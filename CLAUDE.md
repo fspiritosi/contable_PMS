@@ -236,6 +236,29 @@ npm run cy:run:dashboard     // cambios en dashboard
 // Documentación en: docs/README.md (índice principal)
 ```
 
+### 9. Prisma Decimal → Number() antes de pasar a Client Components
+
+Los campos `Decimal` de Prisma (montos, cantidades, tasas, etc.) NO se pueden serializar a Client Components. SIEMPRE convertir con `Number()` en el Server Action antes de retornar.
+
+```typescript
+// ✅ SIEMPRE - Convertir Decimals en el return del Server Action
+return {
+  ...invoice,
+  total: Number(invoice.total),
+  lines: invoice.lines.map((line) => ({
+    ...line,
+    quantity: Number(line.quantity),
+    unitCost: Number(line.unitCost),
+  })),
+};
+
+// ❌ NUNCA - Retornar el resultado directo de Prisma con Decimals
+return await prisma.invoice.findFirst({ ... });
+// Error: "Only plain objects can be passed to Client Components. Decimal objects are not supported."
+```
+
+**Regla**: Toda query Prisma que retorne datos consumidos por Client Components debe mapear TODOS los campos `Decimal` a `Number()`, incluyendo relaciones anidadas.
+
 **app/ solo puede contener:**
 - `page.tsx` - Página de la ruta
 - `layout.tsx` - Layout de la ruta
@@ -328,6 +351,7 @@ modules/{module-name}/
 - [ ] Queries usan `select` para campos necesarios
 - [ ] Server actions usan `getActiveCompanyId()`
 - [ ] Columnas de DataTable tienen `meta.title`
+- [ ] Campos `Decimal` de Prisma convertidos a `Number()` antes de pasar a Client Components
 - [ ] Diseño responsive implementado
 - [ ] Tests E2E actualizados/creados para los cambios (`cypress/e2e/`)
 - [ ] Documentación del desarrollador actualizada si aplica (`docs/`)

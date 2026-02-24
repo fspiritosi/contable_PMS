@@ -394,6 +394,13 @@ export async function getPurchaseInvoiceById(id: string) {
           total: Number(app.invoice.total),
         },
       })),
+      receivingNotes: invoice.receivingNotes.map((rn) => ({
+        ...rn,
+        lines: rn.lines.map((rnLine) => ({
+          ...rnLine,
+          quantity: Number(rnLine.quantity),
+        })),
+      })),
     };
   } catch (error) {
     logger.error('Error al obtener factura de compra', {

@@ -876,7 +876,7 @@ export async function getUnlinkedPurchaseInvoicesForSupplier(supplierId: string)
   if (!companyId) throw new Error('No hay empresa activa');
 
   try {
-    return await prisma.purchaseInvoice.findMany({
+    const invoices = await prisma.purchaseInvoice.findMany({
       where: {
         companyId,
         supplierId,
@@ -892,6 +892,11 @@ export async function getUnlinkedPurchaseInvoicesForSupplier(supplierId: string)
       orderBy: { issueDate: 'desc' },
       take: 50,
     });
+
+    return invoices.map((inv) => ({
+      ...inv,
+      total: Number(inv.total),
+    }));
   } catch (error) {
     logger.error('Error al obtener facturas no vinculadas', {
       data: { error, supplierId, companyId },
