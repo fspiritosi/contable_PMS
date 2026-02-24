@@ -171,11 +171,17 @@ export function _ReceivingNoteForm({
     const selectedInvoice = purchaseInvoices.find((inv) => inv.id === watchedPurchaseInvoiceId);
     if (!selectedInvoice) return;
 
+    // Usar pendingQty (cantidad pendiente de recibir) en vez de quantity total
+    // Filtrar líneas sin pendientes (ya recibidas completamente)
+    const pendingLines = selectedInvoice.lines.filter(
+      (line) => (line.pendingQty ?? line.quantity) > 0
+    );
+
     replace(
-      selectedInvoice.lines.map((line) => ({
+      pendingLines.map((line) => ({
         productId: line.productId ?? '',
         description: line.description,
-        quantity: String(line.quantity),
+        quantity: String(line.pendingQty ?? line.quantity),
         purchaseOrderLineId: '',
         notes: '',
       }))

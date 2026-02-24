@@ -343,21 +343,52 @@ export async function getConfirmedPurchaseInvoicesForSupplier(supplierId: string
             },
           },
         },
+        // Incluir remitos confirmados para calcular cantidades pendientes
+        receivingNotes: {
+          where: { status: 'CONFIRMED' },
+          select: {
+            lines: {
+              select: {
+                productId: true,
+                quantity: true,
+              },
+            },
+          },
+        },
       },
       orderBy: { issueDate: 'desc' },
     });
 
-    return invoices.map((inv) => ({
-      ...inv,
-      total: Number(inv.total),
-      lines: inv.lines
-        .filter((line) => line.product && line.product.trackStock)
-        .map((line) => ({
-          ...line,
-          quantity: Number(line.quantity),
-          product: line.product!,
-        })),
-    }));
+    return invoices.map((inv) => {
+      // Sumar cantidades ya recibidas por producto
+      const receivedByProduct = new Map<string, number>();
+      for (const rn of inv.receivingNotes) {
+        for (const rnLine of rn.lines) {
+          const current = receivedByProduct.get(rnLine.productId) ?? 0;
+          receivedByProduct.set(rnLine.productId, current + Number(rnLine.quantity));
+        }
+      }
+
+      return {
+        ...inv,
+        total: Number(inv.total),
+        lines: inv.lines
+          .filter((line) => line.product && line.product.trackStock)
+          .map((line) => {
+            const invoicedQty = Number(line.quantity);
+            const receivedQty = receivedByProduct.get(line.productId!) ?? 0;
+            const pendingQty = Math.max(0, invoicedQty - receivedQty);
+
+            return {
+              ...line,
+              quantity: invoicedQty,
+              receivedQty,
+              pendingQty,
+              product: line.product!,
+            };
+          }),
+      };
+    });
   } catch (error) {
     logger.error('Error al obtener FCs para remito', { data: { error } });
     return [];
