@@ -77,14 +77,17 @@ export async function getCashflowData(
   if (!companyId) throw new Error('No hay empresa activa');
 
   try {
-    // Si se provee startMonth (YYYY-MM), usar el inicio de ese mes como ancla
+    // startDate SIEMPRE es hoy para que el saldo proyectado sea acumulativo desde hoy
+    const today = moment();
+    const startDate = today.clone().startOf('day').toDate();
+
+    // El anchor controla desde dónde se generan los buckets visuales
     const anchor = startMonth
       ? moment.utc(startMonth, 'YYYY-MM').startOf('month')
       : moment();
     const now = anchor;
-    const startDate = now.clone().startOf('day').toDate();
 
-    // Rango según granularidad
+    // endDate se calcula desde el anchor (mes que está mirando el usuario)
     let endDate: Date;
     switch (granularity) {
       case 'daily':
@@ -278,31 +281,39 @@ export async function getCashflowData(
     // 3. Generar buckets temporales
     const buckets = generateBuckets(granularity, now);
 
-    // 4. Asignar cada item a su bucket
+    // 4. Asignar cada item a su bucket o al acumulado pre-período
+    // Items entre hoy y el primer bucket visible se acumulan aparte
+    // para mantener el saldo proyectado acumulativo desde hoy
+    let prePeriodInflows = 0;
+    let prePeriodOutflows = 0;
 
     // Recibos DRAFT → ingresos
     for (const receipt of draftReceipts) {
       const bucket = findBucket(buckets, moment(receipt.date), granularity);
+      const amount = Number(receipt.totalAmount);
       if (bucket) {
-        const amount = Number(receipt.totalAmount);
         bucket.details.receipts += amount;
         bucket.details.receiptsItems.push({
           label: `${receipt.fullNumber} — ${receipt.customer.name}`,
           amount,
         });
+      } else {
+        prePeriodInflows += amount;
       }
     }
 
     // Órdenes de pago DRAFT → egresos
     for (const op of draftPaymentOrders) {
       const bucket = findBucket(buckets, moment(op.date), granularity);
+      const amount = Number(op.totalAmount);
       if (bucket) {
-        const amount = Number(op.totalAmount);
         bucket.details.paymentOrders += amount;
         bucket.details.paymentOrdersItems.push({
           label: `${op.fullNumber}${op.supplier ? ` — ${op.supplier.tradeName || op.supplier.businessName}` : ''}`,
           amount,
         });
+      } else {
+        prePeriodOutflows += amount;
       }
     }
 
@@ -319,6 +330,8 @@ export async function getCashflowData(
               label: `${oc.fullNumber} — ${oc.supplier.tradeName || oc.supplier.businessName}`,
               amount: uninvoicedBalance,
             });
+          } else {
+            prePeriodOutflows += uninvoicedBalance;
           }
         }
       }
@@ -327,13 +340,15 @@ export async function getCashflowData(
     // Cuotas de OC (distribuidas por fecha de vencimiento)
     for (const inst of approvedPOInstallments) {
       const bucket = findBucket(buckets, moment.utc(inst.dueDate), granularity);
+      const amount = Number(inst.amount);
       if (bucket) {
-        const amount = Number(inst.amount);
         bucket.details.purchaseOrders += amount;
         bucket.details.purchaseOrdersItems.push({
           label: `${inst.order.fullNumber} cuota ${inst.number} — ${inst.order.supplier.tradeName || inst.order.supplier.businessName}`,
           amount,
         });
+      } else {
+        prePeriodOutflows += amount;
       }
     }
 
@@ -341,47 +356,53 @@ export async function getCashflowData(
     for (const exp of pendingExpenses) {
       const date = exp.dueDate ? moment.utc(exp.dueDate) : moment();
       const bucket = findBucket(buckets, date, granularity);
+      const amount = Number(exp.amount);
       if (bucket) {
-        const amount = Number(exp.amount);
         bucket.details.expenses += amount;
         bucket.details.expensesItems.push({
           label: `${exp.fullNumber} — ${exp.description}`,
           amount,
         });
+      } else {
+        prePeriodOutflows += amount;
       }
     }
 
     for (const check of checksThirdParty) {
       const bucket = findBucket(buckets, moment(check.dueDate), granularity);
+      const amount = Number(check.amount);
       if (bucket) {
-        const amount = Number(check.amount);
         bucket.details.checksIn += amount;
         bucket.details.checksInItems.push({
           label: `Nº ${check.checkNumber}${check.drawerName ? ` — ${check.drawerName}` : ''}${check.bankName ? ` (${check.bankName})` : ''}`,
           amount,
         });
+      } else {
+        prePeriodInflows += amount;
       }
     }
 
     for (const check of checksOwn) {
       const bucket = findBucket(buckets, moment(check.dueDate), granularity);
+      const amount = Number(check.amount);
       if (bucket) {
-        const amount = Number(check.amount);
         bucket.details.checksOut += amount;
         bucket.details.checksOutItems.push({
           label: `Nº ${check.checkNumber}${check.payeeName ? ` — ${check.payeeName}` : ''}${check.bankName ? ` (${check.bankName})` : ''}`,
           amount,
         });
+      } else {
+        prePeriodOutflows += amount;
       }
     }
 
     for (const proj of projections) {
       // CashflowProjection.date es @db.Date → usar moment.utc para evitar off-by-one
       const bucket = findBucket(buckets, moment.utc(proj.date), granularity);
-      if (bucket) {
-        // Para PARTIAL, solo incluir el monto no confirmado
-        const effectiveAmount = Number(proj.amount) - Number(proj.confirmedAmount);
-        if (effectiveAmount > 0) {
+      // Para PARTIAL, solo incluir el monto no confirmado
+      const effectiveAmount = Number(proj.amount) - Number(proj.confirmedAmount);
+      if (effectiveAmount > 0) {
+        if (bucket) {
           const item: CashflowDetailItem = {
             label: proj.description,
             amount: effectiveAmount,
@@ -393,12 +414,19 @@ export async function getCashflowData(
             bucket.details.projectionsOut += effectiveAmount;
             bucket.details.projectionsOutItems.push(item);
           }
+        } else {
+          if (proj.type === 'INCOME') {
+            prePeriodInflows += effectiveAmount;
+          } else {
+            prePeriodOutflows += effectiveAmount;
+          }
         }
       }
     }
 
     // 5. Calcular totales y saldo proyectado acumulativo
-    let runningBalance = currentBalance;
+    // El running balance parte del saldo actual + lo acumulado entre hoy y el primer bucket
+    let runningBalance = currentBalance + prePeriodInflows - prePeriodOutflows;
     const rows: CashflowRow[] = buckets.map((bucket) => {
       const inflows =
         bucket.details.receipts +
@@ -423,8 +451,9 @@ export async function getCashflowData(
     });
 
     // 6. Calcular resumen
-    const totalProjectedInflows = rows.reduce((acc, r) => acc + r.inflows, 0);
-    const totalProjectedOutflows = rows.reduce((acc, r) => acc + r.outflows, 0);
+    // Incluir tanto los items del pre-período como los de los buckets visibles
+    const totalProjectedInflows = prePeriodInflows + rows.reduce((acc, r) => acc + r.inflows, 0);
+    const totalProjectedOutflows = prePeriodOutflows + rows.reduce((acc, r) => acc + r.outflows, 0);
 
     // Cheques en cartera (todos, no solo rango)
     const allChecksInPortfolio = await prisma.check.findMany({
