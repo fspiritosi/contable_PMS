@@ -9,7 +9,7 @@ import { createInvoiceSchema } from '../shared/validators';
 import { revalidatePath } from 'next/cache';
 import { Prisma } from '@/generated/prisma/client';
 import type { DataTableSearchParams } from '@/shared/components/common/DataTable';
-import { parseSearchParams, stateToPrismaParams } from '@/shared/components/common/DataTable/helpers';
+import { buildFiltersWhere, buildDateRangeFiltersWhere, parseSearchParams, stateToPrismaParams } from '@/shared/components/common/DataTable/helpers';
 import {
   validateVoucherType,
   mapTaxStatusToCustomerTaxCondition,
@@ -96,8 +96,17 @@ export async function getInvoicesPaginated(searchParams: DataTableSearchParams) 
     const { page, pageSize, search, sortBy, sortOrder } = parsed;
     const { skip, take, orderBy: prismaOrderBy } = stateToPrismaParams(parsed);
 
+    const filtersWhere = buildFiltersWhere(parsed.filters, {
+      status: 'status',
+      voucherType: 'voucherType',
+    }, { exclude: ['issueDate'] });
+
+    const dateFiltersWhere = buildDateRangeFiltersWhere(parsed.filters, ['issueDate']);
+
     const where: Prisma.SalesInvoiceWhereInput = {
       companyId,
+      ...filtersWhere,
+      ...dateFiltersWhere,
       ...(search && {
         OR: [
           { fullNumber: { contains: search, mode: 'insensitive' } },

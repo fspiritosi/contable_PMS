@@ -27,9 +27,12 @@ interface ColumnsProps {
   onToggleStatus: (account: BankAccountWithBalance) => void;
   onClose: (account: BankAccountWithBalance) => void;
   isLoading: boolean;
+  canEdit?: boolean;
+  canToggleStatus?: boolean;
+  canClose?: boolean;
 }
 
-export function getColumns({ onEdit, onToggleStatus, onClose, isLoading }: ColumnsProps): ColumnDef<BankAccountWithBalance>[] {
+export function getColumns({ onEdit, onToggleStatus, onClose, isLoading, canEdit = true, canToggleStatus = true, canClose = true }: ColumnsProps): ColumnDef<BankAccountWithBalance>[] {
   return [
     {
       accessorKey: 'bankName',
@@ -84,6 +87,22 @@ export function getColumns({ onEdit, onToggleStatus, onClose, isLoading }: Colum
       },
     },
     {
+      accessorKey: 'accountType',
+      meta: { title: 'Tipo de Cuenta' },
+      header: 'Tipo de Cuenta',
+      enableHiding: false,
+      enableSorting: false,
+      cell: () => null,
+    },
+    {
+      accessorKey: 'currency',
+      meta: { title: 'Moneda' },
+      header: 'Moneda',
+      enableHiding: false,
+      enableSorting: false,
+      cell: () => null,
+    },
+    {
       accessorKey: 'status',
       meta: { title: 'Estado' },
       header: ({ column }) => <DataTableColumnHeader column={column} title="Estado" />,
@@ -113,10 +132,12 @@ export function getColumns({ onEdit, onToggleStatus, onClose, isLoading }: Colum
 
               {!isClosed && (
                 <>
-                  <DropdownMenuItem onClick={() => onEdit(account)}>
-                    <Pencil className="mr-2 h-4 w-4" />
-                    Editar
-                  </DropdownMenuItem>
+                  {canEdit && (
+                    <DropdownMenuItem onClick={() => onEdit(account)}>
+                      <Pencil className="mr-2 h-4 w-4" />
+                      Editar
+                    </DropdownMenuItem>
+                  )}
 
                   <DropdownMenuItem asChild>
                     <Link href={`/dashboard/commercial/treasury/bank-accounts/${account.id}`}>
@@ -127,21 +148,23 @@ export function getColumns({ onEdit, onToggleStatus, onClose, isLoading }: Colum
 
                   <DropdownMenuSeparator />
 
-                  <DropdownMenuItem onClick={() => onToggleStatus(account)} disabled={isLoading}>
-                    {isActive ? (
-                      <>
-                        <PowerOff className="mr-2 h-4 w-4" />
-                        Desactivar
-                      </>
-                    ) : (
-                      <>
-                        <Power className="mr-2 h-4 w-4" />
-                        Activar
-                      </>
-                    )}
-                  </DropdownMenuItem>
+                  {canToggleStatus && (
+                    <DropdownMenuItem onClick={() => onToggleStatus(account)} disabled={isLoading}>
+                      {isActive ? (
+                        <>
+                          <PowerOff className="mr-2 h-4 w-4" />
+                          Desactivar
+                        </>
+                      ) : (
+                        <>
+                          <Power className="mr-2 h-4 w-4" />
+                          Activar
+                        </>
+                      )}
+                    </DropdownMenuItem>
+                  )}
 
-                  {account.balance === 0 && (
+                  {canClose && account.balance === 0 && (
                     <DropdownMenuItem onClick={() => onClose(account)} disabled={isLoading}>
                       <Lock className="mr-2 h-4 w-4" />
                       Cerrar Cuenta

@@ -25,6 +25,10 @@ interface ColumnsProps {
   onEndorse: (check: CheckListItem) => void;
   onVoid: (check: CheckListItem) => void;
   onDelete: (check: CheckListItem) => void;
+  canDeposit?: boolean;
+  canEndorse?: boolean;
+  canVoid?: boolean;
+  canDelete?: boolean;
 }
 
 export function getColumns({
@@ -33,6 +37,10 @@ export function getColumns({
   onEndorse,
   onVoid,
   onDelete,
+  canDeposit = true,
+  canEndorse = true,
+  canVoid = true,
+  canDelete: canDeleteProp = true,
 }: ColumnsProps): ColumnDef<CheckListItem>[] {
   return [
     {
@@ -114,23 +122,27 @@ export function getColumns({
               </DropdownMenuItem>
               {check.type === 'THIRD_PARTY' && check.status === 'PORTFOLIO' && (
                 <>
-                  <DropdownMenuItem onClick={() => onDeposit(check)}>
-                    <Landmark className="mr-2 h-4 w-4" />
-                    Depositar
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => onEndorse(check)}>
-                    <ArrowRightLeft className="mr-2 h-4 w-4" />
-                    Endosar
-                  </DropdownMenuItem>
+                  {canDeposit && (
+                    <DropdownMenuItem onClick={() => onDeposit(check)}>
+                      <Landmark className="mr-2 h-4 w-4" />
+                      Depositar
+                    </DropdownMenuItem>
+                  )}
+                  {canEndorse && (
+                    <DropdownMenuItem onClick={() => onEndorse(check)}>
+                      <ArrowRightLeft className="mr-2 h-4 w-4" />
+                      Endosar
+                    </DropdownMenuItem>
+                  )}
                 </>
               )}
-              {!['CLEARED', 'CASHED', 'VOIDED'].includes(check.status) && (
+              {canVoid && !['CLEARED', 'CASHED', 'VOIDED'].includes(check.status) && (
                 <DropdownMenuItem onClick={() => onVoid(check)} className="text-destructive">
                   <Ban className="mr-2 h-4 w-4" />
                   Anular
                 </DropdownMenuItem>
               )}
-              {['PORTFOLIO', 'DELIVERED'].includes(check.status) && (
+              {canDeleteProp && ['PORTFOLIO', 'DELIVERED'].includes(check.status) && (
                 <DropdownMenuItem onClick={() => onDelete(check)} className="text-destructive">
                   <Trash2 className="mr-2 h-4 w-4" />
                   Eliminar

@@ -18,7 +18,6 @@ import { _BankMovementsTable } from './components/_BankMovementsTable';
 import { _BankAccountSummary } from './components/_BankAccountSummary';
 import { _BankAccountDetailActions } from './components/_BankAccountDetailActions';
 import { _ReconciliationView } from './components/_ReconciliationView';
-import { _BankMovementFilters } from './components/_BankMovementFilters';
 
 interface Props {
   bankAccountId: string;
@@ -29,17 +28,10 @@ export async function BankAccountDetail({ bankAccountId, searchParams }: Props) 
   const params = searchParams as Record<string, string>;
   const tab = (params.tab as 'movements' | 'reconciliation') || 'movements';
 
-  // Parse filter params
-  const filters = {
-    type: params.movementType || undefined,
-    dateFrom: params.dateFrom ? new Date(params.dateFrom) : undefined,
-    dateTo: params.dateTo ? new Date(`${params.dateTo}T23:59:59`) : undefined,
-  };
-
   const [bankAccount, movementsResult, pendingResult, reconciliationStats] = await Promise.all([
     getBankAccountById(bankAccountId),
-    getBankMovementsPaginated(bankAccountId, searchParams, { ...filters }),
-    getBankMovementsPaginated(bankAccountId, searchParams, { reconciled: false, ...filters }),
+    getBankMovementsPaginated(bankAccountId, searchParams),
+    getBankMovementsPaginated(bankAccountId, searchParams, { reconciled: false }),
     getReconciliationStats(bankAccountId),
   ]);
 
@@ -97,7 +89,6 @@ export async function BankAccountDetail({ bankAccountId, searchParams }: Props) 
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <_BankMovementFilters />
               <_BankMovementsTable
                 data={movementsResult.data}
                 totalRows={movementsResult.total}

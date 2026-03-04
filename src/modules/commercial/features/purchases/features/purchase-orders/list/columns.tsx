@@ -26,11 +26,11 @@ import { formatCurrency } from '@/shared/utils/formatters';
 
 interface ColumnsProps {
   onView: (order: PurchaseOrderListItem) => void;
-  onEdit: (order: PurchaseOrderListItem) => void;
-  onSubmitForApproval: (order: PurchaseOrderListItem) => void;
-  onApprove: (order: PurchaseOrderListItem) => void;
-  onCancel: (order: PurchaseOrderListItem) => void;
-  onDelete: (order: PurchaseOrderListItem) => void;
+  onEdit?: (order: PurchaseOrderListItem) => void;
+  onSubmitForApproval?: (order: PurchaseOrderListItem) => void;
+  onApprove?: (order: PurchaseOrderListItem) => void;
+  onCancel?: (order: PurchaseOrderListItem) => void;
+  onDelete?: (order: PurchaseOrderListItem) => void;
   loading: string | null;
 }
 
@@ -156,13 +156,13 @@ export function getColumns({
                 <Eye className="mr-2 h-4 w-4" />
                 Ver detalle
               </DropdownMenuItem>
-              {isDraft && (
+              {isDraft && onEdit && (
                 <DropdownMenuItem onClick={() => onEdit(order)}>
                   <Pencil className="mr-2 h-4 w-4" />
                   Editar
                 </DropdownMenuItem>
               )}
-              {isDraft && (
+              {isDraft && onSubmitForApproval && (
                 <>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => onSubmitForApproval(order)} disabled={isLoading}>
@@ -171,7 +171,7 @@ export function getColumns({
                   </DropdownMenuItem>
                 </>
               )}
-              {isPending && (
+              {isPending && onApprove && (
                 <>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => onApprove(order)} disabled={isLoading}>
@@ -180,7 +180,7 @@ export function getColumns({
                   </DropdownMenuItem>
                 </>
               )}
-              {canCancel && (
+              {canCancel && onCancel && (
                 <>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
@@ -193,7 +193,7 @@ export function getColumns({
                   </DropdownMenuItem>
                 </>
               )}
-              {isDraft && (
+              {isDraft && onDelete && (
                 <DropdownMenuItem
                   onClick={() => onDelete(order)}
                   disabled={isLoading}

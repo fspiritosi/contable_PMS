@@ -6,6 +6,7 @@ import { logger } from '@/shared/lib/logger';
 import { getActiveCompanyId } from '@/shared/lib/company';
 import { checkPermission } from '@/shared/lib/permissions';
 import { revalidatePath } from 'next/cache';
+import { buildFiltersWhere } from '@/shared/components/common/DataTable/helpers';
 import {
   createProductSchema,
   updateProductSchema,
@@ -18,6 +19,7 @@ interface GetProductsParams {
   page?: number;
   pageSize?: number;
   search?: string;
+  filters?: Record<string, string[]>;
 }
 
 /**
@@ -25,7 +27,7 @@ interface GetProductsParams {
  */
 export async function getProducts(params: GetProductsParams = {}) {
   await checkPermission('commercial.products', 'view', { redirect: true });
-  const { page = 1, pageSize = 10, search } = params;
+  const { page = 1, pageSize = 10, search, filters = {} } = params;
   const companyId = await getActiveCompanyId();
   if (!companyId) throw new Error('No hay empresa activa');
 
@@ -33,8 +35,14 @@ export async function getProducts(params: GetProductsParams = {}) {
     const { userId } = await auth();
     if (!userId) throw new Error('No autenticado');
 
+    const filtersWhere = buildFiltersWhere(filters, {
+      type: 'type',
+      status: 'status',
+    });
+
     const where = {
       companyId,
+      ...filtersWhere,
       ...(search && {
         OR: [
           { name: { contains: search, mode: 'insensitive' as const } },

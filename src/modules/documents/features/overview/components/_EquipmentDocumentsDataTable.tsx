@@ -100,6 +100,8 @@ export function _EquipmentDocumentsDataTable({
       searchParams={searchParams}
       searchPlaceholder="Buscar por equipo o tipo de documento..."
       facetedFilters={facetedFilters}
+      tableId="documents-equipment"
+      showFilterToggle
       enableRowSelection={true}
       showRowSelection={true}
       emptyMessage="No hay documentos de equipos"

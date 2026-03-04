@@ -7,7 +7,7 @@ import { prisma } from '@/shared/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { Prisma } from '@/generated/prisma/client';
 import type { DataTableSearchParams } from '@/shared/components/common/DataTable';
-import { parseSearchParams, stateToPrismaParams } from '@/shared/components/common/DataTable/helpers';
+import { buildFiltersWhere, buildDateRangeFiltersWhere, parseSearchParams, stateToPrismaParams } from '@/shared/components/common/DataTable/helpers';
 import { CREDIT_NOTE_TYPES, isCreditNote } from '@/modules/commercial/shared/voucher-utils';
 import type { CreatePaymentOrderFormData } from '../../shared/validators';
 import type { PendingPurchaseInvoice, PaymentOrderListItem, PaymentOrderWithDetails } from '../../shared/types';
@@ -500,8 +500,16 @@ export async function getPaymentOrdersPaginated(searchParams: DataTableSearchPar
     const { page, pageSize, search, sortBy, sortOrder } = parsed;
     const { skip, take, orderBy: prismaOrderBy } = stateToPrismaParams(parsed);
 
+    const filtersWhere = buildFiltersWhere(parsed.filters, {
+      status: 'status',
+    }, { exclude: ['date'] });
+
+    const dateFiltersWhere = buildDateRangeFiltersWhere(parsed.filters, ['date']);
+
     const where: Prisma.PaymentOrderWhereInput = {
       companyId,
+      ...filtersWhere,
+      ...dateFiltersWhere,
       ...(search && {
         OR: [
           { fullNumber: { contains: search, mode: 'insensitive' } },

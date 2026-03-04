@@ -88,6 +88,7 @@ export function _JobPositionsDataTable({ data, totalRows, searchParams, permissi
         totalRows={totalRows}
         searchParams={searchParams}
         searchPlaceholder="Buscar puestos de trabajo..."
+        tableId="company-job-positions"
         toolbarActions={
           permissions.canCreate ? (
             <Button onClick={handleCreate} data-testid="new-job-position-button">

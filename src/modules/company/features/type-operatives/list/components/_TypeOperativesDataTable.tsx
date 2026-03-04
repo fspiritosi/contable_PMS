@@ -88,6 +88,7 @@ export function _TypeOperativesDataTable({ data, totalRows, searchParams, permis
         totalRows={totalRows}
         searchParams={searchParams}
         searchPlaceholder="Buscar tipos operativos..."
+        tableId="company-type-operatives"
         toolbarActions={
           permissions.canCreate ? (
             <Button onClick={handleCreate} data-testid="new-type-operative-button">

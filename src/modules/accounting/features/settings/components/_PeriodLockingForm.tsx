@@ -19,6 +19,7 @@ import {
 } from '@/shared/components/ui/alert-dialog';
 
 import { setLockedPeriod } from '../actions.server';
+import { usePermissions } from '@/shared/hooks/usePermissions';
 
 interface PeriodLockingFormProps {
   companyId: string;
@@ -48,6 +49,8 @@ export function _PeriodLockingForm({
   lockedUntilDate,
 }: PeriodLockingFormProps) {
   const router = useRouter();
+  const { hasPermission } = usePermissions();
+  const canUpdate = hasPermission('accounting.settings', 'update');
   const [isLoading, setIsLoading] = useState(false);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
 
@@ -83,7 +86,7 @@ export function _PeriodLockingForm({
   });
 
   function handleMonthClick(month: MonthCell) {
-    if (!month.isClickable || isLoading) return;
+    if (!month.isClickable || isLoading || !canUpdate) return;
 
     if (month.isLastLocked) {
       // Unlock: set lockedUntilDate to previous month's end, or null if first
@@ -171,10 +174,10 @@ export function _PeriodLockingForm({
               <button
                 key={index}
                 onClick={() => handleMonthClick(month)}
-                disabled={isLoading}
-                className={`rounded-lg border p-3 text-center cursor-pointer hover:border-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                  month.isLocked ? 'bg-muted' : ''
-                }`}
+                disabled={isLoading || !canUpdate}
+                className={`rounded-lg border p-3 text-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                  canUpdate ? 'cursor-pointer hover:border-primary' : 'cursor-default'
+                } ${month.isLocked ? 'bg-muted' : ''}`}
               >
                 <div className="flex flex-col items-center gap-1">
                   {month.isLocked ? (

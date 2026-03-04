@@ -21,9 +21,12 @@ interface ColumnsProps {
   onEdit: (order: PaymentOrderListItem) => void;
   onConfirm: (order: PaymentOrderListItem) => void;
   onDelete: (order: PaymentOrderListItem) => void;
+  canEdit?: boolean;
+  canApprove?: boolean;
+  canDelete?: boolean;
 }
 
-export function getColumns({ onViewDetail, onEdit, onConfirm, onDelete }: ColumnsProps): ColumnDef<PaymentOrderListItem>[] {
+export function getColumns({ onViewDetail, onEdit, onConfirm, onDelete, canEdit = true, canApprove = true, canDelete = true }: ColumnsProps): ColumnDef<PaymentOrderListItem>[] {
   return [
     {
       accessorKey: 'fullNumber',
@@ -107,20 +110,26 @@ export function getColumns({ onViewDetail, onEdit, onConfirm, onDelete }: Column
 
               {paymentOrder.status === 'DRAFT' && (
                 <>
-                  <DropdownMenuItem onClick={() => onEdit(paymentOrder)}>
-                    <Edit className="mr-2 h-4 w-4" />
-                    Editar
-                  </DropdownMenuItem>
+                  {canEdit && (
+                    <DropdownMenuItem onClick={() => onEdit(paymentOrder)}>
+                      <Edit className="mr-2 h-4 w-4" />
+                      Editar
+                    </DropdownMenuItem>
+                  )}
 
-                  <DropdownMenuItem onClick={() => onConfirm(paymentOrder)}>
-                    <CheckCircle className="mr-2 h-4 w-4" />
-                    Confirmar Orden
-                  </DropdownMenuItem>
+                  {canApprove && (
+                    <DropdownMenuItem onClick={() => onConfirm(paymentOrder)}>
+                      <CheckCircle className="mr-2 h-4 w-4" />
+                      Confirmar Orden
+                    </DropdownMenuItem>
+                  )}
 
-                  <DropdownMenuItem onClick={() => onDelete(paymentOrder)} className="text-destructive">
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    Eliminar
-                  </DropdownMenuItem>
+                  {canDelete && (
+                    <DropdownMenuItem onClick={() => onDelete(paymentOrder)} className="text-destructive">
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Eliminar
+                    </DropdownMenuItem>
+                  )}
                 </>
               )}
             </DropdownMenuContent>

@@ -9,16 +9,8 @@ interface Props {
 }
 
 export async function SuppliersList({ searchParams = {} }: Props) {
-  const page = searchParams.page ? parseInt(searchParams.page) : 1;
-  const search = searchParams.search;
-  const pageSize = searchParams.pageSize ? parseInt(searchParams.pageSize) : 10;
-
   const [result, permissions] = await Promise.all([
-    getSuppliers({
-      page,
-      pageSize,
-      search,
-    }),
+    getSuppliers(searchParams),
     getModulePermissions('commercial.suppliers'),
   ]);
 

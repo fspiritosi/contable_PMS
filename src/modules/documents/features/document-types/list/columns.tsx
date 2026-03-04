@@ -28,11 +28,15 @@ const appliesToIcons: Record<DocumentAppliesTo, typeof User> = {
 interface ColumnsOptions {
   onDelete: (docType: DocumentTypeListItem) => void;
   onEdit: (docType: DocumentTypeListItem) => void;
+  canUpdate: boolean;
+  canDelete: boolean;
 }
 
 export function getColumns({
   onDelete,
   onEdit,
+  canUpdate,
+  canDelete,
 }: ColumnsOptions): ColumnDef<DocumentTypeListItem>[] {
   return [
     // Columna de selección
@@ -195,22 +199,26 @@ export function getColumns({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                onClick={() => onEdit(docType)}
-                data-testid={`doctype-edit-${docType.id}`}
-              >
-                <Edit className="mr-2 h-4 w-4" />
-                Editar
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={() => onDelete(docType)}
-                className="text-destructive"
-                data-testid={`doctype-delete-${docType.id}`}
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                Eliminar
-              </DropdownMenuItem>
+              {canUpdate && (
+                <DropdownMenuItem
+                  onClick={() => onEdit(docType)}
+                  data-testid={`doctype-edit-${docType.id}`}
+                >
+                  <Edit className="mr-2 h-4 w-4" />
+                  Editar
+                </DropdownMenuItem>
+              )}
+              {canUpdate && canDelete && <DropdownMenuSeparator />}
+              {canDelete && (
+                <DropdownMenuItem
+                  onClick={() => onDelete(docType)}
+                  className="text-destructive"
+                  data-testid={`doctype-delete-${docType.id}`}
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Eliminar
+                </DropdownMenuItem>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         );

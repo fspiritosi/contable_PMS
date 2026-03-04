@@ -36,6 +36,7 @@ import { formatDate } from '@/shared/utils/formatters';
 import { unassignEmployeeFromClient } from '../actions.server';
 import type { ClientDetail } from '../actions.server';
 import { _AssignEmployeeDialog } from './_AssignEmployeeDialog';
+import { usePermissions } from '@/shared/hooks/usePermissions';
 
 interface Props {
   client: ClientDetail;
@@ -43,6 +44,7 @@ interface Props {
 
 export function _EmployeesTab({ client }: Props) {
   const router = useRouter();
+  const { hasPermission } = usePermissions();
   const [showAssignDialog, setShowAssignDialog] = useState(false);
   const [employeeToUnassign, setEmployeeToUnassign] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -83,10 +85,12 @@ export function _EmployeesTab({ client }: Props) {
                 {client.employeeAllocations.length !== 1 ? 's' : ''}
               </CardDescription>
             </div>
-            <Button onClick={() => setShowAssignDialog(true)}>
-              <Plus className="mr-2 h-4 w-4" />
-              Asignar Empleado
-            </Button>
+            {hasPermission('commercial.clients', 'update') && (
+              <Button onClick={() => setShowAssignDialog(true)}>
+                <Plus className="mr-2 h-4 w-4" />
+                Asignar Empleado
+              </Button>
+            )}
           </div>
         </CardHeader>
         <CardContent>
@@ -118,13 +122,15 @@ export function _EmployeesTab({ client }: Props) {
                         {formatDate(allocation.createdAt)}
                       </TableCell>
                       <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => setEmployeeToUnassign(allocation.employee.id)}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
+                        {hasPermission('commercial.clients', 'update') && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setEmployeeToUnassign(allocation.employee.id)}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}

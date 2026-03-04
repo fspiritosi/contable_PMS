@@ -21,9 +21,9 @@ import type { PurchaseInvoiceStatus } from '@/generated/prisma/enums';
 
 interface ColumnsProps {
   onView: (invoice: PurchaseInvoiceListItem) => void;
-  onEdit: (invoice: PurchaseInvoiceListItem) => void;
-  onConfirm: (invoice: PurchaseInvoiceListItem) => void;
-  onCancel: (invoice: PurchaseInvoiceListItem) => void;
+  onEdit?: (invoice: PurchaseInvoiceListItem) => void;
+  onConfirm?: (invoice: PurchaseInvoiceListItem) => void;
+  onCancel?: (invoice: PurchaseInvoiceListItem) => void;
   loading: string | null;
 }
 
@@ -161,13 +161,13 @@ export function getColumns({ onView, onEdit, onConfirm, onCancel, loading }: Col
                 <Eye className="mr-2 h-4 w-4" />
                 Ver detalle
               </DropdownMenuItem>
-              {canEdit && (
+              {canEdit && onEdit && (
                 <DropdownMenuItem onClick={() => onEdit(invoice)}>
                   <Pencil className="mr-2 h-4 w-4" />
                   Editar
                 </DropdownMenuItem>
               )}
-              {canConfirm && (
+              {canConfirm && onConfirm && (
                 <>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
@@ -179,7 +179,7 @@ export function getColumns({ onView, onEdit, onConfirm, onCancel, loading }: Col
                   </DropdownMenuItem>
                 </>
               )}
-              {canCancel && (
+              {canCancel && onCancel && (
                 <>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem

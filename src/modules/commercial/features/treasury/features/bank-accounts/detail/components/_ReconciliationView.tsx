@@ -166,6 +166,7 @@ export function _ReconciliationView({ data, totalRows, searchParams, stats, bank
               totalRows={totalRows}
               searchParams={searchParams}
               showSearch={false}
+              tableId="commercial-bank-reconciliation"
               enableRowSelection
               showRowSelection
               onRowSelectionChange={setSelectedRows}

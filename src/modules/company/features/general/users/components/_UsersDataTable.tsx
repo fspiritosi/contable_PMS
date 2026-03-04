@@ -172,6 +172,7 @@ export function _UsersDataTable({
         totalRows={totalRows}
         searchParams={searchParams}
         searchPlaceholder="Buscar usuarios..."
+        tableId="company-users"
         toolbarActions={
           permissions.canCreate ? (
             <Button onClick={() => setIsInviteOpen(true)}>

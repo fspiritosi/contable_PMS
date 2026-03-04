@@ -61,6 +61,7 @@ import {
   vehicleStatusBadges,
   vehicleTerminationReasonLabels,
 } from '@/shared/utils/mappers';
+import { usePermissions } from '@/shared/hooks/usePermissions';
 import {
   getAllVehicles,
   reactivateVehicle,
@@ -73,6 +74,7 @@ interface Props {
 }
 
 export function _EquipmentTable({ initialData }: Props) {
+  const { hasPermission } = usePermissions();
   const router = useRouter();
   const queryClient = useQueryClient();
   const [sorting, setSorting] = useState<SortingState>([]);
@@ -205,29 +207,35 @@ export function _EquipmentTable({ initialData }: Props) {
                 <Eye className="mr-2 h-4 w-4" />
                 Ver detalle
               </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => router.push(`/dashboard/equipment/${vehicle.id}/edit`)}
-              >
-                <Pencil className="mr-2 h-4 w-4" />
-                Editar
-              </DropdownMenuItem>
+              {hasPermission('equipment', 'update') && (
+                <DropdownMenuItem
+                  onClick={() => router.push(`/dashboard/equipment/${vehicle.id}/edit`)}
+                >
+                  <Pencil className="mr-2 h-4 w-4" />
+                  Editar
+                </DropdownMenuItem>
+              )}
               <DropdownMenuSeparator />
               {vehicle.isActive ? (
-                <DropdownMenuItem
-                  className="text-destructive"
-                  onClick={() => {
-                    setSelectedVehicle(vehicle);
-                    setDeleteDialogOpen(true);
-                  }}
-                >
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Dar de baja
-                </DropdownMenuItem>
+                hasPermission('equipment', 'delete') && (
+                  <DropdownMenuItem
+                    className="text-destructive"
+                    onClick={() => {
+                      setSelectedVehicle(vehicle);
+                      setDeleteDialogOpen(true);
+                    }}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Dar de baja
+                  </DropdownMenuItem>
+                )
               ) : (
-                <DropdownMenuItem onClick={() => reactivateMutation.mutate(vehicle.id)}>
-                  <RotateCcw className="mr-2 h-4 w-4" />
-                  Reactivar
-                </DropdownMenuItem>
+                hasPermission('equipment', 'update') && (
+                  <DropdownMenuItem onClick={() => reactivateMutation.mutate(vehicle.id)}>
+                    <RotateCcw className="mr-2 h-4 w-4" />
+                    Reactivar
+                  </DropdownMenuItem>
+                )
               )}
             </DropdownMenuContent>
           </DropdownMenu>
@@ -281,12 +289,14 @@ export function _EquipmentTable({ initialData }: Props) {
               onChange={(e) => setGlobalFilter(e.target.value)}
               className="max-w-sm"
             />
-            <Button asChild data-testid="new-equipment-button">
-              <Link href="/dashboard/equipment/new">
-                <Plus className="mr-2 h-4 w-4" />
-                Nuevo Equipo
-              </Link>
-            </Button>
+            {hasPermission('equipment', 'create') && (
+              <Button asChild data-testid="new-equipment-button">
+                <Link href="/dashboard/equipment/new">
+                  <Plus className="mr-2 h-4 w-4" />
+                  Nuevo Equipo
+                </Link>
+              </Button>
+            )}
           </div>
         </div>
 

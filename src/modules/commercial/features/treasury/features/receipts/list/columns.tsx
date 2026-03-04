@@ -21,9 +21,12 @@ interface ColumnsProps {
   onEdit: (receipt: ReceiptListItem) => void;
   onConfirm: (receipt: ReceiptListItem) => void;
   onDelete: (receipt: ReceiptListItem) => void;
+  canEdit?: boolean;
+  canApprove?: boolean;
+  canDelete?: boolean;
 }
 
-export function getColumns({ onViewDetail, onEdit, onConfirm, onDelete }: ColumnsProps): ColumnDef<ReceiptListItem>[] {
+export function getColumns({ onViewDetail, onEdit, onConfirm, onDelete, canEdit = true, canApprove = true, canDelete = true }: ColumnsProps): ColumnDef<ReceiptListItem>[] {
   return [
     {
       accessorKey: 'fullNumber',
@@ -104,20 +107,26 @@ export function getColumns({ onViewDetail, onEdit, onConfirm, onDelete }: Column
 
               {receipt.status === 'DRAFT' && (
                 <>
-                  <DropdownMenuItem onClick={() => onEdit(receipt)}>
-                    <Edit className="mr-2 h-4 w-4" />
-                    Editar
-                  </DropdownMenuItem>
+                  {canEdit && (
+                    <DropdownMenuItem onClick={() => onEdit(receipt)}>
+                      <Edit className="mr-2 h-4 w-4" />
+                      Editar
+                    </DropdownMenuItem>
+                  )}
 
-                  <DropdownMenuItem onClick={() => onConfirm(receipt)}>
-                    <CheckCircle className="mr-2 h-4 w-4" />
-                    Confirmar Recibo
-                  </DropdownMenuItem>
+                  {canApprove && (
+                    <DropdownMenuItem onClick={() => onConfirm(receipt)}>
+                      <CheckCircle className="mr-2 h-4 w-4" />
+                      Confirmar Recibo
+                    </DropdownMenuItem>
+                  )}
 
-                  <DropdownMenuItem onClick={() => onDelete(receipt)} className="text-destructive">
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    Eliminar
-                  </DropdownMenuItem>
+                  {canDelete && (
+                    <DropdownMenuItem onClick={() => onDelete(receipt)} className="text-destructive">
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Eliminar
+                    </DropdownMenuItem>
+                  )}
                 </>
               )}
             </DropdownMenuContent>

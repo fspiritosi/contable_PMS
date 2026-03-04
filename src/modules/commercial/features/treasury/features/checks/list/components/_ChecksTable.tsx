@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { Button } from '@/shared/components/ui/button';
 import { Plus } from 'lucide-react';
-import { DataTable, type DataTableSearchParams } from '@/shared/components/common/DataTable';
+import { DataTable, type DataTableSearchParams, type DataTableFacetedFilterConfig } from '@/shared/components/common/DataTable';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,12 +17,14 @@ import {
   AlertDialogTitle,
 } from '@/shared/components/ui/alert-dialog';
 import type { CheckListItem } from '../../../../shared/types';
+import { CHECK_STATUS_LABELS, CHECK_TYPE_LABELS } from '../../../../shared/validators';
 import { voidCheck, deleteCheck } from '../../actions.server';
 import { getColumns } from '../columns';
 import { _CreateCheckModal } from './_CreateCheckModal';
 import { _CheckDetailModal } from './_CheckDetailModal';
 import { _DepositCheckModal } from './_DepositCheckModal';
 import { _EndorseCheckModal } from './_EndorseCheckModal';
+import { usePermissions } from '@/shared/hooks/usePermissions';
 
 interface Props {
   data: CheckListItem[];
@@ -40,6 +42,7 @@ export function _ChecksTable({ data, totalRows, searchParams }: Props) {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedCheck, setSelectedCheck] = useState<CheckListItem | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const { hasPermission } = usePermissions();
 
   const handleVoid = async () => {
     if (!selectedCheck) return;
@@ -71,6 +74,42 @@ export function _ChecksTable({ data, totalRows, searchParams }: Props) {
     }
   };
 
+  const canCreate = hasPermission('commercial.treasury.checks', 'create');
+  const canUpdate = hasPermission('commercial.treasury.checks', 'update');
+  const canDelete = hasPermission('commercial.treasury.checks', 'delete');
+
+  const facetedFilters: DataTableFacetedFilterConfig[] = useMemo(
+    () => [
+      {
+        columnId: 'status',
+        title: 'Estado',
+        options: Object.entries(CHECK_STATUS_LABELS).map(([value, label]) => ({
+          label,
+          value,
+        })),
+      },
+      {
+        columnId: 'type',
+        title: 'Tipo',
+        options: Object.entries(CHECK_TYPE_LABELS).map(([value, label]) => ({
+          label,
+          value,
+        })),
+      },
+      {
+        columnId: 'issueDate',
+        title: 'Fecha Emisión',
+        type: 'dateRange' as const,
+      },
+      {
+        columnId: 'dueDate',
+        title: 'Fecha Vencimiento',
+        type: 'dateRange' as const,
+      },
+    ],
+    []
+  );
+
   const columns = useMemo(
     () =>
       getColumns({
@@ -94,8 +133,12 @@ export function _ChecksTable({ data, totalRows, searchParams }: Props) {
           setSelectedCheck(check);
           setDeleteDialogOpen(true);
         },
+        canDeposit: canUpdate,
+        canEndorse: canUpdate,
+        canVoid: canDelete,
+        canDelete,
       }),
-    []
+    [canUpdate, canDelete]
   );
 
   return (
@@ -106,11 +149,16 @@ export function _ChecksTable({ data, totalRows, searchParams }: Props) {
         totalRows={totalRows}
         searchParams={searchParams}
         searchPlaceholder="Buscar cheques..."
+        facetedFilters={facetedFilters}
+        tableId="commercial-checks"
+        showFilterToggle
         toolbarActions={
-          <Button onClick={() => setCreateOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Nuevo Cheque
-          </Button>
+          canCreate && (
+            <Button onClick={() => setCreateOpen(true)}>
+              <Plus className="mr-2 h-4 w-4" />
+              Nuevo Cheque
+            </Button>
+          )
         }
       />
 

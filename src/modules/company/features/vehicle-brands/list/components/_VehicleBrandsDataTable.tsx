@@ -88,6 +88,7 @@ export function _VehicleBrandsDataTable({ data, totalRows, searchParams, permiss
         totalRows={totalRows}
         searchParams={searchParams}
         searchPlaceholder="Buscar marcas de vehículos..."
+        tableId="company-vehicle-brands"
         toolbarActions={
           permissions.canCreate ? (
             <Button onClick={handleCreate} data-testid="new-vehicle-brand-button">

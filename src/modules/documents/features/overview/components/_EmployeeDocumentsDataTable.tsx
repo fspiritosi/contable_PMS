@@ -101,6 +101,8 @@ export function _EmployeeDocumentsDataTable({
       searchParams={searchParams}
       searchPlaceholder="Buscar por empleado o tipo de documento..."
       facetedFilters={facetedFilters}
+      tableId="documents-employees"
+      showFilterToggle
       enableRowSelection={true}
       showRowSelection={true}
       emptyMessage="No hay documentos de empleados"

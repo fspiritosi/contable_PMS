@@ -19,6 +19,7 @@ import {
 
 import { saveAccountingSettings, getAccountingSettings } from '../actions.server';
 import { useState } from 'react';
+import { usePermissions } from '@/shared/hooks/usePermissions';
 
 // Esquema de validación con transformación de "__clear__" a null
 const commercialIntegrationSchema = z.object({
@@ -67,6 +68,7 @@ export function _CommercialIntegrationForm({
   defaultValues,
 }: CommercialIntegrationFormProps) {
   const router = useRouter();
+  const { hasPermission } = usePermissions();
   const [isLoading, setIsLoading] = useState(false);
 
   const form = useForm<FormValues>({
@@ -709,7 +711,7 @@ export function _CommercialIntegrationForm({
       </div>
 
       <div className="flex justify-end border-t pt-4">
-        <Button type="submit" disabled={isLoading}>
+        <Button type="submit" disabled={isLoading || !hasPermission('accounting.settings', 'update')}>
           {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
           Guardar Configuración
         </Button>

@@ -3,8 +3,9 @@
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
+import { usePermissions } from '@/shared/hooks/usePermissions';
 
-import { DataTable, type DataTableSearchParams } from '@/shared/components/common/DataTable';
+import { DataTable, type DataTableSearchParams, type DataTableFacetedFilterConfig } from '@/shared/components/common/DataTable';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,6 +18,7 @@ import {
 } from '@/shared/components/ui/alert-dialog';
 import { confirmExpense, cancelExpense, deleteExpense } from '../../actions.server';
 import { getColumns, type ExpenseListItem } from '../columns';
+import { EXPENSE_STATUS_LABELS } from '../../validators';
 import { _CreateExpenseModal } from './_CreateExpenseModal';
 import { _ExpenseDetailModal } from './_ExpenseDetailModal';
 
@@ -28,6 +30,7 @@ interface Props {
 
 export function _ExpensesTable({ data, totalRows, searchParams }: Props) {
   const router = useRouter();
+  const { hasPermission } = usePermissions();
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -87,6 +90,35 @@ export function _ExpensesTable({ data, totalRows, searchParams }: Props) {
     }
   };
 
+  const canCreate = hasPermission('commercial.expenses', 'create');
+  const canUpdate = hasPermission('commercial.expenses', 'update');
+  const canApprove = hasPermission('commercial.expenses', 'approve');
+  const canDelete = hasPermission('commercial.expenses', 'delete');
+
+  const facetedFilters: DataTableFacetedFilterConfig[] = useMemo(
+    () => [
+      {
+        columnId: 'status',
+        title: 'Estado',
+        options: Object.entries(EXPENSE_STATUS_LABELS).map(([value, label]) => ({
+          label,
+          value,
+        })),
+      },
+      {
+        columnId: 'date',
+        title: 'Fecha',
+        type: 'dateRange' as const,
+      },
+      {
+        columnId: 'dueDate',
+        title: 'Vencimiento',
+        type: 'dateRange' as const,
+      },
+    ],
+    []
+  );
+
   const columns = useMemo(
     () =>
       getColumns({
@@ -94,24 +126,32 @@ export function _ExpensesTable({ data, totalRows, searchParams }: Props) {
           setSelectedExpense(expense);
           setDetailModalOpen(true);
         },
-        onEdit: (expense) => {
-          setSelectedExpense(expense);
-          setEditModalOpen(true);
-        },
-        onConfirm: (expense) => {
-          setSelectedExpense(expense);
-          setConfirmDialogOpen(true);
-        },
-        onCancel: (expense) => {
-          setSelectedExpense(expense);
-          setCancelDialogOpen(true);
-        },
-        onDelete: (expense) => {
-          setSelectedExpense(expense);
-          setDeleteDialogOpen(true);
-        },
+        onEdit: canUpdate
+          ? (expense) => {
+              setSelectedExpense(expense);
+              setEditModalOpen(true);
+            }
+          : undefined,
+        onConfirm: canApprove
+          ? (expense) => {
+              setSelectedExpense(expense);
+              setConfirmDialogOpen(true);
+            }
+          : undefined,
+        onCancel: canDelete
+          ? (expense) => {
+              setSelectedExpense(expense);
+              setCancelDialogOpen(true);
+            }
+          : undefined,
+        onDelete: canDelete
+          ? (expense) => {
+              setSelectedExpense(expense);
+              setDeleteDialogOpen(true);
+            }
+          : undefined,
       }),
-    []
+    [canUpdate, canApprove, canDelete]
   );
 
   return (
@@ -122,7 +162,10 @@ export function _ExpensesTable({ data, totalRows, searchParams }: Props) {
         totalRows={totalRows}
         searchParams={searchParams}
         searchPlaceholder="Buscar gastos..."
-        toolbarActions={<_CreateExpenseModal onSuccess={() => router.refresh()} />}
+        facetedFilters={facetedFilters}
+        tableId="commercial-expenses"
+        showFilterToggle
+        toolbarActions={canCreate ? <_CreateExpenseModal onSuccess={() => router.refresh()} /> : undefined}
       />
 
       {/* Diálogo de Confirmación */}

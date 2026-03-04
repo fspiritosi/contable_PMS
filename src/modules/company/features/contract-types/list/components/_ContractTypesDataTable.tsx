@@ -88,6 +88,7 @@ export function _ContractTypesDataTable({ data, totalRows, searchParams, permiss
         totalRows={totalRows}
         searchParams={searchParams}
         searchPlaceholder="Buscar tipos de contrato..."
+        tableId="company-contract-types"
         toolbarActions={
           permissions.canCreate ? (
             <Button onClick={handleCreate} data-testid="new-contract-type-button">

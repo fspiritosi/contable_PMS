@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { Button } from '@/shared/components/ui/button';
+import { usePermissions } from '@/shared/hooks/usePermissions';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -41,6 +42,7 @@ interface PendingAction {
 
 export function _PurchaseOrderActions({ orderId, status, fullNumber }: PurchaseOrderActionsProps) {
   const router = useRouter();
+  const { hasPermission } = usePermissions();
   const [loading, setLoading] = useState(false);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
 
@@ -69,81 +71,89 @@ export function _PurchaseOrderActions({ orderId, status, fullNumber }: PurchaseO
       <div className="flex items-center gap-2">
         {status === 'DRAFT' && (
           <>
-            <Button
-              variant="default"
-              size="sm"
-              disabled={loading}
-              onClick={() =>
-                setPendingAction({
-                  title: '¿Enviar a aprobación?',
-                  description: `La orden ${fullNumber} será enviada a aprobación.`,
-                  action: () => submitForApproval(orderId),
-                  successMessage: 'Orden enviada a aprobación',
-                })
-              }
-            >
-              <Send className="mr-2 h-4 w-4" />
-              Enviar a Aprobación
-            </Button>
-            <Button
-              variant="destructive"
-              size="sm"
-              disabled={loading}
-              onClick={() =>
-                setPendingAction({
-                  title: '¿Eliminar orden?',
-                  description: `La orden ${fullNumber} será eliminada permanentemente. Esta acción no se puede deshacer.`,
-                  action: () => deletePurchaseOrder(orderId),
-                  successMessage: 'Orden eliminada',
-                  redirectToList: true,
-                  destructive: true,
-                })
-              }
-            >
-              <Trash2 className="mr-2 h-4 w-4" />
-              Eliminar
-            </Button>
+            {hasPermission('commercial.purchase-orders', 'update') && (
+              <Button
+                variant="default"
+                size="sm"
+                disabled={loading}
+                onClick={() =>
+                  setPendingAction({
+                    title: '¿Enviar a aprobación?',
+                    description: `La orden ${fullNumber} será enviada a aprobación.`,
+                    action: () => submitForApproval(orderId),
+                    successMessage: 'Orden enviada a aprobación',
+                  })
+                }
+              >
+                <Send className="mr-2 h-4 w-4" />
+                Enviar a Aprobación
+              </Button>
+            )}
+            {hasPermission('commercial.purchase-orders', 'delete') && (
+              <Button
+                variant="destructive"
+                size="sm"
+                disabled={loading}
+                onClick={() =>
+                  setPendingAction({
+                    title: '¿Eliminar orden?',
+                    description: `La orden ${fullNumber} será eliminada permanentemente. Esta acción no se puede deshacer.`,
+                    action: () => deletePurchaseOrder(orderId),
+                    successMessage: 'Orden eliminada',
+                    redirectToList: true,
+                    destructive: true,
+                  })
+                }
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Eliminar
+              </Button>
+            )}
           </>
         )}
 
         {status === 'PENDING_APPROVAL' && (
           <>
-            <Button
-              variant="default"
-              size="sm"
-              disabled={loading}
-              onClick={() =>
-                setPendingAction({
-                  title: '¿Aprobar orden?',
-                  description: `La orden ${fullNumber} será aprobada.`,
-                  action: () => approvePurchaseOrder(orderId),
-                  successMessage: 'Orden aprobada correctamente',
-                })
-              }
-            >
-              <CheckCircle className="mr-2 h-4 w-4" />
-              Aprobar
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={loading}
-              onClick={() =>
-                setPendingAction({
-                  title: '¿Rechazar orden?',
-                  description: `La orden ${fullNumber} será rechazada y volverá a estado borrador.`,
-                  action: () => rejectPurchaseOrder(orderId),
-                  successMessage: 'Orden rechazada',
-                })
-              }
-            >
-              <XCircle className="mr-2 h-4 w-4" />
-              Rechazar
-            </Button>
+            {hasPermission('commercial.purchase-orders', 'approve') && (
+              <>
+                <Button
+                  variant="default"
+                  size="sm"
+                  disabled={loading}
+                  onClick={() =>
+                    setPendingAction({
+                      title: '¿Aprobar orden?',
+                      description: `La orden ${fullNumber} será aprobada.`,
+                      action: () => approvePurchaseOrder(orderId),
+                      successMessage: 'Orden aprobada correctamente',
+                    })
+                  }
+                >
+                  <CheckCircle className="mr-2 h-4 w-4" />
+                  Aprobar
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={loading}
+                  onClick={() =>
+                    setPendingAction({
+                      title: '¿Rechazar orden?',
+                      description: `La orden ${fullNumber} será rechazada y volverá a estado borrador.`,
+                      action: () => rejectPurchaseOrder(orderId),
+                      successMessage: 'Orden rechazada',
+                    })
+                  }
+                >
+                  <XCircle className="mr-2 h-4 w-4" />
+                  Rechazar
+                </Button>
+              </>
+            )}
           </>
         )}
 
-        {['DRAFT', 'PENDING_APPROVAL', 'APPROVED'].includes(status) && status !== 'DRAFT' && (
+        {['DRAFT', 'PENDING_APPROVAL', 'APPROVED'].includes(status) && status !== 'DRAFT' && hasPermission('commercial.purchase-orders', 'delete') && (
           <Button
             variant="destructive"
             size="sm"

@@ -315,6 +315,7 @@ export function _SupplierAccountStatementTab({ accountStatement }: SupplierAccou
               data={invoices}
               totalRows={invoices.length}
               searchPlaceholder="Buscar facturas..."
+              tableId="commercial-supplier-invoices"
             />
           )}
         </CardContent>
@@ -335,6 +336,7 @@ export function _SupplierAccountStatementTab({ accountStatement }: SupplierAccou
               data={payments}
               totalRows={payments.length}
               searchPlaceholder="Buscar pagos..."
+              tableId="commercial-supplier-payments"
             />
           )}
         </CardContent>

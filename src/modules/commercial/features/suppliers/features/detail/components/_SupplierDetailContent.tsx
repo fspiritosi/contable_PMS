@@ -24,6 +24,7 @@ import type { Supplier } from '../../../shared/types';
 import { SUPPLIER_TAX_CONDITION_LABELS, SUPPLIER_STATUS_LABELS } from '../../../shared/types';
 import { deleteSupplier } from '../../list/actions.server';
 import { logger } from '@/shared/lib/logger';
+import { usePermissions } from '@/shared/hooks/usePermissions';
 
 interface SupplierDetailContentProps {
   supplier: Supplier;
@@ -31,6 +32,7 @@ interface SupplierDetailContentProps {
 
 export function _SupplierDetailContent({ supplier }: SupplierDetailContentProps) {
   const router = useRouter();
+  const { hasPermission } = usePermissions();
   const [isDeleting, setIsDeleting] = useState(false);
 
   // Formatear CUIT con guiones
@@ -88,32 +90,36 @@ export function _SupplierDetailContent({ supplier }: SupplierDetailContentProps)
           </div>
         </div>
         <div className="flex gap-2">
-          <Link href={`/dashboard/commercial/suppliers/${supplier.id}/edit`}>
-            <Button>
-              <Edit className="mr-2 h-4 w-4" />
-              Editar
-            </Button>
-          </Link>
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button variant="destructive" disabled={isDeleting}>
-                <Trash2 className="mr-2 h-4 w-4" />
-                {isDeleting ? 'Eliminando...' : 'Eliminar'}
+          {hasPermission('commercial.suppliers', 'update') && (
+            <Link href={`/dashboard/commercial/suppliers/${supplier.id}/edit`}>
+              <Button>
+                <Edit className="mr-2 h-4 w-4" />
+                Editar
               </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  Vas a eliminar el proveedor &quot;{supplier.businessName}&quot;. Esta acción no se puede deshacer.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                <AlertDialogAction onClick={handleDelete}>Eliminar</AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
+            </Link>
+          )}
+          {hasPermission('commercial.suppliers', 'delete') && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive" disabled={isDeleting}>
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  {isDeleting ? 'Eliminando...' : 'Eliminar'}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Vas a eliminar el proveedor &quot;{supplier.businessName}&quot;. Esta acción no se puede deshacer.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleDelete}>Eliminar</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
         </div>
       </div>
 

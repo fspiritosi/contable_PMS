@@ -30,41 +30,6 @@ import type { DataTableProps } from './types';
  * Este componente está diseñado para trabajar con datos paginados desde el servidor.
  * El estado se sincroniza automáticamente con la URL para permitir compartir links
  * y navegación con el botón atrás/adelante del navegador.
- *
- * @example
- * ```tsx
- * // 1. Server Component (page.tsx)
- * export default async function EmployeesPage({ searchParams }) {
- *   const params = await searchParams;
- *   const { data, total } = await getEmployees(params);
- *
- *   return (
- *     <DataTable
- *       columns={columns}
- *       data={data}
- *       totalRows={total}
- *       searchParams={params}
- *       searchPlaceholder="Buscar empleados..."
- *       facetedFilters={[
- *         { columnId: 'status', title: 'Estado', options: statusOptions },
- *       ]}
- *     />
- *   );
- * }
- *
- * // 2. Server Action
- * export async function getEmployees(searchParams: DataTableSearchParams) {
- *   const state = parseSearchParams(searchParams);
- *   const prismaParams = stateToPrismaParams(state);
- *
- *   const [data, total] = await Promise.all([
- *     prisma.employee.findMany({ ...prismaParams, where: { companyId } }),
- *     prisma.employee.count({ where: { companyId } }),
- *   ]);
- *
- *   return { data, total };
- * }
- * ```
  */
 export function DataTable<TData extends Record<string, unknown>, TValue = unknown>({
   columns,
@@ -84,13 +49,80 @@ export function DataTable<TData extends Record<string, unknown>, TValue = unknow
   toolbarActions,
   exportConfig,
   showExportButton = true,
+  initialColumnVisibility,
+  tableId,
+  showFilterToggle = false,
+  initialFilterVisibility,
+  exportActions,
   'data-testid': dataTestId = 'data-table',
 }: DataTableProps<TData, TValue>) {
   // Estado de selección de filas (local)
   const [rowSelection, setRowSelection] = React.useState({});
 
-  // Estado de visibilidad de columnas (local)
-  const [columnVisibility, setColumnVisibility] = React.useState({});
+  // Estado de visibilidad de columnas (inicializado desde props o vacío)
+  const [columnVisibility, setColumnVisibility] = React.useState<Record<string, boolean>>(
+    () => initialColumnVisibility ?? {}
+  );
+
+  // Estado de visibilidad de filtros
+  const [filterVisibility, setFilterVisibility] = React.useState<Record<string, boolean>>(
+    () => {
+      if (initialFilterVisibility) return initialFilterVisibility;
+      // Por defecto, todos los filtros visibles
+      const defaults: Record<string, boolean> = {};
+      facetedFilters.forEach((f) => {
+        defaults[f.columnId] = true;
+      });
+      return defaults;
+    }
+  );
+
+  // Persistencia de preferencias con debounce
+  const saveTimeoutRef = React.useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  const handleColumnVisibilityChange = React.useCallback(
+    (updater: React.SetStateAction<Record<string, boolean>>) => {
+      setColumnVisibility((prev) => {
+        const next = typeof updater === 'function' ? updater(prev) : updater;
+
+        if (tableId) {
+          // Debounce save
+          if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+          saveTimeoutRef.current = setTimeout(() => {
+            import('@/shared/actions/table-preferences').then(({ saveTableColumnVisibility }) => {
+              saveTableColumnVisibility(tableId, next);
+            });
+          }, 1000);
+        }
+
+        return next;
+      });
+    },
+    [tableId]
+  );
+
+  const handleFilterVisibilityChange = React.useCallback(
+    (newVisibility: Record<string, boolean>) => {
+      setFilterVisibility(newVisibility);
+
+      if (tableId) {
+        if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = setTimeout(() => {
+          import('@/shared/actions/table-preferences').then(({ saveTableFilterVisibility }) => {
+            saveTableFilterVisibility(tableId, newVisibility);
+          });
+        }, 1000);
+      }
+    },
+    [tableId]
+  );
+
+  // Cleanup timeout on unmount
+  React.useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    };
+  }, []);
 
   // Hook para manejar estado sincronizado con URL
   const filterableColumns = facetedFilters.map((f) => f.columnId);
@@ -135,8 +167,8 @@ export function DataTable<TData extends Record<string, unknown>, TValue = unknow
         onRowSelectionChange(selectedRows);
       }
     },
-    // Column visibility (local)
-    onColumnVisibilityChange: setColumnVisibility,
+    // Column visibility (local with persistence)
+    onColumnVisibilityChange: handleColumnVisibilityChange,
     // Server-side pagination
     manualPagination: true,
     onPaginationChange,
@@ -172,6 +204,11 @@ export function DataTable<TData extends Record<string, unknown>, TValue = unknow
             {toolbarActions}
           </>
         }
+        showFilterToggle={showFilterToggle}
+        filterVisibility={filterVisibility}
+        onFilterVisibilityChange={handleFilterVisibilityChange}
+        exportActions={exportActions}
+        tableId={tableId}
       />
 
       {/* Table */}

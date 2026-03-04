@@ -9,6 +9,7 @@ import { Button } from '@/shared/components/ui/button';
 import {
   DataTable,
   type DataTableSearchParams,
+  type DataTableFacetedFilterConfig,
 } from '@/shared/components/common/DataTable';
 import {
   AlertDialog,
@@ -23,6 +24,10 @@ import {
 import type { ModulePermissions } from '@/shared/lib/permissions';
 import { getColumns } from '../columns';
 import type { Product } from '../../../shared/types';
+import {
+  PRODUCT_TYPE_LABELS,
+  PRODUCT_STATUS_LABELS,
+} from '../../../shared/types';
 import { deleteProduct } from '../actions.server';
 
 interface ProductsTableProps {
@@ -65,6 +70,28 @@ export function _ProductsTable({ data, totalRows, searchParams, permissions }: P
     [permissions]
   );
 
+  const facetedFilters = useMemo<DataTableFacetedFilterConfig[]>(
+    () => [
+      {
+        columnId: 'type',
+        title: 'Tipo',
+        options: Object.entries(PRODUCT_TYPE_LABELS).map(([value, label]) => ({
+          value,
+          label,
+        })),
+      },
+      {
+        columnId: 'status',
+        title: 'Estado',
+        options: Object.entries(PRODUCT_STATUS_LABELS).map(([value, label]) => ({
+          value,
+          label,
+        })),
+      },
+    ],
+    []
+  );
+
   return (
     <>
       <DataTable
@@ -73,6 +100,9 @@ export function _ProductsTable({ data, totalRows, searchParams, permissions }: P
         totalRows={totalRows}
         searchParams={searchParams}
         searchPlaceholder="Buscar productos..."
+        tableId="commercial-products"
+        facetedFilters={facetedFilters}
+        showFilterToggle
         toolbarActions={
           permissions.canCreate ? (
             <Button onClick={() => router.push('/dashboard/commercial/products/new')}>

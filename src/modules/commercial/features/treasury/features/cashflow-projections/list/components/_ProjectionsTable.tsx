@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
-import { DataTable, type DataTableSearchParams } from '@/shared/components/common/DataTable';
+import { DataTable, type DataTableSearchParams, type DataTableFacetedFilterConfig } from '@/shared/components/common/DataTable';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -18,11 +18,17 @@ import {
 
 import { deleteProjection } from '../../actions.server';
 import type { ProjectionListItem } from '../../../../shared/types';
+import {
+  PROJECTION_TYPE_LABELS,
+  PROJECTION_CATEGORY_LABELS,
+  PROJECTION_STATUS_LABELS,
+} from '../../../../shared/validators';
 import { getColumns } from '../columns';
 import { _CreateProjectionModal } from './_CreateProjectionModal';
 import { _EditProjectionModal } from './_EditProjectionModal';
 import { _LinkDocumentModal } from './_LinkDocumentModal';
 import { _ProjectionLinksSection } from './_ProjectionLinksSection';
+import { usePermissions } from '@/shared/hooks/usePermissions';
 
 interface Props {
   data: ProjectionListItem[];
@@ -38,6 +44,7 @@ export function _ProjectionsTable({ data, totalRows, searchParams }: Props) {
   const [linksOpen, setLinksOpen] = useState(false);
   const [selectedProjection, setSelectedProjection] = useState<ProjectionListItem | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const { hasPermission } = usePermissions();
 
   const handleDelete = async () => {
     if (!selectedProjection) return;
@@ -55,6 +62,45 @@ export function _ProjectionsTable({ data, totalRows, searchParams }: Props) {
       setSelectedProjection(null);
     }
   };
+
+  const canCreate = hasPermission('commercial.treasury.projections', 'create');
+  const canEdit = hasPermission('commercial.treasury.projections', 'update');
+  const canDelete = hasPermission('commercial.treasury.projections', 'delete');
+
+  const facetedFilters: DataTableFacetedFilterConfig[] = useMemo(
+    () => [
+      {
+        columnId: 'status',
+        title: 'Estado',
+        options: Object.entries(PROJECTION_STATUS_LABELS).map(([value, label]) => ({
+          label,
+          value,
+        })),
+      },
+      {
+        columnId: 'type',
+        title: 'Tipo',
+        options: Object.entries(PROJECTION_TYPE_LABELS).map(([value, label]) => ({
+          label,
+          value,
+        })),
+      },
+      {
+        columnId: 'category',
+        title: 'Categoría',
+        options: Object.entries(PROJECTION_CATEGORY_LABELS).map(([value, label]) => ({
+          label,
+          value,
+        })),
+      },
+      {
+        columnId: 'date',
+        title: 'Fecha',
+        type: 'dateRange' as const,
+      },
+    ],
+    []
+  );
 
   const columns = useMemo(
     () =>
@@ -75,8 +121,10 @@ export function _ProjectionsTable({ data, totalRows, searchParams }: Props) {
           setSelectedProjection(projection);
           setLinksOpen(true);
         },
+        canEdit,
+        canDelete,
       }),
-    []
+    [canEdit, canDelete]
   );
 
   return (
@@ -87,8 +135,11 @@ export function _ProjectionsTable({ data, totalRows, searchParams }: Props) {
         totalRows={totalRows}
         searchParams={searchParams}
         searchPlaceholder="Buscar proyecciones..."
+        facetedFilters={facetedFilters}
+        tableId="commercial-cashflow-projections"
+        showFilterToggle
         toolbarActions={
-          <_CreateProjectionModal onSuccess={() => router.refresh()} />
+          canCreate ? <_CreateProjectionModal onSuccess={() => router.refresh()} /> : undefined
         }
       />
 

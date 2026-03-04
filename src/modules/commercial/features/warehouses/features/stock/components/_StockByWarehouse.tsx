@@ -17,6 +17,7 @@ import { getWarehouseStocks } from '../../list/actions.server';
 import { useQuery } from '@tanstack/react-query';
 import { DataTable } from '@/shared/components/common/DataTable';
 import { getColumns } from '../columns';
+import { usePermissions } from '@/shared/hooks/usePermissions';
 
 interface StockByWarehouseProps {
   warehouses: Warehouse[];
@@ -35,6 +36,7 @@ export function StockByWarehouse({
   const [adjustDialogOpen, setAdjustDialogOpen] = useState(false);
   const [transferDialogOpen, setTransferDialogOpen] = useState(false);
   const [selectedStock, setSelectedStock] = useState<WarehouseStock | null>(null);
+  const { hasPermission } = usePermissions();
 
   const { data: stocks = defaultStock } = useQuery({
     queryKey: ['warehouse-stocks', selectedWarehouseId],
@@ -44,6 +46,9 @@ export function StockByWarehouse({
   });
 
   const selectedWarehouse = warehouses.find(w => w.id === selectedWarehouseId);
+
+  const canAdjustStock = hasPermission('commercial.stock', 'update');
+  const canTransferStock = hasPermission('commercial.movements', 'create');
 
   const columns = useMemo(
     () =>
@@ -56,8 +61,10 @@ export function StockByWarehouse({
           setSelectedStock(stock);
           setTransferDialogOpen(true);
         },
+        canAdjust: canAdjustStock,
+        canTransfer: canTransferStock,
       }),
-    []
+    [canAdjustStock, canTransferStock]
   );
 
   return (
@@ -102,6 +109,7 @@ export function StockByWarehouse({
             data={stocks}
             totalRows={stocks.length}
             searchPlaceholder="Buscar productos..."
+            tableId="commercial-stock"
           />
         ) : (
           <div className="flex flex-col items-center justify-center py-12 text-center border rounded-md">

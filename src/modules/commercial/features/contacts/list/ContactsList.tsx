@@ -1,4 +1,5 @@
 import type { DataTableSearchParams } from '@/shared/components/common/DataTable';
+import { parseSearchParams } from '@/shared/components/common/DataTable/helpers';
 import { PermissionGuard } from '@/shared/components/common/PermissionGuard';
 import { getModulePermissions } from '@/shared/lib/permissions';
 import { getContacts, getContactFormOptions } from './actions.server';
@@ -9,15 +10,14 @@ interface Props {
 }
 
 export async function ContactsList({ searchParams = {} }: Props) {
-  const page = searchParams.page ? parseInt(searchParams.page) : 1;
-  const search = searchParams.search;
-  const pageSize = searchParams.pageSize ? parseInt(searchParams.pageSize) : 10;
+  const { page, pageSize, search, filters } = parseSearchParams(searchParams);
 
   const [result, options, permissions] = await Promise.all([
     getContacts({
-      page,
+      page: page + 1,
       pageSize,
       search,
+      filters,
     }),
     getContactFormOptions(),
     getModulePermissions('commercial.contacts'),

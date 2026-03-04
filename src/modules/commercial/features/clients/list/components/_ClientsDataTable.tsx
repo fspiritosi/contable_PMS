@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { Button } from '@/shared/components/ui/button';
 import {
   DataTable,
+  type DataTableFacetedFilterConfig,
   type DataTableSearchParams,
 } from '@/shared/components/common/DataTable';
 import {
@@ -84,6 +85,20 @@ export function _ClientsDataTable({ data, totalRows, searchParams, permissions }
     [permissions]
   );
 
+  const facetedFilters = useMemo<DataTableFacetedFilterConfig[]>(
+    () => [
+      {
+        columnId: 'isActive',
+        title: 'Estado',
+        options: [
+          { value: 'true', label: 'Activo' },
+          { value: 'false', label: 'Inactivo' },
+        ],
+      },
+    ],
+    []
+  );
+
   return (
     <>
       <DataTable
@@ -92,6 +107,9 @@ export function _ClientsDataTable({ data, totalRows, searchParams, permissions }
         totalRows={totalRows}
         searchParams={searchParams}
         searchPlaceholder="Buscar clientes..."
+        tableId="commercial-clients"
+        facetedFilters={facetedFilters}
+        showFilterToggle
         toolbarActions={
           permissions.canCreate ? (
             <Button onClick={() => setIsCreateOpen(true)}>

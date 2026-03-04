@@ -38,9 +38,11 @@ interface ColumnsProps {
   onDelete: (projection: ProjectionListItem) => void;
   onLink: (projection: ProjectionListItem) => void;
   onViewLinks: (projection: ProjectionListItem) => void;
+  canEdit?: boolean;
+  canDelete?: boolean;
 }
 
-export function getColumns({ onEdit, onDelete, onLink, onViewLinks }: ColumnsProps): ColumnDef<ProjectionListItem>[] {
+export function getColumns({ onEdit, onDelete, onLink, onViewLinks, canEdit = true, canDelete: canDeleteProp = true }: ColumnsProps): ColumnDef<ProjectionListItem>[] {
   return [
     {
       accessorKey: 'type',
@@ -129,10 +131,12 @@ export function getColumns({ onEdit, onDelete, onLink, onViewLinks }: ColumnsPro
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => onEdit(projection)}>
-                <Pencil className="mr-2 h-4 w-4" />
-                Editar
-              </DropdownMenuItem>
+              {canEdit && (
+                <DropdownMenuItem onClick={() => onEdit(projection)}>
+                  <Pencil className="mr-2 h-4 w-4" />
+                  Editar
+                </DropdownMenuItem>
+              )}
               {!isConfirmed && (
                 <DropdownMenuItem onClick={() => onLink(projection)}>
                   <Link2 className="mr-2 h-4 w-4" />
@@ -146,10 +150,12 @@ export function getColumns({ onEdit, onDelete, onLink, onViewLinks }: ColumnsPro
                 </DropdownMenuItem>
               )}
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => onDelete(projection)} className="text-destructive">
-                <Trash2 className="mr-2 h-4 w-4" />
-                Eliminar
-              </DropdownMenuItem>
+              {canDeleteProp && (
+                <DropdownMenuItem onClick={() => onDelete(projection)} className="text-destructive">
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Eliminar
+                </DropdownMenuItem>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         );

@@ -88,6 +88,7 @@ export function _SectorsDataTable({ data, totalRows, searchParams, permissions }
         totalRows={totalRows}
         searchParams={searchParams}
         searchPlaceholder="Buscar sectores..."
+        tableId="company-sectors"
         toolbarActions={
           permissions.canCreate ? (
             <Button onClick={handleCreate} data-testid="new-sector-button">

@@ -94,6 +94,7 @@ export function _ContractorsDataTable({ data, totalRows, searchParams, permissio
         searchParams={searchParams}
         searchPlaceholder="Buscar contratistas..."
         emptyMessage="No hay contratistas registrados"
+        tableId="company-contractors"
         toolbarActions={
           permissions.canCreate ? (
             <Button onClick={handleCreate} data-testid="new-contractor-button">

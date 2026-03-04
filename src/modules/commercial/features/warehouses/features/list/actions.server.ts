@@ -8,7 +8,7 @@ import { logger } from '@/shared/lib/logger';
 import { getActiveCompanyId } from '@/shared/lib/company';
 import { checkPermission } from '@/shared/lib/permissions';
 import type { DataTableSearchParams } from '@/shared/components/common/DataTable';
-import { parseSearchParams, stateToPrismaParams } from '@/shared/components/common/DataTable/helpers';
+import { parseSearchParams, stateToPrismaParams, buildFiltersWhere } from '@/shared/components/common/DataTable/helpers';
 import {
   createWarehouseSchema,
   updateWarehouseSchema,
@@ -32,11 +32,12 @@ interface GetWarehousesParams {
   pageSize?: number;
   search?: string;
   isActive?: boolean;
+  filters?: Record<string, string[]>;
 }
 
 export async function getWarehouses(params: GetWarehousesParams = {}) {
   await checkPermission('commercial.warehouses', 'view', { redirect: true });
-  const { page = 1, pageSize = 10, search, isActive } = params;
+  const { page = 1, pageSize = 10, search, isActive, filters = {} } = params;
   const { userId } = await auth();
   if (!userId) {
     throw new Error('No autenticado');
@@ -48,9 +49,21 @@ export async function getWarehouses(params: GetWarehousesParams = {}) {
   }
 
   try {
+    // Build faceted filters, excluding isActive since it needs boolean conversion
+    const facetedWhere = buildFiltersWhere(filters, {}, { exclude: ['isActive'] });
+
+    // Handle isActive boolean filter from faceted filter (values are 'true'/'false' strings)
+    let isActiveFilter: boolean | undefined = isActive;
+    if (filters.isActive && filters.isActive.length > 0) {
+      const val = filters.isActive[0];
+      if (val === 'true') isActiveFilter = true;
+      else if (val === 'false') isActiveFilter = false;
+    }
+
     const where = {
       companyId,
-      ...(isActive !== undefined && { isActive }),
+      ...facetedWhere,
+      ...(isActiveFilter !== undefined && { isActive: isActiveFilter }),
       ...(search && {
         OR: [
           { code: { contains: search, mode: 'insensitive' as const } },

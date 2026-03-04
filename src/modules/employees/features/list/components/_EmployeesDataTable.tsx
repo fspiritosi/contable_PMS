@@ -112,6 +112,8 @@ export function _EmployeesDataTable({
       searchParams={searchParams}
       searchPlaceholder="Buscar por nombre, legajo, documento o CUIL..."
       facetedFilters={facetedFilters}
+      tableId="employees"
+      showFilterToggle
       enableRowSelection={true}
       showRowSelection={true}
       emptyMessage="No hay empleados registrados"

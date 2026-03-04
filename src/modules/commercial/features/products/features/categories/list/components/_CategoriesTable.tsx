@@ -34,12 +34,14 @@ import Link from 'next/link';
 import { toast } from 'sonner';
 import type { ProductCategory } from '../../shared/types';
 import { deleteCategory } from '../actions.server';
+import { usePermissions } from '@/shared/hooks/usePermissions';
 
 interface CategoriesTableProps {
   categories: ProductCategory[];
 }
 
 export function CategoriesTable({ categories }: CategoriesTableProps) {
+  const { hasPermission } = usePermissions();
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
 
   const handleDelete = async () => {
@@ -116,19 +118,23 @@ export function CategoriesTable({ categories }: CategoriesTableProps) {
                   <DropdownMenuContent align="end">
                     <DropdownMenuLabel>Acciones</DropdownMenuLabel>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem asChild>
-                      <Link href={`/dashboard/commercial/categories/${category.id}/edit`}>
-                        <Edit className="mr-2 h-4 w-4" />
-                        Editar
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => setDeleteTarget({ id: category.id, name: category.name })}
-                      className="text-destructive focus:text-destructive"
-                    >
-                      <Trash2 className="mr-2 h-4 w-4" />
-                      Eliminar
-                    </DropdownMenuItem>
+                    {hasPermission('commercial.categories', 'update') && (
+                      <DropdownMenuItem asChild>
+                        <Link href={`/dashboard/commercial/categories/${category.id}/edit`}>
+                          <Edit className="mr-2 h-4 w-4" />
+                          Editar
+                        </Link>
+                      </DropdownMenuItem>
+                    )}
+                    {hasPermission('commercial.categories', 'delete') && (
+                      <DropdownMenuItem
+                        onClick={() => setDeleteTarget({ id: category.id, name: category.name })}
+                        className="text-destructive focus:text-destructive"
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Eliminar
+                      </DropdownMenuItem>
+                    )}
                   </DropdownMenuContent>
                 </DropdownMenu>
               </TableCell>

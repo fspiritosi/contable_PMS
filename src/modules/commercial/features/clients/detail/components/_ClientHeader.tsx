@@ -22,6 +22,7 @@ import {
 
 import { deactivateClient, reactivateClient } from '../../list/actions.server';
 import type { ClientDetail } from '../actions.server';
+import { usePermissions } from '@/shared/hooks/usePermissions';
 
 interface Props {
   client: ClientDetail;
@@ -29,6 +30,7 @@ interface Props {
 
 export function _ClientHeader({ client }: Props) {
   const router = useRouter();
+  const { hasPermission } = usePermissions();
   const [showDeactivateDialog, setShowDeactivateDialog] = useState(false);
   const [showReactivateDialog, setShowReactivateDialog] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -111,30 +113,34 @@ export function _ClientHeader({ client }: Props) {
 
         {/* Row 2: Action buttons */}
         <div className="flex gap-2 sm:justify-end">
-          <Button variant="outline" className="flex-1 sm:flex-none" asChild>
-            <Link href={`/dashboard/company/commercial/clients/${client.id}/edit`}>
-              <Edit className="mr-2 h-4 w-4" />
-              Editar
-            </Link>
-          </Button>
-          {client.isActive ? (
-            <Button
-              variant="destructive"
-              className="flex-1 sm:flex-none"
-              onClick={() => setShowDeactivateDialog(true)}
-            >
-              <PowerOff className="mr-2 h-4 w-4" />
-              <span className="hidden xs:inline">Dar de </span>Baja
+          {hasPermission('commercial.clients', 'update') && (
+            <Button variant="outline" className="flex-1 sm:flex-none" asChild>
+              <Link href={`/dashboard/company/commercial/clients/${client.id}/edit`}>
+                <Edit className="mr-2 h-4 w-4" />
+                Editar
+              </Link>
             </Button>
-          ) : (
-            <Button
-              variant="default"
-              className="flex-1 sm:flex-none"
-              onClick={() => setShowReactivateDialog(true)}
-            >
-              <Power className="mr-2 h-4 w-4" />
-              Reactivar
-            </Button>
+          )}
+          {hasPermission('commercial.clients', 'update') && (
+            client.isActive ? (
+              <Button
+                variant="destructive"
+                className="flex-1 sm:flex-none"
+                onClick={() => setShowDeactivateDialog(true)}
+              >
+                <PowerOff className="mr-2 h-4 w-4" />
+                <span className="hidden xs:inline">Dar de </span>Baja
+              </Button>
+            ) : (
+              <Button
+                variant="default"
+                className="flex-1 sm:flex-none"
+                onClick={() => setShowReactivateDialog(true)}
+              >
+                <Power className="mr-2 h-4 w-4" />
+                Reactivar
+              </Button>
+            )
           )}
         </div>
       </div>

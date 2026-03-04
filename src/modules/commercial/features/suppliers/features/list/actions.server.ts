@@ -7,6 +7,13 @@ import { checkPermission } from '@/shared/lib/permissions';
 import { getActiveCompanyId } from '@/shared/lib/company';
 import { revalidatePath } from 'next/cache';
 import {
+  buildFiltersWhere,
+  buildSearchWhere,
+  parseSearchParams,
+  stateToPrismaParams,
+  type DataTableSearchParams,
+} from '@/shared/components/common/DataTable/helpers';
+import {
   createSupplierSchema,
   updateSupplierSchema,
   type CreateSupplierFormData,
@@ -14,18 +21,11 @@ import {
 } from '../../shared/validators';
 import type { Supplier } from '../../shared/types';
 
-interface GetSuppliersParams {
-  page?: number;
-  pageSize?: number;
-  search?: string;
-}
-
 /**
  * Obtiene el listado de proveedores de la empresa activa con paginación
  */
-export async function getSuppliers(params: GetSuppliersParams = {}) {
+export async function getSuppliers(searchParams: DataTableSearchParams = {}) {
   await checkPermission('commercial.suppliers', 'view', { redirect: true });
-  const { page = 1, pageSize = 10, search } = params;
   const companyId = await getActiveCompanyId();
   if (!companyId) throw new Error('No hay empresa activa');
 
@@ -33,24 +33,33 @@ export async function getSuppliers(params: GetSuppliersParams = {}) {
     const { userId } = await auth();
     if (!userId) throw new Error('No autenticado');
 
+    const state = parseSearchParams(searchParams);
+    const { skip, take, orderBy } = stateToPrismaParams(state);
+
+    const searchWhere = buildSearchWhere(state.search, [
+      'businessName',
+      'tradeName',
+      'taxId',
+      'email',
+    ]);
+
+    const filtersWhere = buildFiltersWhere(state.filters, {
+      status: 'status',
+      taxCondition: 'taxCondition',
+    });
+
     const where = {
       companyId,
-      ...(search && {
-        OR: [
-          { businessName: { contains: search, mode: 'insensitive' as const } },
-          { tradeName: { contains: search, mode: 'insensitive' as const } },
-          { taxId: { contains: search, mode: 'insensitive' as const } },
-          { email: { contains: search, mode: 'insensitive' as const } },
-        ],
-      }),
+      ...searchWhere,
+      ...filtersWhere,
     };
 
     const [suppliers, total] = await Promise.all([
       prisma.supplier.findMany({
         where,
-        orderBy: [{ status: 'asc' }, { businessName: 'asc' }],
-        skip: (page - 1) * pageSize,
-        take: pageSize,
+        orderBy: orderBy || [{ status: 'asc' }, { businessName: 'asc' }],
+        skip,
+        take,
       }),
       prisma.supplier.count({ where }),
     ]);
@@ -63,10 +72,10 @@ export async function getSuppliers(params: GetSuppliersParams = {}) {
     return {
       data,
       pagination: {
-        page,
-        pageSize,
+        page: state.page + 1,
+        pageSize: state.pageSize,
         total,
-        totalPages: Math.ceil(total / pageSize),
+        totalPages: Math.ceil(total / state.pageSize),
       },
     };
   } catch (error) {

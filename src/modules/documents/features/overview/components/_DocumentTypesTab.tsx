@@ -32,6 +32,7 @@ import {
 } from '../../document-types/list/actions.server';
 import { getColumns } from '../../document-types/list/columns';
 import { _DocumentTypeFormModal } from '../../document-types/list/components/_DocumentTypeFormModal';
+import { usePermissions } from '@/shared/hooks/usePermissions';
 
 interface Props {
   data: DocumentTypeListItem[];
@@ -89,8 +90,12 @@ export function _DocumentTypesTab({ data, totalRows, searchParams, tabCounts, cu
     }
   };
 
+  const { hasPermission } = usePermissions();
+  const canUpdate = hasPermission('documents', 'update');
+  const canDelete = hasPermission('documents', 'delete');
+
   // Obtener columnas con handlers
-  const columns = getColumns({ onDelete: handleDelete, onEdit: handleEdit });
+  const columns = getColumns({ onDelete: handleDelete, onEdit: handleEdit, canUpdate, canDelete });
 
   // Cambio de tab interno (docTypeTab) - preservar tab=types
   const handleDocTypeTabChange = (docTypeTab: string) => {
@@ -172,6 +177,8 @@ export function _DocumentTypesTab({ data, totalRows, searchParams, tabCounts, cu
         searchParams={searchParams}
         searchPlaceholder="Buscar por nombre..."
         facetedFilters={facetedFilters}
+        tableId="documents-types-overview"
+        showFilterToggle
         enableRowSelection={true}
         showRowSelection={true}
         toolbarActions={toolbarActions}

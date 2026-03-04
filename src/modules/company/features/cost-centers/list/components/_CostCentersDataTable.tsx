@@ -92,6 +92,7 @@ export function _CostCentersDataTable({ data, totalRows, searchParams, permissio
         searchParams={searchParams}
         searchPlaceholder="Buscar centros de costo..."
         emptyMessage="No hay centros de costo registrados"
+        tableId="company-cost-centers"
         toolbarActions={
           permissions.canCreate ? (
             <Button onClick={handleCreate} data-testid="new-cost-center-button">

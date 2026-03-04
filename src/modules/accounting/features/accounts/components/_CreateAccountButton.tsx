@@ -4,6 +4,7 @@ import { Button } from '@/shared/components/ui/button';
 import { Plus } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { _CreateAccountModal } from './_CreateAccountModal';
+import { usePermissions } from '@/shared/hooks/usePermissions';
 
 interface CreateAccountButtonProps {
   companyId: string;
@@ -11,6 +12,11 @@ interface CreateAccountButtonProps {
 
 export function _CreateAccountButton({ companyId }: CreateAccountButtonProps) {
   const [showModal, setShowModal] = useState(false);
+  const { hasPermission } = usePermissions();
+
+  if (!hasPermission('accounting.accounts', 'create')) {
+    return null;
+  }
 
   return (
     <>

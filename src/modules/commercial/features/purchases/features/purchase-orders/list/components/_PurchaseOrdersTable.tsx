@@ -4,8 +4,9 @@ import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
+import { usePermissions } from '@/shared/hooks/usePermissions';
 
-import { DataTable, type DataTableSearchParams } from '@/shared/components/common/DataTable';
+import { DataTable, type DataTableSearchParams, type DataTableFacetedFilterConfig } from '@/shared/components/common/DataTable';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,6 +25,10 @@ import {
   deletePurchaseOrder,
 } from '../actions.server';
 import { getColumns } from '../columns';
+import {
+  PURCHASE_ORDER_STATUS_LABELS,
+  PURCHASE_ORDER_INVOICING_STATUS_LABELS,
+} from '../../shared/validators';
 
 interface PurchaseOrdersTableProps {
   data: PurchaseOrderListItem[];
@@ -41,6 +46,7 @@ interface PendingAction {
 
 export function _PurchaseOrdersTable({ data, totalRows, searchParams }: PurchaseOrdersTableProps) {
   const router = useRouter();
+  const { hasPermission } = usePermissions();
   const [loading, setLoading] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [executing, setExecuting] = useState(false);
@@ -104,18 +110,51 @@ export function _PurchaseOrdersTable({ data, totalRows, searchParams }: Purchase
     });
   };
 
+  const canUpdate = hasPermission('commercial.purchase-orders', 'update');
+  const canApprove = hasPermission('commercial.purchase-orders', 'approve');
+  const canDelete = hasPermission('commercial.purchase-orders', 'delete');
+
+  const facetedFilters: DataTableFacetedFilterConfig[] = useMemo(
+    () => [
+      {
+        columnId: 'status',
+        title: 'Recepción',
+        options: Object.entries(PURCHASE_ORDER_STATUS_LABELS).map(([value, label]) => ({
+          label,
+          value,
+        })),
+      },
+      {
+        columnId: 'invoicingStatus',
+        title: 'Facturación',
+        options: Object.entries(PURCHASE_ORDER_INVOICING_STATUS_LABELS).map(([value, label]) => ({
+          label,
+          value,
+        })),
+      },
+      {
+        columnId: 'issueDate',
+        title: 'Fecha',
+        type: 'dateRange' as const,
+      },
+    ],
+    []
+  );
+
   const columns = useMemo(
     () =>
       getColumns({
         onView: (order) => router.push(`/dashboard/commercial/purchase-orders/${order.id}`),
-        onEdit: (order) => router.push(`/dashboard/commercial/purchase-orders/${order.id}`),
-        onSubmitForApproval: handleSubmitForApproval,
-        onApprove: handleApprove,
-        onCancel: handleCancel,
-        onDelete: handleDelete,
+        onEdit: canUpdate
+          ? (order) => router.push(`/dashboard/commercial/purchase-orders/${order.id}`)
+          : undefined,
+        onSubmitForApproval: canUpdate ? handleSubmitForApproval : undefined,
+        onApprove: canApprove ? handleApprove : undefined,
+        onCancel: canDelete ? handleCancel : undefined,
+        onDelete: canDelete ? handleDelete : undefined,
         loading,
       }),
-    [loading]
+    [loading, canUpdate, canApprove, canDelete]
   );
 
   return (
@@ -126,6 +165,9 @@ export function _PurchaseOrdersTable({ data, totalRows, searchParams }: Purchase
         totalRows={totalRows}
         searchParams={searchParams}
         searchPlaceholder="Buscar órdenes de compra..."
+        facetedFilters={facetedFilters}
+        tableId="commercial-purchase-orders"
+        showFilterToggle
       />
 
       <AlertDialog

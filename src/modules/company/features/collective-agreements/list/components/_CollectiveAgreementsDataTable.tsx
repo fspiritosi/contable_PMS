@@ -100,6 +100,7 @@ export function _CollectiveAgreementsDataTable({
         searchParams={searchParams}
         searchPlaceholder="Buscar convenios colectivos..."
         emptyMessage="No hay convenios colectivos registrados"
+        tableId="company-collective-agreements"
         toolbarActions={
           permissions.canCreate ? (
             <Button onClick={handleCreate} data-testid="new-collective-agreement-button">

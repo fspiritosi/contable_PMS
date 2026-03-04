@@ -9,6 +9,7 @@ import { Button } from '@/shared/components/ui/button';
 import { _CreateBankMovementDialog } from './_CreateBankMovementDialog';
 import { _BankMovementImportDialog } from '@/modules/commercial/features/treasury/features/bank-movements/components/_BankMovementImportDialog';
 import { downloadBankMovementsTemplate } from '@/modules/commercial/features/treasury/features/bank-movements/lib/import-export.server';
+import { usePermissions } from '@/shared/hooks/usePermissions';
 
 interface Props {
   bankAccountId: string;
@@ -19,6 +20,7 @@ export function _BankAccountDetailActions({ bankAccountId }: Props) {
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const router = useRouter();
+  const { hasPermission } = usePermissions();
 
   const handleDownloadTemplate = async () => {
     setIsDownloading(true);
@@ -59,15 +61,19 @@ export function _BankAccountDetailActions({ bankAccountId }: Props) {
           Plantilla Excel
         </Button>
 
-        <Button variant="outline" onClick={() => setIsImportOpen(true)}>
-          <Upload className="h-4 w-4 mr-2" />
-          Importar Excel
-        </Button>
+        {hasPermission('commercial.treasury.bank-accounts', 'create') && (
+          <Button variant="outline" onClick={() => setIsImportOpen(true)}>
+            <Upload className="h-4 w-4 mr-2" />
+            Importar Excel
+          </Button>
+        )}
 
-        <Button onClick={() => setIsDialogOpen(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          Nuevo Movimiento
-        </Button>
+        {hasPermission('commercial.treasury.bank-accounts', 'create') && (
+          <Button onClick={() => setIsDialogOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Nuevo Movimiento
+          </Button>
+        )}
       </div>
 
       <_CreateBankMovementDialog

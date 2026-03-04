@@ -1,4 +1,5 @@
 import type { DataTableSearchParams } from '@/shared/components/common/DataTable';
+import { parseSearchParams } from '@/shared/components/common/DataTable/helpers';
 import { PermissionGuard } from '@/shared/components/common/PermissionGuard';
 import { getModulePermissions } from '@/shared/lib/permissions';
 import { getProducts } from './actions.server';
@@ -9,15 +10,16 @@ interface Props {
 }
 
 export async function ProductsList({ searchParams = {} }: Props) {
-  const page = searchParams.page ? parseInt(searchParams.page) : 1;
-  const search = searchParams.search;
-  const pageSize = searchParams.pageSize ? parseInt(searchParams.pageSize) : 10;
+  const state = parseSearchParams(searchParams);
+  const page = state.page + 1;
+  const { search, pageSize, filters } = state;
 
   const [result, permissions] = await Promise.all([
     getProducts({
       page,
       pageSize,
       search,
+      filters,
     }),
     getModulePermissions('commercial.products'),
   ]);

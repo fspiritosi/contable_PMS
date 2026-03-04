@@ -61,8 +61,14 @@ export interface DataTableFacetedFilterConfig {
   columnId: string;
   /** Título del filtro */
   title: string;
-  /** Opciones disponibles */
-  options: DataTableFilterOption[];
+  /** Opciones disponibles (no requerido para type 'dateRange' o 'text') */
+  options?: DataTableFilterOption[];
+  /** Tipo de filtro: faceted (default), dateRange o text */
+  type?: 'faceted' | 'dateRange' | 'text';
+  /** Placeholder para filtros de texto */
+  placeholder?: string;
+  /** Conteos externos (server-side) para las opciones del filtro faceteado */
+  externalCounts?: Map<string, number>;
 }
 
 // ============================================================================
@@ -180,6 +186,16 @@ export interface DataTableProps<TData, TValue = unknown> {
   exportConfig?: DataTableExportConfig<TData>;
   /** Mostrar botón de exportar a Excel (default: true si hay exportConfig) */
   showExportButton?: boolean;
+  /** Visibilidad inicial de columnas (ej: { email: false }) */
+  initialColumnVisibility?: Record<string, boolean>;
+  /** ID de tabla para persistencia de preferencias del usuario */
+  tableId?: string;
+  /** Mostrar toggle de visibilidad de filtros (default: false) */
+  showFilterToggle?: boolean;
+  /** Visibilidad inicial de filtros (ej: { status: true, priority: false }) */
+  initialFilterVisibility?: Record<string, boolean>;
+  /** Acciones de exportación separadas del toolbar (ej: botones de importar/exportar CSV) */
+  exportActions?: React.ReactNode;
   /** ID del test para cypress */
   'data-testid'?: string;
 }
@@ -196,6 +212,16 @@ export interface DataTableToolbarProps<TData> {
   /** Mostrar input de búsqueda (default: true) */
   showSearch?: boolean;
   toolbarActions?: React.ReactNode;
+  /** ID de tabla para persistencia */
+  tableId?: string;
+  /** Mostrar toggle de visibilidad de filtros */
+  showFilterToggle?: boolean;
+  /** Estado de visibilidad de filtros */
+  filterVisibility?: Record<string, boolean>;
+  /** Callback cuando cambia visibilidad de filtros */
+  onFilterVisibilityChange?: (visibility: Record<string, boolean>) => void;
+  /** Acciones de exportación (separadas de toolbarActions) */
+  exportActions?: React.ReactNode;
 }
 
 /**
@@ -224,6 +250,8 @@ export interface DataTableFacetedFilterProps<TData, TValue> {
   column?: Column<TData, TValue>;
   title: string;
   options: DataTableFilterOption[];
+  /** Conteos externos (server-side) en vez de facets locales */
+  externalCounts?: Map<string, number>;
 }
 
 /**

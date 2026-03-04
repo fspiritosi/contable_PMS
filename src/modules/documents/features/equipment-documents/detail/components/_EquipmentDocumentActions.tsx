@@ -26,6 +26,8 @@ import {
 } from '@/shared/components/ui/card';
 import { Separator } from '@/shared/components/ui/separator';
 
+import { usePermissions } from '@/shared/hooks/usePermissions';
+
 import type { DocumentState } from '@/generated/prisma/enums';
 import {
   deleteEquipmentDocument,
@@ -133,6 +135,7 @@ export function _EquipmentDocumentActions({
   };
 
   const canModify = documentState === 'APPROVED';
+  const { hasPermission } = usePermissions();
 
   return (
     <>
@@ -150,7 +153,7 @@ export function _EquipmentDocumentActions({
             </Button>
           )}
 
-          {canModify && (
+          {canModify && hasPermission('documents', 'update') && (
             <>
               <Separator />
 
@@ -181,7 +184,7 @@ export function _EquipmentDocumentActions({
           <Separator />
 
           {/* Revertir a versión anterior (solo si hay versiones previas) */}
-          {hasPreviousVersions && (
+          {hasPreviousVersions && hasPermission('documents', 'delete') && (
             <Button
               variant="outline"
               className="w-full justify-start h-auto py-2 text-orange-600 hover:text-orange-600"
@@ -198,19 +201,21 @@ export function _EquipmentDocumentActions({
           )}
 
           {/* Eliminar completamente */}
-          <Button
-            variant="outline"
-            className="w-full justify-start h-auto py-2 text-destructive hover:text-destructive"
-            onClick={() => setDeleteDialogOpen(true)}
-          >
-            <Trash2 className="mr-2 h-4 w-4 flex-shrink-0" />
-            <div className="flex flex-col items-start text-left min-w-0">
-              <span>Eliminar documento</span>
-              <span className="text-xs font-normal text-muted-foreground line-clamp-1 sm:line-clamp-none">
-                Elimina el documento y todo su historial
-              </span>
-            </div>
-          </Button>
+          {hasPermission('documents', 'delete') && (
+            <Button
+              variant="outline"
+              className="w-full justify-start h-auto py-2 text-destructive hover:text-destructive"
+              onClick={() => setDeleteDialogOpen(true)}
+            >
+              <Trash2 className="mr-2 h-4 w-4 flex-shrink-0" />
+              <div className="flex flex-col items-start text-left min-w-0">
+                <span>Eliminar documento</span>
+                <span className="text-xs font-normal text-muted-foreground line-clamp-1 sm:line-clamp-none">
+                  Elimina el documento y todo su historial
+                </span>
+              </div>
+            </Button>
+          )}
         </CardContent>
       </Card>
 

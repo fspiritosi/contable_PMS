@@ -81,6 +81,8 @@ export function _MultiResourceDocumentsDataTable({
         totalRows={data.length}
         searchPlaceholder="Buscar por tipo de documento..."
         facetedFilters={facetedFilters}
+        tableId="documents-multi-resource"
+        showFilterToggle
         enableRowSelection={true}
         showRowSelection={true}
         emptyMessage={emptyMessage}

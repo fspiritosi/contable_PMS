@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { Button } from '@/shared/components/ui/button';
 import { CheckCircle, Ban, Trash2, Loader2 } from 'lucide-react';
+import { usePermissions } from '@/shared/hooks/usePermissions';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -39,6 +40,7 @@ interface PendingAction {
 
 export function _ReceivingNoteActions({ noteId, status, fullNumber }: ReceivingNoteActionsProps) {
   const router = useRouter();
+  const { hasPermission } = usePermissions();
   const [loading, setLoading] = useState(false);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
 
@@ -67,44 +69,48 @@ export function _ReceivingNoteActions({ noteId, status, fullNumber }: ReceivingN
       <div className="flex items-center gap-2">
         {status === 'DRAFT' && (
           <>
-            <Button
-              variant="default"
-              size="sm"
-              disabled={loading}
-              onClick={() =>
-                setPendingAction({
-                  title: '¿Confirmar remito?',
-                  description: `El remito ${fullNumber} será confirmado. Se actualizará el stock del almacén.`,
-                  action: () => confirmReceivingNote(noteId),
-                  successMessage: 'Remito confirmado correctamente',
-                })
-              }
-            >
-              <CheckCircle className="mr-2 h-4 w-4" />
-              Confirmar
-            </Button>
-            <Button
-              variant="destructive"
-              size="sm"
-              disabled={loading}
-              onClick={() =>
-                setPendingAction({
-                  title: '¿Eliminar remito?',
-                  description: `El remito ${fullNumber} será eliminado permanentemente. Esta acción no se puede deshacer.`,
-                  action: () => deleteReceivingNote(noteId),
-                  successMessage: 'Remito eliminado',
-                  redirectToList: true,
-                  destructive: true,
-                })
-              }
-            >
-              <Trash2 className="mr-2 h-4 w-4" />
-              Eliminar
-            </Button>
+            {hasPermission('commercial.receiving-notes', 'approve') && (
+              <Button
+                variant="default"
+                size="sm"
+                disabled={loading}
+                onClick={() =>
+                  setPendingAction({
+                    title: '¿Confirmar remito?',
+                    description: `El remito ${fullNumber} será confirmado. Se actualizará el stock del almacén.`,
+                    action: () => confirmReceivingNote(noteId),
+                    successMessage: 'Remito confirmado correctamente',
+                  })
+                }
+              >
+                <CheckCircle className="mr-2 h-4 w-4" />
+                Confirmar
+              </Button>
+            )}
+            {hasPermission('commercial.receiving-notes', 'delete') && (
+              <Button
+                variant="destructive"
+                size="sm"
+                disabled={loading}
+                onClick={() =>
+                  setPendingAction({
+                    title: '¿Eliminar remito?',
+                    description: `El remito ${fullNumber} será eliminado permanentemente. Esta acción no se puede deshacer.`,
+                    action: () => deleteReceivingNote(noteId),
+                    successMessage: 'Remito eliminado',
+                    redirectToList: true,
+                    destructive: true,
+                  })
+                }
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Eliminar
+              </Button>
+            )}
           </>
         )}
 
-        {status === 'CONFIRMED' && (
+        {status === 'CONFIRMED' && hasPermission('commercial.receiving-notes', 'delete') && (
           <Button
             variant="destructive"
             size="sm"

@@ -10,6 +10,31 @@ interface GetContactsParams {
   page?: number;
   pageSize?: number;
   search?: string;
+  filters?: Record<string, string[]>;
+}
+
+/**
+ * Construye la cláusula where para el filtro linkedType
+ * Valores posibles: 'client', 'lead', 'none'
+ */
+function buildLinkedTypeWhere(values: string[]) {
+  if (!values || values.length === 0) return {};
+
+  const conditions: object[] = [];
+
+  if (values.includes('client')) {
+    conditions.push({ contractorId: { not: null } });
+  }
+  if (values.includes('lead')) {
+    conditions.push({ leadId: { not: null }, contractorId: null });
+  }
+  if (values.includes('none')) {
+    conditions.push({ contractorId: null, leadId: null });
+  }
+
+  if (conditions.length === 0) return {};
+  if (conditions.length === 1) return conditions[0];
+  return { OR: conditions };
 }
 
 /**
@@ -17,14 +42,17 @@ interface GetContactsParams {
  */
 export async function getContacts(params: GetContactsParams = {}) {
   await checkPermission('commercial.contacts', 'view', { redirect: true });
-  const { page = 1, pageSize = 10, search } = params;
+  const { page = 1, pageSize = 10, search, filters = {} } = params;
   const companyId = await getActiveCompanyId();
   if (!companyId) throw new Error('No hay empresa activa');
 
   try {
+    const linkedTypeWhere = buildLinkedTypeWhere(filters['linkedType'] ?? []);
+
     const where = {
       companyId,
       isActive: true,
+      ...linkedTypeWhere,
       ...(search && {
         OR: [
           { firstName: { contains: search, mode: 'insensitive' as const } },

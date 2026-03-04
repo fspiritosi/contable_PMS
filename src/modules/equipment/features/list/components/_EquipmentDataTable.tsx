@@ -221,11 +221,13 @@ export function _EquipmentDataTable({
   // Botones del toolbar
   const toolbarActions = (
     <div className="flex gap-2">
-      <Button variant="outline" onClick={() => setBulkDepreciationOpen(true)}>
-        <Calculator className="mr-2 h-4 w-4" />
-        <span className="hidden sm:inline">Contabilizar Depreciaciones</span>
-        <span className="sm:hidden">Deprec.</span>
-      </Button>
+      {permissions.canUpdate && (
+        <Button variant="outline" onClick={() => setBulkDepreciationOpen(true)}>
+          <Calculator className="mr-2 h-4 w-4" />
+          <span className="hidden sm:inline">Contabilizar Depreciaciones</span>
+          <span className="sm:hidden">Deprec.</span>
+        </Button>
+      )}
       {permissions.canCreate && (
         <Button asChild data-testid="new-equipment-button">
           <Link href="/dashboard/equipment/new">
@@ -256,6 +258,8 @@ export function _EquipmentDataTable({
         searchParams={searchParams}
         searchPlaceholder="Buscar por N° interno, dominio, chasis..."
         facetedFilters={facetedFilters}
+        tableId="equipment"
+        showFilterToggle
         enableRowSelection={true}
         showRowSelection={true}
         toolbarActions={toolbarActions}

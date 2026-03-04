@@ -28,9 +28,10 @@ interface BankMovement extends Record<string, unknown> {
 interface MovementColumnsProps {
   onToggleReconcile: (movement: BankMovement) => void;
   isLoading: boolean;
+  canReconcile?: boolean;
 }
 
-export function getMovementColumns({ onToggleReconcile, isLoading }: MovementColumnsProps): ColumnDef<BankMovement>[] {
+export function getMovementColumns({ onToggleReconcile, isLoading, canReconcile = true }: MovementColumnsProps): ColumnDef<BankMovement>[] {
   return [
     {
       id: 'select',
@@ -166,8 +167,8 @@ export function getMovementColumns({ onToggleReconcile, isLoading }: MovementCol
           <button
             type="button"
             className="flex items-center gap-2 cursor-pointer hover:opacity-70 transition-opacity disabled:opacity-50"
-            onClick={() => onToggleReconcile(row.original)}
-            disabled={isLoading}
+            onClick={() => canReconcile ? onToggleReconcile(row.original) : undefined}
+            disabled={isLoading || !canReconcile}
           >
             {reconciled ? (
               <>

@@ -217,6 +217,7 @@ export function _AuditLogTable({ data, totalRows, searchParams }: Props) {
       totalRows={totalRows}
       searchParams={searchParams}
       searchPlaceholder="Buscar en auditoría..."
+      tableId="company-audit-log"
     />
   );
 }

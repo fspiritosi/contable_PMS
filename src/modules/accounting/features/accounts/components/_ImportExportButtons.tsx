@@ -28,6 +28,7 @@ import {
   importAccountsFromExcel,
 } from '../lib/import-export.server';
 import { useRouter } from 'next/navigation';
+import { usePermissions } from '@/shared/hooks/usePermissions';
 
 interface ImportExportButtonsProps {
   companyId: string;
@@ -35,6 +36,7 @@ interface ImportExportButtonsProps {
 
 export function _ImportExportButtons({ companyId }: ImportExportButtonsProps) {
   const router = useRouter();
+  const { hasPermission } = usePermissions();
   const [isExporting, setIsExporting] = useState(false);
   const [isDownloadingTemplate, setIsDownloadingTemplate] = useState(false);
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
@@ -214,10 +216,12 @@ export function _ImportExportButtons({ companyId }: ImportExportButtonsProps) {
 
           <DropdownMenuSeparator />
 
-          <DropdownMenuItem onClick={() => setIsImportDialogOpen(true)}>
-            <Upload className="mr-2 h-4 w-4" />
-            Importar desde Excel
-          </DropdownMenuItem>
+          {hasPermission('accounting.accounts', 'create') && (
+            <DropdownMenuItem onClick={() => setIsImportDialogOpen(true)}>
+              <Upload className="mr-2 h-4 w-4" />
+              Importar desde Excel
+            </DropdownMenuItem>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
 

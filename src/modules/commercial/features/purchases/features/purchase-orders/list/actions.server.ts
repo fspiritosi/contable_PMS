@@ -9,6 +9,8 @@ import { revalidatePath } from 'next/cache';
 import type { DataTableSearchParams } from '@/shared/components/common/DataTable';
 import {
   buildSearchWhere,
+  buildFiltersWhere,
+  buildDateRangeFiltersWhere,
   parseSearchParams,
   stateToPrismaParams,
 } from '@/shared/components/common/DataTable/helpers';
@@ -32,17 +34,26 @@ export async function getPurchaseOrdersPaginated(searchParams: DataTableSearchPa
   if (!companyId) throw new Error('No hay empresa activa');
 
   try {
-    const state = parseSearchParams(searchParams);
-    const { skip, take, orderBy } = stateToPrismaParams(state);
+    const parsed = parseSearchParams(searchParams);
+    const { skip, take, orderBy } = stateToPrismaParams(parsed);
 
-    const searchWhere = buildSearchWhere(state.search, [
+    const searchWhere = buildSearchWhere(parsed.search, [
       'fullNumber',
       'notes',
     ]);
 
+    const filtersWhere = buildFiltersWhere(parsed.filters, {
+      status: 'status',
+      invoicingStatus: 'invoicingStatus',
+    }, { exclude: ['issueDate'] });
+
+    const dateFiltersWhere = buildDateRangeFiltersWhere(parsed.filters, ['issueDate']);
+
     const where = {
       companyId,
       ...searchWhere,
+      ...filtersWhere,
+      ...dateFiltersWhere,
     };
 
     const [orders, total] = await Promise.all([

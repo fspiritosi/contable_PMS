@@ -9,6 +9,8 @@ import { revalidatePath } from 'next/cache';
 import type { DataTableSearchParams } from '@/shared/components/common/DataTable';
 import {
   buildSearchWhere,
+  buildFiltersWhere,
+  buildDateRangeFiltersWhere,
   parseSearchParams,
   stateToPrismaParams,
 } from '@/shared/components/common/DataTable/helpers';
@@ -32,17 +34,22 @@ export async function getReceivingNotesPaginated(searchParams: DataTableSearchPa
   if (!companyId) throw new Error('No hay empresa activa');
 
   try {
-    const state = parseSearchParams(searchParams);
-    const { skip, take, orderBy } = stateToPrismaParams(state);
+    const parsed = parseSearchParams(searchParams);
+    const { skip, take, orderBy } = stateToPrismaParams(parsed);
 
-    const searchWhere = buildSearchWhere(state.search, [
+    const searchWhere = buildSearchWhere(parsed.search, [
       'fullNumber',
       'notes',
     ]);
 
+    const filtersWhere = buildFiltersWhere(parsed.filters, {}, { exclude: ['receptionDate'] });
+    const dateFiltersWhere = buildDateRangeFiltersWhere(parsed.filters, ['receptionDate']);
+
     const where = {
       companyId,
       ...searchWhere,
+      ...filtersWhere,
+      ...dateFiltersWhere,
     };
 
     const [notes, total] = await Promise.all([

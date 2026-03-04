@@ -2,13 +2,14 @@
 
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus } from 'lucide-react';
+import { Plus, Building2, Users, Unlink } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Button } from '@/shared/components/ui/button';
 import {
   DataTable,
   type DataTableSearchParams,
+  type DataTableFacetedFilterConfig,
 } from '@/shared/components/common/DataTable';
 import {
   AlertDialog,
@@ -36,6 +37,18 @@ interface Props {
   options: ContactFormOptions;
   permissions: ModulePermissions;
 }
+
+const LINKED_TYPE_FILTERS: DataTableFacetedFilterConfig = {
+  columnId: 'linkedTo',
+  title: 'Vinculado a',
+  options: [
+    { value: 'client', label: 'Cliente', icon: Building2 },
+    { value: 'lead', label: 'Lead', icon: Users },
+    { value: 'none', label: 'Sin vincular', icon: Unlink },
+  ],
+};
+
+const FACETED_FILTERS: DataTableFacetedFilterConfig[] = [LINKED_TYPE_FILTERS];
 
 export function _ContactsDataTable({ data, totalRows, searchParams, options, permissions }: Props) {
   const router = useRouter();
@@ -78,6 +91,8 @@ export function _ContactsDataTable({ data, totalRows, searchParams, options, per
         totalRows={totalRows}
         searchParams={searchParams}
         searchPlaceholder="Buscar contactos..."
+        tableId="commercial-contacts"
+        facetedFilters={FACETED_FILTERS}
         toolbarActions={
           permissions.canCreate ? (
             <Button onClick={() => setIsCreateOpen(true)}>

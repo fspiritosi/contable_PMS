@@ -109,6 +109,14 @@ export function getColumns({ onEdit, onDelete, permissions }: ColumnsProps): Col
       id: 'linkedTo',
       meta: { title: 'Vinculado a' },
       header: ({ column }) => <DataTableColumnHeader column={column} title="Vinculado a" />,
+      filterFn: (row, _columnId, filterValues: string[]) => {
+        if (!filterValues || filterValues.length === 0) return true;
+        const contact = row.original;
+        if (contact.contractor && filterValues.includes('client')) return true;
+        if (contact.lead && !contact.contractor && filterValues.includes('lead')) return true;
+        if (!contact.contractor && !contact.lead && filterValues.includes('none')) return true;
+        return false;
+      },
       cell: ({ row }) => {
         const contact = row.original;
 

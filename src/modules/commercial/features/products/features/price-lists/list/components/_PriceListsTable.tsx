@@ -85,6 +85,7 @@ export function _PriceListsTable({ data, totalRows, searchParams, permissions }:
         totalRows={totalRows}
         searchParams={searchParams}
         searchPlaceholder="Buscar listas de precios..."
+        tableId="commercial-price-lists"
         toolbarActions={
           permissions.canCreate ? (
             <Button onClick={() => router.push('/dashboard/commercial/price-lists/new')}>

@@ -4,8 +4,9 @@ import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
+import { usePermissions } from '@/shared/hooks/usePermissions';
 
-import { DataTable, type DataTableSearchParams } from '@/shared/components/common/DataTable';
+import { DataTable, type DataTableSearchParams, type DataTableFacetedFilterConfig } from '@/shared/components/common/DataTable';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,6 +24,7 @@ import {
   deleteReceivingNote,
 } from '../actions.server';
 import { getColumns } from '../columns';
+import { RECEIVING_NOTE_STATUS_LABELS } from '../../shared/validators';
 
 interface ReceivingNotesTableProps {
   data: ReceivingNoteListItem[];
@@ -40,6 +42,7 @@ interface PendingAction {
 
 export function _ReceivingNotesTable({ data, totalRows, searchParams }: ReceivingNotesTableProps) {
   const router = useRouter();
+  const { hasPermission } = usePermissions();
   const [loading, setLoading] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [executing, setExecuting] = useState(false);
@@ -93,17 +96,42 @@ export function _ReceivingNotesTable({ data, totalRows, searchParams }: Receivin
     });
   };
 
+  const canUpdate = hasPermission('commercial.receiving-notes', 'update');
+  const canApprove = hasPermission('commercial.receiving-notes', 'approve');
+  const canDelete = hasPermission('commercial.receiving-notes', 'delete');
+
   const columns = useMemo(
     () =>
       getColumns({
         onView: (note) => router.push(`/dashboard/commercial/receiving-notes/${note.id}`),
-        onEdit: (note) => router.push(`/dashboard/commercial/receiving-notes/${note.id}/edit`),
-        onConfirm: handleConfirm,
-        onCancel: handleCancel,
-        onDelete: handleDelete,
+        onEdit: canUpdate
+          ? (note) => router.push(`/dashboard/commercial/receiving-notes/${note.id}/edit`)
+          : undefined,
+        onConfirm: canApprove ? handleConfirm : undefined,
+        onCancel: canDelete ? handleCancel : undefined,
+        onDelete: canDelete ? handleDelete : undefined,
         loading,
       }),
-    [loading]
+    [loading, canUpdate, canApprove, canDelete]
+  );
+
+  const facetedFilters: DataTableFacetedFilterConfig[] = useMemo(
+    () => [
+      {
+        columnId: 'status',
+        title: 'Estado',
+        options: Object.entries(RECEIVING_NOTE_STATUS_LABELS).map(([value, label]) => ({
+          label,
+          value,
+        })),
+      },
+      {
+        columnId: 'receptionDate',
+        title: 'Fecha Recepción',
+        type: 'dateRange' as const,
+      },
+    ],
+    []
   );
 
   return (
@@ -114,6 +142,9 @@ export function _ReceivingNotesTable({ data, totalRows, searchParams }: Receivin
         totalRows={totalRows}
         searchParams={searchParams}
         searchPlaceholder="Buscar remitos de recepción..."
+        facetedFilters={facetedFilters}
+        tableId="commercial-receiving-notes"
+        showFilterToggle
       />
 
       <AlertDialog

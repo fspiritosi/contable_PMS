@@ -1,4 +1,5 @@
 import type { DataTableSearchParams } from '@/shared/components/common/DataTable';
+import { parseSearchParams } from '@/shared/components/common/DataTable/helpers';
 import { PermissionGuard } from '@/shared/components/common/PermissionGuard';
 import { getModulePermissions } from '@/shared/lib/permissions';
 import { getWarehouses } from './actions.server';
@@ -9,15 +10,17 @@ interface WarehousesListProps {
 }
 
 export async function WarehousesList({ searchParams = {} }: WarehousesListProps) {
-  const page = searchParams.page ? parseInt(searchParams.page) : 1;
-  const pageSize = searchParams.pageSize ? parseInt(searchParams.pageSize) : 10;
-  const search = searchParams.search;
+  const parsed = parseSearchParams(searchParams);
+  const page = parsed.page + 1;
+  const pageSize = parsed.pageSize;
+  const search = parsed.search || undefined;
 
   const [result, permissions] = await Promise.all([
     getWarehouses({
       page,
       pageSize,
       search,
+      filters: parsed.filters,
     }),
     getModulePermissions('commercial.warehouses'),
   ]);

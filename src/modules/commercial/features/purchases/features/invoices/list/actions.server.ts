@@ -8,6 +8,8 @@ import { revalidatePath } from 'next/cache';
 import type { DataTableSearchParams } from '@/shared/components/common/DataTable';
 import {
   buildSearchWhere,
+  buildFiltersWhere,
+  buildDateRangeFiltersWhere,
   parseSearchParams,
   stateToPrismaParams,
 } from '@/shared/components/common/DataTable/helpers';
@@ -42,9 +44,18 @@ export async function getPurchaseInvoicesPaginated(searchParams: DataTableSearch
       'notes',
     ]);
 
+    const filtersWhere = buildFiltersWhere(state.filters, {
+      status: 'status',
+      voucherType: 'voucherType',
+    }, { exclude: ['issueDate'] });
+
+    const dateFiltersWhere = buildDateRangeFiltersWhere(state.filters, ['issueDate']);
+
     const where = {
       companyId,
       ...searchWhere,
+      ...filtersWhere,
+      ...dateFiltersWhere,
     };
 
     const [invoices, total] = await Promise.all([

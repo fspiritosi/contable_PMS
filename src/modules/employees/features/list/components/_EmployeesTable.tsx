@@ -36,6 +36,7 @@ import {
 } from '@/shared/components/ui/table';
 
 import { employeeStatusBadges, getBadgeConfig } from '@/shared/utils/mappers';
+import { usePermissions } from '@/shared/hooks/usePermissions';
 import { deleteEmployee, getAllEmployees, type EmployeeListItem } from '../actions.server';
 
 interface Props {
@@ -44,6 +45,7 @@ interface Props {
 
 export function _EmployeesTable({ initialData }: Props) {
   const queryClient = useQueryClient();
+  const { hasPermission } = usePermissions();
   const [search, setSearch] = useState('');
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
@@ -159,27 +161,36 @@ export function _EmployeesTable({ initialData }: Props) {
                             Ver detalle
                           </Link>
                         </DropdownMenuItem>
-                        <DropdownMenuItem asChild data-testid={`employee-edit-${employee.id}`}>
-                          <Link href={`/dashboard/employees/${employee.id}/edit`}>
-                            <Pencil className="mr-2 h-4 w-4" />
-                            Editar
-                          </Link>
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem asChild data-testid={`employee-terminate-${employee.id}`}>
-                          <Link href={`/dashboard/employees/${employee.id}/terminate`}>
-                            <UserX className="mr-2 h-4 w-4" />
-                            Dar de baja
-                          </Link>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          className="text-destructive"
-                          onClick={() => setDeleteId(employee.id)}
-                          data-testid={`employee-delete-${employee.id}`}
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Eliminar
-                        </DropdownMenuItem>
+                        {hasPermission('employees', 'update') && (
+                          <DropdownMenuItem asChild data-testid={`employee-edit-${employee.id}`}>
+                            <Link href={`/dashboard/employees/${employee.id}/edit`}>
+                              <Pencil className="mr-2 h-4 w-4" />
+                              Editar
+                            </Link>
+                          </DropdownMenuItem>
+                        )}
+                        {hasPermission('employees', 'delete') && (
+                          <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              asChild
+                              data-testid={`employee-terminate-${employee.id}`}
+                            >
+                              <Link href={`/dashboard/employees/${employee.id}/terminate`}>
+                                <UserX className="mr-2 h-4 w-4" />
+                                Dar de baja
+                              </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="text-destructive"
+                              onClick={() => setDeleteId(employee.id)}
+                              data-testid={`employee-delete-${employee.id}`}
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Eliminar
+                            </DropdownMenuItem>
+                          </>
+                        )}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>

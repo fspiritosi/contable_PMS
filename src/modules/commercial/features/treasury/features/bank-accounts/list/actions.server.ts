@@ -7,6 +7,7 @@ import { checkPermission } from '@/shared/lib/permissions';
 import type { DataTableSearchParams } from '@/shared/components/common/DataTable';
 import {
   buildSearchWhere,
+  buildFiltersWhere,
   parseSearchParams,
   stateToPrismaParams,
 } from '@/shared/components/common/DataTable/helpers';
@@ -85,9 +86,16 @@ export async function getBankAccountsPaginated(searchParams: DataTableSearchPara
       'alias',
     ]);
 
+    const filtersWhere = buildFiltersWhere(state.filters, {
+      status: 'status',
+      accountType: 'accountType',
+      currency: 'currency',
+    });
+
     const where = {
       companyId,
       ...searchWhere,
+      ...filtersWhere,
     };
 
     const [bankAccounts, total] = await Promise.all([

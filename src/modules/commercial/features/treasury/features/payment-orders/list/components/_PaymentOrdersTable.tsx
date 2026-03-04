@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
-import { DataTable, type DataTableSearchParams } from '@/shared/components/common/DataTable';
+import { DataTable, type DataTableSearchParams, type DataTableFacetedFilterConfig } from '@/shared/components/common/DataTable';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,10 +17,12 @@ import {
 } from '@/shared/components/ui/alert-dialog';
 import { confirmPaymentOrder, deletePaymentOrder } from '../../actions.server';
 import type { PaymentOrderListItem } from '../../../../shared/types';
+import { PAYMENT_ORDER_STATUS_LABELS } from '../../../../shared/validators';
 import { getColumns } from '../columns';
 import { PaymentOrderDetailModal } from './_PaymentOrderDetailModal';
 import { EditPaymentOrderModal } from './_EditPaymentOrderModal';
 import { CreatePaymentOrderModal } from './_CreatePaymentOrderModal';
+import { usePermissions } from '@/shared/hooks/usePermissions';
 
 interface Props {
   data: PaymentOrderListItem[];
@@ -37,6 +39,7 @@ export function _PaymentOrdersTable({ data, totalRows, searchParams }: Props) {
   const [selectedPaymentOrderId, setSelectedPaymentOrderId] = useState<string | null>(null);
   const [isConfirming, setIsConfirming] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const { hasPermission } = usePermissions();
 
   const handleConfirm = async () => {
     if (!selectedPaymentOrderId) return;
@@ -72,6 +75,30 @@ export function _PaymentOrdersTable({ data, totalRows, searchParams }: Props) {
     }
   };
 
+  const canCreate = hasPermission('commercial.treasury.payment-orders', 'create');
+  const canEdit = hasPermission('commercial.treasury.payment-orders', 'update');
+  const canApprove = hasPermission('commercial.treasury.payment-orders', 'approve');
+  const canDelete = hasPermission('commercial.treasury.payment-orders', 'delete');
+
+  const facetedFilters: DataTableFacetedFilterConfig[] = useMemo(
+    () => [
+      {
+        columnId: 'status',
+        title: 'Estado',
+        options: Object.entries(PAYMENT_ORDER_STATUS_LABELS).map(([value, label]) => ({
+          label,
+          value,
+        })),
+      },
+      {
+        columnId: 'date',
+        title: 'Fecha',
+        type: 'dateRange' as const,
+      },
+    ],
+    []
+  );
+
   const columns = useMemo(
     () =>
       getColumns({
@@ -91,8 +118,11 @@ export function _PaymentOrdersTable({ data, totalRows, searchParams }: Props) {
           setSelectedPaymentOrderId(order.id);
           setDeleteDialogOpen(true);
         },
+        canEdit,
+        canApprove,
+        canDelete,
       }),
-    []
+    [canEdit, canApprove, canDelete]
   );
 
   return (
@@ -103,7 +133,10 @@ export function _PaymentOrdersTable({ data, totalRows, searchParams }: Props) {
         totalRows={totalRows}
         searchParams={searchParams}
         searchPlaceholder="Buscar órdenes de pago..."
-        toolbarActions={<CreatePaymentOrderModal onSuccess={() => router.refresh()} />}
+        facetedFilters={facetedFilters}
+        tableId="commercial-payment-orders"
+        showFilterToggle
+        toolbarActions={canCreate ? <CreatePaymentOrderModal onSuccess={() => router.refresh()} /> : undefined}
       />
 
       {/* Diálogo de Confirmación */}

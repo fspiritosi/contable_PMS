@@ -35,6 +35,7 @@ export function _MovementsTable({ data, totalRows, searchParams }: Props) {
       totalRows={totalRows}
       searchParams={searchParams}
       searchPlaceholder="Buscar movimientos..."
+      tableId="commercial-stock-movements"
     />
   );
 }

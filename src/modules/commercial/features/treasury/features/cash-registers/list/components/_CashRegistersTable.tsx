@@ -1,11 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { MoreHorizontal, Pencil, Power, PowerOff, DollarSign, History } from 'lucide-react';
 import moment from 'moment';
 import { toast } from 'sonner';
 
-import { DataTable } from '@/shared/components/common/DataTable';
+import { DataTable, type DataTableFacetedFilterConfig } from '@/shared/components/common/DataTable';
 import type { ColumnDef } from '@tanstack/react-table';
 import { Badge } from '@/shared/components/ui/badge';
 import { Button } from '@/shared/components/ui/button';
@@ -20,6 +20,7 @@ import {
 
 import { activateCashRegister, deactivateCashRegister } from '../../actions.server';
 import type { CashRegisterWithActiveSession } from '../../../../shared/types';
+import { usePermissions } from '@/shared/hooks/usePermissions';
 import {
   CASH_REGISTER_STATUS_LABELS,
   CASH_REGISTER_STATUS_BADGES,
@@ -41,6 +42,7 @@ export function _CashRegistersTable({ cashRegisters, onRefresh }: Props) {
   const [isOpenSessionModalOpen, setIsOpenSessionModalOpen] = useState(false);
   const [isCloseSessionModalOpen, setIsCloseSessionModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const { hasPermission } = usePermissions();
 
   const handleEdit = (register: CashRegisterWithActiveSession) => {
     setSelectedRegister(register);
@@ -164,19 +166,21 @@ export function _CashRegistersTable({ cashRegisters, onRefresh }: Props) {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuLabel>Acciones</DropdownMenuLabel>
-              <DropdownMenuItem onClick={() => handleEdit(register)}>
-                <Pencil className="mr-2 h-4 w-4" />
-                Editar
-              </DropdownMenuItem>
+              {hasPermission('commercial.treasury.cash-registers', 'update') && (
+                <DropdownMenuItem onClick={() => handleEdit(register)}>
+                  <Pencil className="mr-2 h-4 w-4" />
+                  Editar
+                </DropdownMenuItem>
+              )}
 
-              {isActive && !hasActiveSession && (
+              {hasPermission('commercial.treasury.cash-registers', 'update') && isActive && !hasActiveSession && (
                 <DropdownMenuItem onClick={() => handleOpenSession(register)}>
                   <DollarSign className="mr-2 h-4 w-4" />
                   Abrir Sesión
                 </DropdownMenuItem>
               )}
 
-              {hasActiveSession && (
+              {hasPermission('commercial.treasury.cash-registers', 'update') && hasActiveSession && (
                 <DropdownMenuItem onClick={() => handleCloseSession(register)}>
                   <PowerOff className="mr-2 h-4 w-4" />
                   Cerrar Sesión
@@ -185,19 +189,21 @@ export function _CashRegistersTable({ cashRegisters, onRefresh }: Props) {
 
               <DropdownMenuSeparator />
 
-              <DropdownMenuItem onClick={() => handleToggleStatus(register)} disabled={isLoading || hasActiveSession}>
-                {isActive ? (
-                  <>
-                    <PowerOff className="mr-2 h-4 w-4" />
-                    Desactivar
-                  </>
-                ) : (
-                  <>
-                    <Power className="mr-2 h-4 w-4" />
-                    Activar
-                  </>
-                )}
-              </DropdownMenuItem>
+              {hasPermission('commercial.treasury.cash-registers', 'update') && (
+                <DropdownMenuItem onClick={() => handleToggleStatus(register)} disabled={isLoading || hasActiveSession}>
+                  {isActive ? (
+                    <>
+                      <PowerOff className="mr-2 h-4 w-4" />
+                      Desactivar
+                    </>
+                  ) : (
+                    <>
+                      <Power className="mr-2 h-4 w-4" />
+                      Activar
+                    </>
+                  )}
+                </DropdownMenuItem>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         );
@@ -205,12 +211,29 @@ export function _CashRegistersTable({ cashRegisters, onRefresh }: Props) {
     },
   ];
 
+  const facetedFilters: DataTableFacetedFilterConfig[] = useMemo(
+    () => [
+      {
+        columnId: 'status',
+        title: 'Estado',
+        options: Object.entries(CASH_REGISTER_STATUS_LABELS).map(([value, label]) => ({
+          label,
+          value,
+        })),
+      },
+    ],
+    []
+  );
+
   return (
     <>
       <DataTable<CashRegisterWithActiveSession>
         columns={columns}
         data={cashRegisters}
         totalRows={cashRegisters.length}
+        facetedFilters={facetedFilters}
+        tableId="commercial-cash-registers"
+        showFilterToggle
       />
 
       {selectedRegister && (

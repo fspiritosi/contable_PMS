@@ -97,6 +97,8 @@ export function _CompanyDocumentsDataTable({
       searchParams={searchParams}
       searchPlaceholder="Buscar por tipo de documento..."
       facetedFilters={facetedFilters}
+      tableId="documents-company"
+      showFilterToggle
       enableRowSelection={true}
       showRowSelection={true}
       emptyMessage="No hay documentos de empresa"

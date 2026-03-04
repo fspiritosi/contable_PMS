@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
-import { DataTable, type DataTableSearchParams } from '@/shared/components/common/DataTable';
+import { DataTable, type DataTableSearchParams, type DataTableFacetedFilterConfig } from '@/shared/components/common/DataTable';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,10 +17,12 @@ import {
 } from '@/shared/components/ui/alert-dialog';
 import { confirmReceipt, deleteReceipt } from '../../actions.server';
 import type { ReceiptListItem } from '../../../../shared/types';
+import { RECEIPT_STATUS_LABELS } from '../../../../shared/validators';
 import { getColumns } from '../columns';
 import { ReceiptDetailModal } from './_ReceiptDetailModal';
 import { EditReceiptModal } from './_EditReceiptModal';
 import { CreateReceiptModal } from './_CreateReceiptModal';
+import { usePermissions } from '@/shared/hooks/usePermissions';
 
 interface Props {
   data: ReceiptListItem[];
@@ -37,6 +39,7 @@ export function _ReceiptsTable({ data, totalRows, searchParams }: Props) {
   const [selectedReceiptId, setSelectedReceiptId] = useState<string | null>(null);
   const [isConfirming, setIsConfirming] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const { hasPermission } = usePermissions();
 
   const handleConfirm = async () => {
     if (!selectedReceiptId) return;
@@ -72,6 +75,30 @@ export function _ReceiptsTable({ data, totalRows, searchParams }: Props) {
     }
   };
 
+  const canCreate = hasPermission('commercial.treasury.receipts', 'create');
+  const canEdit = hasPermission('commercial.treasury.receipts', 'update');
+  const canApprove = hasPermission('commercial.treasury.receipts', 'approve');
+  const canDelete = hasPermission('commercial.treasury.receipts', 'delete');
+
+  const facetedFilters: DataTableFacetedFilterConfig[] = useMemo(
+    () => [
+      {
+        columnId: 'status',
+        title: 'Estado',
+        options: Object.entries(RECEIPT_STATUS_LABELS).map(([value, label]) => ({
+          label,
+          value,
+        })),
+      },
+      {
+        columnId: 'date',
+        title: 'Fecha',
+        type: 'dateRange' as const,
+      },
+    ],
+    []
+  );
+
   const columns = useMemo(
     () =>
       getColumns({
@@ -91,8 +118,11 @@ export function _ReceiptsTable({ data, totalRows, searchParams }: Props) {
           setSelectedReceiptId(receipt.id);
           setDeleteDialogOpen(true);
         },
+        canEdit,
+        canApprove,
+        canDelete,
       }),
-    []
+    [canEdit, canApprove, canDelete]
   );
 
   return (
@@ -103,7 +133,10 @@ export function _ReceiptsTable({ data, totalRows, searchParams }: Props) {
         totalRows={totalRows}
         searchParams={searchParams}
         searchPlaceholder="Buscar recibos..."
-        toolbarActions={<CreateReceiptModal onSuccess={() => router.refresh()} />}
+        facetedFilters={facetedFilters}
+        tableId="commercial-receipts"
+        showFilterToggle
+        toolbarActions={canCreate ? <CreateReceiptModal onSuccess={() => router.refresh()} /> : undefined}
       />
 
       {/* Diálogo de Confirmación */}

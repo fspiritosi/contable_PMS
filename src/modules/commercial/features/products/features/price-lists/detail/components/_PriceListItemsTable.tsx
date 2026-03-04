@@ -30,6 +30,7 @@ import type { PriceListItem } from '../../../../shared/types';
 import { logger } from '@/shared/lib/logger';
 import { _AddPriceListItemDialog } from './_AddPriceListItemDialog';
 import { _EditPriceListItemDialog } from './_EditPriceListItemDialog';
+import { usePermissions } from '@/shared/hooks/usePermissions';
 
 interface PriceListItemsTableProps {
   priceListId: string;
@@ -38,6 +39,7 @@ interface PriceListItemsTableProps {
 
 export function _PriceListItemsTable({ priceListId, items }: PriceListItemsTableProps) {
   const router = useRouter();
+  const { hasPermission } = usePermissions();
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [editingItem, setEditingItem] = useState<PriceListItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
@@ -112,19 +114,25 @@ export function _PriceListItemsTable({ priceListId, items }: PriceListItemsTable
               <DropdownMenuContent align="end">
                 <DropdownMenuLabel>Acciones</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => setEditingItem(item)}>
-                  <Pencil className="mr-2 h-4 w-4" />
-                  Editar precio
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={() => setDeleteTarget({ id: item.id, name: item.product?.name || 'el producto' })}
-                  disabled={deletingId === item.id}
-                  className="text-destructive focus:text-destructive"
-                >
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Eliminar
-                </DropdownMenuItem>
+                {hasPermission('commercial.price-lists', 'update') && (
+                  <DropdownMenuItem onClick={() => setEditingItem(item)}>
+                    <Pencil className="mr-2 h-4 w-4" />
+                    Editar precio
+                  </DropdownMenuItem>
+                )}
+                {hasPermission('commercial.price-lists', 'delete') && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={() => setDeleteTarget({ id: item.id, name: item.product?.name || 'el producto' })}
+                      disabled={deletingId === item.id}
+                      className="text-destructive focus:text-destructive"
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Eliminar
+                    </DropdownMenuItem>
+                  </>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           );
@@ -140,7 +148,12 @@ export function _PriceListItemsTable({ priceListId, items }: PriceListItemsTable
         columns={columns as ColumnDef<Record<string, unknown>, unknown>[]}
         data={items as unknown as Record<string, unknown>[]}
         totalRows={items.length}
-        toolbarActions={<_AddPriceListItemDialog priceListId={priceListId} />}
+        tableId="commercial-price-list-items"
+        toolbarActions={
+          hasPermission('commercial.price-lists', 'update') ? (
+            <_AddPriceListItemDialog priceListId={priceListId} />
+          ) : undefined
+        }
       />
 
       {editingItem && (

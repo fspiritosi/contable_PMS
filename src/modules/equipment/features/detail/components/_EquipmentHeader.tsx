@@ -13,6 +13,7 @@ import {
 } from '@/shared/components/ui/tooltip';
 
 import { getBadgeConfig, vehicleConditionBadges, vehicleStatusBadges } from '@/shared/utils/mappers';
+import { usePermissions } from '@/shared/hooks/usePermissions';
 import type { VehicleStatusInfo } from '@/shared/lib/vehicleStatus.types';
 import type { VehicleDetail } from '../actions.server';
 
@@ -22,6 +23,7 @@ interface Props {
 }
 
 export function _EquipmentHeader({ vehicle, statusInfo }: Props) {
+  const { hasPermission } = usePermissions();
   const statusBadge = getBadgeConfig(vehicle.status, vehicleStatusBadges);
   const conditionBadge = getBadgeConfig(vehicle.condition, vehicleConditionBadges);
 
@@ -143,13 +145,15 @@ export function _EquipmentHeader({ vehicle, statusInfo }: Props) {
 
       {/* Row 2: Action buttons */}
       <div className="flex gap-2 sm:justify-end">
-        <Button variant="outline" className="flex-1 sm:flex-none" asChild>
-          <Link href={`/dashboard/equipment/${vehicle.id}/edit`}>
-            <Edit className="mr-2 h-4 w-4" />
-            Editar
-          </Link>
-        </Button>
-        {vehicle.isActive && (
+        {hasPermission('equipment', 'update') && (
+          <Button variant="outline" className="flex-1 sm:flex-none" asChild>
+            <Link href={`/dashboard/equipment/${vehicle.id}/edit`}>
+              <Edit className="mr-2 h-4 w-4" />
+              Editar
+            </Link>
+          </Button>
+        )}
+        {vehicle.isActive && hasPermission('equipment', 'delete') && (
           <Button variant="destructive" className="flex-1 sm:flex-none">
             <Trash2 className="mr-2 h-4 w-4" />
             <span className="hidden xs:inline">Dar de </span>Baja

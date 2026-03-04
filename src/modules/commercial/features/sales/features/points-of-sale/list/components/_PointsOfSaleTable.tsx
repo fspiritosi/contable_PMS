@@ -1,7 +1,8 @@
 'use client';
 
+import { useMemo, useState } from 'react';
 import { ColumnDef } from '@tanstack/react-table';
-import { DataTable } from '@/shared/components/common/DataTable';
+import { DataTable, type DataTableFacetedFilterConfig } from '@/shared/components/common/DataTable';
 import { Badge } from '@/shared/components/ui/badge';
 import { Button } from '@/shared/components/ui/button';
 import {
@@ -24,9 +25,9 @@ import {
 } from '@/shared/components/ui/alert-dialog';
 import { MoreHorizontal, Pencil, Trash2, Power, CheckCircle2, XCircle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
 import { deletePointOfSale, togglePointOfSaleStatus, getPointsOfSale } from '../actions.server';
 import { toast } from 'sonner';
+import { usePermissions } from '@/shared/hooks/usePermissions';
 
 type PointOfSale = Awaited<ReturnType<typeof getPointsOfSale>>[number];
 
@@ -36,6 +37,7 @@ interface PointsOfSaleTableProps {
 
 export function PointsOfSaleTable({ data }: PointsOfSaleTableProps) {
   const router = useRouter();
+  const { hasPermission } = usePermissions();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedPointOfSale, setSelectedPointOfSale] = useState<PointOfSale | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -120,6 +122,9 @@ export function PointsOfSaleTable({ data }: PointsOfSaleTableProps) {
           </Badge>
         );
       },
+      filterFn: (row, id, value: string[]) => {
+        return value.includes(String(row.getValue(id)));
+      },
     },
     {
       accessorKey: 'afipEnabled',
@@ -132,6 +137,9 @@ export function PointsOfSaleTable({ data }: PointsOfSaleTableProps) {
         ) : (
           <Badge variant="outline">Deshabilitado</Badge>
         );
+      },
+      filterFn: (row, id, value: string[]) => {
+        return value.includes(String(row.getValue(id)));
       },
     },
     {
@@ -159,22 +167,30 @@ export function PointsOfSaleTable({ data }: PointsOfSaleTableProps) {
             <DropdownMenuContent align="end">
               <DropdownMenuLabel>Acciones</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => handleEdit(pointOfSale)}>
-                <Pencil className="mr-2 h-4 w-4" />
-                Editar
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleToggleStatus(pointOfSale)}>
-                <Power className="mr-2 h-4 w-4" />
-                {pointOfSale.isActive ? 'Desactivar' : 'Activar'}
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={() => handleDeleteClick(pointOfSale)}
-                className="text-destructive"
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                Eliminar
-              </DropdownMenuItem>
+              {hasPermission('commercial.points-of-sale', 'update') && (
+                <>
+                  <DropdownMenuItem onClick={() => handleEdit(pointOfSale)}>
+                    <Pencil className="mr-2 h-4 w-4" />
+                    Editar
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleToggleStatus(pointOfSale)}>
+                    <Power className="mr-2 h-4 w-4" />
+                    {pointOfSale.isActive ? 'Desactivar' : 'Activar'}
+                  </DropdownMenuItem>
+                </>
+              )}
+              {hasPermission('commercial.points-of-sale', 'delete') && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => handleDeleteClick(pointOfSale)}
+                    className="text-destructive"
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Eliminar
+                  </DropdownMenuItem>
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         );
@@ -182,9 +198,38 @@ export function PointsOfSaleTable({ data }: PointsOfSaleTableProps) {
     },
   ];
 
+  const facetedFilters: DataTableFacetedFilterConfig[] = useMemo(
+    () => [
+      {
+        columnId: 'isActive',
+        title: 'Estado',
+        options: [
+          { value: 'true', label: 'Activo', icon: CheckCircle2 },
+          { value: 'false', label: 'Inactivo', icon: XCircle },
+        ],
+      },
+      {
+        columnId: 'afipEnabled',
+        title: 'AFIP',
+        options: [
+          { value: 'true', label: 'Habilitado' },
+          { value: 'false', label: 'Deshabilitado' },
+        ],
+      },
+    ],
+    []
+  );
+
   return (
     <>
-      <DataTable columns={columns} data={data} totalRows={data.length} />
+      <DataTable
+        columns={columns}
+        data={data}
+        totalRows={data.length}
+        facetedFilters={facetedFilters}
+        tableId="commercial-points-of-sale"
+        showFilterToggle
+      />
 
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>

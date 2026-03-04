@@ -3,8 +3,10 @@
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
+import { usePermissions } from '@/shared/hooks/usePermissions';
 
-import { DataTable, type DataTableSearchParams } from '@/shared/components/common/DataTable';
+import { DataTable, type DataTableSearchParams, type DataTableFacetedFilterConfig } from '@/shared/components/common/DataTable';
+import { VOUCHER_TYPE_LABELS, INVOICE_STATUS_LABELS } from '../../shared/validators';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -35,6 +37,7 @@ interface Props {
 
 export function _InvoicesTable({ data, totalRows, searchParams }: Props) {
   const router = useRouter();
+  const { hasPermission } = usePermissions();
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [attachDialogOpen, setAttachDialogOpen] = useState(false);
@@ -73,29 +76,66 @@ export function _InvoicesTable({ data, totalRows, searchParams }: Props) {
     }
   };
 
+  const canUpdate = hasPermission('commercial.invoices', 'update');
+  const canApprove = hasPermission('commercial.invoices', 'approve');
+  const canDelete = hasPermission('commercial.invoices', 'delete');
+
+  const facetedFilters: DataTableFacetedFilterConfig[] = useMemo(
+    () => [
+      {
+        columnId: 'status',
+        title: 'Estado',
+        options: Object.entries(INVOICE_STATUS_LABELS).map(([value, label]) => ({
+          label,
+          value,
+        })),
+      },
+      {
+        columnId: 'voucherType',
+        title: 'Tipo',
+        options: Object.entries(VOUCHER_TYPE_LABELS).map(([value, label]) => ({
+          label,
+          value,
+        })),
+      },
+      {
+        columnId: 'issueDate',
+        title: 'Fecha',
+        type: 'dateRange' as const,
+      },
+    ],
+    []
+  );
+
   const columns = useMemo(
     () =>
       getColumns({
         onView: (invoice) => {
           router.push(`/dashboard/commercial/invoices/${invoice.id}`);
         },
-        onEdit: (invoice) => {
-          router.push(`/dashboard/commercial/invoices/${invoice.id}/edit`);
-        },
-        onConfirm: (invoice) => {
-          setSelectedInvoice(invoice);
-          setConfirmDialogOpen(true);
-        },
-        onCancel: (invoice) => {
-          setSelectedInvoice(invoice);
-          setCancelDialogOpen(true);
-        },
+        onEdit: canUpdate
+          ? (invoice) => {
+              router.push(`/dashboard/commercial/invoices/${invoice.id}/edit`);
+            }
+          : undefined,
+        onConfirm: canApprove
+          ? (invoice) => {
+              setSelectedInvoice(invoice);
+              setConfirmDialogOpen(true);
+            }
+          : undefined,
+        onCancel: canDelete
+          ? (invoice) => {
+              setSelectedInvoice(invoice);
+              setCancelDialogOpen(true);
+            }
+          : undefined,
         onAttach: (invoice) => {
           setSelectedInvoice(invoice);
           setAttachDialogOpen(true);
         },
       }),
-    []
+    [canUpdate, canApprove, canDelete]
   );
 
   return (
@@ -106,6 +146,9 @@ export function _InvoicesTable({ data, totalRows, searchParams }: Props) {
         totalRows={totalRows}
         searchParams={searchParams}
         searchPlaceholder="Buscar facturas..."
+        facetedFilters={facetedFilters}
+        tableId="commercial-sales-invoices"
+        showFilterToggle
       />
 
       <AlertDialog open={confirmDialogOpen} onOpenChange={setConfirmDialogOpen}>

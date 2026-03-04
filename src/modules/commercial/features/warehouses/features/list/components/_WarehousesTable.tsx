@@ -9,6 +9,7 @@ import { Button } from '@/shared/components/ui/button';
 import {
   DataTable,
   type DataTableSearchParams,
+  type DataTableFacetedFilterConfig,
 } from '@/shared/components/common/DataTable';
 import {
   AlertDialog,
@@ -24,6 +25,7 @@ import type { ModulePermissions } from '@/shared/lib/permissions';
 import { getColumns } from '../columns';
 import type { WarehouseListItem } from '../actions.server';
 import { deleteWarehouse, toggleWarehouseActive } from '../actions.server';
+import { WAREHOUSE_TYPE_LABELS } from '../../../shared/types';
 
 interface WarehousesTableProps {
   data: WarehouseListItem[];
@@ -77,6 +79,28 @@ export function _WarehousesTable({ data, totalRows, searchParams, permissions }:
     [permissions]
   );
 
+  const facetedFilters = useMemo<DataTableFacetedFilterConfig[]>(
+    () => [
+      {
+        columnId: 'type',
+        title: 'Tipo',
+        options: Object.entries(WAREHOUSE_TYPE_LABELS).map(([value, label]) => ({
+          value,
+          label,
+        })),
+      },
+      {
+        columnId: 'isActive',
+        title: 'Estado',
+        options: [
+          { value: 'true', label: 'Activo' },
+          { value: 'false', label: 'Inactivo' },
+        ],
+      },
+    ],
+    []
+  );
+
   return (
     <>
       <DataTable
@@ -85,6 +109,9 @@ export function _WarehousesTable({ data, totalRows, searchParams, permissions }:
         totalRows={totalRows}
         searchParams={searchParams}
         searchPlaceholder="Buscar almacenes..."
+        tableId="commercial-warehouses"
+        facetedFilters={facetedFilters}
+        showFilterToggle
         toolbarActions={
           permissions.canCreate ? (
             <Button onClick={() => router.push('/dashboard/commercial/warehouses/new')}>

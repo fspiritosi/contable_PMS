@@ -80,6 +80,7 @@ export function _RolesDataTable({
         totalRows={totalRows}
         searchParams={searchParams}
         searchPlaceholder="Buscar roles..."
+        tableId="company-roles"
         toolbarActions={
           permissions.canCreate ? (
             <Button asChild data-testid="new-role-button">

@@ -24,6 +24,8 @@ import {
 import { Button } from '@/shared/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/shared/components/ui/tabs';
 
+import { usePermissions } from '@/shared/hooks/usePermissions';
+
 import {
   deleteDocumentType,
   type DocumentTypeListItem,
@@ -51,6 +53,7 @@ export function _DocumentTypesDataTable({
   const router = useRouter();
   const params = useSearchParams();
   const queryClient = useQueryClient();
+  const { hasPermission } = usePermissions();
 
   // Dialog states
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -96,7 +99,12 @@ export function _DocumentTypesDataTable({
   };
 
   // Obtener columnas con handlers
-  const columns = getColumns({ onDelete: handleDelete, onEdit: handleEdit });
+  const columns = getColumns({
+    onDelete: handleDelete,
+    onEdit: handleEdit,
+    canUpdate: hasPermission('documents', 'update'),
+    canDelete: hasPermission('documents', 'delete'),
+  });
 
   // Cambio de tab - preservar otros parámetros pero resetear página
   const handleTabChange = (tab: string) => {
@@ -139,12 +147,12 @@ export function _DocumentTypesDataTable({
   ];
 
   // Botón de nuevo tipo para el toolbar
-  const toolbarActions = (
+  const toolbarActions = hasPermission('documents', 'create') ? (
     <Button onClick={handleCreate} data-testid="new-document-type-button">
       <Plus className="mr-2 h-4 w-4" />
       Nuevo Tipo
     </Button>
-  );
+  ) : null;
 
   return (
     <div className="space-y-4">
@@ -175,6 +183,8 @@ export function _DocumentTypesDataTable({
         searchParams={searchParams}
         searchPlaceholder="Buscar por nombre..."
         facetedFilters={facetedFilters}
+        tableId="documents-document-types"
+        showFilterToggle
         enableRowSelection={true}
         showRowSelection={true}
         toolbarActions={toolbarActions}

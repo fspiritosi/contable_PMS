@@ -45,10 +45,10 @@ const STATUS_BADGE_VARIANTS: Record<string, BadgeVariant> = {
 
 interface ColumnsProps {
   onViewDetail: (expense: ExpenseListItem) => void;
-  onEdit: (expense: ExpenseListItem) => void;
-  onConfirm: (expense: ExpenseListItem) => void;
-  onCancel: (expense: ExpenseListItem) => void;
-  onDelete: (expense: ExpenseListItem) => void;
+  onEdit?: (expense: ExpenseListItem) => void;
+  onConfirm?: (expense: ExpenseListItem) => void;
+  onCancel?: (expense: ExpenseListItem) => void;
+  onDelete?: (expense: ExpenseListItem) => void;
 }
 
 export function getColumns({ onViewDetail, onEdit, onConfirm, onCancel, onDelete }: ColumnsProps): ColumnDef<ExpenseListItem>[] {
@@ -162,32 +162,35 @@ export function getColumns({ onViewDetail, onEdit, onConfirm, onCancel, onDelete
                 Ver Detalle
               </DropdownMenuItem>
 
-              {isDraft && (
+              {isDraft && onEdit && (
                 <>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => onEdit(expense)}>
                     <Edit className="mr-2 h-4 w-4" />
                     Editar
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => onConfirm(expense)}>
-                    <CheckCircle className="mr-2 h-4 w-4" />
-                    Confirmar
-                  </DropdownMenuItem>
                 </>
               )}
 
-              {canCancel && !isDraft && (
+              {isDraft && onConfirm && (
+                <DropdownMenuItem onClick={() => onConfirm(expense)}>
+                  <CheckCircle className="mr-2 h-4 w-4" />
+                  Confirmar
+                </DropdownMenuItem>
+              )}
+
+              {canCancel && onCancel && !isDraft && (
                 <DropdownMenuSeparator />
               )}
 
-              {canCancel && (
+              {canCancel && onCancel && (
                 <DropdownMenuItem onClick={() => onCancel(expense)} className="text-destructive">
                   <XCircle className="mr-2 h-4 w-4" />
                   Cancelar
                 </DropdownMenuItem>
               )}
 
-              {isDraft && (
+              {isDraft && onDelete && (
                 <DropdownMenuItem onClick={() => onDelete(expense)} className="text-destructive">
                   <Trash2 className="mr-2 h-4 w-4" />
                   Eliminar

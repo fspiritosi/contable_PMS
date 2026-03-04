@@ -7,7 +7,7 @@ import { prisma } from '@/shared/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { Prisma } from '@/generated/prisma/client';
 import type { DataTableSearchParams } from '@/shared/components/common/DataTable';
-import { parseSearchParams, stateToPrismaParams } from '@/shared/components/common/DataTable/helpers';
+import { parseSearchParams, stateToPrismaParams, buildFiltersWhere, buildDateRangeFiltersWhere } from '@/shared/components/common/DataTable/helpers';
 import type { ExpenseFormInput, ExpenseCategoryFormInput } from './validators';
 import {
   createJournalEntryForExpense,
@@ -194,8 +194,16 @@ export async function getExpensesPaginated(searchParams: DataTableSearchParams) 
     const { search } = parsed;
     const { skip, take, orderBy: prismaOrderBy } = stateToPrismaParams(parsed);
 
+    const filtersWhere = buildFiltersWhere(parsed.filters, {
+      status: 'status',
+    }, { exclude: ['date', 'dueDate'] });
+
+    const dateFiltersWhere = buildDateRangeFiltersWhere(parsed.filters, ['date', 'dueDate']);
+
     const where: Prisma.ExpenseWhereInput = {
       companyId,
+      ...filtersWhere,
+      ...dateFiltersWhere,
       ...(search && {
         OR: [
           { fullNumber: { contains: search, mode: 'insensitive' } },

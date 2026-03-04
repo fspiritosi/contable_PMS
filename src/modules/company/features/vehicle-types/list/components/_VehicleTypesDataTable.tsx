@@ -92,6 +92,7 @@ export function _VehicleTypesDataTable({ data, totalRows, searchParams, permissi
         searchParams={searchParams}
         searchPlaceholder="Buscar tipos de equipo..."
         emptyMessage="No hay tipos de equipo registrados"
+        tableId="company-vehicle-types"
         toolbarActions={
           permissions.canCreate ? (
             <Button onClick={handleCreate} data-testid="new-vehicle-type-button">

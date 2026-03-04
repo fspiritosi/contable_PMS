@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { Button } from '@/shared/components/ui/button';
 import {
   DataTable,
+  type DataTableFacetedFilterConfig,
   type DataTableSearchParams,
 } from '@/shared/components/common/DataTable';
 import {
@@ -21,7 +22,7 @@ import {
   AlertDialogTitle,
 } from '@/shared/components/ui/alert-dialog';
 import type { ModulePermissions } from '@/shared/lib/permissions';
-import { getColumns } from '../columns';
+import { getColumns, leadStatusLabels } from '../columns';
 import { _LeadFormModal } from './_LeadFormModal';
 import { _ConvertLeadModal } from './_ConvertLeadModal';
 import {
@@ -89,6 +90,20 @@ export function _LeadsDataTable({
     [permissions]
   );
 
+  const facetedFilters = useMemo<DataTableFacetedFilterConfig[]>(
+    () => [
+      {
+        columnId: 'status',
+        title: 'Estado',
+        options: Object.entries(leadStatusLabels).map(([value, label]) => ({
+          value,
+          label,
+        })),
+      },
+    ],
+    []
+  );
+
   return (
     <>
       <DataTable
@@ -97,6 +112,9 @@ export function _LeadsDataTable({
         totalRows={totalRows}
         searchParams={searchParams}
         searchPlaceholder="Buscar leads..."
+        tableId="commercial-leads"
+        facetedFilters={facetedFilters}
+        showFilterToggle
         toolbarActions={
           permissions.canCreate ? (
             <Button onClick={() => setIsCreateOpen(true)}>

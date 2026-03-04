@@ -15,6 +15,7 @@ import moment from 'moment';
 import { accountingSettingsSchema } from '../../../shared/types';
 import { saveAccountingSettings } from '../actions.server';
 import { useState } from 'react';
+import { usePermissions } from '@/shared/hooks/usePermissions';
 
 interface AccountingSettingsFormProps {
   companyId: string;
@@ -31,6 +32,7 @@ type FormValues = {
 
 export function _AccountingSettingsForm({ companyId, defaultValues }: AccountingSettingsFormProps) {
   const router = useRouter();
+  const { hasPermission } = usePermissions();
   const [isLoading, setIsLoading] = useState(false);
 
   const form = useForm<FormValues>({
@@ -110,7 +112,7 @@ export function _AccountingSettingsForm({ companyId, defaultValues }: Accounting
       </div>
 
       <div className="flex justify-end">
-        <Button type="submit" disabled={isLoading}>
+        <Button type="submit" disabled={isLoading || !hasPermission('accounting.settings', 'update')}>
           {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
           Guardar Cambios
         </Button>

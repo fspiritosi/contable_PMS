@@ -150,6 +150,10 @@ export function getColumns({ onEdit, onDeactivate, onReactivate, permissions }: 
           </Badge>
         );
       },
+      filterFn: (row, id, value) => {
+        const isActive = row.getValue(id);
+        return value.includes(String(isActive));
+      },
     },
   ];
 

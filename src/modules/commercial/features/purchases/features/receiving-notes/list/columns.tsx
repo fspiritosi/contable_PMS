@@ -20,10 +20,10 @@ import type { ReceivingNoteStatus } from '@/generated/prisma/enums';
 
 interface ColumnsProps {
   onView: (note: ReceivingNoteListItem) => void;
-  onEdit: (note: ReceivingNoteListItem) => void;
-  onConfirm: (note: ReceivingNoteListItem) => void;
-  onCancel: (note: ReceivingNoteListItem) => void;
-  onDelete: (note: ReceivingNoteListItem) => void;
+  onEdit?: (note: ReceivingNoteListItem) => void;
+  onConfirm?: (note: ReceivingNoteListItem) => void;
+  onCancel?: (note: ReceivingNoteListItem) => void;
+  onDelete?: (note: ReceivingNoteListItem) => void;
   loading: string | null;
 }
 
@@ -139,13 +139,13 @@ export function getColumns({
                 <Eye className="mr-2 h-4 w-4" />
                 Ver detalle
               </DropdownMenuItem>
-              {isDraft && (
+              {isDraft && onEdit && (
                 <DropdownMenuItem onClick={() => onEdit(note)}>
                   <Pencil className="mr-2 h-4 w-4" />
                   Editar
                 </DropdownMenuItem>
               )}
-              {isDraft && (
+              {isDraft && onConfirm && (
                 <>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => onConfirm(note)} disabled={isLoading}>
@@ -154,7 +154,7 @@ export function getColumns({
                   </DropdownMenuItem>
                 </>
               )}
-              {isConfirmed && (
+              {isConfirmed && onCancel && (
                 <>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
@@ -167,7 +167,7 @@ export function getColumns({
                   </DropdownMenuItem>
                 </>
               )}
-              {isDraft && (
+              {isDraft && onDelete && (
                 <DropdownMenuItem
                   onClick={() => onDelete(note)}
                   disabled={isLoading}

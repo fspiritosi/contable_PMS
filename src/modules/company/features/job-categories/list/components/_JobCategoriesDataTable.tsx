@@ -88,6 +88,7 @@ export function _JobCategoriesDataTable({ data, totalRows, searchParams, permiss
         totalRows={totalRows}
         searchParams={searchParams}
         searchPlaceholder="Buscar categorías laborales..."
+        tableId="company-job-categories"
         toolbarActions={
           permissions.canCreate ? (
             <Button onClick={handleCreate} data-testid="new-job-category-button">

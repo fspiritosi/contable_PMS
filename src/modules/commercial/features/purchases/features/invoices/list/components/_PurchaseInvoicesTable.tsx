@@ -3,8 +3,9 @@
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
+import { usePermissions } from '@/shared/hooks/usePermissions';
 
-import { DataTable, type DataTableSearchParams } from '@/shared/components/common/DataTable';
+import { DataTable, type DataTableSearchParams, type DataTableFacetedFilterConfig } from '@/shared/components/common/DataTable';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,6 +29,7 @@ import { PackageCheck } from 'lucide-react';
 import type { PurchaseInvoiceListItem } from '../actions.server';
 import { confirmPurchaseInvoice, cancelPurchaseInvoice } from '../actions.server';
 import { getColumns } from '../columns';
+import { PURCHASE_INVOICE_STATUS_LABELS, VOUCHER_TYPE_LABELS } from '../../shared/validators';
 
 interface PurchaseInvoicesTableProps {
   data: PurchaseInvoiceListItem[];
@@ -47,6 +49,7 @@ type ReceivingNotePrompt = {
 
 export function _PurchaseInvoicesTable({ data, totalRows, searchParams }: PurchaseInvoicesTableProps) {
   const router = useRouter();
+  const { hasPermission } = usePermissions();
   const [loading, setLoading] = useState<string | null>(null);
   const [alertAction, setAlertAction] = useState<AlertAction | null>(null);
   const [receivingNotePrompt, setReceivingNotePrompt] = useState<ReceivingNotePrompt | null>(null);
@@ -96,16 +99,53 @@ export function _PurchaseInvoicesTable({ data, totalRows, searchParams }: Purcha
     }
   };
 
+  const canUpdate = hasPermission('commercial.purchases', 'update');
+  const canApprove = hasPermission('commercial.purchases', 'approve');
+  const canDelete = hasPermission('commercial.purchases', 'delete');
+
+  const facetedFilters: DataTableFacetedFilterConfig[] = useMemo(
+    () => [
+      {
+        columnId: 'status',
+        title: 'Estado',
+        options: Object.entries(PURCHASE_INVOICE_STATUS_LABELS).map(([value, label]) => ({
+          label,
+          value,
+        })),
+      },
+      {
+        columnId: 'voucherType',
+        title: 'Tipo',
+        options: Object.entries(VOUCHER_TYPE_LABELS).map(([value, label]) => ({
+          label,
+          value,
+        })),
+      },
+      {
+        columnId: 'issueDate',
+        title: 'Fecha',
+        type: 'dateRange' as const,
+      },
+    ],
+    []
+  );
+
   const columns = useMemo(
     () =>
       getColumns({
         onView: (invoice) => router.push(`/dashboard/commercial/purchases/${invoice.id}`),
-        onEdit: (invoice) => router.push(`/dashboard/commercial/purchases/${invoice.id}/edit`),
-        onConfirm: (invoice) => setAlertAction({ type: 'confirm', invoice }),
-        onCancel: (invoice) => setAlertAction({ type: 'cancel', invoice }),
+        onEdit: canUpdate
+          ? (invoice) => router.push(`/dashboard/commercial/purchases/${invoice.id}/edit`)
+          : undefined,
+        onConfirm: canApprove
+          ? (invoice) => setAlertAction({ type: 'confirm', invoice })
+          : undefined,
+        onCancel: canDelete
+          ? (invoice) => setAlertAction({ type: 'cancel', invoice })
+          : undefined,
         loading,
       }),
-    [loading]
+    [loading, canUpdate, canApprove, canDelete]
   );
 
   const alertTitle = alertAction?.type === 'confirm' ? '¿Confirmar factura?' : '¿Cancelar factura?';
@@ -122,6 +162,9 @@ export function _PurchaseInvoicesTable({ data, totalRows, searchParams }: Purcha
         totalRows={totalRows}
         searchParams={searchParams}
         searchPlaceholder="Buscar facturas..."
+        facetedFilters={facetedFilters}
+        tableId="commercial-purchase-invoices"
+        showFilterToggle
       />
 
       <AlertDialog open={!!alertAction} onOpenChange={(open) => !open && setAlertAction(null)}>

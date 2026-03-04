@@ -9,8 +9,11 @@ export { DataTable } from './DataTable';
 
 // Sub-componentes (para uso individual si es necesario)
 export { DataTableColumnHeader } from './DataTableColumnHeader';
+export { DataTableDateRangeFilter } from './DataTableDateRangeFilter';
 export { DataTableFacetedFilter } from './DataTableFacetedFilter';
+export { DataTableFilterOptions } from './DataTableFilterOptions';
 export { DataTablePagination } from './DataTablePagination';
+export { DataTableTextFilter } from './DataTableTextFilter';
 export { DataTableToolbar } from './DataTableToolbar';
 export { DataTableViewOptions } from './DataTableViewOptions';
 
@@ -22,8 +25,10 @@ export { useDataTable } from './useDataTable';
 export {
   DEFAULT_PAGE,
   DEFAULT_PAGE_SIZE,
+  buildDateRangeFiltersWhere,
   buildFiltersWhere,
   buildSearchWhere,
+  buildTextFiltersWhere,
   parseSearchParams,
   stateToPrismaParams,
   stateToSearchParams,

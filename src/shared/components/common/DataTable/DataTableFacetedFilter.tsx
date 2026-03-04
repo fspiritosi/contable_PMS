@@ -43,8 +43,10 @@ export function DataTableFacetedFilter<TData, TValue>({
   column,
   title,
   options,
+  externalCounts,
 }: DataTableFacetedFilterProps<TData, TValue>) {
-  const facets = column?.getFacetedUniqueValues();
+  const localFacets = column?.getFacetedUniqueValues();
+  const facets = externalCounts ?? localFacets;
   const selectedValues = new Set(column?.getFilterValue() as string[]);
 
   return (

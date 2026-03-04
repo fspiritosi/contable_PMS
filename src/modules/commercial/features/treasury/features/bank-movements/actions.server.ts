@@ -8,7 +8,12 @@ import { revalidatePath } from 'next/cache';
 import { Prisma } from '@/generated/prisma/client';
 import { BankMovementType } from '@/generated/prisma/enums';
 import type { DataTableSearchParams } from '@/shared/components/common/DataTable';
-import { parseSearchParams, stateToPrismaParams } from '@/shared/components/common/DataTable/helpers';
+import {
+  parseSearchParams,
+  stateToPrismaParams,
+  buildFiltersWhere,
+  buildDateRangeFiltersWhere,
+} from '@/shared/components/common/DataTable/helpers';
 import { bankMovementSchema, type BankMovementFormData } from '../../shared/validators';
 import { checkPermission } from '@/shared/lib/permissions';
 
@@ -290,7 +295,7 @@ export async function getBankAccountMovements(bankAccountId: string, limit = 50)
 export async function getBankMovementsPaginated(
   bankAccountId: string,
   searchParams: DataTableSearchParams,
-  options?: { reconciled?: boolean; type?: string; dateFrom?: Date; dateTo?: Date }
+  options?: { reconciled?: boolean }
 ) {
   await checkPermission('commercial.treasury.bank-accounts', 'view', { redirect: true });
   const companyId = await getActiveCompanyId();
@@ -298,22 +303,28 @@ export async function getBankMovementsPaginated(
 
   try {
     const parsed = parseSearchParams(searchParams);
-    const { page, pageSize, search, sortBy, sortOrder } = parsed;
+    const { search } = parsed;
     const { skip, take, orderBy: prismaOrderBy } = stateToPrismaParams(parsed);
+
+    // Build faceted filter clauses
+    const filtersWhere = buildFiltersWhere(parsed.filters, {
+      type: 'type',
+      reconciled: 'reconciled',
+    }, { exclude: ['date'] });
+
+    const dateFiltersWhere = buildDateRangeFiltersWhere(parsed.filters, ['date']);
+
+    // Handle reconciled filter: convert string to boolean
+    if (filtersWhere.reconciled !== undefined) {
+      filtersWhere.reconciled = filtersWhere.reconciled === 'true';
+    }
 
     const where: Prisma.BankMovementWhereInput = {
       bankAccountId,
       companyId,
       ...(options?.reconciled !== undefined && { reconciled: options.reconciled }),
-      ...(options?.type && { type: options.type as BankMovementType }),
-      ...(options?.dateFrom || options?.dateTo
-        ? {
-            date: {
-              ...(options.dateFrom && { gte: options.dateFrom }),
-              ...(options.dateTo && { lte: options.dateTo }),
-            },
-          }
-        : {}),
+      ...filtersWhere,
+      ...dateFiltersWhere,
       ...(search && {
         OR: [
           { description: { contains: search, mode: 'insensitive' } },

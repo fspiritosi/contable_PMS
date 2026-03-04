@@ -5,25 +5,15 @@ import { X } from 'lucide-react';
 import { Button } from '@/shared/components/ui/button';
 import { Input } from '@/shared/components/ui/input';
 
+import { DataTableDateRangeFilter } from './DataTableDateRangeFilter';
 import { DataTableFacetedFilter } from './DataTableFacetedFilter';
+import { DataTableFilterOptions } from './DataTableFilterOptions';
+import { DataTableTextFilter } from './DataTableTextFilter';
 import { DataTableViewOptions } from './DataTableViewOptions';
 import type { DataTableToolbarProps } from './types';
 
 /**
  * Barra de herramientas con búsqueda, filtros y acciones
- *
- * @example
- * ```tsx
- * <DataTableToolbar
- *   table={table}
- *   searchPlaceholder="Buscar empleados..."
- *   searchColumn="name"
- *   facetedFilters={[
- *     { columnId: 'status', title: 'Estado', options: statusOptions },
- *   ]}
- *   toolbarActions={<Button>Nueva acción</Button>}
- * />
- * ```
  */
 export function DataTableToolbar<TData>({
   table,
@@ -33,6 +23,10 @@ export function DataTableToolbar<TData>({
   showColumnToggle = true,
   showSearch = true,
   toolbarActions,
+  showFilterToggle = false,
+  filterVisibility,
+  onFilterVisibilityChange,
+  exportActions,
 }: DataTableToolbarProps<TData>) {
   const isFiltered = table.getState().columnFilters.length > 0;
 
@@ -49,9 +43,14 @@ export function DataTableToolbar<TData>({
     }
   };
 
+  // Filtrar filtros según visibilidad
+  const visibleFilters = filterVisibility
+    ? facetedFilters.filter((f) => filterVisibility[f.columnId] !== false)
+    : facetedFilters;
+
   return (
     <div className="flex items-center justify-between">
-      <div className="flex flex-1 items-center space-x-2">
+      <div className="flex flex-1 flex-wrap items-center gap-2">
         {/* Input de búsqueda */}
         {showSearch && (
           <Input
@@ -63,19 +62,43 @@ export function DataTableToolbar<TData>({
           />
         )}
 
-        {/* Filtros faceteados */}
-        {facetedFilters.map((filter) => {
+        {/* Filtros según tipo */}
+        {visibleFilters.map((filter) => {
           const column = table.getColumn(filter.columnId);
           if (!column) return null;
 
-          return (
-            <DataTableFacetedFilter
-              key={filter.columnId}
-              column={column}
-              title={filter.title}
-              options={filter.options}
-            />
-          );
+          const filterType = filter.type ?? 'faceted';
+
+          switch (filterType) {
+            case 'dateRange':
+              return (
+                <DataTableDateRangeFilter
+                  key={filter.columnId}
+                  column={column}
+                  title={filter.title}
+                />
+              );
+            case 'text':
+              return (
+                <DataTableTextFilter
+                  key={filter.columnId}
+                  column={column}
+                  title={filter.title}
+                  placeholder={filter.placeholder}
+                />
+              );
+            case 'faceted':
+            default:
+              return (
+                <DataTableFacetedFilter
+                  key={filter.columnId}
+                  column={column}
+                  title={filter.title}
+                  options={filter.options ?? []}
+                  externalCounts={filter.externalCounts}
+                />
+              );
+          }
         })}
 
         {/* Botón para limpiar filtros */}
@@ -93,6 +116,18 @@ export function DataTableToolbar<TData>({
       </div>
 
       <div className="flex items-center space-x-2">
+        {/* Toggle de filtros */}
+        {showFilterToggle && filterVisibility && onFilterVisibilityChange && (
+          <DataTableFilterOptions
+            filters={facetedFilters}
+            visibility={filterVisibility}
+            onVisibilityChange={onFilterVisibilityChange}
+          />
+        )}
+
+        {/* Acciones de exportación */}
+        {exportActions}
+
         {/* Acciones personalizadas */}
         {toolbarActions}
 

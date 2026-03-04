@@ -39,6 +39,7 @@ import {
   AlertDialogTitle,
 } from '@/shared/components/ui/alert-dialog';
 
+import { usePermissions } from '@/shared/hooks/usePermissions';
 import {
   getVehicleDepreciation,
   postDepreciationEntry,
@@ -81,6 +82,7 @@ function formatCurrency(value: number): string {
 }
 
 export function _DepreciationTab({ vehicleId, vehiclePrice }: Props) {
+  const { hasPermission } = usePermissions();
   const router = useRouter();
   const queryClient = useQueryClient();
   const [showConfigDialog, setShowConfigDialog] = useState(false);
@@ -157,10 +159,12 @@ export function _DepreciationTab({ vehicleId, vehiclePrice }: Props) {
                 pérdida de valor.
               </p>
             </div>
-            <Button onClick={() => setShowConfigDialog(true)}>
-              <Plus className="mr-2 h-4 w-4" />
-              Configurar Depreciación
-            </Button>
+            {hasPermission('equipment', 'create') && (
+              <Button onClick={() => setShowConfigDialog(true)}>
+                <Plus className="mr-2 h-4 w-4" />
+                Configurar Depreciación
+              </Button>
+            )}
           </CardContent>
         </Card>
 
@@ -241,6 +245,9 @@ export function _DepreciationTab({ vehicleId, vehiclePrice }: Props) {
       cell: ({ row }) => {
         const entry = row.original;
         if (entry.isPosted || !nextPendingEntry || entry.id !== nextPendingEntry.id) {
+          return null;
+        }
+        if (!hasPermission('equipment', 'update')) {
           return null;
         }
 
@@ -332,7 +339,7 @@ export function _DepreciationTab({ vehicleId, vehiclePrice }: Props) {
 
           {/* Acciones */}
           <div className="flex flex-wrap gap-2 border-t pt-4">
-            {depreciation.status === 'ACTIVE' && (
+            {depreciation.status === 'ACTIVE' && hasPermission('equipment', 'update') && (
               <Button
                 variant="outline"
                 size="sm"
@@ -345,7 +352,7 @@ export function _DepreciationTab({ vehicleId, vehiclePrice }: Props) {
                 Suspender
               </Button>
             )}
-            {depreciation.status === 'SUSPENDED' && (
+            {depreciation.status === 'SUSPENDED' && hasPermission('equipment', 'update') && (
               <Button
                 variant="outline"
                 size="sm"
@@ -358,7 +365,7 @@ export function _DepreciationTab({ vehicleId, vehiclePrice }: Props) {
                 Reactivar
               </Button>
             )}
-            {depreciation.status === 'ACTIVE' && (
+            {depreciation.status === 'ACTIVE' && hasPermission('equipment', 'update') && (
               <Button
                 variant="outline"
                 size="sm"
@@ -368,7 +375,7 @@ export function _DepreciationTab({ vehicleId, vehiclePrice }: Props) {
                 Ajustar Valor
               </Button>
             )}
-            {!hasPostedEntries && depreciation.status !== 'COMPLETED' && (
+            {!hasPostedEntries && depreciation.status !== 'COMPLETED' && hasPermission('equipment', 'delete') && (
               <Button
                 variant="destructive"
                 size="sm"

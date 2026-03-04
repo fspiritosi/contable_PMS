@@ -6,15 +6,20 @@ import { Plus } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Button } from '@/shared/components/ui/button';
-import { DataTable, type DataTableSearchParams } from '@/shared/components/common/DataTable';
+import { DataTable, type DataTableSearchParams, type DataTableFacetedFilterConfig } from '@/shared/components/common/DataTable';
 import {
   activateBankAccount,
   deactivateBankAccount,
   closeBankAccount,
 } from '../../actions.server';
 import type { BankAccountWithBalance } from '../../../../shared/types';
+import {
+  BANK_ACCOUNT_TYPE_LABELS,
+  BANK_ACCOUNT_STATUS_LABELS,
+} from '../../../../shared/validators';
 import { getColumns } from '../columns';
 import { _BankAccountFormModal } from './_BankAccountFormModal';
+import { usePermissions } from '@/shared/hooks/usePermissions';
 
 interface Props {
   data: BankAccountWithBalance[];
@@ -28,6 +33,7 @@ export function _BankAccountsTable({ data, totalRows, searchParams }: Props) {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const { hasPermission } = usePermissions();
 
   const handleEdit = (account: BankAccountWithBalance) => {
     setSelectedAccount(account);
@@ -70,6 +76,40 @@ export function _BankAccountsTable({ data, totalRows, searchParams }: Props) {
     }
   };
 
+  const canUpdate = hasPermission('commercial.treasury.bank-accounts', 'update');
+  const canDelete = hasPermission('commercial.treasury.bank-accounts', 'delete');
+
+  const facetedFilters: DataTableFacetedFilterConfig[] = useMemo(
+    () => [
+      {
+        columnId: 'status',
+        title: 'Estado',
+        options: Object.entries(BANK_ACCOUNT_STATUS_LABELS).map(([value, label]) => ({
+          label,
+          value,
+        })),
+      },
+      {
+        columnId: 'accountType',
+        title: 'Tipo de Cuenta',
+        options: Object.entries(BANK_ACCOUNT_TYPE_LABELS).map(([value, label]) => ({
+          label,
+          value,
+        })),
+      },
+      {
+        columnId: 'currency',
+        title: 'Moneda',
+        options: [
+          { label: 'Pesos (ARS)', value: 'ARS' },
+          { label: 'Dólares (USD)', value: 'USD' },
+          { label: 'Euros (EUR)', value: 'EUR' },
+        ],
+      },
+    ],
+    []
+  );
+
   const columns = useMemo(
     () =>
       getColumns({
@@ -77,8 +117,11 @@ export function _BankAccountsTable({ data, totalRows, searchParams }: Props) {
         onToggleStatus: handleToggleStatus,
         onClose: handleClose,
         isLoading,
+        canEdit: canUpdate,
+        canToggleStatus: canUpdate,
+        canClose: canDelete,
       }),
-    [isLoading]
+    [isLoading, canUpdate, canDelete]
   );
 
   return (
@@ -89,11 +132,17 @@ export function _BankAccountsTable({ data, totalRows, searchParams }: Props) {
         totalRows={totalRows}
         searchParams={searchParams}
         searchPlaceholder="Buscar cuentas bancarias..."
+        facetedFilters={facetedFilters}
+        tableId="commercial-bank-accounts"
+        showFilterToggle
+        initialColumnVisibility={{ accountType: false, currency: false }}
         toolbarActions={
-          <Button size="sm" onClick={() => setIsCreateModalOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Nueva Cuenta
-          </Button>
+          hasPermission('commercial.treasury.bank-accounts', 'create') && (
+            <Button size="sm" onClick={() => setIsCreateModalOpen(true)}>
+              <Plus className="mr-2 h-4 w-4" />
+              Nueva Cuenta
+            </Button>
+          )
         }
       />
 

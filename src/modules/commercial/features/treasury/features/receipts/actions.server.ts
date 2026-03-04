@@ -9,6 +9,8 @@ import { Prisma } from '@/generated/prisma/client';
 import type { DataTableSearchParams } from '@/shared/components/common/DataTable';
 import {
   buildSearchWhere,
+  buildFiltersWhere,
+  buildDateRangeFiltersWhere,
   parseSearchParams,
   stateToPrismaParams,
 } from '@/shared/components/common/DataTable/helpers';
@@ -476,17 +478,25 @@ export async function getReceiptsPaginated(searchParams: DataTableSearchParams) 
   if (!companyId) throw new Error('No hay empresa activa');
 
   try {
-    const state = parseSearchParams(searchParams);
-    const { skip, take, orderBy } = stateToPrismaParams(state);
+    const parsed = parseSearchParams(searchParams);
+    const { skip, take, orderBy } = stateToPrismaParams(parsed);
+
+    const filtersWhere = buildFiltersWhere(parsed.filters, {
+      status: 'status',
+    }, { exclude: ['date'] });
+
+    const dateFiltersWhere = buildDateRangeFiltersWhere(parsed.filters, ['date']);
 
     // Buscar en fullNumber y nombre de cliente
     const where = {
       companyId,
-      ...(state.search
+      ...filtersWhere,
+      ...dateFiltersWhere,
+      ...(parsed.search
         ? {
             OR: [
-              { fullNumber: { contains: state.search, mode: 'insensitive' as const } },
-              { customer: { name: { contains: state.search, mode: 'insensitive' as const } } },
+              { fullNumber: { contains: parsed.search, mode: 'insensitive' as const } },
+              { customer: { name: { contains: parsed.search, mode: 'insensitive' as const } } },
             ],
           }
         : {}),

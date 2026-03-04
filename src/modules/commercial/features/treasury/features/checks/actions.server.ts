@@ -6,7 +6,12 @@ import { logger } from '@/shared/lib/logger';
 import { prisma } from '@/shared/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import type { DataTableSearchParams } from '@/shared/components/common/DataTable';
-import { parseSearchParams, stateToPrismaParams } from '@/shared/components/common/DataTable/helpers';
+import {
+  parseSearchParams,
+  stateToPrismaParams,
+  buildFiltersWhere,
+  buildDateRangeFiltersWhere,
+} from '@/shared/components/common/DataTable/helpers';
 import type { CreateCheckFormData, DepositCheckFormData, EndorseCheckFormData } from '../../shared/validators';
 import type { CheckListItem, CheckWithDetails } from '../../shared/types';
 import { checkPermission } from '@/shared/lib/permissions';
@@ -24,19 +29,28 @@ export async function getChecksPaginated(searchParams: DataTableSearchParams) {
   if (!companyId) throw new Error('No hay empresa activa');
 
   try {
-    const state = parseSearchParams(searchParams);
-    const { skip, take, orderBy } = stateToPrismaParams(state);
+    const parsed = parseSearchParams(searchParams);
+    const { skip, take, orderBy } = stateToPrismaParams(parsed);
+
+    const filtersWhere = buildFiltersWhere(parsed.filters, {
+      status: 'status',
+      type: 'type',
+    }, { exclude: ['issueDate', 'dueDate'] });
+
+    const dateFiltersWhere = buildDateRangeFiltersWhere(parsed.filters, ['issueDate', 'dueDate']);
 
     const where = {
       companyId,
-      ...(state.search
+      ...filtersWhere,
+      ...dateFiltersWhere,
+      ...(parsed.search
         ? {
             OR: [
-              { checkNumber: { contains: state.search, mode: 'insensitive' as const } },
-              { bankName: { contains: state.search, mode: 'insensitive' as const } },
-              { drawerName: { contains: state.search, mode: 'insensitive' as const } },
-              { customer: { name: { contains: state.search, mode: 'insensitive' as const } } },
-              { supplier: { businessName: { contains: state.search, mode: 'insensitive' as const } } },
+              { checkNumber: { contains: parsed.search, mode: 'insensitive' as const } },
+              { bankName: { contains: parsed.search, mode: 'insensitive' as const } },
+              { drawerName: { contains: parsed.search, mode: 'insensitive' as const } },
+              { customer: { name: { contains: parsed.search, mode: 'insensitive' as const } } },
+              { supplier: { businessName: { contains: parsed.search, mode: 'insensitive' as const } } },
             ],
           }
         : {}),

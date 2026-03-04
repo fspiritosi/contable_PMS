@@ -144,6 +144,10 @@ export function getColumns({ onEdit, onDelete, onToggleActive, permissions }: Co
           </Badge>
         );
       },
+      filterFn: (row, id, value) => {
+        const isActive = row.getValue(id);
+        return value.includes(String(isActive));
+      },
     },
   ];
 

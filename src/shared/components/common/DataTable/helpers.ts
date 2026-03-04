@@ -171,14 +171,93 @@ export function buildSearchWhere(search: string, fields: string[]) {
  */
 export function buildFiltersWhere(
   filters: Record<string, string[]>,
+  columnMap: Record<string, string> = {},
+  options?: { exclude?: string[] }
+) {
+  const where: Record<string, unknown> = {};
+  const excludeSet = new Set(options?.exclude ?? []);
+
+  Object.entries(filters).forEach(([columnId, values]) => {
+    if (values.length > 0 && !excludeSet.has(columnId)) {
+      const field = columnMap[columnId] || columnId;
+      where[field] = values.length === 1 ? values[0] : { in: values };
+    }
+  });
+
+  return where;
+}
+
+/**
+ * Construye cláusula where para filtros de texto libre
+ *
+ * @example
+ * ```tsx
+ * const textWhere = buildTextFiltersWhere(state.filters, ['notes', 'reference'], {
+ *   notes: 'internalNotes',
+ * });
+ * // Resultado: { internalNotes: { contains: 'valor', mode: 'insensitive' } }
+ * ```
+ */
+export function buildTextFiltersWhere(
+  filters: Record<string, string[]>,
+  textColumns: string[],
   columnMap: Record<string, string> = {}
 ) {
   const where: Record<string, unknown> = {};
 
-  Object.entries(filters).forEach(([columnId, values]) => {
-    if (values.length > 0) {
+  textColumns.forEach((columnId) => {
+    const values = filters[columnId];
+    if (values && values.length > 0 && values[0]) {
       const field = columnMap[columnId] || columnId;
-      where[field] = values.length === 1 ? values[0] : { in: values };
+      where[field] = {
+        contains: values[0],
+        mode: 'insensitive' as const,
+      };
+    }
+  });
+
+  return where;
+}
+
+/**
+ * Construye cláusula where para filtros de rango de fechas
+ *
+ * Los valores se esperan como un array de 2 strings ISO: [from, to]
+ *
+ * @example
+ * ```tsx
+ * const dateWhere = buildDateRangeFiltersWhere(state.filters, ['createdAt'], {
+ *   createdAt: 'createdAt',
+ * });
+ * // Resultado: { createdAt: { gte: Date, lte: Date } }
+ * ```
+ */
+export function buildDateRangeFiltersWhere(
+  filters: Record<string, string[]>,
+  dateColumns: string[],
+  columnMap: Record<string, string> = {}
+) {
+  const where: Record<string, unknown> = {};
+
+  dateColumns.forEach((columnId) => {
+    const values = filters[columnId];
+    if (values && values.length >= 1) {
+      const field = columnMap[columnId] || columnId;
+      const condition: Record<string, Date> = {};
+
+      if (values[0]) {
+        condition.gte = new Date(values[0]);
+      }
+      if (values[1]) {
+        // Set to end of day for the "to" date
+        const toDate = new Date(values[1]);
+        toDate.setHours(23, 59, 59, 999);
+        condition.lte = toDate;
+      }
+
+      if (Object.keys(condition).length > 0) {
+        where[field] = condition;
+      }
     }
   });
 

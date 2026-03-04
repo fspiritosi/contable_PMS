@@ -92,6 +92,7 @@ export function _EquipmentOwnersDataTable({ data, totalRows, searchParams, permi
         searchParams={searchParams}
         searchPlaceholder="Buscar titulares..."
         emptyMessage="No hay titulares registrados"
+        tableId="company-equipment-owners"
         toolbarActions={
           permissions.canCreate ? (
             <Button onClick={handleCreate} data-testid="new-owner-button">

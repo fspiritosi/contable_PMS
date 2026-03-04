@@ -5,6 +5,7 @@ import { getActiveCompanyId } from '@/shared/lib/company';
 import { logger } from '@/shared/lib/logger';
 import { checkPermission } from '@/shared/lib/permissions';
 import { prisma } from '@/shared/lib/prisma';
+import { buildFiltersWhere } from '@/shared/components/common/DataTable/helpers';
 import { revalidatePath } from 'next/cache';
 
 interface GetLeadsParams {
@@ -12,6 +13,7 @@ interface GetLeadsParams {
   pageSize?: number;
   search?: string;
   status?: LeadStatus;
+  filters?: Record<string, string[]>;
 }
 
 /**
@@ -19,15 +21,18 @@ interface GetLeadsParams {
  */
 export async function getLeads(params: GetLeadsParams = {}) {
   await checkPermission('commercial.leads', 'view', { redirect: true });
-  const { page = 1, pageSize = 10, search, status } = params;
+  const { page = 1, pageSize = 10, search, status, filters = {} } = params;
   const companyId = await getActiveCompanyId();
   if (!companyId) throw new Error('No hay empresa activa');
 
   try {
+    const filtersWhere = buildFiltersWhere(filters, ['status']);
+
     const where = {
       companyId,
       isActive: true,
       ...(status && { status }),
+      ...filtersWhere,
       ...(search && {
         OR: [
           { name: { contains: search, mode: 'insensitive' as const } },

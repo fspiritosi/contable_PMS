@@ -64,9 +64,9 @@ function getStatusBadge(status: string) {
 
 interface ColumnsProps {
   onView: (invoice: Invoice) => void;
-  onEdit: (invoice: Invoice) => void;
-  onConfirm: (invoice: Invoice) => void;
-  onCancel: (invoice: Invoice) => void;
+  onEdit?: (invoice: Invoice) => void;
+  onConfirm?: (invoice: Invoice) => void;
+  onCancel?: (invoice: Invoice) => void;
   onAttach: (invoice: Invoice) => void;
 }
 
@@ -163,24 +163,24 @@ export function getColumns({ onView, onEdit, onConfirm, onCancel, onAttach }: Co
                 <Eye className="mr-2 h-4 w-4" />
                 Ver Detalle
               </DropdownMenuItem>
-              {isDraft && (
-                <>
-                  <DropdownMenuItem onClick={() => onEdit(invoice)}>
-                    <Pencil className="mr-2 h-4 w-4" />
-                    Editar
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => onConfirm(invoice)}>
-                    <CheckCircle className="mr-2 h-4 w-4" />
-                    Confirmar
-                  </DropdownMenuItem>
-                </>
+              {isDraft && onEdit && (
+                <DropdownMenuItem onClick={() => onEdit(invoice)}>
+                  <Pencil className="mr-2 h-4 w-4" />
+                  Editar
+                </DropdownMenuItem>
+              )}
+              {isDraft && onConfirm && (
+                <DropdownMenuItem onClick={() => onConfirm(invoice)}>
+                  <CheckCircle className="mr-2 h-4 w-4" />
+                  Confirmar
+                </DropdownMenuItem>
               )}
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => onAttach(invoice)}>
                 <Paperclip className="mr-2 h-4 w-4" />
                 {invoice.documentUrl ? 'Ver Adjunto' : 'Adjuntar Documento'}
               </DropdownMenuItem>
-              {!isCancelled && (
+              {!isCancelled && onCancel && (
                 <>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => onCancel(invoice)} className="text-destructive">

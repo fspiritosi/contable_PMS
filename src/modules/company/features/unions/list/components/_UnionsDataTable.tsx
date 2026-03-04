@@ -92,6 +92,7 @@ export function _UnionsDataTable({ data, totalRows, searchParams, permissions }:
         searchParams={searchParams}
         searchPlaceholder="Buscar sindicatos..."
         emptyMessage="No hay sindicatos registrados"
+        tableId="company-unions"
         toolbarActions={
           permissions.canCreate ? (
             <Button onClick={handleCreate} data-testid="new-union-button">

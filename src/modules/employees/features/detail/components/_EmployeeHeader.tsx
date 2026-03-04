@@ -1,3 +1,5 @@
+'use client';
+
 import { AlertCircle, ArrowLeft, CheckCircle2, Edit, UserX } from 'lucide-react';
 import Link from 'next/link';
 
@@ -14,6 +16,7 @@ import {
 import { getInitials } from '@/shared/utils/formatters';
 import { employeeStatusBadges, getBadgeConfig } from '@/shared/utils/mappers';
 import type { EmployeeStatusInfo } from '@/shared/lib/employeeStatus.types';
+import { usePermissions } from '@/shared/hooks/usePermissions';
 import type { Employee } from '../actions.server';
 
 interface Props {
@@ -22,6 +25,7 @@ interface Props {
 }
 
 export function _EmployeeHeader({ employee, statusInfo }: Props) {
+  const { hasPermission } = usePermissions();
   const initials = getInitials(employee.firstName, employee.lastName);
   const statusBadge = getBadgeConfig(employee.status, employeeStatusBadges);
 
@@ -141,13 +145,15 @@ export function _EmployeeHeader({ employee, statusInfo }: Props) {
 
       {/* Row 2: Action buttons */}
       <div className="flex gap-2 sm:justify-end">
-        <Button variant="outline" className="flex-1 sm:flex-none" asChild>
-          <Link href={`/dashboard/employees/${employee.id}/edit`}>
-            <Edit className="mr-2 h-4 w-4" />
-            Editar
-          </Link>
-        </Button>
-        {employee.isActive && (
+        {hasPermission('employees', 'update') && (
+          <Button variant="outline" className="flex-1 sm:flex-none" asChild>
+            <Link href={`/dashboard/employees/${employee.id}/edit`}>
+              <Edit className="mr-2 h-4 w-4" />
+              Editar
+            </Link>
+          </Button>
+        )}
+        {employee.isActive && hasPermission('employees', 'delete') && (
           <Button variant="destructive" className="flex-1 sm:flex-none">
             <UserX className="mr-2 h-4 w-4" />
             <span className="hidden xs:inline">Dar de </span>Baja

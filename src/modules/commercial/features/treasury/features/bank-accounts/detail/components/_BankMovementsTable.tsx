@@ -5,13 +5,15 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { CheckCircle2, Circle } from 'lucide-react';
 
-import { DataTable, type DataTableSearchParams } from '@/shared/components/common/DataTable';
+import { DataTable, type DataTableSearchParams, type DataTableFacetedFilterConfig } from '@/shared/components/common/DataTable';
 import { Button } from '@/shared/components/ui/button';
 import {
   reconcileBankMovement,
   reconcileMultipleBankMovements,
 } from '../../../bank-movements/actions.server';
+import { BANK_MOVEMENT_TYPE_LABELS } from '../../../../shared/validators';
 import { getMovementColumns } from '../columns';
+import { usePermissions } from '@/shared/hooks/usePermissions';
 
 interface BankMovement extends Record<string, unknown> {
   id: string;
@@ -38,6 +40,7 @@ export function _BankMovementsTable({ data, totalRows, searchParams }: Props) {
   const router = useRouter();
   const [selectedRows, setSelectedRows] = useState<BankMovement[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const { hasPermission } = usePermissions();
 
   const handleToggleReconcile = async (movement: BankMovement) => {
     try {
@@ -76,14 +79,43 @@ export function _BankMovementsTable({ data, totalRows, searchParams }: Props) {
   const pendingSelected = selectedRows.filter((r) => !r.reconciled);
   const reconciledSelected = selectedRows.filter((r) => r.reconciled);
 
+  const canReconcile = hasPermission('commercial.treasury.bank-accounts', 'update');
+
+  const facetedFilters: DataTableFacetedFilterConfig[] = useMemo(
+    () => [
+      {
+        columnId: 'type',
+        title: 'Tipo',
+        options: Object.entries(BANK_MOVEMENT_TYPE_LABELS).map(([value, label]) => ({
+          label: label as string,
+          value,
+        })),
+      },
+      {
+        columnId: 'reconciled',
+        title: 'Conciliado',
+        options: [
+          { label: 'Conciliado', value: 'true' },
+          { label: 'Pendiente', value: 'false' },
+        ],
+      },
+      {
+        columnId: 'date',
+        title: 'Fecha',
+        type: 'dateRange' as const,
+      },
+    ],
+    []
+  );
+
   const columns = useMemo(
-    () => getMovementColumns({ onToggleReconcile: handleToggleReconcile, isLoading }),
-    [isLoading]
+    () => getMovementColumns({ onToggleReconcile: handleToggleReconcile, isLoading, canReconcile }),
+    [isLoading, canReconcile]
   );
 
   const toolbarActions = (
     <>
-      {pendingSelected.length > 0 && (
+      {canReconcile && pendingSelected.length > 0 && (
         <Button
           size="sm"
           onClick={() => handleBulkReconcile(true)}
@@ -93,7 +125,7 @@ export function _BankMovementsTable({ data, totalRows, searchParams }: Props) {
           Conciliar ({pendingSelected.length})
         </Button>
       )}
-      {reconciledSelected.length > 0 && (
+      {canReconcile && reconciledSelected.length > 0 && (
         <Button
           size="sm"
           variant="outline"
@@ -114,6 +146,9 @@ export function _BankMovementsTable({ data, totalRows, searchParams }: Props) {
       totalRows={totalRows}
       searchParams={searchParams}
       showSearch={false}
+      facetedFilters={facetedFilters}
+      tableId="commercial-bank-movements"
+      showFilterToggle
       enableRowSelection
       showRowSelection
       onRowSelectionChange={setSelectedRows}

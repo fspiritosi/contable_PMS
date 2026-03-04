@@ -315,6 +315,7 @@ export function _AccountStatementTab({ accountStatement }: AccountStatementTabPr
               data={invoices}
               totalRows={invoices.length}
               searchPlaceholder="Buscar facturas..."
+              tableId="commercial-client-invoices"
             />
           )}
         </CardContent>
@@ -335,6 +336,7 @@ export function _AccountStatementTab({ accountStatement }: AccountStatementTabPr
               data={receipts}
               totalRows={receipts.length}
               searchPlaceholder="Buscar recibos..."
+              tableId="commercial-client-receipts"
             />
           )}
         </CardContent>

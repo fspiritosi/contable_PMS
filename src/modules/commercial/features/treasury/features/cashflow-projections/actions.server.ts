@@ -6,7 +6,12 @@ import { logger } from '@/shared/lib/logger';
 import { prisma } from '@/shared/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import type { DataTableSearchParams } from '@/shared/components/common/DataTable';
-import { parseSearchParams, stateToPrismaParams } from '@/shared/components/common/DataTable/helpers';
+import {
+  parseSearchParams,
+  stateToPrismaParams,
+  buildFiltersWhere,
+  buildDateRangeFiltersWhere,
+} from '@/shared/components/common/DataTable/helpers';
 import type { CreateProjectionFormData, LinkDocumentFormData } from '../../shared/validators';
 import type {
   ProjectionListItem,
@@ -32,8 +37,18 @@ export async function getProjectionsPaginated(searchParams: DataTableSearchParam
     const state = parseSearchParams(searchParams);
     const { skip, take, orderBy } = stateToPrismaParams(state);
 
+    const filtersWhere = buildFiltersWhere(state.filters, {
+      status: 'status',
+      type: 'type',
+      category: 'category',
+    }, { exclude: ['date'] });
+
+    const dateFiltersWhere = buildDateRangeFiltersWhere(state.filters, ['date']);
+
     const where = {
       companyId,
+      ...filtersWhere,
+      ...dateFiltersWhere,
       ...(state.search
         ? {
             OR: [
