@@ -6,6 +6,7 @@ import { logger } from '@/shared/lib/logger';
 import { prisma } from '@/shared/lib/prisma';
 import moment from 'moment';
 import { checkPermission } from '@/shared/lib/permissions';
+import { CREDIT_NOTE_TYPES, isCreditNote } from '@/modules/commercial/shared/voucher-utils';
 
 // ============================================
 // TIPOS
@@ -38,6 +39,10 @@ export interface CashflowRow {
     checksInItems: CashflowDetailItem[];
     checksOut: number;
     checksOutItems: CashflowDetailItem[];
+    salesInvoices: number;
+    salesInvoicesItems: CashflowDetailItem[];
+    purchaseInvoices: number;
+    purchaseInvoicesItems: CashflowDetailItem[];
     projectionsIn: number;
     projectionsInItems: CashflowDetailItem[];
     projectionsOut: number;
@@ -110,6 +115,8 @@ export async function getCashflowData(
       pendingExpenses,
       checksThirdParty,
       checksOwn,
+      pendingSalesInvoices,
+      pendingPurchaseInvoices,
       projections,
       bankAccounts,
       openSessions,
@@ -238,6 +245,56 @@ export async function getCashflowData(
           checkNumber: true,
           payeeName: true,
           bankName: true,
+        },
+      }),
+      // Facturas de venta pendientes de cobro (ingresos - excluir las que ya tienen recibo DRAFT y NC)
+      prisma.salesInvoice.findMany({
+        where: {
+          companyId,
+          status: { in: ['CONFIRMED', 'PARTIAL_PAID'] },
+          voucherType: { notIn: CREDIT_NOTE_TYPES },
+          // Excluir facturas que ya tienen recibo en DRAFT para evitar doble conteo
+          receiptItems: { none: { receipt: { status: 'DRAFT' } } },
+        },
+        select: {
+          id: true,
+          fullNumber: true,
+          issueDate: true,
+          dueDate: true,
+          total: true,
+          customer: { select: { name: true } },
+          receiptItems: { select: { amount: true } },
+          creditNoteApplicationsReceived: {
+            select: { amount: true, creditNoteId: true },
+          },
+          creditDebitNotes: {
+            select: { id: true, voucherType: true, total: true, status: true },
+          },
+        },
+      }),
+      // Facturas de compra pendientes de pago (egresos - excluir las que ya tienen OP DRAFT y NC)
+      prisma.purchaseInvoice.findMany({
+        where: {
+          companyId,
+          status: { in: ['CONFIRMED', 'PARTIAL_PAID'] },
+          voucherType: { notIn: CREDIT_NOTE_TYPES },
+          // Excluir facturas que ya tienen OP en DRAFT para evitar doble conteo
+          paymentOrderItems: { none: { paymentOrder: { status: 'DRAFT' } } },
+        },
+        select: {
+          id: true,
+          fullNumber: true,
+          issueDate: true,
+          dueDate: true,
+          total: true,
+          supplier: { select: { tradeName: true, businessName: true } },
+          paymentOrderItems: { select: { amount: true } },
+          creditNoteApplicationsReceived: {
+            select: { amount: true, creditNoteId: true },
+          },
+          creditDebitNotes: {
+            select: { id: true, voucherType: true, total: true, status: true },
+          },
         },
       }),
       // Proyecciones manuales (excluir CONFIRMED, usar monto efectivo para PARTIAL)
@@ -396,6 +453,63 @@ export async function getCashflowData(
       }
     }
 
+    // Facturas de venta pendientes de cobro → ingresos
+    for (const inv of pendingSalesInvoices) {
+      const receiptsPaid = inv.receiptItems.reduce((sum, item) => sum + Number(item.amount), 0);
+      const cnAppliedExplicit = inv.creditNoteApplicationsReceived.reduce((sum, app) => sum + Number(app.amount), 0);
+      const explicitCNIds = new Set(inv.creditNoteApplicationsReceived.map((app) => app.creditNoteId));
+      const cnLinkedRaw = inv.creditDebitNotes
+        .filter((doc) => isCreditNote(doc.voucherType) && doc.status !== 'DRAFT' && doc.status !== 'CANCELLED' && !explicitCNIds.has(doc.id))
+        .reduce((sum, doc) => sum + Number(doc.total), 0);
+      const maxFallbackCN = Math.max(0, Number(inv.total) - receiptsPaid - cnAppliedExplicit);
+      const cnLinked = Math.min(cnLinkedRaw, maxFallbackCN);
+      const pendingAmount = Number(inv.total) - receiptsPaid - cnAppliedExplicit - cnLinked;
+      if (pendingAmount > 0) {
+        const date = inv.dueDate ? moment.utc(inv.dueDate) : moment.utc(inv.issueDate);
+        // Solo incluir si la fecha cae dentro del rango (hoy → endDate)
+        if (date.isSameOrAfter(moment(startDate)) && date.isSameOrBefore(moment(endDate))) {
+          const bucket = findBucket(buckets, date, granularity);
+          if (bucket) {
+            bucket.details.salesInvoices += pendingAmount;
+            bucket.details.salesInvoicesItems.push({
+              label: `${inv.fullNumber} — ${inv.customer.name}`,
+              amount: pendingAmount,
+            });
+          } else {
+            prePeriodInflows += pendingAmount;
+          }
+        }
+      }
+    }
+
+    // Facturas de compra pendientes de pago → egresos
+    for (const inv of pendingPurchaseInvoices) {
+      const paymentsPaid = inv.paymentOrderItems.reduce((sum, item) => sum + Number(item.amount), 0);
+      const cnAppliedExplicit = inv.creditNoteApplicationsReceived.reduce((sum, app) => sum + Number(app.amount), 0);
+      const explicitCNIds = new Set(inv.creditNoteApplicationsReceived.map((app) => app.creditNoteId));
+      const cnLinkedRaw = inv.creditDebitNotes
+        .filter((doc) => isCreditNote(doc.voucherType) && doc.status !== 'DRAFT' && doc.status !== 'CANCELLED' && !explicitCNIds.has(doc.id))
+        .reduce((sum, doc) => sum + Number(doc.total), 0);
+      const maxFallbackCN = Math.max(0, Number(inv.total) - paymentsPaid - cnAppliedExplicit);
+      const cnLinked = Math.min(cnLinkedRaw, maxFallbackCN);
+      const pendingAmount = Number(inv.total) - paymentsPaid - cnAppliedExplicit - cnLinked;
+      if (pendingAmount > 0) {
+        const date = inv.dueDate ? moment.utc(inv.dueDate) : moment.utc(inv.issueDate);
+        if (date.isSameOrAfter(moment(startDate)) && date.isSameOrBefore(moment(endDate))) {
+          const bucket = findBucket(buckets, date, granularity);
+          if (bucket) {
+            bucket.details.purchaseInvoices += pendingAmount;
+            bucket.details.purchaseInvoicesItems.push({
+              label: `${inv.fullNumber} — ${inv.supplier.tradeName || inv.supplier.businessName}`,
+              amount: pendingAmount,
+            });
+          } else {
+            prePeriodOutflows += pendingAmount;
+          }
+        }
+      }
+    }
+
     for (const proj of projections) {
       // CashflowProjection.date es @db.Date → usar moment.utc para evitar off-by-one
       const bucket = findBucket(buckets, moment.utc(proj.date), granularity);
@@ -431,10 +545,12 @@ export async function getCashflowData(
       const inflows =
         bucket.details.receipts +
         bucket.details.checksIn +
+        bucket.details.salesInvoices +
         bucket.details.projectionsIn;
       const outflows =
         bucket.details.paymentOrders +
         bucket.details.purchaseOrders +
+        bucket.details.purchaseInvoices +
         bucket.details.expenses +
         bucket.details.checksOut +
         bucket.details.projectionsOut;
@@ -535,6 +651,10 @@ interface BucketTemplate {
     checksInItems: CashflowDetailItem[];
     checksOut: number;
     checksOutItems: CashflowDetailItem[];
+    salesInvoices: number;
+    salesInvoicesItems: CashflowDetailItem[];
+    purchaseInvoices: number;
+    purchaseInvoicesItems: CashflowDetailItem[];
     projectionsIn: number;
     projectionsInItems: CashflowDetailItem[];
     projectionsOut: number;
@@ -556,6 +676,10 @@ function emptyDetails() {
     checksInItems: [] as CashflowDetailItem[],
     checksOut: 0,
     checksOutItems: [] as CashflowDetailItem[],
+    salesInvoices: 0,
+    salesInvoicesItems: [] as CashflowDetailItem[],
+    purchaseInvoices: 0,
+    purchaseInvoicesItems: [] as CashflowDetailItem[],
     projectionsIn: 0,
     projectionsInItems: [] as CashflowDetailItem[],
     projectionsOut: 0,

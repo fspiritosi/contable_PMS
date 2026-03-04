@@ -39,6 +39,15 @@ function getCategoryDetails(row: CashflowRow): DetailCategory[] {
       type: 'inflow',
     });
   }
+  if (row.details.salesInvoices > 0) {
+    categories.push({
+      key: 'salesInvoices',
+      label: 'Facturas por Cobrar',
+      total: row.details.salesInvoices,
+      items: row.details.salesInvoicesItems,
+      type: 'inflow',
+    });
+  }
   if (row.details.checksIn > 0) {
     categories.push({
       key: 'checksIn',
@@ -63,6 +72,15 @@ function getCategoryDetails(row: CashflowRow): DetailCategory[] {
       label: 'Órdenes de Pago',
       total: row.details.paymentOrders,
       items: row.details.paymentOrdersItems,
+      type: 'outflow',
+    });
+  }
+  if (row.details.purchaseInvoices > 0) {
+    categories.push({
+      key: 'purchaseInvoices',
+      label: 'Facturas por Pagar',
+      total: row.details.purchaseInvoices,
+      items: row.details.purchaseInvoicesItems,
       type: 'outflow',
     });
   }
