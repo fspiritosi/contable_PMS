@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { isS3Provider } from '@/shared/config/storage.config';
 import { getContentType } from '@/shared/config/storage.config';
-import { localFileExists, readLocalFile, getPresignedDownloadUrl } from '@/shared/lib/storage';
+import { localFileExists, readLocalFile, readS3File } from '@/shared/lib/storage';
 import { logger } from '@/shared/lib/logger';
 
 /**
@@ -11,7 +11,7 @@ import { logger } from '@/shared/lib/logger';
  * GET /api/storage/[...path]
  *
  * - Con STORAGE_PROVIDER=local: sirve archivos del filesystem
- * - Con STORAGE_PROVIDER=s3: redirige a presigned URL de S3/MinIO
+ * - Con STORAGE_PROVIDER=s3: descarga de S3 internamente y sirve al cliente
  */
 export async function GET(
   request: NextRequest,
@@ -26,21 +26,25 @@ export async function GET(
       return NextResponse.json({ error: 'Ruta inválida' }, { status: 400 });
     }
 
-    // Si usamos S3, redirigir a presigned URL
+    let file: Buffer | Uint8Array;
+
     if (isS3Provider()) {
-      const presignedUrl = await getPresignedDownloadUrl(key);
-      return NextResponse.redirect(presignedUrl);
+      // S3: descargar internamente y servir al cliente
+      const result = await readS3File(key);
+      if (!result) {
+        return NextResponse.json({ error: 'Archivo no encontrado' }, { status: 404 });
+      }
+      file = result;
+    } else {
+      // Storage local: servir archivo del filesystem
+      const exists = await localFileExists(key);
+      if (!exists) {
+        return NextResponse.json({ error: 'Archivo no encontrado' }, { status: 404 });
+      }
+      file = await readLocalFile(key);
     }
 
-    // Storage local: servir archivo directamente
-    const exists = await localFileExists(key);
-    if (!exists) {
-      return NextResponse.json({ error: 'Archivo no encontrado' }, { status: 404 });
-    }
-
-    const file = await readLocalFile(key);
     const contentType = getContentType(key);
-
     const download = request.nextUrl.searchParams.get('download');
     const filename = key.split('/').pop() || 'file';
 

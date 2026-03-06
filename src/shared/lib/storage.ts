@@ -299,16 +299,24 @@ export async function deleteFile(key: string): Promise<void> {
 
 /**
  * Obtiene una URL para descargar un archivo
- * Con bucket público, retorna URL directa (más simple y compatible)
- * Si se necesitan presigned URLs en el futuro, usar getS3PresignedDownloadUrl
+ * Si hay S3_PUBLIC_URL configurada, retorna URL pública directa
+ * Si no, genera una presigned URL real con el AWS SDK
  */
 export async function getPresignedDownloadUrl(
   key: string,
-  _options: PresignedUrlOptions = {}
+  options: PresignedUrlOptions = {}
 ): Promise<string> {
-  // Usamos URL pública directa (bucket configurado como público en MinIO/R2)
-  // Esto evita problemas de compatibilidad con presigned URLs entre AWS SDK y MinIO
-  return getPublicUrl(key);
+  if (isS3Provider()) {
+    const { s3 } = storageConfig;
+    // Si hay URL pública configurada, usarla directamente
+    if (s3.publicUrl) {
+      return `${s3.publicUrl}/${key}`;
+    }
+    // Generar presigned URL real con AWS SDK
+    return await getS3PresignedDownloadUrl(key, options);
+  }
+  // Storage local: URL del API route
+  return `${storageConfig.local.publicUrl}/${key}`;
 }
 
 /**
@@ -348,6 +356,43 @@ export function getPublicUrl(key: string): string {
     return `${s3.endpoint}/${s3.bucket}/${key}`;
   } else {
     return `${storageConfig.local.publicUrl}/${key}`;
+  }
+}
+
+// ============================================
+// HELPERS PARA LEER ARCHIVOS (API route)
+// ============================================
+
+/**
+ * Lee un archivo desde S3 (solo para el API route)
+ * Retorna null si no existe
+ */
+export async function readS3File(key: string): Promise<Buffer | null> {
+  const { s3 } = storageConfig;
+  const client = getS3Client();
+
+  try {
+    const response = await client.send(
+      new GetObjectCommand({
+        Bucket: s3.bucket,
+        Key: key,
+      })
+    );
+
+    if (!response.Body) return null;
+
+    // Convertir stream a Buffer
+    const chunks: Uint8Array[] = [];
+    const stream = response.Body as AsyncIterable<Uint8Array>;
+    for await (const chunk of stream) {
+      chunks.push(chunk);
+    }
+    return Buffer.concat(chunks);
+  } catch (error: unknown) {
+    if ((error as { name?: string }).name === 'NoSuchKey') {
+      return null;
+    }
+    throw error;
   }
 }
 
