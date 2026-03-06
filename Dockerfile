@@ -22,8 +22,13 @@ COPY . .
 # Generar Prisma Client
 RUN npx prisma generate
 
-# Build Next.js
+# Variables dummy para build (Next.js pre-renderiza rutas que acceden a env vars)
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy"
+ENV NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY="pk_test_dummy"
+ENV CLERK_SECRET_KEY="sk_test_dummy"
+
+# Build Next.js
 RUN npm run build
 
 # --- Stage 3: Production ---
