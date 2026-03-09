@@ -552,6 +552,99 @@ export async function getProductsForSelect() {
   }
 }
 
+/**
+ * Obtiene todas las facturas de compra (sin paginación) para exportación a Excel
+ */
+export async function getAllPurchaseInvoicesForExport(searchParams: DataTableSearchParams) {
+  await checkPermission('commercial.purchases', 'view', { redirect: true });
+  const { userId } = await auth();
+  if (!userId) throw new Error('No autenticado');
+
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  try {
+    const state = parseSearchParams(searchParams);
+
+    const searchWhere = buildSearchWhere(state.search, [
+      'fullNumber',
+      'notes',
+    ]);
+
+    const filtersWhere = buildFiltersWhere(state.filters, {
+      status: 'status',
+      voucherType: 'voucherType',
+    }, { exclude: ['issueDate', 'fullNumber', 'supplier'] });
+
+    const dateFiltersWhere = buildDateRangeFiltersWhere(state.filters, ['issueDate']);
+    const textFiltersWhere = buildTextFiltersWhere(state.filters, ['fullNumber']);
+
+    // Filtro de texto para proveedor (relación anidada)
+    const supplierNameFilter = state.filters['supplier'];
+    const supplierWhere = supplierNameFilter?.[0]
+      ? { supplier: { OR: [
+          { businessName: { contains: supplierNameFilter[0], mode: 'insensitive' as const } },
+          { tradeName: { contains: supplierNameFilter[0], mode: 'insensitive' as const } },
+        ] } }
+      : {};
+
+    const where: Prisma.PurchaseInvoiceWhereInput = {
+      companyId,
+      ...searchWhere,
+      ...filtersWhere,
+      ...dateFiltersWhere,
+      ...textFiltersWhere,
+      ...supplierWhere,
+    };
+
+    const invoices = await prisma.purchaseInvoice.findMany({
+      where,
+      take: 5000,
+      orderBy: [{ issueDate: 'desc' }, { number: 'desc' }],
+      select: {
+        id: true,
+        fullNumber: true,
+        voucherType: true,
+        issueDate: true,
+        dueDate: true,
+        subtotal: true,
+        vatAmount: true,
+        otherTaxes: true,
+        total: true,
+        status: true,
+        notes: true,
+        cae: true,
+        supplier: {
+          select: {
+            businessName: true,
+            tradeName: true,
+            taxId: true,
+          },
+        },
+      },
+    });
+
+    return invoices.map((inv) => ({
+      ...inv,
+      supplier: inv.supplier.tradeName || inv.supplier.businessName,
+      supplierTaxId: inv.supplier.taxId,
+      subtotal: Number(inv.subtotal),
+      vatAmount: Number(inv.vatAmount),
+      otherTaxes: Number(inv.otherTaxes),
+      total: Number(inv.total),
+    }));
+  } catch (error) {
+    logger.error('Error al exportar facturas de compra', {
+      data: {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        companyId,
+      },
+    });
+    throw new Error('Error al exportar facturas de compra');
+  }
+}
+
 // ============================================
 // MUTATIONS
 // ============================================

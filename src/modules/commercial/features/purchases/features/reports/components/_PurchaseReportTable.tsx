@@ -3,12 +3,15 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/card';
 import { Badge } from '@/shared/components/ui/badge';
-import { ArrowUpDown, ArrowUp, ArrowDown, CheckCircle, FileText, XCircle } from 'lucide-react';
+import { Button } from '@/shared/components/ui/button';
+import { ArrowUpDown, ArrowUp, ArrowDown, CheckCircle, Download, FileText, XCircle } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
 import moment from 'moment';
 import { formatCurrency } from '@/shared/utils/formatters';
+import { exportToExcel, type ExcelColumn, type ExcelExportOptions } from '@/shared/lib/excel-export';
 import { VOUCHER_TYPE_LABELS, PURCHASE_INVOICE_STATUS_LABELS } from '../../invoices/shared/validators';
 import { supplierTaxConditionLabels } from '@/shared/utils/mappers';
+import { toast } from 'sonner';
 
 // Tipo de datos por período
 interface PurchasesByPeriodData {
@@ -232,6 +235,7 @@ function getStatusBadge(status: string) {
 
 export function _PurchaseReportTable({ reportType, data, startDate, endDate }: Props) {
   const [sortConfig, setSortConfig] = useState<SortConfig | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     setSortConfig(null);
@@ -247,6 +251,113 @@ export function _PurchaseReportTable({ reportType, data, startDate, endDate }: P
       return { key, direction: 'asc' as const };
     });
   }, []);
+
+  const handleExport = async () => {
+    if (!data || !reportType) return;
+
+    setExporting(true);
+    try {
+      let columns: ExcelColumn[] = [];
+      let rows: Record<string, unknown>[] = [];
+      let options: ExcelExportOptions = { filename: 'reporte-compras', sheetName: 'Reporte' };
+
+      switch (reportType) {
+        case 'period': {
+          const periodData = data as PurchasesByPeriodData;
+          columns = [
+            { key: 'issueDate', title: 'Fecha', formatter: (val) => val ? moment(val as string).format('DD/MM/YYYY') : '' },
+            { key: 'fullNumber', title: 'Nro. Comprobante' },
+            { key: 'voucherType', title: 'Tipo', formatter: (val) => VOUCHER_TYPE_LABELS[val as keyof typeof VOUCHER_TYPE_LABELS] || String(val) },
+            { key: 'supplierName', title: 'Proveedor' },
+            { key: 'subtotal', title: 'Subtotal', formatter: (val) => Number(val) },
+            { key: 'vatAmount', title: 'IVA', formatter: (val) => Number(val) },
+            { key: 'total', title: 'Total', formatter: (val) => Number(val) },
+            { key: 'status', title: 'Estado', formatter: (val) => PURCHASE_INVOICE_STATUS_LABELS[val as keyof typeof PURCHASE_INVOICE_STATUS_LABELS] || String(val) },
+          ];
+          rows = (periodData.invoices || []).map((inv) => ({
+            ...inv,
+            supplierName: inv.supplier.businessName,
+          }));
+          options = {
+            filename: 'compras-por-periodo',
+            title: 'Compras por Período',
+            sheetName: 'Por Período',
+          };
+          break;
+        }
+        case 'supplier': {
+          const supplierData = data as PurchasesBySupplierData;
+          columns = [
+            { key: 'supplierName', title: 'Proveedor' },
+            { key: 'taxId', title: 'CUIT' },
+            { key: 'invoiceCount', title: 'Cant. Facturas' },
+            { key: 'subtotal', title: 'Subtotal', formatter: (val) => Number(val) },
+            { key: 'vatAmount', title: 'IVA', formatter: (val) => Number(val) },
+            { key: 'total', title: 'Total', formatter: (val) => Number(val) },
+          ];
+          rows = supplierData.purchasesBySupplier || [];
+          options = {
+            filename: 'compras-por-proveedor',
+            title: 'Compras por Proveedor',
+            sheetName: 'Por Proveedor',
+          };
+          break;
+        }
+        case 'product': {
+          const productData = data as PurchasesByProductData;
+          columns = [
+            { key: 'productCode', title: 'Código' },
+            { key: 'productName', title: 'Producto' },
+            { key: 'quantity', title: 'Cantidad', formatter: (val) => Number(val) },
+            { key: 'unitOfMeasure', title: 'UM' },
+            { key: 'subtotal', title: 'Subtotal', formatter: (val) => Number(val) },
+            { key: 'vatAmount', title: 'IVA', formatter: (val) => Number(val) },
+            { key: 'total', title: 'Total', formatter: (val) => Number(val) },
+          ];
+          rows = productData.purchasesByProduct || [];
+          options = {
+            filename: 'compras-por-producto',
+            title: 'Compras por Producto',
+            sheetName: 'Por Producto',
+          };
+          break;
+        }
+        case 'vat': {
+          const vatData = data as VATPurchaseBookData;
+          columns = [
+            { key: 'issueDate', title: 'Fecha', formatter: (val) => val ? moment(val as string).format('DD/MM/YYYY') : '' },
+            { key: 'fullNumber', title: 'Comprobante' },
+            { key: 'supplierName', title: 'Proveedor' },
+            { key: 'supplierTaxId', title: 'CUIT' },
+            { key: 'supplierTaxCondition', title: 'Cond. IVA', formatter: (val) => supplierTaxConditionLabels[val as keyof typeof supplierTaxConditionLabels] || String(val) },
+            { key: 'subtotal', title: 'Neto', formatter: (val) => Number(val) },
+            { key: 'vatAmount', title: 'IVA', formatter: (val) => Number(val) },
+            { key: 'total', title: 'Total', formatter: (val) => Number(val) },
+            { key: 'cae', title: 'CAE' },
+          ];
+          rows = vatData.vatBook || [];
+          options = {
+            filename: 'libro-iva-compras',
+            title: 'Libro IVA Compras',
+            sheetName: 'Libro IVA',
+          };
+          break;
+        }
+      }
+
+      if (rows.length === 0) {
+        toast.warning('No hay datos para exportar');
+        return;
+      }
+
+      await exportToExcel(rows as Record<string, unknown>[], columns, options);
+      toast.success(`Exportado: ${rows.length} registros`);
+    } catch {
+      toast.error('Error al exportar');
+    } finally {
+      setExporting(false);
+    }
+  };
 
   if (!data || !reportType) {
     return (
@@ -603,16 +714,35 @@ export function _PurchaseReportTable({ reportType, data, startDate, endDate }: P
     );
   };
 
-  switch (reportType) {
-    case 'period':
-      return renderPeriodReport(data as PurchasesByPeriodData);
-    case 'supplier':
-      return renderSupplierReport(data as PurchasesBySupplierData);
-    case 'product':
-      return renderProductReport(data as PurchasesByProductData);
-    case 'vat':
-      return renderVATReport(data as VATPurchaseBookData);
-    default:
-      return null;
-  }
+  const reportContent = (() => {
+    switch (reportType) {
+      case 'period':
+        return renderPeriodReport(data as PurchasesByPeriodData);
+      case 'supplier':
+        return renderSupplierReport(data as PurchasesBySupplierData);
+      case 'product':
+        return renderProductReport(data as PurchasesByProductData);
+      case 'vat':
+        return renderVATReport(data as VATPurchaseBookData);
+      default:
+        return null;
+    }
+  })();
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleExport}
+          disabled={exporting}
+        >
+          <Download className="mr-2 h-4 w-4" />
+          {exporting ? 'Exportando...' : 'Exportar a Excel'}
+        </Button>
+      </div>
+      {reportContent}
+    </div>
+  );
 }

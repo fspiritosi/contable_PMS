@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { usePermissions } from '@/shared/hooks/usePermissions';
 
-import { DataTable, type DataTableSearchParams, type DataTableFacetedFilterConfig } from '@/shared/components/common/DataTable';
+import { DataTable, type DataTableExportConfig, type DataTableSearchParams, type DataTableFacetedFilterConfig } from '@/shared/components/common/DataTable';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,8 +26,9 @@ import {
 } from '@/shared/components/ui/dialog';
 import { Button } from '@/shared/components/ui/button';
 import { PackageCheck } from 'lucide-react';
+import moment from 'moment';
 import type { PurchaseInvoiceListItem } from '../actions.server';
-import { confirmPurchaseInvoice, cancelPurchaseInvoice } from '../actions.server';
+import { confirmPurchaseInvoice, cancelPurchaseInvoice, getAllPurchaseInvoicesForExport } from '../actions.server';
 import { getColumns } from '../columns';
 import { PURCHASE_INVOICE_STATUS_LABELS, VOUCHER_TYPE_LABELS } from '../../shared/validators';
 
@@ -168,6 +169,28 @@ export function _PurchaseInvoicesTable({ data, totalRows, searchParams, facetCou
     [loading, canUpdate, canApprove, canDelete]
   );
 
+  const exportConfig = useMemo(
+    () => ({
+      fetchAllData: () => getAllPurchaseInvoicesForExport(searchParams),
+      options: {
+        filename: 'facturas-compra',
+        title: 'Facturas de Compra',
+        sheetName: 'Facturas',
+      },
+      formatters: {
+        status: (val: unknown) => PURCHASE_INVOICE_STATUS_LABELS[val as keyof typeof PURCHASE_INVOICE_STATUS_LABELS] || String(val),
+        voucherType: (val: unknown) => VOUCHER_TYPE_LABELS[val as keyof typeof VOUCHER_TYPE_LABELS] || String(val),
+        issueDate: (val: unknown) => val ? moment(val as string).format('DD/MM/YYYY') : '',
+        dueDate: (val: unknown) => val ? moment(val as string).format('DD/MM/YYYY') : '',
+        total: (val: unknown) => Number(val),
+        subtotal: (val: unknown) => Number(val),
+        vatAmount: (val: unknown) => Number(val),
+      },
+      excludeColumns: ['actions'],
+    }) satisfies DataTableExportConfig<Record<string, unknown>>,
+    [searchParams]
+  ) as unknown as DataTableExportConfig<PurchaseInvoiceListItem>;
+
   const alertTitle = alertAction?.type === 'confirm' ? '¿Confirmar factura?' : '¿Cancelar factura?';
   const alertDescription = alertAction?.type === 'confirm'
     ? `¿Desea confirmar la factura ${alertAction?.invoice.fullNumber}?`
@@ -185,6 +208,7 @@ export function _PurchaseInvoicesTable({ data, totalRows, searchParams, facetCou
         facetedFilters={facetedFilters}
         tableId="commercial-purchase-invoices"
         showFilterToggle
+        exportConfig={exportConfig}
       />
 
       <AlertDialog open={!!alertAction} onOpenChange={(open) => !open && setAlertAction(null)}>
