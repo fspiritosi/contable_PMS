@@ -3,9 +3,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/card';
 import { Badge } from '@/shared/components/ui/badge';
-import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { ArrowUpDown, ArrowUp, ArrowDown, CheckCircle, FileText, XCircle } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
 import moment from 'moment';
+import { formatCurrency } from '@/shared/utils/formatters';
 import { VOUCHER_TYPE_LABELS, PURCHASE_INVOICE_STATUS_LABELS } from '../../invoices/shared/validators';
 import { supplierTaxConditionLabels } from '@/shared/utils/mappers';
 
@@ -184,6 +185,49 @@ function SortableHeader({
   );
 }
 
+function getStatusBadge(status: string) {
+  const label = PURCHASE_INVOICE_STATUS_LABELS[status as keyof typeof PURCHASE_INVOICE_STATUS_LABELS] || status;
+  switch (status) {
+    case 'DRAFT':
+      return (
+        <Badge variant="outline" className="gap-1">
+          <FileText className="h-3 w-3" />
+          {label}
+        </Badge>
+      );
+    case 'CONFIRMED':
+      return (
+        <Badge variant="default" className="gap-1">
+          <CheckCircle className="h-3 w-3" />
+          {label}
+        </Badge>
+      );
+    case 'PAID':
+      return (
+        <Badge className="gap-1 bg-green-600">
+          <CheckCircle className="h-3 w-3" />
+          {label}
+        </Badge>
+      );
+    case 'PARTIAL_PAID':
+      return (
+        <Badge className="gap-1 bg-yellow-600">
+          <CheckCircle className="h-3 w-3" />
+          {label}
+        </Badge>
+      );
+    case 'CANCELLED':
+      return (
+        <Badge variant="destructive" className="gap-1">
+          <XCircle className="h-3 w-3" />
+          {label}
+        </Badge>
+      );
+    default:
+      return <Badge variant="secondary">{label}</Badge>;
+  }
+}
+
 // --- Main Component ---
 
 export function _PurchaseReportTable({ reportType, data, startDate, endDate }: Props) {
@@ -263,18 +307,16 @@ export function _PurchaseReportTable({ reportType, data, startDate, endDate }: P
                       </td>
                       <td className="py-3">{inv.supplier.businessName}</td>
                       <td className="py-3 text-right font-mono">
-                        ${Number(inv.subtotal).toFixed(2)}
+                        {formatCurrency(Number(inv.subtotal))}
                       </td>
                       <td className="py-3 text-right font-mono">
-                        ${Number(inv.vatAmount).toFixed(2)}
+                        {formatCurrency(Number(inv.vatAmount))}
                       </td>
                       <td className="py-3 text-right font-mono font-semibold">
-                        ${Number(inv.total).toFixed(2)}
+                        {formatCurrency(Number(inv.total))}
                       </td>
-                      <td className="py-3">
-                        <Badge variant="outline">
-                          {PURCHASE_INVOICE_STATUS_LABELS[inv.status as keyof typeof PURCHASE_INVOICE_STATUS_LABELS]}
-                        </Badge>
+                      <td className="py-3 pl-4">
+                        {getStatusBadge(inv.status)}
                       </td>
                     </tr>
                   ))}
@@ -284,11 +326,11 @@ export function _PurchaseReportTable({ reportType, data, startDate, endDate }: P
                     <td className="pt-3" colSpan={4}>
                       TOTALES ({data.totals?.count || 0} facturas)
                     </td>
-                    <td className="pt-3 text-right">${(data.totals?.subtotal || 0).toFixed(2)}</td>
-                    <td className="pt-3 text-right">
-                      ${(data.totals?.vatAmount || 0).toFixed(2)}
+                    <td className="pt-3 text-right font-mono">{formatCurrency(data.totals?.subtotal || 0)}</td>
+                    <td className="pt-3 text-right font-mono">
+                      {formatCurrency(data.totals?.vatAmount || 0)}
                     </td>
-                    <td className="pt-3 text-right">${(data.totals?.total || 0).toFixed(2)}</td>
+                    <td className="pt-3 text-right font-mono">{formatCurrency(data.totals?.total || 0)}</td>
                     <td></td>
                   </tr>
                 </tfoot>
@@ -340,11 +382,11 @@ export function _PurchaseReportTable({ reportType, data, startDate, endDate }: P
                       <td className="py-3 font-mono">{supplier.taxId || '-'}</td>
                       <td className="py-3 text-right">{supplier.invoiceCount}</td>
                       <td className="py-3 text-right font-mono">
-                        ${supplier.subtotal.toFixed(2)}
+                        {formatCurrency(supplier.subtotal)}
                       </td>
-                      <td className="py-3 text-right font-mono">${supplier.vatAmount.toFixed(2)}</td>
+                      <td className="py-3 text-right font-mono">{formatCurrency(supplier.vatAmount)}</td>
                       <td className="py-3 text-right font-mono font-semibold">
-                        ${supplier.total.toFixed(2)}
+                        {formatCurrency(supplier.total)}
                       </td>
                     </tr>
                   ))}
@@ -354,13 +396,13 @@ export function _PurchaseReportTable({ reportType, data, startDate, endDate }: P
                     <td className="pt-3" colSpan={3}>
                       TOTALES ({data.totals?.supplierCount || 0} proveedores)
                     </td>
-                    <td className="pt-3 text-right">
-                      ${(data.totals?.subtotal || 0).toFixed(2)}
+                    <td className="pt-3 text-right font-mono">
+                      {formatCurrency(data.totals?.subtotal || 0)}
                     </td>
-                    <td className="pt-3 text-right">
-                      ${(data.totals?.vatAmount || 0).toFixed(2)}
+                    <td className="pt-3 text-right font-mono">
+                      {formatCurrency(data.totals?.vatAmount || 0)}
                     </td>
-                    <td className="pt-3 text-right">${(data.totals?.total || 0).toFixed(2)}</td>
+                    <td className="pt-3 text-right font-mono">{formatCurrency(data.totals?.total || 0)}</td>
                   </tr>
                 </tfoot>
               </table>
@@ -412,10 +454,10 @@ export function _PurchaseReportTable({ reportType, data, startDate, endDate }: P
                       <td className="py-3">{product.productName}</td>
                       <td className="py-3 text-right font-mono">{product.quantity.toFixed(3)}</td>
                       <td className="py-3">{product.unitOfMeasure}</td>
-                      <td className="py-3 text-right font-mono">${product.subtotal.toFixed(2)}</td>
-                      <td className="py-3 text-right font-mono">${product.vatAmount.toFixed(2)}</td>
+                      <td className="py-3 text-right font-mono">{formatCurrency(product.subtotal)}</td>
+                      <td className="py-3 text-right font-mono">{formatCurrency(product.vatAmount)}</td>
                       <td className="py-3 text-right font-mono font-semibold">
-                        ${product.total.toFixed(2)}
+                        {formatCurrency(product.total)}
                       </td>
                     </tr>
                   ))}
@@ -425,11 +467,11 @@ export function _PurchaseReportTable({ reportType, data, startDate, endDate }: P
                     <td className="pt-3" colSpan={4}>
                       TOTALES ({data.totals?.productCount || 0} productos)
                     </td>
-                    <td className="pt-3 text-right">${(data.totals?.subtotal || 0).toFixed(2)}</td>
-                    <td className="pt-3 text-right">
-                      ${(data.totals?.vatAmount || 0).toFixed(2)}
+                    <td className="pt-3 text-right font-mono">{formatCurrency(data.totals?.subtotal || 0)}</td>
+                    <td className="pt-3 text-right font-mono">
+                      {formatCurrency(data.totals?.vatAmount || 0)}
                     </td>
-                    <td className="pt-3 text-right">${(data.totals?.total || 0).toFixed(2)}</td>
+                    <td className="pt-3 text-right font-mono">{formatCurrency(data.totals?.total || 0)}</td>
                   </tr>
                 </tfoot>
               </table>
@@ -488,10 +530,10 @@ export function _PurchaseReportTable({ reportType, data, startDate, endDate }: P
                         <td className="py-3 text-xs">
                           {supplierTaxConditionLabels[inv.supplierTaxCondition as keyof typeof supplierTaxConditionLabels] || inv.supplierTaxCondition}
                         </td>
-                        <td className="py-3 text-right font-mono">${inv.subtotal.toFixed(2)}</td>
-                        <td className="py-3 text-right font-mono">${inv.vatAmount.toFixed(2)}</td>
+                        <td className="py-3 text-right font-mono">{formatCurrency(inv.subtotal)}</td>
+                        <td className="py-3 text-right font-mono">{formatCurrency(inv.vatAmount)}</td>
                         <td className="py-3 text-right font-mono font-semibold">
-                          ${inv.total.toFixed(2)}
+                          {formatCurrency(inv.total)}
                         </td>
                         <td className="py-3 font-mono text-xs">{inv.cae || '-'}</td>
                       </tr>
@@ -502,13 +544,13 @@ export function _PurchaseReportTable({ reportType, data, startDate, endDate }: P
                       <td className="pt-3" colSpan={5}>
                         TOTALES ({data.totals?.invoiceCount || 0} facturas)
                       </td>
-                      <td className="pt-3 text-right">
-                        ${(data.totals?.subtotal || 0).toFixed(2)}
+                      <td className="pt-3 text-right font-mono">
+                        {formatCurrency(data.totals?.subtotal || 0)}
                       </td>
-                      <td className="pt-3 text-right">
-                        ${(data.totals?.vatAmount || 0).toFixed(2)}
+                      <td className="pt-3 text-right font-mono">
+                        {formatCurrency(data.totals?.vatAmount || 0)}
                       </td>
-                      <td className="pt-3 text-right">${(data.totals?.total || 0).toFixed(2)}</td>
+                      <td className="pt-3 text-right font-mono">{formatCurrency(data.totals?.total || 0)}</td>
                       <td></td>
                     </tr>
                   </tfoot>
@@ -537,19 +579,19 @@ export function _PurchaseReportTable({ reportType, data, startDate, endDate }: P
                   {vatSummary.map((vat) => (
                     <tr key={vat.rate}>
                       <td className="py-3 font-semibold">{vat.rate}%</td>
-                      <td className="py-3 text-right font-mono">${vat.base.toFixed(2)}</td>
-                      <td className="py-3 text-right font-mono">${vat.amount.toFixed(2)}</td>
+                      <td className="py-3 text-right font-mono">{formatCurrency(vat.base)}</td>
+                      <td className="py-3 text-right font-mono">{formatCurrency(vat.amount)}</td>
                     </tr>
                   ))}
                 </tbody>
                 <tfoot className="border-t-2 font-semibold">
                   <tr>
                     <td className="pt-3">TOTAL</td>
-                    <td className="pt-3 text-right">
-                      ${vatSummary.reduce((sum, v) => sum + v.base, 0).toFixed(2)}
+                    <td className="pt-3 text-right font-mono">
+                      {formatCurrency(vatSummary.reduce((sum, v) => sum + v.base, 0))}
                     </td>
-                    <td className="pt-3 text-right">
-                      ${vatSummary.reduce((sum, v) => sum + v.amount, 0).toFixed(2)}
+                    <td className="pt-3 text-right font-mono">
+                      {formatCurrency(vatSummary.reduce((sum, v) => sum + v.amount, 0))}
                     </td>
                   </tr>
                 </tfoot>

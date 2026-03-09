@@ -23,20 +23,28 @@ const REPORT_TYPES = {
   vat: 'Libro IVA Compras',
 };
 
-interface Props {
-  onGenerate: (type: ReportType, startDate: Date, endDate: Date) => void;
-  loading: boolean;
+interface SupplierOption {
+  id: string;
+  businessName: string;
+  tradeName: string | null;
 }
 
-export function _ReportSelector({ onGenerate, loading }: Props) {
+interface Props {
+  onGenerate: (type: ReportType, startDate: Date, endDate: Date, supplierId?: string) => void;
+  loading: boolean;
+  suppliers?: SupplierOption[];
+}
+
+export function _ReportSelector({ onGenerate, loading, suppliers = [] }: Props) {
   const [reportType, setReportType] = useState<ReportType>('period');
   const [startDate, setStartDate] = useState<Date>(
     moment().startOf('month').toDate()
   );
   const [endDate, setEndDate] = useState<Date>(moment().endOf('month').toDate());
+  const [supplierId, setSupplierId] = useState<string>('');
 
   const handleGenerate = () => {
-    onGenerate(reportType, startDate, endDate);
+    onGenerate(reportType, startDate, endDate, supplierId && supplierId !== 'all' ? supplierId : undefined);
   };
 
   return (
@@ -46,7 +54,7 @@ export function _ReportSelector({ onGenerate, loading }: Props) {
         <CardDescription>Selecciona el tipo de reporte y el período</CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="grid gap-4 md:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-5">
           {/* Tipo de Reporte */}
           <div className="space-y-2">
             <label className="text-sm font-medium">Tipo de Reporte</label>
@@ -61,6 +69,27 @@ export function _ReportSelector({ onGenerate, loading }: Props) {
                 {Object.entries(REPORT_TYPES).map(([value, label]) => (
                   <SelectItem key={value} value={value}>
                     {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Proveedor (opcional) */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Proveedor (opcional)</label>
+            <Select
+              value={supplierId}
+              onValueChange={setSupplierId}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Todos" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos los proveedores</SelectItem>
+                {suppliers.map((s) => (
+                  <SelectItem key={s.id} value={s.id}>
+                    {s.tradeName || s.businessName}
                   </SelectItem>
                 ))}
               </SelectContent>

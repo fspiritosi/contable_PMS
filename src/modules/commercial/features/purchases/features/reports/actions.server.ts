@@ -10,7 +10,7 @@ import { checkPermission } from '@/shared/lib/permissions';
 // COMPRAS POR PERÍODO
 // ============================================
 
-export async function getPurchasesByPeriod(startDate: Date, endDate: Date) {
+export async function getPurchasesByPeriod(startDate: Date, endDate: Date, supplierId?: string) {
   await checkPermission('commercial.purchases', 'view', { redirect: true });
   const { userId } = await auth();
   if (!userId) throw new Error('No autenticado');
@@ -29,6 +29,7 @@ export async function getPurchasesByPeriod(startDate: Date, endDate: Date) {
         status: {
           in: ['CONFIRMED', 'PAID', 'PARTIAL_PAID'],
         },
+        ...(supplierId ? { supplierId } : {}),
       },
       select: {
         id: true,
@@ -73,7 +74,7 @@ export async function getPurchasesByPeriod(startDate: Date, endDate: Date) {
 // COMPRAS POR PROVEEDOR
 // ============================================
 
-export async function getPurchasesBySupplier(startDate: Date, endDate: Date) {
+export async function getPurchasesBySupplier(startDate: Date, endDate: Date, supplierId?: string) {
   await checkPermission('commercial.purchases', 'view', { redirect: true });
   const { userId } = await auth();
   if (!userId) throw new Error('No autenticado');
@@ -92,6 +93,7 @@ export async function getPurchasesBySupplier(startDate: Date, endDate: Date) {
         status: {
           in: ['CONFIRMED', 'PAID', 'PARTIAL_PAID'],
         },
+        ...(supplierId ? { supplierId } : {}),
       },
       select: {
         supplierId: true,
@@ -165,7 +167,7 @@ export async function getPurchasesBySupplier(startDate: Date, endDate: Date) {
 // COMPRAS POR PRODUCTO
 // ============================================
 
-export async function getPurchasesByProduct(startDate: Date, endDate: Date) {
+export async function getPurchasesByProduct(startDate: Date, endDate: Date, supplierId?: string) {
   await checkPermission('commercial.purchases', 'view', { redirect: true });
   const { userId } = await auth();
   if (!userId) throw new Error('No autenticado');
@@ -185,6 +187,7 @@ export async function getPurchasesByProduct(startDate: Date, endDate: Date) {
           status: {
             in: ['CONFIRMED', 'PAID', 'PARTIAL_PAID'],
           },
+          ...(supplierId ? { supplierId } : {}),
         },
       },
       select: {
@@ -265,7 +268,7 @@ export async function getPurchasesByProduct(startDate: Date, endDate: Date) {
 // LIBRO IVA COMPRAS
 // ============================================
 
-export async function getVATPurchaseBook(startDate: Date, endDate: Date) {
+export async function getVATPurchaseBook(startDate: Date, endDate: Date, supplierId?: string) {
   await checkPermission('commercial.purchases', 'view', { redirect: true });
   const { userId } = await auth();
   if (!userId) throw new Error('No autenticado');
@@ -284,6 +287,7 @@ export async function getVATPurchaseBook(startDate: Date, endDate: Date) {
         status: {
           in: ['CONFIRMED', 'PAID', 'PARTIAL_PAID'],
         },
+        ...(supplierId ? { supplierId } : {}),
       },
       select: {
         id: true,

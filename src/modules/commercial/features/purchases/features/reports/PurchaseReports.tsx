@@ -13,13 +13,24 @@ import { toast } from 'sonner';
 
 type ReportType = 'period' | 'supplier' | 'product' | 'vat';
 
-export function PurchaseReports() {
+interface SupplierOption {
+  id: string;
+  businessName: string;
+  tradeName: string | null;
+}
+
+interface Props {
+  suppliers?: SupplierOption[];
+}
+
+export function PurchaseReports({ suppliers = [] }: Props) {
   const [loading, setLoading] = useState(false);
   const [reportType, setReportType] = useState<ReportType | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [reportData, setReportData] = useState<any>(null);
   const [dateRange, setDateRange] = useState<{ startDate?: Date; endDate?: Date }>({});
 
-  const handleGenerate = async (type: ReportType, startDate: Date, endDate: Date) => {
+  const handleGenerate = async (type: ReportType, startDate: Date, endDate: Date, supplierId?: string) => {
     try {
       setLoading(true);
       setReportType(type);
@@ -28,16 +39,16 @@ export function PurchaseReports() {
       let data;
       switch (type) {
         case 'period':
-          data = await getPurchasesByPeriod(startDate, endDate);
+          data = await getPurchasesByPeriod(startDate, endDate, supplierId);
           break;
         case 'supplier':
-          data = await getPurchasesBySupplier(startDate, endDate);
+          data = await getPurchasesBySupplier(startDate, endDate, supplierId);
           break;
         case 'product':
-          data = await getPurchasesByProduct(startDate, endDate);
+          data = await getPurchasesByProduct(startDate, endDate, supplierId);
           break;
         case 'vat':
-          data = await getVATPurchaseBook(startDate, endDate);
+          data = await getVATPurchaseBook(startDate, endDate, supplierId);
           break;
       }
 
@@ -62,7 +73,7 @@ export function PurchaseReports() {
         </p>
       </div>
 
-      <_ReportSelector onGenerate={handleGenerate} loading={loading} />
+      <_ReportSelector onGenerate={handleGenerate} loading={loading} suppliers={suppliers} />
 
       <_PurchaseReportTable
         reportType={reportType}

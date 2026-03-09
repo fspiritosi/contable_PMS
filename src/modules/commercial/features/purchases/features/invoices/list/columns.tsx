@@ -15,6 +15,7 @@ import {
 } from '@/shared/components/ui/dropdown-menu';
 import { DataTableColumnHeader } from '@/shared/components/common/DataTable';
 import moment from 'moment';
+import { formatCurrency } from '@/shared/utils/formatters';
 import type { PurchaseInvoiceListItem } from './actions.server';
 import { PURCHASE_INVOICE_STATUS_LABELS, VOUCHER_TYPE_LABELS } from '../shared/validators';
 import type { PurchaseInvoiceStatus } from '@/generated/prisma/enums';
@@ -75,10 +76,10 @@ export function getColumns({ onView, onEdit, onConfirm, onCancel, loading }: Col
     {
       accessorKey: 'total',
       meta: { title: 'Total' },
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Total" />,
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Total" className="justify-end" />,
       cell: ({ row }) => (
         <div className="text-right font-mono font-semibold">
-          ${Number(row.original.total).toFixed(2)}
+          {formatCurrency(Number(row.original.total))}
         </div>
       ),
     },

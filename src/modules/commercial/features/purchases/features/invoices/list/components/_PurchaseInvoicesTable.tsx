@@ -130,6 +130,18 @@ export function _PurchaseInvoicesTable({ data, totalRows, searchParams, facetCou
         externalCounts: facetCounts?.voucherType ? new Map(Object.entries(facetCounts.voucherType)) : undefined,
       },
       {
+        columnId: 'supplier',
+        title: 'Proveedor',
+        type: 'text' as const,
+        placeholder: 'Buscar por proveedor...',
+      },
+      {
+        columnId: 'fullNumber',
+        title: 'Número',
+        type: 'text' as const,
+        placeholder: 'Buscar por número...',
+      },
+      {
         columnId: 'issueDate',
         title: 'Fecha',
         type: 'dateRange' as const,
@@ -169,7 +181,7 @@ export function _PurchaseInvoicesTable({ data, totalRows, searchParams, facetCou
         data={data}
         totalRows={totalRows}
         searchParams={searchParams}
-        searchPlaceholder="Buscar facturas..."
+        showSearch={false}
         facetedFilters={facetedFilters}
         tableId="commercial-purchase-invoices"
         showFilterToggle

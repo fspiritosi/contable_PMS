@@ -10,9 +10,11 @@ import {
   buildSearchWhere,
   buildFiltersWhere,
   buildDateRangeFiltersWhere,
+  buildTextFiltersWhere,
   parseSearchParams,
   stateToPrismaParams,
 } from '@/shared/components/common/DataTable/helpers';
+import type { Prisma } from '@/generated/prisma/client';
 import type { PurchaseInvoiceFormInput } from '../shared/validators';
 import type { VoucherType } from '@/generated/prisma/enums';
 import { checkPermission } from '@/shared/lib/permissions';
@@ -37,7 +39,7 @@ export async function getPurchaseInvoicesPaginated(searchParams: DataTableSearch
 
   try {
     const state = parseSearchParams(searchParams);
-    const { skip, take, orderBy } = stateToPrismaParams(state);
+    const { skip, take, orderBy: prismaOrderBy } = stateToPrismaParams(state);
 
     const searchWhere = buildSearchWhere(state.search, [
       'fullNumber',
@@ -47,23 +49,46 @@ export async function getPurchaseInvoicesPaginated(searchParams: DataTableSearch
     const filtersWhere = buildFiltersWhere(state.filters, {
       status: 'status',
       voucherType: 'voucherType',
-    }, { exclude: ['issueDate'] });
+    }, { exclude: ['issueDate', 'fullNumber', 'supplier'] });
 
     const dateFiltersWhere = buildDateRangeFiltersWhere(state.filters, ['issueDate']);
+    const textFiltersWhere = buildTextFiltersWhere(state.filters, ['fullNumber']);
 
-    const where = {
+    // Filtro de texto para proveedor (relación anidada)
+    const supplierNameFilter = state.filters['supplier'];
+    const supplierWhere = supplierNameFilter?.[0]
+      ? { supplier: { OR: [
+          { businessName: { contains: supplierNameFilter[0], mode: 'insensitive' as const } },
+          { tradeName: { contains: supplierNameFilter[0], mode: 'insensitive' as const } },
+        ] } }
+      : {};
+
+    const where: Prisma.PurchaseInvoiceWhereInput = {
       companyId,
       ...searchWhere,
       ...filtersWhere,
       ...dateFiltersWhere,
+      ...textFiltersWhere,
+      ...supplierWhere,
     };
+
+    // Manejar ordenamiento por relación supplier
+    const sortByField = state.sortBy;
+    let orderBy: Prisma.PurchaseInvoiceOrderByWithRelationInput | Prisma.PurchaseInvoiceOrderByWithRelationInput[];
+    if (sortByField === 'supplier') {
+      orderBy = { supplier: { businessName: state.sortOrder } };
+    } else if (prismaOrderBy && Object.keys(prismaOrderBy).length > 0) {
+      orderBy = prismaOrderBy;
+    } else {
+      orderBy = [{ issueDate: 'desc' }, { number: 'desc' }];
+    }
 
     const [invoices, total] = await Promise.all([
       prisma.purchaseInvoice.findMany({
         where,
         skip,
         take,
-        orderBy: orderBy || { issueDate: 'desc' },
+        orderBy,
         include: {
           supplier: {
             select: {
