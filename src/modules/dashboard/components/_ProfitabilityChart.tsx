@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Bar, CartesianGrid, Line, ComposedChart, XAxis, YAxis } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/shared/components/ui/card';
 import { Button } from '@/shared/components/ui/button';
@@ -47,19 +47,19 @@ interface ProfitabilityChartProps {
 const chartConfig = {
   sales: {
     label: 'Ventas',
-    color: 'hsl(var(--chart-1))',
+    color: '#22c55e',
   },
   purchases: {
     label: 'Compras',
-    color: 'hsl(var(--chart-2))',
+    color: '#3b82f6',
   },
   expenses: {
     label: 'Gastos',
-    color: 'hsl(var(--chart-3))',
+    color: '#f97316',
   },
   profit: {
     label: 'Rentabilidad',
-    color: 'hsl(var(--chart-4))',
+    color: '#8b5cf6',
   },
 } satisfies ChartConfig;
 
@@ -67,6 +67,12 @@ export function _ProfitabilityChart({ data: initialData, categories, period }: P
   const [data, setData] = useState<ProfitabilityData[]>(initialData);
   const [excludedCategories, setExcludedCategories] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(false);
+
+  // Sincronizar cuando cambia el período (nuevos datos del server)
+  useEffect(() => {
+    setData(initialData);
+    setExcludedCategories(new Set());
+  }, [initialData]);
 
   const handleCategoryToggle = async (categoryId: string) => {
     const newExcluded = new Set(excludedCategories);
@@ -169,21 +175,31 @@ export function _ProfitabilityChart({ data: initialData, categories, period }: P
               <ChartTooltip
                 content={
                   <ChartTooltipContent
-                    formatter={(value) => formatCurrency(Number(value))}
+                    indicator="dot"
+                    formatter={(value, name) => {
+                      const label = chartConfig[name as keyof typeof chartConfig]?.label ?? name;
+                      return (
+                        <div className="flex w-full items-center justify-between gap-4">
+                          <span className="text-muted-foreground">{label}</span>
+                          <span className="font-mono font-medium tabular-nums">{formatCurrency(Number(value))}</span>
+                        </div>
+                      );
+                    }}
                   />
                 }
               />
               <ChartLegend content={<ChartLegendContent />} />
-              <Bar dataKey="sales" fill="var(--color-sales)" radius={[2, 2, 0, 0]} barSize={20} />
-              <Bar dataKey="purchases" fill="var(--color-purchases)" radius={[2, 2, 0, 0]} barSize={20} />
-              <Bar dataKey="expenses" fill="var(--color-expenses)" radius={[2, 2, 0, 0]} barSize={20} />
+              <Bar dataKey="sales" fill="var(--color-sales)" radius={[2, 2, 0, 0]} barSize={20} name="sales" />
+              <Bar dataKey="purchases" fill="var(--color-purchases)" radius={[2, 2, 0, 0]} barSize={20} name="purchases" />
+              <Bar dataKey="expenses" fill="var(--color-expenses)" radius={[2, 2, 0, 0]} barSize={20} name="expenses" />
               <Line
                 type="monotone"
                 dataKey="profit"
                 stroke="var(--color-profit)"
-                strokeWidth={2}
-                dot={{ r: 4 }}
-                activeDot={{ r: 6 }}
+                strokeWidth={3}
+                dot={{ r: 5, fill: 'var(--color-profit)', strokeWidth: 2, stroke: '#fff' }}
+                activeDot={{ r: 7 }}
+                name="profit"
               />
             </ComposedChart>
           </ChartContainer>
