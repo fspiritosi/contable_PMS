@@ -13,11 +13,12 @@ import {
   UrlTabsContent,
 } from '@/shared/components/ui/url-tabs';
 import { getBankAccountById } from '../actions.server';
-import { getBankMovementsPaginated, getReconciliationStats } from '../../bank-movements/actions.server';
+import { getBankMovementsPaginated, getReconciliationStats, getBankMovementsTotals } from '../../bank-movements/actions.server';
 import { _BankMovementsTable } from './components/_BankMovementsTable';
 import { _BankAccountSummary } from './components/_BankAccountSummary';
 import { _BankAccountDetailActions } from './components/_BankAccountDetailActions';
 import { _ReconciliationView } from './components/_ReconciliationView';
+import { _QuickMonthFilter } from './components/_QuickMonthFilter';
 
 interface Props {
   bankAccountId: string;
@@ -28,11 +29,12 @@ export async function BankAccountDetail({ bankAccountId, searchParams }: Props) 
   const params = searchParams as Record<string, string>;
   const tab = (params.tab as 'movements' | 'reconciliation') || 'movements';
 
-  const [bankAccount, movementsResult, pendingResult, reconciliationStats] = await Promise.all([
+  const [bankAccount, movementsResult, pendingResult, reconciliationStats, movementsTotals] = await Promise.all([
     getBankAccountById(bankAccountId),
     getBankMovementsPaginated(bankAccountId, searchParams),
     getBankMovementsPaginated(bankAccountId, searchParams, { reconciled: false }),
     getReconciliationStats(bankAccountId),
+    getBankMovementsTotals(bankAccountId, searchParams),
   ]);
 
   if (!bankAccount) {
@@ -83,10 +85,15 @@ export async function BankAccountDetail({ bankAccountId, searchParams }: Props) 
         <UrlTabsContent value="movements">
           <Card>
             <CardHeader>
-              <CardTitle>Movimientos</CardTitle>
-              <CardDescription>
-                Historial completo de movimientos de la cuenta
-              </CardDescription>
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <CardTitle>Movimientos</CardTitle>
+                  <CardDescription>
+                    Historial completo de movimientos de la cuenta
+                  </CardDescription>
+                </div>
+              </div>
+              <_QuickMonthFilter />
             </CardHeader>
             <CardContent className="space-y-4">
               <_BankMovementsTable
@@ -95,6 +102,7 @@ export async function BankAccountDetail({ bankAccountId, searchParams }: Props) 
                 searchParams={searchParams}
                 bankAccountId={bankAccountId}
                 bankAccountName={`${bankAccount.bankName} ${bankAccount.accountNumber}`}
+                totals={movementsTotals}
               />
             </CardContent>
           </Card>

@@ -380,6 +380,75 @@ export async function getBankMovementsPaginated(
 }
 
 /**
+ * Obtiene los totales de movimientos filtrados (entradas, salidas, neto)
+ */
+export async function getBankMovementsTotals(
+  bankAccountId: string,
+  searchParams: DataTableSearchParams
+) {
+  await checkPermission('commercial.treasury.bank-accounts', 'view', { redirect: true });
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  try {
+    const parsed = parseSearchParams(searchParams);
+    const { search } = parsed;
+
+    const filtersWhere = buildFiltersWhere(parsed.filters, {
+      type: 'type',
+      reconciled: 'reconciled',
+    }, { exclude: ['date'] });
+
+    const dateFiltersWhere = buildDateRangeFiltersWhere(parsed.filters, ['date']);
+
+    if (filtersWhere.reconciled !== undefined) {
+      filtersWhere.reconciled = filtersWhere.reconciled === 'true';
+    }
+
+    const where: Prisma.BankMovementWhereInput = {
+      bankAccountId,
+      companyId,
+      ...filtersWhere,
+      ...dateFiltersWhere,
+      ...(search && {
+        OR: [
+          { description: { contains: search, mode: 'insensitive' } },
+          { reference: { contains: search, mode: 'insensitive' } },
+          { statementNumber: { contains: search, mode: 'insensitive' } },
+        ],
+      }),
+    };
+
+    const movements = await prisma.bankMovement.findMany({
+      where,
+      select: { type: true, amount: true },
+    });
+
+    const INCOME_TYPES = ['DEPOSIT', 'TRANSFER_IN', 'INTEREST'];
+    let totalEntries = 0;
+    let totalExits = 0;
+
+    for (const m of movements) {
+      const amount = Number(m.amount);
+      if (INCOME_TYPES.includes(m.type)) {
+        totalEntries += amount;
+      } else {
+        totalExits += amount;
+      }
+    }
+
+    return {
+      totalEntries,
+      totalExits,
+      netBalance: totalEntries - totalExits,
+    };
+  } catch (error) {
+    logger.error('Error al obtener totales de movimientos', { data: { error, bankAccountId } });
+    throw new Error('Error al obtener totales de movimientos');
+  }
+}
+
+/**
  * Obtiene las cuentas contables disponibles para movimientos bancarios
  */
 export async function getAccountsForBankMovement() {

@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import moment from 'moment';
-import { CheckCircle2, Circle, Download, Loader2 } from 'lucide-react';
+import { ArrowDownCircle, ArrowUpCircle, CheckCircle2, Circle, Download, Loader2, TrendingUp } from 'lucide-react';
 
 import { DataTable, type DataTableSearchParams, type DataTableFacetedFilterConfig } from '@/shared/components/common/DataTable';
 import { Button } from '@/shared/components/ui/button';
@@ -19,6 +19,7 @@ import {
   AlertDialogTitle,
 } from '@/shared/components/ui/alert-dialog';
 import { exportToExcel, type ExcelColumn } from '@/shared/lib/excel-export';
+import { formatCurrency } from '@/shared/utils/formatters';
 import {
   reconcileBankMovement,
   reconcileMultipleBankMovements,
@@ -44,15 +45,22 @@ interface BankMovement extends Record<string, unknown> {
   paymentOrder?: { id: string; fullNumber: string } | null;
 }
 
+interface MovementsTotals {
+  totalEntries: number;
+  totalExits: number;
+  netBalance: number;
+}
+
 interface Props {
   data: BankMovement[];
   totalRows: number;
   searchParams: DataTableSearchParams;
   bankAccountId: string;
   bankAccountName?: string;
+  totals?: MovementsTotals;
 }
 
-export function _BankMovementsTable({ data, totalRows, searchParams, bankAccountId, bankAccountName }: Props) {
+export function _BankMovementsTable({ data, totalRows, searchParams, bankAccountId, bankAccountName, totals }: Props) {
   const router = useRouter();
   const currentSearchParams = useSearchParams();
   const [selectedRows, setSelectedRows] = useState<BankMovement[]>([]);
@@ -290,6 +298,28 @@ export function _BankMovementsTable({ data, totalRows, searchParams, bankAccount
         onRowSelectionChange={setSelectedRows}
         toolbarActions={toolbarActions}
       />
+
+      {totals && (
+        <div className="mt-4 flex flex-wrap items-center gap-4 rounded-lg border bg-muted/50 px-4 py-3">
+          <div className="flex items-center gap-2">
+            <ArrowDownCircle className="h-4 w-4 text-green-600" />
+            <span className="text-sm text-muted-foreground">Entradas:</span>
+            <span className="text-sm font-semibold text-green-600">{formatCurrency(totals.totalEntries)}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <ArrowUpCircle className="h-4 w-4 text-red-600" />
+            <span className="text-sm text-muted-foreground">Salidas:</span>
+            <span className="text-sm font-semibold text-red-600">{formatCurrency(totals.totalExits)}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm text-muted-foreground">Saldo filtrado:</span>
+            <span className={`text-sm font-bold ${totals.netBalance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              {formatCurrency(totals.netBalance)}
+            </span>
+          </div>
+        </div>
+      )}
 
       <AlertDialog open={!!movementToDelete} onOpenChange={(open) => !open && setMovementToDelete(null)}>
         <AlertDialogContent>
