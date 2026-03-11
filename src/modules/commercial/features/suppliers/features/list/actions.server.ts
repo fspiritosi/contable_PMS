@@ -8,7 +8,7 @@ import { getActiveCompanyId } from '@/shared/lib/company';
 import { revalidatePath } from 'next/cache';
 import {
   buildFiltersWhere,
-  buildSearchWhere,
+  buildTextFiltersWhere,
   parseSearchParams,
   stateToPrismaParams,
   type DataTableSearchParams,
@@ -36,22 +36,29 @@ export async function getSuppliers(searchParams: DataTableSearchParams = {}) {
     const state = parseSearchParams(searchParams);
     const { skip, take, orderBy } = stateToPrismaParams(state);
 
-    const searchWhere = buildSearchWhere(state.search, [
-      'businessName',
-      'tradeName',
-      'taxId',
-      'email',
-    ]);
-
     const filtersWhere = buildFiltersWhere(state.filters, {
       status: 'status',
       taxCondition: 'taxCondition',
-    });
+    }, { exclude: ['businessName', 'taxId'] });
+
+    const textFiltersWhere = buildTextFiltersWhere(state.filters, ['taxId']);
+
+    // Filtro de texto para nombre (busca en businessName y tradeName)
+    const businessNameFilter = state.filters['businessName'];
+    const nameWhere = businessNameFilter?.[0]
+      ? {
+          OR: [
+            { businessName: { contains: businessNameFilter[0], mode: 'insensitive' as const } },
+            { tradeName: { contains: businessNameFilter[0], mode: 'insensitive' as const } },
+          ],
+        }
+      : {};
 
     const where = {
       companyId,
-      ...searchWhere,
       ...filtersWhere,
+      ...textFiltersWhere,
+      ...nameWhere,
     };
 
     const [suppliers, total] = await Promise.all([

@@ -76,6 +76,18 @@ export function _SuppliersTable({ data, totalRows, searchParams, permissions, fa
   const facetedFilters = useMemo<DataTableFacetedFilterConfig[]>(
     () => [
       {
+        columnId: 'businessName',
+        title: 'Nombre',
+        type: 'text' as const,
+        placeholder: 'Buscar por nombre...',
+      },
+      {
+        columnId: 'taxId',
+        title: 'CUIT',
+        type: 'text' as const,
+        placeholder: 'Buscar por CUIT...',
+      },
+      {
         columnId: 'status',
         title: 'Estado',
         options: Object.entries(SUPPLIER_STATUS_LABELS).map(([value, label]) => ({
@@ -104,7 +116,7 @@ export function _SuppliersTable({ data, totalRows, searchParams, permissions, fa
         data={data}
         totalRows={totalRows}
         searchParams={searchParams}
-        searchPlaceholder="Buscar proveedores..."
+        showSearch={false}
         tableId="commercial-suppliers"
         facetedFilters={facetedFilters}
         showFilterToggle
