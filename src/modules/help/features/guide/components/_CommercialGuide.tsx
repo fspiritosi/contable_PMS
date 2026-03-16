@@ -565,6 +565,110 @@ export function _CommercialGuide() {
         </CardContent>
       </Card>
 
+      {/* Remitos de Entrega */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Package className="h-5 w-5" />
+            Remitos de Entrega
+          </CardTitle>
+          <CardDescription>
+            Registro de mercadería entregada a clientes
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p>
+            Los remitos de entrega registran la salida de productos de un
+            almacén hacia un cliente. Al crear el remito, se descuenta el
+            stock automáticamente.
+          </p>
+          <p>
+            <strong>Crear un remito de entrega:</strong>
+          </p>
+          <ol className="list-decimal pl-6 space-y-2 text-muted-foreground">
+            <li>
+              Ve a{' '}
+              <strong>Comercial → Ventas → Remitos de Entrega</strong>
+            </li>
+            <li>
+              Haz clic en <strong>Nuevo Remito</strong>
+            </li>
+            <li>
+              Selecciona el <strong>cliente</strong>
+            </li>
+            <li>
+              Selecciona el <strong>almacén</strong> de donde sale la mercadería
+            </li>
+            <li>
+              Indica la <strong>fecha de entrega</strong>
+            </li>
+            <li>
+              Agrega las <strong>líneas</strong>: busca el producto, indica cantidad y notas
+            </li>
+            <li>
+              Haz clic en <strong>Crear Remito</strong> (se descuenta stock inmediatamente)
+            </li>
+          </ol>
+
+          <p className="mt-3">
+            <strong>Estados:</strong>
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Badge variant="secondary">Pendiente de Entrega</Badge>
+            <span>→</span>
+            <Badge className="bg-green-600">Aceptado</Badge>
+            <span>→</span>
+            <Badge className="bg-blue-600">Facturado</Badge>
+          </div>
+          <div className="flex flex-wrap gap-2 mt-1">
+            <Badge variant="destructive">Anulado</Badge>
+          </div>
+          <ul className="list-disc pl-6 space-y-1 text-muted-foreground mt-2">
+            <li>
+              <strong>Pendiente de Entrega</strong>: se puede editar (ej: si el
+              cliente rechaza un producto). Al editar se recalcula el stock
+            </li>
+            <li>
+              <strong>Aceptado</strong>: el cliente aceptó la mercadería. Listo
+              para facturar
+            </li>
+            <li>
+              <strong>Facturado</strong>: se generó una factura de venta desde
+              este remito
+            </li>
+            <li>
+              <strong>Anulado</strong>: se revierten los movimientos de stock
+            </li>
+          </ul>
+
+          <p className="mt-3">
+            <strong>Facturar remitos:</strong>
+          </p>
+          <ol className="list-decimal pl-6 space-y-2 text-muted-foreground">
+            <li>
+              Desde la lista de remitos, haz clic en{' '}
+              <strong>Facturar Remitos</strong>
+            </li>
+            <li>
+              Selecciona un <strong>cliente</strong> (solo muestra clientes con
+              remitos aceptados)
+            </li>
+            <li>
+              Marca los <strong>remitos a facturar</strong> (pueden ser varios)
+            </li>
+            <li>
+              Haz clic en <strong>Facturar</strong>: se crea una factura de venta
+              en borrador con las líneas combinadas
+            </li>
+          </ol>
+
+          <p className="text-sm text-muted-foreground mt-3">
+            También puedes ver los remitos de un cliente desde su ficha en{' '}
+            <strong>Clientes → [Cliente] → Remitos</strong>.
+          </p>
+        </CardContent>
+      </Card>
+
       {/* Almacenes */}
       <Card>
         <CardHeader>
