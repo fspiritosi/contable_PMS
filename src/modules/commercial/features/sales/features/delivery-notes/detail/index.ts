@@ -1,0 +1,1 @@
+export { DeliveryNoteDetail } from './DeliveryNoteDetail';

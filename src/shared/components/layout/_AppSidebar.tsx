@@ -154,6 +154,11 @@ const navMain: NavItemWithSub[] = [
             module: 'commercial.points-of-sale',
           },
           {
+            title: 'Remitos de Entrega',
+            href: '/dashboard/commercial/delivery-notes',
+            module: 'commercial.delivery-notes',
+          },
+          {
             title: 'Facturas de Venta',
             href: '/dashboard/commercial/invoices',
             module: 'commercial.invoices',
