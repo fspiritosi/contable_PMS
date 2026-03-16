@@ -74,14 +74,20 @@ export async function applySalesCreditNote(
     return { id: inv.id, pendingAmount };
   }).filter((inv) => inv.pendingAmount > 0.005);
 
-  // Priorizar factura original si existe
+  // Si el usuario seleccionó una factura original, aplicar SOLO a esa factura
+  // Si no seleccionó, aplicar FIFO contra todas las pendientes
   if (creditNote.originalInvoiceId) {
-    const originalIdx = invoicesWithPending.findIndex(
+    const originalInvoice = invoicesWithPending.find(
       (inv) => inv.id === creditNote.originalInvoiceId
     );
-    if (originalIdx > 0) {
-      const [original] = invoicesWithPending.splice(originalIdx, 1);
-      invoicesWithPending.unshift(original);
+    if (originalInvoice) {
+      invoicesWithPending.length = 0;
+      invoicesWithPending.push(originalInvoice);
+    } else {
+      logger.info('NC tiene factura original pero sin saldo pendiente, no se auto-compensa', {
+        data: { creditNoteId: creditNote.id, originalInvoiceId: creditNote.originalInvoiceId },
+      });
+      return [];
     }
   }
 
@@ -198,14 +204,20 @@ export async function applyPurchaseCreditNote(
     return { id: inv.id, pendingAmount };
   }).filter((inv) => inv.pendingAmount > 0.005);
 
-  // Priorizar factura original si existe
+  // Si el usuario seleccionó una factura original, aplicar SOLO a esa factura
+  // Si no seleccionó, aplicar FIFO contra todas las pendientes
   if (creditNote.originalInvoiceId) {
-    const originalIdx = invoicesWithPending.findIndex(
+    const originalInvoice = invoicesWithPending.find(
       (inv) => inv.id === creditNote.originalInvoiceId
     );
-    if (originalIdx > 0) {
-      const [original] = invoicesWithPending.splice(originalIdx, 1);
-      invoicesWithPending.unshift(original);
+    if (originalInvoice) {
+      invoicesWithPending.length = 0;
+      invoicesWithPending.push(originalInvoice);
+    } else {
+      logger.info('NC tiene factura original pero sin saldo pendiente, no se auto-compensa', {
+        data: { creditNoteId: creditNote.id, originalInvoiceId: creditNote.originalInvoiceId },
+      });
+      return [];
     }
   }
 
