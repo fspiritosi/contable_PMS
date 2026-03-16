@@ -1,11 +1,12 @@
-import { getCustomersForSelect, getWarehousesForDelivery } from '../list/actions.server';
+import { getCustomersForSelect, getWarehousesForDelivery, getProductsForDelivery } from '../list/actions.server';
 import { _DeliveryNoteForm } from './components/_DeliveryNoteForm';
 import { PermissionGuard } from '@/shared/components/common/PermissionGuard';
 
 export async function CreateDeliveryNote() {
-  const [customers, warehouses] = await Promise.all([
+  const [customers, warehouses, products] = await Promise.all([
     getCustomersForSelect(),
     getWarehousesForDelivery(),
+    getProductsForDelivery(),
   ]);
 
   const defaultWarehouse = warehouses.find((w) => w.type === 'MAIN') ?? warehouses[0];
@@ -20,6 +21,7 @@ export async function CreateDeliveryNote() {
         <_DeliveryNoteForm
           customers={customers}
           warehouses={warehouses}
+          products={products}
           defaultWarehouseId={defaultWarehouse?.id}
         />
       </div>

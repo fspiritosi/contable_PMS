@@ -1,6 +1,7 @@
 import {
   getCustomersForSelect,
   getWarehousesForDelivery,
+  getProductsForDelivery,
   getDeliveryNoteById,
 } from '../list/actions.server';
 import { _DeliveryNoteForm } from '../create/components/_DeliveryNoteForm';
@@ -13,10 +14,11 @@ interface EditDeliveryNoteProps {
 }
 
 export async function EditDeliveryNote({ id }: EditDeliveryNoteProps) {
-  const [note, customers, warehouses] = await Promise.all([
+  const [note, customers, warehouses, products] = await Promise.all([
     getDeliveryNoteById(id),
     getCustomersForSelect(),
     getWarehousesForDelivery(),
+    getProductsForDelivery(),
   ]);
 
   if (note.status !== 'PENDING_DELIVERY') {
@@ -74,6 +76,7 @@ export async function EditDeliveryNote({ id }: EditDeliveryNoteProps) {
         <_DeliveryNoteForm
           customers={customers}
           warehouses={warehouses}
+          products={products}
           editMode
           noteId={id}
           defaultValues={defaultValues}

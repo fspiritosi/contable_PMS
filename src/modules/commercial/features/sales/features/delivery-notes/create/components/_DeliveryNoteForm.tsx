@@ -4,9 +4,8 @@ import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { useQuery } from '@tanstack/react-query';
 import moment from 'moment';
-import { Plus, Trash2 } from 'lucide-react';
+import { Check, ChevronsUpDown, Plus, Trash2 } from 'lucide-react';
 
 import { Button } from '@/shared/components/ui/button';
 import { Card } from '@/shared/components/ui/card';
@@ -28,6 +27,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/shared/components/ui/select';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/shared/components/ui/popover';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/shared/components/ui/command';
+import { cn } from '@/shared/lib/utils';
 
 import {
   deliveryNoteFormSchema,
@@ -36,7 +49,6 @@ import {
 import {
   createDeliveryNote,
   updateDeliveryNote,
-  getProductsForDelivery,
 } from '../../list/actions.server';
 
 // ============================================
@@ -46,6 +58,7 @@ import {
 interface Props {
   customers: Array<{ id: string; name: string; taxId: string | null }>;
   warehouses: Array<{ id: string; name: string; type: string }>;
+  products: Array<{ id: string; code: string; name: string; unitOfMeasure: string }>;
   defaultWarehouseId?: string;
   editMode?: boolean;
   noteId?: string;
@@ -59,6 +72,7 @@ interface Props {
 export function _DeliveryNoteForm({
   customers,
   warehouses,
+  products,
   defaultWarehouseId,
   editMode = false,
   noteId,
@@ -80,15 +94,6 @@ export function _DeliveryNoteForm({
   const { fields, append, remove } = useFieldArray({
     control: form.control,
     name: 'lines',
-  });
-
-  // ============================================
-  // REACT QUERY: Productos
-  // ============================================
-
-  const { data: products = [], isFetching: loadingProducts } = useQuery({
-    queryKey: ['products-for-delivery'],
-    queryFn: getProductsForDelivery,
   });
 
   // ============================================
@@ -282,40 +287,64 @@ export function _DeliveryNoteForm({
                   <FormField
                     control={form.control}
                     name={`lines.${index}.productId`}
-                    render={({ field: f }) => (
-                      <FormItem>
+                    render={({ field: f }) => {
+                      const selectedProduct = products.find((p) => p.id === f.value);
+                      return (
+                      <FormItem className="flex flex-col">
                         <FormLabel>Producto *</FormLabel>
-                        <Select
-                          onValueChange={(value) => {
-                            f.onChange(value);
-                            const product = products.find((p) => p.id === value);
-                            if (product) {
-                              form.setValue(`lines.${index}.description`, product.name);
-                            }
-                          }}
-                          value={f.value}
-                          disabled={loadingProducts}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue
-                                placeholder={
-                                  loadingProducts ? 'Cargando productos...' : 'Selecciona un producto'
-                                }
-                              />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {products.map((product) => (
-                              <SelectItem key={product.id} value={product.id}>
-                                {product.code} — {product.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <FormControl>
+                              <Button
+                                variant="outline"
+                                role="combobox"
+                                className={cn(
+                                  'w-full justify-between font-normal',
+                                  !f.value && 'text-muted-foreground'
+                                )}
+
+                              >
+                                {selectedProduct
+                                    ? `${selectedProduct.code} — ${selectedProduct.name}`
+                                    : 'Buscar producto...'}
+                                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                              </Button>
+                            </FormControl>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-[350px] p-0" align="start">
+                            <Command>
+                              <CommandInput placeholder="Buscar por código o nombre..." />
+                              <CommandList>
+                                <CommandEmpty>No se encontraron productos.</CommandEmpty>
+                                <CommandGroup>
+                                  {products.map((product) => (
+                                    <CommandItem
+                                      key={product.id}
+                                      value={`${product.code} ${product.name}`}
+                                      onSelect={() => {
+                                        f.onChange(product.id);
+                                        form.setValue(`lines.${index}.description`, product.name);
+                                      }}
+                                    >
+                                      <Check
+                                        className={cn(
+                                          'mr-2 h-4 w-4',
+                                          f.value === product.id ? 'opacity-100' : 'opacity-0'
+                                        )}
+                                      />
+                                      <span className="font-mono text-xs mr-2">{product.code}</span>
+                                      {product.name}
+                                    </CommandItem>
+                                  ))}
+                                </CommandGroup>
+                              </CommandList>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
                         <FormMessage />
                       </FormItem>
-                    )}
+                      );
+                    }}
                   />
 
                   {/* Descripción */}

@@ -184,8 +184,18 @@ export async function createDeliveryNote(input: DeliveryNoteFormInput) {
       const nextNumber = (lastNote?.number ?? 0) + 1;
       const fullNumber = `RE-${String(nextNumber).padStart(5, '0')}`;
 
-      // Verificar stock disponible antes de crear
+      // Verificar stock disponible antes de crear (solo productos con trackStock)
+      const productIds = input.lines.map((l) => l.productId);
+      const productsInfo = await tx.product.findMany({
+        where: { id: { in: productIds } },
+        select: { id: true, name: true, trackStock: true },
+      });
+      const productMap = new Map(productsInfo.map((p) => [p.id, p]));
+
       for (const line of input.lines) {
+        const product = productMap.get(line.productId);
+        if (!product?.trackStock) continue;
+
         const stock = await tx.warehouseStock.findUnique({
           where: {
             warehouseId_productId: {
@@ -199,12 +209,8 @@ export async function createDeliveryNote(input: DeliveryNoteFormInput) {
         const requested = parseFloat(line.quantity);
 
         if (available < requested) {
-          const product = await tx.product.findUnique({
-            where: { id: line.productId },
-            select: { name: true },
-          });
           throw new Error(
-            `Stock insuficiente de "${product?.name || line.description}". Disponible: ${available}, Solicitado: ${requested}`
+            `Stock insuficiente de "${product.name}". Disponible: ${available}, Solicitado: ${requested}`
           );
         }
       }
@@ -232,8 +238,11 @@ export async function createDeliveryNote(input: DeliveryNoteFormInput) {
         select: { id: true, fullNumber: true },
       });
 
-      // Descontar stock
+      // Descontar stock (solo productos con trackStock)
       for (const line of input.lines) {
+        const product = productMap.get(line.productId);
+        if (!product?.trackStock) continue;
+
         const qty = new Prisma.Decimal(line.quantity);
 
         await tx.stockMovement.create({

@@ -176,7 +176,7 @@ export async function createStockAdjustment(data: unknown) {
         },
       });
 
-      // Actualizar stock
+      // Actualizar stock (quantity y availableQty)
       await tx.warehouseStock.upsert({
         where: {
           warehouseId_productId: {
@@ -188,11 +188,16 @@ export async function createStockAdjustment(data: unknown) {
           quantity: {
             increment: signedQuantity,
           },
+          availableQty: {
+            increment: signedQuantity,
+          },
         },
         create: {
           warehouseId: warehouse.id,
           productId: product.id,
           quantity: signedQuantity,
+          reservedQty: 0,
+          availableQty: signedQuantity,
         },
       });
 
@@ -356,14 +361,15 @@ export async function createStockTransfer(data: unknown) {
           },
         },
         update: {
-          quantity: {
-            decrement: quantity,
-          },
+          quantity: { decrement: quantity },
+          availableQty: { decrement: quantity },
         },
         create: {
           warehouseId: sourceWarehouse.id,
           productId: product.id,
           quantity: quantity.negated(),
+          reservedQty: 0,
+          availableQty: quantity.negated(),
         },
       });
 
@@ -376,14 +382,15 @@ export async function createStockTransfer(data: unknown) {
           },
         },
         update: {
-          quantity: {
-            increment: quantity,
-          },
+          quantity: { increment: quantity },
+          availableQty: { increment: quantity },
         },
         create: {
           warehouseId: destinationWarehouse.id,
           productId: product.id,
           quantity: quantity,
+          reservedQty: 0,
+          availableQty: quantity,
         },
       });
 

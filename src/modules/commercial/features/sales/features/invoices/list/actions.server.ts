@@ -726,14 +726,15 @@ export async function confirmInvoice(id: string) {
                   },
                 },
                 update: {
-                  quantity: {
-                    increment: quantityToHandle,
-                  },
+                  quantity: { increment: quantityToHandle },
+                  availableQty: { increment: quantityToHandle },
                 },
                 create: {
                   warehouseId: warehouse.id,
                   productId: line.productId,
                   quantity: quantityToHandle,
+                  reservedQty: 0,
+                  availableQty: quantityToHandle,
                 },
               });
 
@@ -778,14 +779,15 @@ export async function confirmInvoice(id: string) {
                   },
                 },
                 update: {
-                  quantity: {
-                    decrement: quantityToHandle,
-                  },
+                  quantity: { decrement: quantityToHandle },
+                  availableQty: { decrement: quantityToHandle },
                 },
                 create: {
                   warehouseId: warehouse.id,
                   productId: line.productId,
                   quantity: new Prisma.Decimal(0).minus(quantityToHandle),
+                  reservedQty: 0,
+                  availableQty: new Prisma.Decimal(0).minus(quantityToHandle),
                 },
               });
 
@@ -1056,11 +1058,16 @@ export async function cancelInvoice(id: string) {
                     productId: line.productId,
                   },
                 },
-                update: { quantity: { increment: line.quantity } },
+                update: {
+                  quantity: { increment: line.quantity },
+                  availableQty: { increment: line.quantity },
+                },
                 create: {
                   warehouseId: stockMovement.warehouseId,
                   productId: line.productId,
                   quantity: line.quantity,
+                  reservedQty: 0,
+                  availableQty: line.quantity,
                 },
               });
 
