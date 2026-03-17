@@ -41,22 +41,21 @@ export async function getProjectionsPaginated(searchParams: DataTableSearchParam
       status: 'status',
       type: 'type',
       category: 'category',
-    }, { exclude: ['date'] });
+    }, { exclude: ['date', 'description'] });
 
     const dateFiltersWhere = buildDateRangeFiltersWhere(state.filters, ['date']);
+
+    // Filtro de texto para descripción
+    const descriptionFilter = state.filters['description']?.[0];
+    const descriptionWhere = descriptionFilter
+      ? { description: { contains: descriptionFilter, mode: 'insensitive' as const } }
+      : {};
 
     const where = {
       companyId,
       ...filtersWhere,
       ...dateFiltersWhere,
-      ...(state.search
-        ? {
-            OR: [
-              { description: { contains: state.search, mode: 'insensitive' as const } },
-              { notes: { contains: state.search, mode: 'insensitive' as const } },
-            ],
-          }
-        : {}),
+      ...descriptionWhere,
     };
 
     const [projections, totalRows] = await Promise.all([

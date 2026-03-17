@@ -87,6 +87,24 @@ export function _ChecksTable({ data, totalRows, searchParams, facetCounts }: Pro
   const facetedFilters: DataTableFacetedFilterConfig[] = useMemo(
     () => [
       {
+        columnId: 'checkNumber',
+        title: 'Número',
+        type: 'text' as const,
+        placeholder: 'Buscar por número...',
+      },
+      {
+        columnId: 'bankName',
+        title: 'Banco',
+        type: 'text' as const,
+        placeholder: 'Buscar por banco...',
+      },
+      {
+        columnId: 'drawerName',
+        title: 'Librador',
+        type: 'text' as const,
+        placeholder: 'Buscar por librador...',
+      },
+      {
         columnId: 'status',
         title: 'Estado',
         options: Object.entries(CHECK_STATUS_LABELS).map(([value, label]) => ({
@@ -156,7 +174,7 @@ export function _ChecksTable({ data, totalRows, searchParams, facetCounts }: Pro
         data={data}
         totalRows={totalRows}
         searchParams={searchParams}
-        searchPlaceholder="Buscar cheques..."
+        showSearch={false}
         facetedFilters={facetedFilters}
         tableId="commercial-checks"
         showFilterToggle

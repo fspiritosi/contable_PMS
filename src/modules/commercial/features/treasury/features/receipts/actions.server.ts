@@ -482,9 +482,15 @@ export async function getReceiptsPaginated(searchParams: DataTableSearchParams) 
 
     const filtersWhere = buildFiltersWhere(parsed.filters, {
       status: 'status',
-    }, { exclude: ['date', 'customer'] });
+    }, { exclude: ['date', 'customer', 'fullNumber'] });
 
     const dateFiltersWhere = buildDateRangeFiltersWhere(parsed.filters, ['date']);
+
+    // Filtro de texto para número
+    const fullNumberFilter = parsed.filters['fullNumber']?.[0];
+    const fullNumberWhere = fullNumberFilter
+      ? { fullNumber: { contains: fullNumberFilter, mode: 'insensitive' as const } }
+      : {};
 
     // Filtro de texto para cliente
     const customerFilter = parsed.filters['customer'];
@@ -500,6 +506,7 @@ export async function getReceiptsPaginated(searchParams: DataTableSearchParams) 
       companyId,
       ...filtersWhere,
       ...dateFiltersWhere,
+      ...fullNumberWhere,
       ...customerWhere,
     };
 

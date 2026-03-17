@@ -214,6 +214,24 @@ export function _CashRegistersTable({ cashRegisters, onRefresh }: Props) {
   const facetedFilters: DataTableFacetedFilterConfig[] = useMemo(
     () => [
       {
+        columnId: 'code',
+        title: 'Código',
+        type: 'text' as const,
+        placeholder: 'Buscar por código...',
+      },
+      {
+        columnId: 'name',
+        title: 'Nombre',
+        type: 'text' as const,
+        placeholder: 'Buscar por nombre...',
+      },
+      {
+        columnId: 'location',
+        title: 'Ubicación',
+        type: 'text' as const,
+        placeholder: 'Buscar por ubicación...',
+      },
+      {
         columnId: 'status',
         title: 'Estado',
         options: Object.entries(CASH_REGISTER_STATUS_LABELS).map(([value, label]) => ({
@@ -231,6 +249,7 @@ export function _CashRegistersTable({ cashRegisters, onRefresh }: Props) {
         columns={columns}
         data={cashRegisters}
         totalRows={cashRegisters.length}
+        showSearch={false}
         facetedFilters={facetedFilters}
         tableId="commercial-cash-registers"
         showFilterToggle

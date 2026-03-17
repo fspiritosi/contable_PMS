@@ -70,12 +70,10 @@ export function _ProjectionsTable({ data, totalRows, searchParams }: Props) {
   const facetedFilters: DataTableFacetedFilterConfig[] = useMemo(
     () => [
       {
-        columnId: 'status',
-        title: 'Estado',
-        options: Object.entries(PROJECTION_STATUS_LABELS).map(([value, label]) => ({
-          label,
-          value,
-        })),
+        columnId: 'description',
+        title: 'Descripción',
+        type: 'text' as const,
+        placeholder: 'Buscar por descripción...',
       },
       {
         columnId: 'type',
@@ -89,6 +87,14 @@ export function _ProjectionsTable({ data, totalRows, searchParams }: Props) {
         columnId: 'category',
         title: 'Categoría',
         options: Object.entries(PROJECTION_CATEGORY_LABELS).map(([value, label]) => ({
+          label,
+          value,
+        })),
+      },
+      {
+        columnId: 'status',
+        title: 'Estado',
+        options: Object.entries(PROJECTION_STATUS_LABELS).map(([value, label]) => ({
           label,
           value,
         })),
@@ -134,7 +140,7 @@ export function _ProjectionsTable({ data, totalRows, searchParams }: Props) {
         data={data}
         totalRows={totalRows}
         searchParams={searchParams}
-        searchPlaceholder="Buscar proyecciones..."
+        showSearch={false}
         facetedFilters={facetedFilters}
         tableId="commercial-cashflow-projections"
         showFilterToggle

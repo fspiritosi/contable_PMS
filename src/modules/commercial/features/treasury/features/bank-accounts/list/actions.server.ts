@@ -6,7 +6,6 @@ import { prisma } from '@/shared/lib/prisma';
 import { checkPermission } from '@/shared/lib/permissions';
 import type { DataTableSearchParams } from '@/shared/components/common/DataTable';
 import {
-  buildSearchWhere,
   buildFiltersWhere,
   parseSearchParams,
   stateToPrismaParams,
@@ -79,23 +78,24 @@ export async function getBankAccountsPaginated(searchParams: DataTableSearchPara
     const state = parseSearchParams(searchParams);
     const { skip, take, orderBy } = stateToPrismaParams(state);
 
-    const searchWhere = buildSearchWhere(state.search, [
-      'bankName',
-      'accountNumber',
-      'cbu',
-      'alias',
-    ]);
-
     const filtersWhere = buildFiltersWhere(state.filters, {
       status: 'status',
       accountType: 'accountType',
       currency: 'currency',
-    });
+    }, { exclude: ['bankName', 'accountNumber', 'cbu'] });
+
+    // Filtros de texto
+    const textFields = ['bankName', 'accountNumber', 'cbu'] as const;
+    const textWhere = textFields.reduce<Record<string, unknown>>((acc, field) => {
+      const val = state.filters[field]?.[0];
+      if (val) acc[field] = { contains: val, mode: 'insensitive' as const };
+      return acc;
+    }, {});
 
     const where = {
       companyId,
-      ...searchWhere,
       ...filtersWhere,
+      ...textWhere,
     };
 
     const [bankAccounts, total] = await Promise.all([

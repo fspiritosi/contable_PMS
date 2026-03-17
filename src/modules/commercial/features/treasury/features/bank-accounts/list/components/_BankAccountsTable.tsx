@@ -88,6 +88,24 @@ export function _BankAccountsTable({ data, totalRows, searchParams, facetCounts 
   const facetedFilters: DataTableFacetedFilterConfig[] = useMemo(
     () => [
       {
+        columnId: 'bankName',
+        title: 'Banco',
+        type: 'text' as const,
+        placeholder: 'Buscar por banco...',
+      },
+      {
+        columnId: 'accountNumber',
+        title: 'Nro. Cuenta',
+        type: 'text' as const,
+        placeholder: 'Buscar por número...',
+      },
+      {
+        columnId: 'cbu',
+        title: 'CBU',
+        type: 'text' as const,
+        placeholder: 'Buscar por CBU...',
+      },
+      {
         columnId: 'status',
         title: 'Estado',
         options: Object.entries(BANK_ACCOUNT_STATUS_LABELS).map(([value, label]) => ({
@@ -139,7 +157,7 @@ export function _BankAccountsTable({ data, totalRows, searchParams, facetCounts 
         data={data}
         totalRows={totalRows}
         searchParams={searchParams}
-        searchPlaceholder="Buscar cuentas bancarias..."
+        showSearch={false}
         facetedFilters={facetedFilters}
         tableId="commercial-bank-accounts"
         showFilterToggle

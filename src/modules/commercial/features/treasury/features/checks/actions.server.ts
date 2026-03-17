@@ -35,25 +35,23 @@ export async function getChecksPaginated(searchParams: DataTableSearchParams) {
     const filtersWhere = buildFiltersWhere(parsed.filters, {
       status: 'status',
       type: 'type',
-    }, { exclude: ['issueDate', 'dueDate'] });
+    }, { exclude: ['issueDate', 'dueDate', 'checkNumber', 'bankName', 'drawerName'] });
 
     const dateFiltersWhere = buildDateRangeFiltersWhere(parsed.filters, ['issueDate', 'dueDate']);
+
+    // Filtros de texto
+    const textFields = ['checkNumber', 'bankName', 'drawerName'] as const;
+    const textWhere = textFields.reduce<Record<string, unknown>>((acc, field) => {
+      const val = parsed.filters[field]?.[0];
+      if (val) acc[field] = { contains: val, mode: 'insensitive' as const };
+      return acc;
+    }, {});
 
     const where = {
       companyId,
       ...filtersWhere,
       ...dateFiltersWhere,
-      ...(parsed.search
-        ? {
-            OR: [
-              { checkNumber: { contains: parsed.search, mode: 'insensitive' as const } },
-              { bankName: { contains: parsed.search, mode: 'insensitive' as const } },
-              { drawerName: { contains: parsed.search, mode: 'insensitive' as const } },
-              { customer: { name: { contains: parsed.search, mode: 'insensitive' as const } } },
-              { supplier: { businessName: { contains: parsed.search, mode: 'insensitive' as const } } },
-            ],
-          }
-        : {}),
+      ...textWhere,
     };
 
     const [checks, totalRows] = await Promise.all([

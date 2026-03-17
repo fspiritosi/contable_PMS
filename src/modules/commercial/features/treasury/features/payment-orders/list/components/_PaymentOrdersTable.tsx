@@ -88,10 +88,21 @@ export function _PaymentOrdersTable({ data, totalRows, searchParams, facetCounts
   const facetedFilters: DataTableFacetedFilterConfig[] = useMemo(
     () => [
       {
+        columnId: 'fullNumber',
+        title: 'Número',
+        type: 'text' as const,
+        placeholder: 'Buscar por número...',
+      },
+      {
         columnId: 'supplier',
         title: 'Proveedor',
         type: 'text' as const,
         placeholder: 'Buscar por proveedor...',
+      },
+      {
+        columnId: 'date',
+        title: 'Fecha',
+        type: 'dateRange' as const,
       },
       {
         columnId: 'status',
@@ -101,11 +112,6 @@ export function _PaymentOrdersTable({ data, totalRows, searchParams, facetCounts
           value,
         })),
         externalCounts: facetCounts?.status ? new Map(Object.entries(facetCounts.status)) : undefined,
-      },
-      {
-        columnId: 'date',
-        title: 'Fecha',
-        type: 'dateRange' as const,
       },
     ],
     [facetCounts]

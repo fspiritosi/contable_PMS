@@ -83,10 +83,21 @@ export function _ReceiptsTable({ data, totalRows, searchParams }: Props) {
   const facetedFilters: DataTableFacetedFilterConfig[] = useMemo(
     () => [
       {
+        columnId: 'fullNumber',
+        title: 'Número',
+        type: 'text' as const,
+        placeholder: 'Buscar por número...',
+      },
+      {
         columnId: 'customer',
         title: 'Cliente',
         type: 'text' as const,
         placeholder: 'Buscar por cliente...',
+      },
+      {
+        columnId: 'date',
+        title: 'Fecha',
+        type: 'dateRange' as const,
       },
       {
         columnId: 'status',
@@ -95,11 +106,6 @@ export function _ReceiptsTable({ data, totalRows, searchParams }: Props) {
           label,
           value,
         })),
-      },
-      {
-        columnId: 'date',
-        title: 'Fecha',
-        type: 'dateRange' as const,
       },
     ],
     []
