@@ -181,9 +181,43 @@ export async function getBankAccountById(id: string) {
       return null;
     }
 
+    // Calcular saldo real desde los movimientos bancarios
+    const INCOME_TYPES = ['DEPOSIT', 'TRANSFER_IN', 'INTEREST'];
+    const movements = await prisma.bankMovement.findMany({
+      where: { bankAccountId: id, companyId },
+      select: { type: true, amount: true },
+    });
+
+    let calculatedBalance = 0;
+    for (const m of movements) {
+      const amount = Number(m.amount);
+      if (INCOME_TYPES.includes(m.type)) {
+        calculatedBalance += amount;
+      } else {
+        calculatedBalance -= amount;
+      }
+    }
+
+    // Sincronizar el saldo almacenado si difiere del calculado
+    const storedBalance = Number(bankAccount.balance);
+    if (Math.abs(storedBalance - calculatedBalance) > 0.01) {
+      logger.warn('Saldo almacenado difiere del calculado, sincronizando', {
+        data: {
+          bankAccountId: id,
+          storedBalance,
+          calculatedBalance,
+          difference: storedBalance - calculatedBalance,
+        },
+      });
+      await prisma.bankAccount.update({
+        where: { id },
+        data: { balance: new Prisma.Decimal(calculatedBalance) },
+      });
+    }
+
     return {
       ...bankAccount,
-      balance: Number(bankAccount.balance),
+      balance: calculatedBalance,
     };
   } catch (error) {
     logger.error('Error al obtener cuenta bancaria', { data: { error, id } });
