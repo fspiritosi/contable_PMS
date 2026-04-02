@@ -14,7 +14,6 @@ import {
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { promises as fs } from 'fs';
 import path from 'path';
 
@@ -119,15 +118,8 @@ async function uploadToS3(
     })
   );
 
-  // Generar URL
-  let url: string;
-  if (s3.publicUrl) {
-    // URL pública directa (si el bucket tiene acceso público)
-    url = `${s3.publicUrl}/${key}`;
-  } else {
-    // Presigned URL para acceso temporal
-    url = await getPresignedDownloadUrl(key);
-  }
+  // URL a través del API route proxy (MinIO no necesita ser público)
+  const url = `/api/storage/${key}`;
 
   return { key, url, filename };
 }
@@ -142,48 +134,6 @@ async function deleteFromS3(key: string): Promise<void> {
       Key: key,
     })
   );
-}
-
-async function getS3PresignedDownloadUrl(
-  key: string,
-  options: PresignedUrlOptions = {}
-): Promise<string> {
-  const { s3 } = storageConfig;
-  const expiresIn = options.expiresIn || storageConfig.presignedUrlExpiry;
-  const client = getS3Client();
-
-  const command = new GetObjectCommand({
-    Bucket: s3.bucket,
-    Key: key,
-    ...(options.downloadFilename && {
-      ResponseContentDisposition: `attachment; filename="${options.downloadFilename}"`,
-    }),
-  });
-
-  // unhoistableHeaders evita que el SDK agregue headers como x-amz-checksum-mode
-  // que causan errores de firma con MinIO
-  return await getSignedUrl(client, command, {
-    expiresIn,
-    unhoistableHeaders: new Set(['x-amz-checksum-mode']),
-  });
-}
-
-async function getS3PresignedUploadUrl(
-  key: string,
-  contentType: string,
-  options: PresignedUrlOptions = {}
-): Promise<string> {
-  const { s3 } = storageConfig;
-  const expiresIn = options.expiresIn || storageConfig.presignedUrlExpiry;
-  const client = getS3Client();
-
-  const command = new PutObjectCommand({
-    Bucket: s3.bucket,
-    Key: key,
-    ContentType: contentType,
-  });
-
-  return await getSignedUrl(client, command, { expiresIn });
 }
 
 // ============================================
@@ -299,64 +249,23 @@ export async function deleteFile(key: string): Promise<void> {
 
 /**
  * Obtiene una URL para descargar un archivo
- * Si hay S3_PUBLIC_URL configurada, retorna URL pública directa
- * Si no, genera una presigned URL real con el AWS SDK
+ * Siempre usa el API route proxy para que MinIO/S3 no necesite ser público
  */
 export async function getPresignedDownloadUrl(
   key: string,
   options: PresignedUrlOptions = {}
 ): Promise<string> {
-  if (isS3Provider()) {
-    const { s3 } = storageConfig;
-    // Si hay URL pública configurada, usarla directamente
-    if (s3.publicUrl) {
-      return `${s3.publicUrl}/${key}`;
-    }
-    // Generar presigned URL real con AWS SDK
-    return await getS3PresignedDownloadUrl(key, options);
-  }
-  // Storage local: URL del API route
-  return `${storageConfig.local.publicUrl}/${key}`;
-}
-
-/**
- * Obtiene una URL presigned para subir un archivo directamente desde el cliente
- * (Solo funciona con S3/MinIO/R2)
- */
-export async function getPresignedUploadUrl(
-  key: string,
-  contentType: string,
-  options: PresignedUrlOptions = {}
-): Promise<string> {
-  if (!isS3Provider()) {
-    throw new Error('Presigned upload URLs solo disponibles con S3 provider');
-  }
-
-  try {
-    return await getS3PresignedUploadUrl(key, contentType, options);
-  } catch (error) {
-    logger.error('Error al generar URL de upload', {
-      data: { error, key, provider: storageConfig.provider },
-    });
-    throw new Error('Error al generar URL de upload');
-  }
+  // Proxy a través del API route (funciona con S3 y local)
+  const downloadParam = options.downloadFilename ? '?download=true' : '';
+  return `/api/storage/${key}${downloadParam}`;
 }
 
 /**
  * Obtiene la URL pública de un archivo
- * (Para archivos en carpetas públicas o buckets públicos)
+ * Usa el API route proxy para que el storage no necesite ser público
  */
 export function getPublicUrl(key: string): string {
-  if (isS3Provider()) {
-    const { s3 } = storageConfig;
-    if (s3.publicUrl) {
-      return `${s3.publicUrl}/${key}`;
-    }
-    // Si no hay URL pública, construir desde endpoint
-    return `${s3.endpoint}/${s3.bucket}/${key}`;
-  } else {
-    return `${storageConfig.local.publicUrl}/${key}`;
-  }
+  return `/api/storage/${key}`;
 }
 
 // ============================================
