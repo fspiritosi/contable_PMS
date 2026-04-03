@@ -24,7 +24,7 @@ export const quoteFormSchema = z.object({
   leadId: z.string().uuid().optional().or(z.literal('')),
   issueDate: z.date({ message: 'La fecha de emisión es requerida' }),
   expirationDate: z.date().optional(),
-  currency: z.enum(['ARS', 'USD', 'EUR', 'GBP']).default('ARS'),
+  currency: z.enum(['ARS', 'USD', 'EUR', 'GBP']),
   notes: z.string().optional(),
   conditions: z.string().optional(),
   globalDiscountPercent: z.string().optional(),
