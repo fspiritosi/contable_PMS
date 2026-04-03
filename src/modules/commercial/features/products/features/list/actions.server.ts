@@ -793,6 +793,49 @@ export async function processProductImport(
   return { success: true, errors, imported, updated };
 }
 
+// ============================================================================
+// BULK PRODUCT EDIT (category, status, unitOfMeasure, description)
+// ============================================================================
+
+interface BulkUpdateProductsInput {
+  productIds: string[];
+  updates: {
+    categoryId?: string | null;
+    status?: string;
+    unitOfMeasure?: string;
+    description?: string;
+  };
+}
+
+/**
+ * Actualiza masivamente campos de productos seleccionados
+ */
+export async function bulkUpdateProducts(input: BulkUpdateProductsInput) {
+  await checkPermission('commercial.products', 'update', { redirect: true });
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  if (!input.productIds.length) throw new Error('Seleccione al menos un producto');
+
+  // Build update data (only include non-undefined fields)
+  const data: Record<string, unknown> = {};
+  if (input.updates.categoryId !== undefined) data.categoryId = input.updates.categoryId || null;
+  if (input.updates.status) data.status = input.updates.status;
+  if (input.updates.unitOfMeasure) data.unitOfMeasure = input.updates.unitOfMeasure;
+  if (input.updates.description !== undefined) data.description = input.updates.description || null;
+
+  if (Object.keys(data).length === 0) throw new Error('No hay cambios para aplicar');
+
+  const result = await prisma.product.updateMany({
+    where: { id: { in: input.productIds }, companyId },
+    data,
+  });
+
+  logger.info('Bulk product update', { data: { count: result.count, fields: Object.keys(data) } });
+  revalidatePath('/dashboard/commercial/products');
+  return { success: true, count: result.count };
+}
+
 /**
  * Retorna la definición de columnas para la plantilla de importación de productos
  */

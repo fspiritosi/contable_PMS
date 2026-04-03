@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { AlertTriangle, DollarSign, FileSpreadsheet, Plus } from 'lucide-react';
+import { AlertTriangle, DollarSign, FileSpreadsheet, Pencil, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Button } from '@/shared/components/ui/button';
@@ -29,6 +29,7 @@ import {
   PRODUCT_STATUS_LABELS,
 } from '../../../shared/types';
 import { deleteProduct } from '../actions.server';
+import { _BulkEditModal } from './_BulkEditModal';
 import { _BulkPriceAdjustModal } from './_BulkPriceAdjustModal';
 import { _ProductImportModal } from './_ProductImportModal';
 
@@ -53,6 +54,7 @@ export function _ProductsTable({ data, totalRows, searchParams, permissions, fac
   const [deletingProduct, setDeletingProduct] = useState<Product | null>(null);
   const [selectedRows, setSelectedRows] = useState<Product[]>([]);
   const [bulkPriceOpen, setBulkPriceOpen] = useState(false);
+  const [bulkEditOpen, setBulkEditOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
 
   const isLowStockActive = urlSearchParams.get('stockLevel') === 'low';
@@ -76,6 +78,11 @@ export function _ProductsTable({ data, totalRows, searchParams, permissions, fac
   }, []);
 
   const handleBulkPriceSuccess = useCallback(() => {
+    setSelectedRows([]);
+    router.refresh();
+  }, [router]);
+
+  const handleBulkEditSuccess = useCallback(() => {
     setSelectedRows([]);
     router.refresh();
   }, [router]);
@@ -189,13 +196,22 @@ export function _ProductsTable({ data, totalRows, searchParams, permissions, fac
               {isLowStockActive ? 'Bajo stock ✕' : 'Bajo stock'}
             </Button>
             {selectedIds.length > 0 && permissions.canUpdate && (
-              <Button
-                variant="outline"
-                onClick={() => setBulkPriceOpen(true)}
-              >
-                <DollarSign className="h-4 w-4 mr-2" />
-                Ajustar Precios ({selectedIds.length})
-              </Button>
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => setBulkEditOpen(true)}
+                >
+                  <Pencil className="h-4 w-4 mr-2" />
+                  Editar en Lote ({selectedIds.length})
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setBulkPriceOpen(true)}
+                >
+                  <DollarSign className="h-4 w-4 mr-2" />
+                  Ajustar Precios ({selectedIds.length})
+                </Button>
+              </>
             )}
             {selectedIds.length === 0 && permissions.canCreate && (
               <Button
@@ -221,6 +237,14 @@ export function _ProductsTable({ data, totalRows, searchParams, permissions, fac
         open={importOpen}
         onOpenChange={setImportOpen}
         onSuccess={handleImportSuccess}
+      />
+
+      {/* Modal de edición masiva */}
+      <_BulkEditModal
+        selectedIds={selectedIds}
+        open={bulkEditOpen}
+        onOpenChange={setBulkEditOpen}
+        onSuccess={handleBulkEditSuccess}
       />
 
       {/* Modal de ajuste masivo de precios */}
