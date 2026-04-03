@@ -14,6 +14,9 @@ interface InvoiceTemplateProps {
   data: InvoicePDFData;
 }
 
+const fmtNum = (value: number, decimals = 2) =>
+  value.toLocaleString('es-AR', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+
 export function InvoiceTemplate({ data }: InvoiceTemplateProps) {
   const { company, invoice, customer, lines, totals, notes, linkedDocuments } = data;
   const isTypeA = invoice.type === 'A';
@@ -119,21 +122,21 @@ export function InvoiceTemplate({ data }: InvoiceTemplateProps) {
             <View key={index} style={styles.tableRow}>
               <Text style={styles.col1}>{index + 1}</Text>
               <Text style={styles.col2}>{line.description}</Text>
-              <Text style={styles.col3}>{line.quantity.toFixed(3)}</Text>
+              <Text style={styles.col3}>{fmtNum(line.quantity, 3)}</Text>
               <Text style={styles.col4}>{line.unitOfMeasure}</Text>
-              <Text style={styles.col5}>${line.unitPrice.toFixed(2)}</Text>
+              <Text style={styles.col5}>${fmtNum(line.unitPrice)}</Text>
               {hasAnyDiscount && (
                 <Text style={styles.colDto}>
                   {line.discountPercent && line.discountPercent > 0
                     ? `${line.discountPercent}%`
                     : line.discountAmount && line.discountAmount > 0
-                      ? `$${line.discountAmount.toFixed(2)}`
+                      ? `$${fmtNum(line.discountAmount)}`
                       : ''}
                 </Text>
               )}
-              {isTypeA && <Text style={styles.col6}>{line.vatRate.toFixed(2)}%</Text>}
-              <Text style={styles.col7}>${line.subtotal.toFixed(2)}</Text>
-              <Text style={styles.col8}>${line.total.toFixed(2)}</Text>
+              {isTypeA && <Text style={styles.col6}>{fmtNum(line.vatRate)}%</Text>}
+              <Text style={styles.col7}>${fmtNum(line.subtotal)}</Text>
+              <Text style={styles.col8}>${fmtNum(line.total)}</Text>
             </View>
           ))}
         </View>
