@@ -31,12 +31,14 @@ import {
 import { Plus, Trash2, BadgePercent } from 'lucide-react';
 import { getDiscountPresetsForSelect } from '@/modules/company/features/discount-presets/list/actions.server';
 import { createInvoice, updateInvoice, getAllowedVoucherTypesForCustomer, getCustomerInvoicesForSelect } from '../../list/actions.server';
+import { updateQuoteAfterInvoice } from '@/modules/commercial/features/quotes/list/actions.server';
 import { isCreditNote, isDebitNote } from '@/modules/commercial/shared/voucher-utils';
 import { invoiceFormSchema, VOUCHER_TYPE_LABELS } from '../../shared/validators';
 import { z } from 'zod';
 import moment from 'moment';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Card } from '@/shared/components/ui/card';
+import { logger } from '@/shared/lib/logger';
 import { Separator } from '@/shared/components/ui/separator';
 import type { VoucherType } from '@/generated/prisma/enums';
 
@@ -424,9 +426,10 @@ interface InvoiceFormProps {
   mode?: 'create' | 'edit';
   invoiceId?: string;
   initialData?: FormInput;
+  fromQuoteId?: string;
 }
 
-export function InvoiceForm({ customers, pointsOfSale, products, mode = 'create', invoiceId, initialData }: InvoiceFormProps) {
+export function InvoiceForm({ customers, pointsOfSale, products, mode = 'create', invoiceId, initialData, fromQuoteId }: InvoiceFormProps) {
   const router = useRouter();
   const isEdit = mode === 'edit';
   const [totals, setTotals] = useState({
@@ -466,6 +469,77 @@ export function InvoiceForm({ customers, pointsOfSale, products, mode = 'create'
     control: form.control,
     name: 'lines',
   });
+
+  // Quote conversion data stored in ref for post-creation update
+  const quoteConversionRef = useRef<{
+    fromQuoteId: string;
+    quoteLineQuantities: Array<{ lineId: string; quantity: number }>;
+  } | null>(null);
+
+  // Load pre-filled data from sessionStorage when coming from a quote conversion
+  useEffect(() => {
+    if (!fromQuoteId) return;
+
+    const storageKey = `quote-conversion-${fromQuoteId}`;
+    const raw = sessionStorage.getItem(storageKey);
+    if (!raw) return;
+
+    try {
+      const data = JSON.parse(raw) as {
+        fromQuoteId: string;
+        customerId: string;
+        lines: Array<{
+          productId: string;
+          description: string;
+          quantity: string;
+          unitPrice: string;
+          vatRate: string;
+          discountPercent: string;
+          discountAmount: string;
+        }>;
+        quoteLineQuantities: Array<{ lineId: string; quantity: number }>;
+      };
+
+      // Store quote data for post-creation
+      quoteConversionRef.current = {
+        fromQuoteId: data.fromQuoteId,
+        quoteLineQuantities: data.quoteLineQuantities,
+      };
+
+      // Set customer
+      if (data.customerId) {
+        form.setValue('customerId', data.customerId);
+      }
+
+      // Set lines
+      if (data.lines.length > 0) {
+        // Clear existing lines first
+        const currentFields = form.getValues('lines');
+        for (let i = currentFields.length - 1; i >= 0; i--) {
+          remove(i);
+        }
+
+        // Add quote lines
+        for (const line of data.lines) {
+          append({
+            productId: line.productId,
+            description: line.description,
+            quantity: line.quantity,
+            unitPrice: line.unitPrice,
+            vatRate: line.vatRate,
+            discountPercent: line.discountPercent || undefined,
+            discountAmount: line.discountAmount || undefined,
+          });
+        }
+      }
+
+      // Clean up sessionStorage
+      sessionStorage.removeItem(storageKey);
+    } catch (err) {
+      logger.error('Error al cargar datos de conversión de presupuesto', { data: { fromQuoteId, error: err } });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fromQuoteId]);
 
   // Recalcular totales cuando cambien las líneas o descuentos globales
   useEffect(() => {
@@ -631,6 +705,25 @@ export function InvoiceForm({ customers, pointsOfSale, products, mode = 'create'
         router.push(`/dashboard/commercial/invoices/${invoiceId}`);
       } else {
         await createInvoice(data);
+
+        // Si viene de un presupuesto, actualizar las cantidades facturadas
+        if (quoteConversionRef.current) {
+          try {
+            await updateQuoteAfterInvoice(
+              quoteConversionRef.current.fromQuoteId,
+              quoteConversionRef.current.quoteLineQuantities.map((lq) => ({
+                lineId: lq.lineId,
+                invoicedQty: lq.quantity,
+              })),
+            );
+          } catch (quoteError) {
+            logger.error('Error al actualizar presupuesto después de facturar', {
+              data: { error: quoteError },
+            });
+            toast.warning('La factura se creó pero no se pudo actualizar el presupuesto');
+          }
+        }
+
         toast.success('Factura creada correctamente');
         router.push('/dashboard/commercial/invoices');
       }

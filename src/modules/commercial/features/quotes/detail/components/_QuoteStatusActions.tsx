@@ -23,8 +23,10 @@ import {
   Pencil,
   Trash2,
   Copy,
-  Info,
+  FileText,
+  Truck,
 } from 'lucide-react';
+import { _QuoteConversionModal } from './_QuoteConversionModal';
 import { usePermissions } from '@/shared/hooks/usePermissions';
 import {
   updateQuoteStatus,
@@ -48,6 +50,7 @@ export function _QuoteStatusActions({
   const [sendOpen, setSendOpen] = useState(false);
   const [acceptOpen, setAcceptOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
+  const [conversionType, setConversionType] = useState<'invoice' | 'delivery' | null>(null);
 
   const statusMutation = useMutation({
     mutationFn: ({ newStatus }: { newStatus: string }) =>
@@ -265,14 +268,38 @@ export function _QuoteStatusActions({
         </>
       )}
 
-      {/* ACCEPTED info */}
+      {/* ACCEPTED actions - conversion buttons */}
       {status === 'ACCEPTED' && (
+        <>
+          {hasPermission('commercial.invoices', 'create') && (
+            <Button
+              size="sm"
+              disabled={isLoading}
+              onClick={() => setConversionType('invoice')}
+            >
+              <FileText className="mr-2 h-4 w-4" />
+              Generar Factura
+            </Button>
+          )}
+          {hasPermission('commercial.quotes', 'update') && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={isLoading}
+              onClick={() => setConversionType('delivery')}
+            >
+              <Truck className="mr-2 h-4 w-4" />
+              Generar Remito
+            </Button>
+          )}
+        </>
+      )}
+
+      {/* COMPLETED info */}
+      {status === 'COMPLETED' && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Info className="h-4 w-4" />
-          <span>
-            Presupuesto aceptado. Próximamente podrás generar facturas y
-            remitos.
-          </span>
+          <CheckCircle2 className="h-4 w-4 text-blue-600" />
+          <span>Presupuesto completado. Todas las líneas fueron facturadas.</span>
         </div>
       )}
 
@@ -287,6 +314,18 @@ export function _QuoteStatusActions({
           <Copy className="mr-2 h-4 w-4" />
           Duplicar
         </Button>
+      )}
+
+      {/* Conversion Modal */}
+      {conversionType && (
+        <_QuoteConversionModal
+          quoteId={quoteId}
+          type={conversionType}
+          open={!!conversionType}
+          onOpenChange={(open) => {
+            if (!open) setConversionType(null);
+          }}
+        />
       )}
     </>
   );

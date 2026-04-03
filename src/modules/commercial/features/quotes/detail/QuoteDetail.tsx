@@ -41,8 +41,15 @@ function formatARS(value: number) {
   return `$${value.toLocaleString('es-AR', { minimumFractionDigits: 2 })}`;
 }
 
+function getProgressColor(current: number, total: number) {
+  if (current >= total) return 'text-green-600';
+  if (current > 0) return 'text-orange-600';
+  return '';
+}
+
 export async function QuoteDetail({ id }: QuoteDetailProps) {
   const quote: Quote = await getQuoteById(id);
+  const showProgress = quote.status === 'ACCEPTED' || quote.status === 'COMPLETED';
 
   return (
     <PermissionGuard module="commercial.quotes" action="view" redirect>
@@ -166,6 +173,12 @@ export async function QuoteDetail({ id }: QuoteDetailProps) {
                   <th className="pb-3 text-right">Subtotal</th>
                   <th className="pb-3 text-right">IVA</th>
                   <th className="pb-3 text-right">Total</th>
+                  {showProgress && (
+                    <>
+                      <th className="pb-3 text-right">Entregado</th>
+                      <th className="pb-3 text-right">Facturado</th>
+                    </>
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y">
@@ -206,6 +219,20 @@ export async function QuoteDetail({ id }: QuoteDetailProps) {
                     <td className="py-3 text-right font-mono font-semibold">
                       {formatARS(line.total)}
                     </td>
+                    {showProgress && (
+                      <>
+                        <td className="py-3 text-right font-mono">
+                          <span className={getProgressColor(line.deliveredQty, line.quantity)}>
+                            {line.deliveredQty.toFixed(0)} / {line.quantity.toFixed(0)}
+                          </span>
+                        </td>
+                        <td className="py-3 text-right font-mono">
+                          <span className={getProgressColor(line.invoicedQty, line.quantity)}>
+                            {line.invoicedQty.toFixed(0)} / {line.quantity.toFixed(0)}
+                          </span>
+                        </td>
+                      </>
+                    )}
                   </tr>
                 ))}
               </tbody>

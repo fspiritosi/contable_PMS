@@ -6,7 +6,11 @@ import {
   getActiveProducts,
 } from './helpers.server';
 
-export async function CreateInvoice() {
+interface CreateInvoiceProps {
+  fromQuoteId?: string;
+}
+
+export async function CreateInvoice({ fromQuoteId }: CreateInvoiceProps) {
   const [customers, pointsOfSale, products] = await Promise.all([
     getActiveCustomers(),
     getActivePointsOfSale(),
@@ -19,11 +23,18 @@ export async function CreateInvoice() {
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Nueva Factura de Venta</h2>
           <p className="text-muted-foreground">
-            Completa los datos para emitir una nueva factura
+            {fromQuoteId
+              ? 'Factura generada desde presupuesto. Verificá los datos y completá los campos faltantes.'
+              : 'Completa los datos para emitir una nueva factura'}
           </p>
         </div>
 
-        <InvoiceForm customers={customers} pointsOfSale={pointsOfSale} products={products} />
+        <InvoiceForm
+          customers={customers}
+          pointsOfSale={pointsOfSale}
+          products={products}
+          fromQuoteId={fromQuoteId}
+        />
       </div>
     </PermissionGuard>
   );
