@@ -172,6 +172,7 @@ export async function InvoiceDetail({ id }: InvoiceDetailProps) {
                 <th className="pb-3">Descripción</th>
                 <th className="pb-3 text-right">Cantidad</th>
                 <th className="pb-3 text-right">Precio Unit.</th>
+                <th className="pb-3 text-right">Dto.</th>
                 <th className="pb-3 text-right">IVA %</th>
                 <th className="pb-3 text-right">Subtotal</th>
                 <th className="pb-3 text-right">IVA</th>
@@ -191,6 +192,13 @@ export async function InvoiceDetail({ id }: InvoiceDetailProps) {
                   </td>
                   <td className="py-3 text-right font-mono">
                     ${Number(line.unitPrice).toFixed(2)}
+                  </td>
+                  <td className="py-3 text-right font-mono">
+                    {line.discountPercent
+                      ? `${Number(line.discountPercent)}%`
+                      : line.discountAmount && Number(line.discountAmount) > 0
+                        ? `$${Number(line.discountAmount).toLocaleString('es-AR', { minimumFractionDigits: 2 })}`
+                        : '-'}
                   </td>
                   <td className="py-3 text-right font-mono">
                     {Number(line.vatRate).toFixed(2)}%
@@ -213,6 +221,32 @@ export async function InvoiceDetail({ id }: InvoiceDetailProps) {
         {/* Totales */}
         <div className="mt-6 flex justify-end">
           <div className="w-full max-w-sm space-y-2">
+            {Number(invoice.discountTotal) > 0 && (
+              <>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Subtotal (antes dto):</span>
+                  <span className="font-mono">
+                    ${Number(invoice.totalBeforeDiscount).toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm text-orange-600">
+                  <span>Descuento total:</span>
+                  <span className="font-mono">
+                    -${Number(invoice.discountTotal).toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+              </>
+            )}
+            {invoice.globalDiscountPercent != null && Number(invoice.globalDiscountPercent) > 0 && (
+              <div className="text-sm text-muted-foreground">
+                Descuento global: {Number(invoice.globalDiscountPercent)}%
+              </div>
+            )}
+            {invoice.globalDiscountAmount != null && Number(invoice.globalDiscountAmount) > 0 && !invoice.globalDiscountPercent && (
+              <div className="text-sm text-muted-foreground">
+                Descuento global: ${Number(invoice.globalDiscountAmount).toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+              </div>
+            )}
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Subtotal:</span>
               <span className="font-mono">
