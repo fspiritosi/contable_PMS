@@ -147,7 +147,6 @@ const navMain: NavItemWithSub[] = [
             title: 'Cotizaciones',
             href: '/dashboard/company/commercial/quotes',
             module: 'commercial.quotes',
-            disabled: true,
           },
           {
             title: 'Puntos de Venta',
