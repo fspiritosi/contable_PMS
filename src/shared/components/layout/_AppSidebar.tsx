@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  BadgePercent,
   Building2,
   ChevronRight,
   ClipboardList,
@@ -419,6 +420,17 @@ const getNavConfig = (isSingleMode: boolean, activeCompanyId?: string): NavItemW
             title: 'Categorías',
             href: '/dashboard/commercial/categories',
             module: 'commercial.categories',
+          },
+        ],
+      },
+      {
+        title: 'Comercial',
+        icon: BadgePercent,
+        items: [
+          {
+            title: 'Descuentos Predefinidos',
+            href: '/dashboard/company/discount-presets',
+            module: 'company.discount-presets',
           },
         ],
       },
