@@ -3,6 +3,7 @@ import { getActiveCompany } from '@/shared/lib/company';
 import { NoCompanyFallback } from '@/modules/companies';
 import { getMyCompanies } from '@/modules/companies/features/list';
 import { getSidebarPermissions } from '@/shared/actions/sidebar';
+import { getIndustryType } from '@/shared/lib/industry';
 import { DashboardLayout } from '@/shared/components/layout/DashboardLayout';
 
 /**
@@ -18,10 +19,12 @@ export default async function Layout({ children }: { children: React.ReactNode }
     return <NoCompanyFallback />;
   }
 
+  const industryType = getIndustryType(activeCompany.industry);
+
   // Obtener companies y permisos del sidebar en paralelo
   const [companies, sidebarPermissions] = await Promise.all([
     getMyCompanies(),
-    getSidebarPermissions(),
+    getSidebarPermissions(activeCompany.industry),
   ]);
 
   return (
@@ -30,6 +33,7 @@ export default async function Layout({ children }: { children: React.ReactNode }
       activeCompany={activeCompany}
       isSingleMode={activeCompany.isSingleMode}
       sidebarPermissions={sidebarPermissions}
+      industryType={industryType}
     >
       {children}
     </DashboardLayout>

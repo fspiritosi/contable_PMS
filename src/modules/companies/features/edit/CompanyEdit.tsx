@@ -17,6 +17,7 @@ const ERROR_CODES = {
 } as const;
 
 import { _CompanyForm } from '../../shared/components';
+import { getIndustryType } from '@/shared/lib/industry';
 
 interface CompanyEditPageProps {
   companyId: string;
@@ -91,7 +92,7 @@ export async function CompanyEdit({ companyId }: CompanyEditPageProps) {
               phone: company.phone ?? undefined,
               address: company.address ?? undefined,
               country: company.country ?? undefined,
-              industry: company.industry ?? undefined,
+              industry: getIndustryType(company.industry),
               provinceId: company.provinceId ?? undefined,
               cityId: company.cityId ?? undefined,
             }}

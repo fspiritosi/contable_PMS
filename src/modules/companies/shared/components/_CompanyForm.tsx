@@ -9,6 +9,7 @@ import { Controller } from 'react-hook-form';
 import { toast } from 'sonner';
 import { z } from 'zod';
 import { TaxStatus } from '@/generated/prisma/enums';
+import { INDUSTRY_TYPES, INDUSTRY_LABELS } from '@/shared/lib/industry';
 
 import { Button } from '@/shared/components/ui/button';
 import { Input } from '@/shared/components/ui/input';
@@ -36,7 +37,7 @@ const companySchema = z.object({
   phone: z.string().optional(),
   address: z.string().optional(),
   country: z.string().optional(),
-  industry: z.string().optional(),
+  industry: z.enum([INDUSTRY_TYPES.GENERAL, INDUSTRY_TYPES.AUTO_PARTS]).optional(),
   provinceId: z.union([z.coerce.number().int(), z.undefined()]),
   cityId: z.union([z.coerce.number().int(), z.undefined()]),
 });
@@ -174,14 +175,30 @@ export function _CompanyForm({
           />
         </div>
 
-        {/* Industria */}
+        {/* Industria / Rubro */}
         <div className="space-y-2">
           <Label htmlFor="industry">Industria / Rubro</Label>
-          <Input
-            id="industry"
-            data-testid="company-industry-input"
-            {...form.register('industry')}
-            disabled={isLoading}
+          <Controller
+            control={form.control}
+            name="industry"
+            render={({ field }) => (
+              <Select
+                onValueChange={field.onChange}
+                value={field.value}
+                disabled={isLoading}
+              >
+                <SelectTrigger id="industry" data-testid="company-industry-select">
+                  <SelectValue placeholder="Seleccionar tipo de industria" />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.values(INDUSTRY_TYPES).map((type) => (
+                    <SelectItem key={type} value={type}>
+                      {INDUSTRY_LABELS[type]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           />
         </div>
 

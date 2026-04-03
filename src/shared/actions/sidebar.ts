@@ -1,5 +1,6 @@
 'use server';
 
+import { getIndustryType, isModuleAvailableForIndustry } from '@/shared/lib/industry';
 import { getCurrentUserPermissions, MODULES } from '@/shared/lib/permissions';
 
 /**
@@ -13,8 +14,11 @@ export type SidebarPermissions = Record<string, boolean>;
  *
  * - Owners y roles de sistema (owner, developer) tienen todos los permisos
  * - Usuarios normales solo ven items donde tienen permiso 'view'
+ * - Módulos restringidos por industria se filtran para todas las categorías de usuario
  */
-export async function getSidebarPermissions(): Promise<SidebarPermissions> {
+export async function getSidebarPermissions(
+  industry?: string | null,
+): Promise<SidebarPermissions> {
   const userPermissions = await getCurrentUserPermissions();
 
   // Si no hay usuario o no es miembro activo, sin acceso
@@ -22,23 +26,31 @@ export async function getSidebarPermissions(): Promise<SidebarPermissions> {
     return {};
   }
 
+  const permissions: SidebarPermissions = {};
+
   // Owners y roles de sistema tienen TODOS los permisos
   if (
     userPermissions.isOwner ||
     userPermissions.roleSlug === 'owner' ||
     userPermissions.roleSlug === 'developer'
   ) {
-    const allPermissions: SidebarPermissions = {};
     for (const mod of Object.values(MODULES)) {
-      allPermissions[mod] = true;
+      permissions[mod] = true;
     }
-    return allPermissions;
+  } else {
+    // Construir mapa de permisos (solo acción 'view')
+    for (const mod of Object.values(MODULES)) {
+      permissions[mod] = userPermissions.permissions[mod]?.view === true;
+    }
   }
 
-  // Construir mapa de permisos (solo acción 'view')
-  const permissions: SidebarPermissions = {};
-  for (const mod of Object.values(MODULES)) {
-    permissions[mod] = userPermissions.permissions[mod]?.view === true;
+  // Aplicar filtro de industria (Nivel 1)
+  // Se aplica DESPUÉS de permisos, tanto para owners como usuarios normales
+  const industryType = getIndustryType(industry);
+  for (const mod of Object.keys(permissions)) {
+    if (!isModuleAvailableForIndustry(mod, industryType)) {
+      permissions[mod] = false;
+    }
   }
 
   return permissions;

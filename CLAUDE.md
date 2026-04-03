@@ -117,6 +117,7 @@ Todas las reglas detalladas están en `.claude/rules/`. Se cargan automáticamen
 | Documentación | `docs/README.md` | Actualizar docs/ con cambios significativos |
 | Doc. Usuario | `@.claude/rules/user-documentation.md` | Actualizar guía de usuario con cada cambio visible |
 | Permisos | `@.claude/rules/permissions.md` | checkPermission en actions, PermissionGuard en pages, usePermissions en client |
+| Industria | `@.claude/rules/industry.md` | Features por tipo de empresa (INDUSTRY_MODULES, INDUSTRY_FEATURES, useIndustry) |
 
 ---
 
@@ -335,6 +336,32 @@ export async function createProduct(data: Input) {
 - `error.tsx` - Manejo de errores
 - `not-found.tsx` - 404
 - Subcarpetas de rutas (ej: `[id]/`, `new/`)
+
+### 12. Features por Tipo de Industria
+
+Al crear nuevas features, evaluar si son universales o específicas de industria:
+
+```typescript
+// ✅ Feature específica de industria - Registrar en INDUSTRY_MODULES o INDUSTRY_FEATURES
+// src/shared/lib/industry/constants.ts
+export const INDUSTRY_FEATURES: Record<string, IndustryType[]> = {
+  'products.triple-coding': ['AUTO_PARTS'],
+};
+
+// ✅ En Server Components
+import { getIndustryType, isFeatureAvailableForIndustry } from '@/shared/lib/industry';
+const industryType = getIndustryType(company?.industry);
+{isFeatureAvailableForIndustry('products.triple-coding', industryType) && <Componente />}
+
+// ✅ En Client Components
+import { useIndustry } from '@/providers/IndustryProvider';
+const { isFeatureAvailable } = useIndustry();
+{isFeatureAvailable('products.triple-coding') && <Componente />}
+```
+
+- **Módulos completos** específicos: registrar en `INDUSTRY_MODULES`
+- **Features dentro de módulos existentes**: registrar en `INDUSTRY_FEATURES`
+- Features **universales** (mayoría): no requieren configuración
 
 ---
 
