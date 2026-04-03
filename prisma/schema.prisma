@@ -172,6 +172,9 @@ model Company {
   receivingNotes      ReceivingNote[]
   deliveryNotes       DeliveryNote[]
 
+  // Presets de descuento
+  discountPresets     DiscountPreset[]
+
   // Depreciación de equipos
   vehicleDepreciations VehicleDepreciation[]
   assetValueAdjustments AssetValueAdjustment[]
@@ -2316,6 +2319,12 @@ model SalesInvoice {
   otherTaxes        Decimal               @default(0) @map("other_taxes") @db.Decimal(12, 2)
   total             Decimal               @default(0) @db.Decimal(12, 2)
 
+  // Descuentos
+  globalDiscountPercent Decimal?          @map("global_discount_percent") @db.Decimal(5, 2)
+  globalDiscountAmount  Decimal?          @map("global_discount_amount") @db.Decimal(12, 2)
+  totalBeforeDiscount   Decimal           @default(0) @map("total_before_discount") @db.Decimal(12, 2)
+  discountTotal         Decimal           @default(0) @map("discount_total") @db.Decimal(12, 2)
+
   // Observaciones
   notes             String?
   internalNotes     String?               @map("internal_notes")
@@ -2365,6 +2374,10 @@ model SalesInvoiceLine {
   quantity        Decimal         @db.Decimal(12, 3)
   unitPrice       Decimal         @map("unit_price") @db.Decimal(12, 2)
 
+  // Descuentos
+  discountPercent Decimal?        @map("discount_percent") @db.Decimal(5, 2)
+  discountAmount  Decimal?        @map("discount_amount") @db.Decimal(12, 2)
+
   // Impuestos
   vatRate         Decimal         @map("vat_rate") @db.Decimal(5, 2)
   vatAmount       Decimal         @map("vat_amount") @db.Decimal(12, 2)
@@ -2376,6 +2389,26 @@ model SalesInvoiceLine {
   product         Product         @relation(fields: [productId], references: [id])
 
   @@map("sales_invoice_lines")
+}
+
+// ============================================
+// MÓDULO COMERCIAL - Presets de Descuento
+// ============================================
+
+model DiscountPreset {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId  String   @map("company_id") @db.Uuid
+  name       String
+  percentage Decimal  @db.Decimal(5, 2)
+  isActive   Boolean  @default(true) @map("is_active")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@unique([companyId, name])
+  @@index([companyId])
+  @@map("discount_presets")
 }
 
 // ============================================
