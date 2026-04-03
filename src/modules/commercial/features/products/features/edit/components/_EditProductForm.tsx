@@ -9,12 +9,18 @@ import type { UpdateProductFormData } from '../../../shared/validators';
 import type { Product, ProductCategory } from '../../../shared/types';
 import { logger } from '@/shared/lib/logger';
 
+interface EquivalenceOption {
+  id: string;
+  name: string;
+}
+
 interface EditProductFormProps {
   product: Product;
   categories: ProductCategory[];
+  equivalences?: EquivalenceOption[];
 }
 
-export function _EditProductForm({ product, categories }: EditProductFormProps) {
+export function _EditProductForm({ product, categories, equivalences = [] }: EditProductFormProps) {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -49,6 +55,9 @@ export function _EditProductForm({ product, categories }: EditProductFormProps) 
     internalCode: product.internalCode || '',
     brand: product.brand || '',
     model: product.model || '',
+    oemCode: product.oemCode || '',
+    auxiliaryCode: product.auxiliaryCode || '',
+    productGroupId: product.productGroupId || undefined,
     status: product.status,
   };
 
@@ -59,6 +68,7 @@ export function _EditProductForm({ product, categories }: EditProductFormProps) 
       isSubmitting={isSubmitting}
       submitLabel="Guardar Cambios"
       categories={categories}
+      equivalences={equivalences}
       showStatus
     />
   );

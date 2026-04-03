@@ -28,9 +28,10 @@ interface ColumnsProps {
   onEdit: (product: Product) => void;
   onDelete: (product: Product) => void;
   permissions: ModulePermissions;
+  showOemCode?: boolean;
 }
 
-export function getColumns({ onEdit, onDelete, permissions }: ColumnsProps): ColumnDef<Product>[] {
+export function getColumns({ onEdit, onDelete, permissions, showOemCode = false }: ColumnsProps): ColumnDef<Product>[] {
   const { canUpdate, canDelete } = permissions;
   const hasAnyAction = canUpdate || canDelete;
 
@@ -98,6 +99,25 @@ export function getColumns({ onEdit, onDelete, permissions }: ColumnsProps): Col
         );
       },
     },
+    ...(showOemCode
+      ? [
+          {
+            accessorKey: 'oemCode',
+            meta: { title: 'Código OEM' },
+            header: ({ column }: { column: unknown }) => (
+              <DataTableColumnHeader column={column as import('@tanstack/react-table').Column<Product>} title="Código OEM" />
+            ),
+            cell: ({ row }: { row: import('@tanstack/react-table').Row<Product> }) => {
+              const oemCode = row.original.oemCode;
+              return oemCode ? (
+                <span className="font-mono text-sm">{oemCode}</span>
+              ) : (
+                <span className="text-muted-foreground">-</span>
+              );
+            },
+          } as ColumnDef<Product>,
+        ]
+      : []),
     {
       accessorKey: 'type',
       meta: { title: 'Tipo' },

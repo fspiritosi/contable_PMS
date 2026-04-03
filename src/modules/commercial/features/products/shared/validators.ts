@@ -49,6 +49,10 @@ export const createProductSchema = z.object({
   internalCode: emptyStringToUndefined.pipe(z.string().max(50).optional()),
   brand: emptyStringToUndefined.pipe(z.string().max(100).optional()),
   model: emptyStringToUndefined.pipe(z.string().max(100).optional()),
+  // Campos de industria AUTO_PARTS (triple codificación y equivalencias)
+  oemCode: emptyStringToUndefined.pipe(z.string().max(100).optional()),
+  auxiliaryCode: emptyStringToUndefined.pipe(z.string().max(100).optional()),
+  productGroupId: emptyStringToUndefined.pipe(z.string().uuid().optional()),
 });
 
 export const updateProductSchema = createProductSchema.partial().extend({

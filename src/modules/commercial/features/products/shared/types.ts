@@ -49,12 +49,16 @@ export interface Product extends Record<string, unknown> {
   internalCode: string | null;
   brand: string | null;
   model: string | null;
+  oemCode: string | null;
+  auxiliaryCode: string | null;
+  productGroupId: string | null;
   status: ProductStatus;
   createdBy: string;
   createdAt: Date;
   updatedAt: Date;
   // Relaciones
   category?: { id: string; name: string } | null;
+  productGroup?: { id: string; name: string } | null;
   // Calculado desde warehouseStocks
   currentStock?: number;
 }

@@ -40,13 +40,30 @@ export async function getProducts(params: GetProductsParams = {}) {
       status: 'status',
     }, { exclude: ['name', 'code', 'category', 'stockLevel'] });
 
-    // Filtros de texto directos
-    const textFields = ['name', 'code'] as const;
-    const textWhere = textFields.reduce<Record<string, unknown>>((acc, field) => {
-      const val = filters[field]?.[0];
-      if (val) acc[field] = { contains: val, mode: 'insensitive' as const };
-      return acc;
-    }, {});
+    // Filtros de texto directos (buscan también en oemCode y auxiliaryCode)
+    const nameFilter = filters['name']?.[0];
+    const codeFilter = filters['code']?.[0];
+
+    const textConditions: Record<string, unknown>[] = [];
+    if (nameFilter) {
+      textConditions.push({
+        OR: [
+          { name: { contains: nameFilter, mode: 'insensitive' as const } },
+          { oemCode: { contains: nameFilter, mode: 'insensitive' as const } },
+          { auxiliaryCode: { contains: nameFilter, mode: 'insensitive' as const } },
+        ],
+      });
+    }
+    if (codeFilter) {
+      textConditions.push({
+        OR: [
+          { code: { contains: codeFilter, mode: 'insensitive' as const } },
+          { oemCode: { contains: codeFilter, mode: 'insensitive' as const } },
+          { auxiliaryCode: { contains: codeFilter, mode: 'insensitive' as const } },
+        ],
+      });
+    }
+    const textWhere = textConditions.length > 0 ? { AND: textConditions } : {};
 
     // Filtro de texto para categoría (relación)
     const categoryFilter = filters['category']?.[0];
@@ -256,6 +273,9 @@ export async function createProduct(data: CreateProductFormData): Promise<Produc
         internalCode: validatedData.internalCode,
         brand: validatedData.brand,
         model: validatedData.model,
+        oemCode: validatedData.oemCode,
+        auxiliaryCode: validatedData.auxiliaryCode,
+        productGroupId: validatedData.productGroupId || null,
         createdBy: userId,
       },
       include: {
@@ -339,6 +359,9 @@ export async function updateProduct(
         internalCode: validatedData.internalCode,
         brand: validatedData.brand,
         model: validatedData.model,
+        oemCode: validatedData.oemCode,
+        auxiliaryCode: validatedData.auxiliaryCode,
+        productGroupId: validatedData.productGroupId || null,
         status: validatedData.status,
       },
       include: {
@@ -640,6 +663,8 @@ export interface ProductImportRow {
   trackStock?: boolean;
   minStock?: number;
   maxStock?: number;
+  oemCode?: string;
+  auxiliaryCode?: string;
 }
 
 export interface ProductImportError {
@@ -769,6 +794,8 @@ export async function processProductImport(
         barcode: row.barcode?.trim() || null,
         brand: row.brand?.trim() || null,
         model: row.model?.trim() || null,
+        oemCode: row.oemCode?.trim() || null,
+        auxiliaryCode: row.auxiliaryCode?.trim() || null,
         ...(categoryId && { categoryId }),
       };
 
@@ -852,5 +879,7 @@ export async function getProductImportColumns() {
     { key: 'barcode', label: 'Código de Barras', required: false, example: '7790001234567', width: 20 },
     { key: 'brand', label: 'Marca', required: false, example: 'Mann Filter', width: 20 },
     { key: 'model', label: 'Modelo', required: false, example: 'W719/5', width: 15 },
+    { key: 'oemCode', label: 'Código OEM', required: false, example: 'OE-12345', width: 20 },
+    { key: 'auxiliaryCode', label: 'Código Auxiliar', required: false, example: 'AUX-67890', width: 20 },
   ] as const;
 }

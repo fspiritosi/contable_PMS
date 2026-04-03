@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { AlertTriangle, DollarSign, FileSpreadsheet, Pencil, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 
+import { useIndustry } from '@/providers/IndustryProvider';
 import { Button } from '@/shared/components/ui/button';
 import {
   DataTable,
@@ -50,6 +51,8 @@ export function _ProductsTable({ data, totalRows, searchParams, permissions, fac
   const router = useRouter();
   const pathname = usePathname();
   const urlSearchParams = useSearchParams();
+  const { isFeatureAvailable } = useIndustry();
+  const showOemCode = isFeatureAvailable('products.triple-coding');
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [deletingProduct, setDeletingProduct] = useState<Product | null>(null);
   const [selectedRows, setSelectedRows] = useState<Product[]>([]);
@@ -115,8 +118,9 @@ export function _ProductsTable({ data, totalRows, searchParams, permissions, fac
         onEdit: setEditingProduct,
         onDelete: setDeletingProduct,
         permissions,
+        showOemCode,
       }),
-    [permissions]
+    [permissions, showOemCode]
   );
 
   const facetedFilters = useMemo<DataTableFacetedFilterConfig[]>(

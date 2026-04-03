@@ -33,6 +33,12 @@ import {
   VAT_RATE_OPTIONS,
 } from '../../../shared/types';
 import { useEffect, useState } from 'react';
+import { useIndustry } from '@/providers/IndustryProvider';
+
+interface EquivalenceOption {
+  id: string;
+  name: string;
+}
 
 interface ProductFormProps {
   onSubmit: (data: CreateProductFormData) => Promise<void>;
@@ -41,6 +47,7 @@ interface ProductFormProps {
   submitLabel?: string;
   categories: ProductCategory[];
   showStatus?: boolean;
+  equivalences?: EquivalenceOption[];
 }
 
 export function _ProductForm({
@@ -50,8 +57,10 @@ export function _ProductForm({
   submitLabel = 'Crear Producto',
   categories,
   showStatus = false,
+  equivalences = [],
 }: ProductFormProps) {
   const [salePriceWithTax, setSalePriceWithTax] = useState<number>(0);
+  const { isFeatureAvailable } = useIndustry();
 
   const form = useForm<CreateProductFormData>({
     resolver: zodResolver(createProductSchema),
@@ -71,6 +80,9 @@ export function _ProductForm({
       internalCode: '',
       brand: '',
       model: '',
+      oemCode: '',
+      auxiliaryCode: '',
+      productGroupId: undefined,
       ...defaultValues,
     },
   });
@@ -435,6 +447,74 @@ export function _ProductForm({
                 )}
               />
             </div>
+
+            {isFeatureAvailable('products.triple-coding') && (
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <FormField
+                  control={form.control}
+                  name="oemCode"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Código OEM</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Código original del fabricante" {...field} />
+                      </FormControl>
+                      <FormDescription>
+                        Código del fabricante original (OEM)
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="auxiliaryCode"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Código Auxiliar</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Código del proveedor" {...field} />
+                      </FormControl>
+                      <FormDescription>
+                        Código alternativo del proveedor o aftermarket
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            )}
+
+            {isFeatureAvailable('products.equivalences') && equivalences.length > 0 && (
+              <FormField
+                control={form.control}
+                name="productGroupId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Grupo de Equivalencia</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Seleccionar grupo (opcional)" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {equivalences.map((group) => (
+                          <SelectItem key={group.id} value={group.id}>
+                            {group.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>
+                      Agrupar con productos equivalentes de otras marcas
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
 
             {showStatus && (
               <FormField

@@ -382,6 +382,8 @@ export function _ProductImportModal({
             trackStock: undefined,
             minStock,
             maxStock,
+            oemCode: rowData.oemCode ? String(rowData.oemCode).trim() : undefined,
+            auxiliaryCode: rowData.auxiliaryCode ? String(rowData.auxiliaryCode).trim() : undefined,
           });
         });
 
@@ -419,6 +421,8 @@ export function _ProductImportModal({
         trackStock: parsed.trackStock,
         minStock: parsed.minStock,
         maxStock: parsed.maxStock,
+        oemCode: parsed.oemCode,
+        auxiliaryCode: parsed.auxiliaryCode,
       }));
       return processProductImport(rowsToImport);
     },
