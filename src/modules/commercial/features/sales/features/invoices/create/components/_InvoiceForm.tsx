@@ -120,38 +120,63 @@ function _InvoiceLineRow({
           />
 
           {/* Cantidad */}
-          <Input
-            {...form.register(`lines.${index}.quantity`)}
-            type="text"
-            placeholder="1"
-            className="h-9 text-sm text-right font-mono"
+          <FormField
+            control={form.control}
+            name={`lines.${index}.quantity`}
+            render={({ field }) => (
+              <FormControl>
+                <Input
+                  {...field}
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="1"
+                  className="h-9 text-sm text-right font-mono"
+                />
+              </FormControl>
+            )}
           />
 
           {/* Precio Unit. */}
-          <Input
-            {...form.register(`lines.${index}.unitPrice`)}
-            type="text"
-            placeholder="0.00"
-            className="h-9 text-sm text-right font-mono"
+          <FormField
+            control={form.control}
+            name={`lines.${index}.unitPrice`}
+            render={({ field }) => (
+              <FormControl>
+                <Input
+                  {...field}
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="0.00"
+                  className="h-9 text-sm text-right font-mono"
+                />
+              </FormControl>
+            )}
           />
 
           {/* Dto. (% o $) */}
           <div className="flex items-center gap-0.5">
-            <Input
-              {...form.register(`lines.${index}.discountPercent`, {
-                onChange: (e) => {
-                  if (e.target.value) {
-                    form.setValue(`lines.${index}.discountAmount`, '');
-                  }
-                },
-              })}
-              value={form.watch(`lines.${index}.discountPercent`) ?? ''}
-              type="number"
-              step="0.01"
-              min="0"
-              max="100"
-              placeholder="%"
-              className="h-9 text-sm text-right font-mono flex-1 min-w-0"
+            <FormField
+              control={form.control}
+              name={`lines.${index}.discountPercent`}
+              render={({ field }) => (
+                <FormControl>
+                  <Input
+                    {...field}
+                    value={field.value ?? ''}
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="%"
+                    className="h-9 text-sm text-right font-mono flex-1 min-w-0"
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === '' || /^\d*\.?\d{0,2}$/.test(val)) {
+                        field.onChange(val);
+                        if (val) form.setValue(`lines.${index}.discountAmount`, '');
+                      }
+                    }}
+                  />
+                </FormControl>
+              )}
             />
             {discountPresets.length > 0 && (
               <Popover>
@@ -219,10 +244,18 @@ function _InvoiceLineRow({
 
         {/* Segunda fila: descripción editable */}
         <div className="grid grid-cols-[minmax(240px,2fr)_1fr] gap-3">
-          <Input
-            {...form.register(`lines.${index}.description`)}
-            placeholder="Descripción del producto o servicio"
-            className="h-7 text-xs text-muted-foreground border-dashed"
+          <FormField
+            control={form.control}
+            name={`lines.${index}.description`}
+            render={({ field }) => (
+              <FormControl>
+                <Input
+                  {...field}
+                  placeholder="Descripción del producto o servicio"
+                  className="h-7 text-xs text-muted-foreground border-dashed"
+                />
+              </FormControl>
+            )}
           />
           {discountValue > 0 && (
             <span className="text-xs font-mono text-orange-600 self-center text-right">
@@ -271,47 +304,69 @@ function _InvoiceLineRow({
           )}
         />
 
-        <FormItem>
-          <FormLabel className="text-xs">Descripción</FormLabel>
-          <Input
-            {...form.register(`lines.${index}.description`)}
-            placeholder="Descripción del producto o servicio"
-          />
-        </FormItem>
+        <FormField
+          control={form.control}
+          name={`lines.${index}.description`}
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel className="text-xs">Descripción</FormLabel>
+              <FormControl>
+                <Input {...field} placeholder="Descripción del producto o servicio" />
+              </FormControl>
+            </FormItem>
+          )}
+        />
 
         <div className="grid grid-cols-2 gap-3">
-          <FormItem>
-            <FormLabel className="text-xs">Cantidad</FormLabel>
-            <Input
-              {...form.register(`lines.${index}.quantity`)}
-              type="text"
-              placeholder="1"
-            />
-          </FormItem>
-          <FormItem>
-            <FormLabel className="text-xs">Precio Unit.</FormLabel>
-            <Input
-              {...form.register(`lines.${index}.unitPrice`)}
-              type="text"
-              placeholder="0.00"
-            />
-          </FormItem>
-          <FormItem>
-            <FormLabel className="text-xs">Dto %</FormLabel>
-            <Input
-              {...form.register(`lines.${index}.discountPercent`, {
-                onChange: (e) => {
-                  if (e.target.value) form.setValue(`lines.${index}.discountAmount`, '');
-                },
-              })}
-              value={form.watch(`lines.${index}.discountPercent`) ?? ''}
-              type="number"
-              step="0.01"
-              min="0"
-              max="100"
-              placeholder="0"
-            />
-          </FormItem>
+          <FormField
+            control={form.control}
+            name={`lines.${index}.quantity`}
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-xs">Cantidad</FormLabel>
+                <FormControl>
+                  <Input {...field} type="text" inputMode="decimal" placeholder="1" />
+                </FormControl>
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name={`lines.${index}.unitPrice`}
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-xs">Precio Unit.</FormLabel>
+                <FormControl>
+                  <Input {...field} type="text" inputMode="decimal" placeholder="0.00" />
+                </FormControl>
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name={`lines.${index}.discountPercent`}
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-xs">Dto %</FormLabel>
+                <FormControl>
+                  <Input
+                    {...field}
+                    value={field.value ?? ''}
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="0"
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === '' || /^\d*\.?\d{0,2}$/.test(val)) {
+                        field.onChange(val);
+                        if (val) form.setValue(`lines.${index}.discountAmount`, '');
+                      }
+                    }}
+                  />
+                </FormControl>
+              </FormItem>
+            )}
+          />
           <FormField
             control={form.control}
             name={`lines.${index}.vatRate`}
