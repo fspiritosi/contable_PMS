@@ -18,6 +18,12 @@ import {
   getExpenseCategories,
   getCriticalStockProducts,
   getRecentAlerts,
+  getTopClientDebts,
+  getTopSupplierDebts,
+  getTopSellingProducts,
+  getWeeklySalesComparison,
+  getPaymentMethodBreakdown,
+  getUpcomingDueDates,
 } from './actions.server';
 import { _SalesTrendChart } from './components/_SalesTrendChart';
 import { _PurchasesTrendChart } from './components/_PurchasesTrendChart';
@@ -26,6 +32,11 @@ import { _AlertsList } from './components/_AlertsList';
 import { _ProfitabilityChart } from './components/_ProfitabilityChart';
 import { _PeriodSelector } from './components/_PeriodSelector';
 import { _MonthsRangeSelector } from './components/_MonthsRangeSelector';
+import { _TopDebtsWidget } from './components/_TopDebtsWidget';
+import { _TopProductsWidget } from './components/_TopProductsWidget';
+import { _WeeklySalesChart } from './components/_WeeklySalesChart';
+import { _PaymentMethodsWidget } from './components/_PaymentMethodsWidget';
+import { _UpcomingDueDatesWidget } from './components/_UpcomingDueDatesWidget';
 import moment from 'moment';
 
 interface DashboardContentProps {
@@ -39,7 +50,10 @@ export async function DashboardContent({ period, monthsRange = 6 }: DashboardCon
     const displayPeriod = validPeriod || moment().format('YYYY-MM');
     const isCurrentMonth = !validPeriod || moment(validPeriod, 'YYYY-MM').isSame(moment(), 'month');
 
-    const [kpis, salesTrend, purchasesTrend, profitabilityTrend, expenseCategories, criticalStock, alerts] = await Promise.all([
+    const [
+      kpis, salesTrend, purchasesTrend, profitabilityTrend, expenseCategories, criticalStock, alerts,
+      topClientDebts, topSupplierDebts, topProducts, weeklySales, paymentMethods, upcomingDueDates,
+    ] = await Promise.all([
       getDashboardKPIs(validPeriod),
       getSalesTrend(validPeriod, monthsRange),
       getPurchasesTrend(validPeriod, monthsRange),
@@ -47,6 +61,12 @@ export async function DashboardContent({ period, monthsRange = 6 }: DashboardCon
       getExpenseCategories(),
       getCriticalStockProducts(),
       getRecentAlerts(validPeriod),
+      getTopClientDebts(),
+      getTopSupplierDebts(),
+      getTopSellingProducts(),
+      getWeeklySalesComparison(),
+      getPaymentMethodBreakdown(),
+      getUpcomingDueDates(),
     ]);
 
     const periodLabel = moment(displayPeriod, 'YYYY-MM').format('MMMM YYYY');
@@ -185,6 +205,34 @@ export async function DashboardContent({ period, monthsRange = 6 }: DashboardCon
       <div className="grid gap-4 md:grid-cols-2">
         <_SalesTrendChart data={salesTrend} />
         <_PurchasesTrendChart data={purchasesTrend} />
+      </div>
+
+      {/* Weekly Sales + Payment Methods */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <_WeeklySalesChart data={weeklySales} />
+        <_PaymentMethodsWidget data={paymentMethods} />
+      </div>
+
+      {/* Top Debts */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <_TopDebtsWidget
+          title="Top 10 Deudas de Clientes"
+          icon={ArrowDownCircle}
+          data={topClientDebts}
+          emptyMessage="Sin deudas de clientes pendientes"
+        />
+        <_TopDebtsWidget
+          title="Top 10 Deudas de Proveedores"
+          icon={ArrowUpCircle}
+          data={topSupplierDebts}
+          emptyMessage="Sin deudas a proveedores pendientes"
+        />
+      </div>
+
+      {/* Top Products + Upcoming Due Dates */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <_TopProductsWidget data={topProducts} />
+        <_UpcomingDueDatesWidget data={upcomingDueDates} />
       </div>
 
       {/* Bottom Row */}

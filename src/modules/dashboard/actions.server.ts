@@ -600,3 +600,384 @@ export async function getRecentAlerts(period?: string) {
     throw new Error('Error al obtener alertas');
   }
 }
+
+// ============================================
+// TOP 10 DEUDAS DE CLIENTES
+// ============================================
+
+export async function getTopClientDebts(limit = 10) {
+  const { userId } = await auth();
+  if (!userId) throw new Error('No autenticado');
+  await checkPermission('dashboard', 'view', { redirect: true });
+
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  try {
+    // Facturas de venta pendientes (no NC), agrupadas por cliente
+    const pendingInvoices = await prisma.salesInvoice.findMany({
+      where: {
+        companyId,
+        status: { in: ['CONFIRMED', 'PARTIAL_PAID'] },
+        voucherType: { notIn: ['NOTA_CREDITO_A', 'NOTA_CREDITO_B', 'NOTA_CREDITO_C'] },
+      },
+      select: {
+        total: true,
+        customerId: true,
+        customer: { select: { name: true, taxId: true } },
+        receiptItems: { select: { amount: true } },
+      },
+    });
+
+    // Agrupar por cliente y calcular deuda pendiente
+    const debtMap = new Map<string, { name: string; taxId: string | null; totalDebt: number; invoiceCount: number }>();
+
+    for (const inv of pendingInvoices) {
+      const paid = inv.receiptItems.reduce((sum, ri) => sum + Number(ri.amount), 0);
+      const pending = Number(inv.total) - paid;
+      if (pending <= 0) continue;
+
+      const existing = debtMap.get(inv.customerId);
+      if (existing) {
+        existing.totalDebt += pending;
+        existing.invoiceCount += 1;
+      } else {
+        debtMap.set(inv.customerId, {
+          name: inv.customer.name,
+          taxId: inv.customer.taxId,
+          totalDebt: pending,
+          invoiceCount: 1,
+        });
+      }
+    }
+
+    return Array.from(debtMap.values())
+      .sort((a, b) => b.totalDebt - a.totalDebt)
+      .slice(0, limit);
+  } catch (error) {
+    logger.error('Error al obtener deudas de clientes', { data: { error, companyId } });
+    throw new Error('Error al obtener deudas de clientes');
+  }
+}
+
+// ============================================
+// TOP 10 DEUDAS DE PROVEEDORES
+// ============================================
+
+export async function getTopSupplierDebts(limit = 10) {
+  const { userId } = await auth();
+  if (!userId) throw new Error('No autenticado');
+  await checkPermission('dashboard', 'view', { redirect: true });
+
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  try {
+    const pendingInvoices = await prisma.purchaseInvoice.findMany({
+      where: {
+        companyId,
+        status: { in: ['CONFIRMED', 'PARTIAL_PAID'] },
+        voucherType: { notIn: ['NOTA_CREDITO_A', 'NOTA_CREDITO_B', 'NOTA_CREDITO_C'] },
+      },
+      select: {
+        total: true,
+        supplierId: true,
+        supplier: { select: { businessName: true, taxId: true } },
+        paymentOrderItems: { select: { amount: true } },
+      },
+    });
+
+    const debtMap = new Map<string, { name: string; taxId: string; totalDebt: number; invoiceCount: number }>();
+
+    for (const inv of pendingInvoices) {
+      const paid = inv.paymentOrderItems.reduce((sum, poi) => sum + Number(poi.amount), 0);
+      const pending = Number(inv.total) - paid;
+      if (pending <= 0) continue;
+
+      const existing = debtMap.get(inv.supplierId);
+      if (existing) {
+        existing.totalDebt += pending;
+        existing.invoiceCount += 1;
+      } else {
+        debtMap.set(inv.supplierId, {
+          name: inv.supplier.businessName,
+          taxId: inv.supplier.taxId,
+          totalDebt: pending,
+          invoiceCount: 1,
+        });
+      }
+    }
+
+    return Array.from(debtMap.values())
+      .sort((a, b) => b.totalDebt - a.totalDebt)
+      .slice(0, limit);
+  } catch (error) {
+    logger.error('Error al obtener deudas de proveedores', { data: { error, companyId } });
+    throw new Error('Error al obtener deudas de proveedores');
+  }
+}
+
+// ============================================
+// TOP 10 PRODUCTOS MÁS VENDIDOS (últimos 30 días)
+// ============================================
+
+export async function getTopSellingProducts(limit = 10) {
+  const { userId } = await auth();
+  if (!userId) throw new Error('No autenticado');
+  await checkPermission('dashboard', 'view', { redirect: true });
+
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  try {
+    const thirtyDaysAgo = moment().subtract(30, 'days').toDate();
+
+    const lines = await prisma.salesInvoiceLine.findMany({
+      where: {
+        invoice: {
+          companyId,
+          issueDate: { gte: thirtyDaysAgo },
+          status: { in: ['CONFIRMED', 'PAID', 'PARTIAL_PAID'] },
+          voucherType: { notIn: ['NOTA_CREDITO_A', 'NOTA_CREDITO_B', 'NOTA_CREDITO_C'] },
+        },
+      },
+      select: {
+        productId: true,
+        quantity: true,
+        total: true,
+        product: { select: { code: true, name: true } },
+      },
+    });
+
+    const productMap = new Map<string, { code: string; name: string; totalQty: number; totalAmount: number }>();
+
+    for (const line of lines) {
+      const existing = productMap.get(line.productId);
+      const qty = Number(line.quantity);
+      const amount = Number(line.total);
+      if (existing) {
+        existing.totalQty += qty;
+        existing.totalAmount += amount;
+      } else {
+        productMap.set(line.productId, {
+          code: line.product.code,
+          name: line.product.name,
+          totalQty: qty,
+          totalAmount: amount,
+        });
+      }
+    }
+
+    return Array.from(productMap.values())
+      .sort((a, b) => b.totalQty - a.totalQty)
+      .slice(0, limit);
+  } catch (error) {
+    logger.error('Error al obtener productos más vendidos', { data: { error, companyId } });
+    throw new Error('Error al obtener productos más vendidos');
+  }
+}
+
+// ============================================
+// VENTAS SEMANALES (semana actual vs anterior)
+// ============================================
+
+export async function getWeeklySalesComparison() {
+  const { userId } = await auth();
+  if (!userId) throw new Error('No autenticado');
+  await checkPermission('dashboard', 'view', { redirect: true });
+
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  try {
+    const currentWeekStart = moment().startOf('isoWeek').toDate();
+    const previousWeekStart = moment().subtract(1, 'week').startOf('isoWeek').toDate();
+    const currentWeekEnd = moment().endOf('isoWeek').toDate();
+
+    const invoices = await prisma.salesInvoice.findMany({
+      where: {
+        companyId,
+        issueDate: { gte: previousWeekStart, lte: currentWeekEnd },
+        status: { in: ['CONFIRMED', 'PAID', 'PARTIAL_PAID'] },
+        voucherType: { notIn: ['NOTA_CREDITO_A', 'NOTA_CREDITO_B', 'NOTA_CREDITO_C'] },
+      },
+      select: { issueDate: true, total: true },
+    });
+
+    const dayNames = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+    const result = dayNames.map((day) => ({ day, currentWeek: 0, previousWeek: 0 }));
+
+    for (const inv of invoices) {
+      const m = moment(inv.issueDate);
+      const dayIndex = m.isoWeekday() - 1; // 0=Lun, 6=Dom
+      const total = Number(inv.total);
+
+      if (m.isSameOrAfter(moment(currentWeekStart)) && m.isSameOrBefore(moment(currentWeekEnd))) {
+        result[dayIndex].currentWeek += total;
+      } else {
+        result[dayIndex].previousWeek += total;
+      }
+    }
+
+    return result;
+  } catch (error) {
+    logger.error('Error al obtener comparación semanal', { data: { error, companyId } });
+    throw new Error('Error al obtener comparación semanal');
+  }
+}
+
+// ============================================
+// MEDIOS DE PAGO DE COBROS
+// ============================================
+
+export async function getPaymentMethodBreakdown() {
+  const { userId } = await auth();
+  if (!userId) throw new Error('No autenticado');
+  await checkPermission('dashboard', 'view', { redirect: true });
+
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  try {
+    const thirtyDaysAgo = moment().subtract(30, 'days').toDate();
+
+    const payments = await prisma.receiptPayment.findMany({
+      where: {
+        receipt: {
+          companyId,
+          status: 'CONFIRMED',
+          date: { gte: thirtyDaysAgo },
+        },
+      },
+      select: { paymentMethod: true, amount: true },
+    });
+
+    const methodLabels: Record<string, string> = {
+      CASH: 'Efectivo',
+      CHECK: 'Cheque',
+      TRANSFER: 'Transferencia',
+      DEBIT_CARD: 'Tarjeta Débito',
+      CREDIT_CARD: 'Tarjeta Crédito',
+      ACCOUNT: 'Cuenta Corriente',
+    };
+
+    const methodMap = new Map<string, { method: string; total: number; count: number }>();
+
+    for (const p of payments) {
+      const label = methodLabels[p.paymentMethod] || p.paymentMethod;
+      const existing = methodMap.get(p.paymentMethod);
+      if (existing) {
+        existing.total += Number(p.amount);
+        existing.count += 1;
+      } else {
+        methodMap.set(p.paymentMethod, {
+          method: label,
+          total: Number(p.amount),
+          count: 1,
+        });
+      }
+    }
+
+    return Array.from(methodMap.values()).sort((a, b) => b.total - a.total);
+  } catch (error) {
+    logger.error('Error al obtener medios de pago', { data: { error, companyId } });
+    throw new Error('Error al obtener medios de pago');
+  }
+}
+
+// ============================================
+// PRÓXIMOS VENCIMIENTOS (30 días)
+// ============================================
+
+export async function getUpcomingDueDates(limit = 10) {
+  const { userId } = await auth();
+  if (!userId) throw new Error('No autenticado');
+  await checkPermission('dashboard', 'view', { redirect: true });
+
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  try {
+    const thirtyDaysFromNow = moment().add(30, 'days').toDate();
+
+    const [salesInvoices, purchaseInvoices] = await Promise.all([
+      prisma.salesInvoice.findMany({
+        where: {
+          companyId,
+          status: { in: ['CONFIRMED', 'PARTIAL_PAID'] },
+          dueDate: { lte: thirtyDaysFromNow },
+          voucherType: { notIn: ['NOTA_CREDITO_A', 'NOTA_CREDITO_B', 'NOTA_CREDITO_C'] },
+        },
+        select: {
+          fullNumber: true,
+          total: true,
+          dueDate: true,
+          customer: { select: { name: true } },
+        },
+        orderBy: { dueDate: 'asc' },
+      }),
+      prisma.purchaseInvoice.findMany({
+        where: {
+          companyId,
+          status: { in: ['CONFIRMED', 'PARTIAL_PAID'] },
+          dueDate: { lte: thirtyDaysFromNow },
+          voucherType: { notIn: ['NOTA_CREDITO_A', 'NOTA_CREDITO_B', 'NOTA_CREDITO_C'] },
+        },
+        select: {
+          fullNumber: true,
+          total: true,
+          dueDate: true,
+          supplier: { select: { businessName: true } },
+        },
+        orderBy: { dueDate: 'asc' },
+      }),
+    ]);
+
+    type DueItem = {
+      type: 'sale' | 'purchase';
+      number: string;
+      entity: string;
+      dueDate: Date | null;
+      total: number;
+      daysUntilDue: number;
+    };
+
+    const items: DueItem[] = [];
+
+    for (const inv of salesInvoices) {
+      const daysUntilDue = inv.dueDate ? moment(inv.dueDate).diff(moment(), 'days') : 0;
+      items.push({
+        type: 'sale',
+        number: inv.fullNumber,
+        entity: inv.customer.name,
+        dueDate: inv.dueDate,
+        total: Number(inv.total),
+        daysUntilDue,
+      });
+    }
+
+    for (const inv of purchaseInvoices) {
+      const daysUntilDue = inv.dueDate ? moment(inv.dueDate).diff(moment(), 'days') : 0;
+      items.push({
+        type: 'purchase',
+        number: inv.fullNumber,
+        entity: inv.supplier.businessName,
+        dueDate: inv.dueDate,
+        total: Number(inv.total),
+        daysUntilDue,
+      });
+    }
+
+    // Ordenar por dueDate asc (más próximos/vencidos primero)
+    items.sort((a, b) => {
+      if (!a.dueDate) return 1;
+      if (!b.dueDate) return -1;
+      return a.dueDate.getTime() - b.dueDate.getTime();
+    });
+
+    return items.slice(0, limit);
+  } catch (error) {
+    logger.error('Error al obtener próximos vencimientos', { data: { error, companyId } });
+    throw new Error('Error al obtener próximos vencimientos');
+  }
+}
