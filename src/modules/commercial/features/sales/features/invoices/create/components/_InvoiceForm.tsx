@@ -4,6 +4,7 @@ import { useForm, useFieldArray, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
+import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/shared/components/ui/button';
 import {
   Form,
@@ -22,7 +23,13 @@ import {
 } from '@/shared/components/ui/select';
 import { Input } from '@/shared/components/ui/input';
 import { Textarea } from '@/shared/components/ui/textarea';
-import { Plus, Trash2 } from 'lucide-react';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/shared/components/ui/popover';
+import { Plus, Trash2, BadgePercent } from 'lucide-react';
+import { getDiscountPresetsForSelect } from '@/modules/company/features/discount-presets/list/actions.server';
 import { createInvoice, updateInvoice, getAllowedVoucherTypesForCustomer, getCustomerInvoicesForSelect } from '../../list/actions.server';
 import { isCreditNote, isDebitNote } from '@/modules/commercial/shared/voucher-utils';
 import { invoiceFormSchema, VOUCHER_TYPE_LABELS } from '../../shared/validators';
@@ -38,22 +45,286 @@ type FormInput = z.infer<typeof invoiceFormSchema>;
 const formatCurrency = (value: number) =>
   `$${value.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-function _LineTotals({ form, index }: { form: ReturnType<typeof useForm<FormInput>>; index: number }) {
+// _LineTotals removido — cálculos integrados en _InvoiceLineRow
+
+interface InvoiceLineRowProps {
+  form: ReturnType<typeof useForm<FormInput>>;
+  index: number;
+  products: InvoiceFormProps['products'];
+  discountPresets: Array<{ id: string; name: string; percentage: number }>;
+  onProductSelect: (index: number, productId: string) => void;
+  onRemove: () => void;
+}
+
+function _InvoiceLineRow({
+  form,
+  index,
+  products,
+  discountPresets,
+  onProductSelect,
+  onRemove,
+}: InvoiceLineRowProps) {
   const line = useWatch({ control: form.control, name: `lines.${index}` });
 
   const qty = parseFloat(line?.quantity ?? '0');
   const price = parseFloat(line?.unitPrice ?? '0');
+  const dtoPercent = parseFloat(line?.discountPercent ?? '0');
+  const dtoAmount = parseFloat(line?.discountAmount ?? '0');
   const vat = parseFloat(line?.vatRate ?? '0');
 
-  const neto = isNaN(qty) || isNaN(price) ? 0 : Math.round(qty * price * 100) / 100;
+  const baseAmount = isNaN(qty) || isNaN(price) ? 0 : Math.round(qty * price * 100) / 100;
+
+  let discountValue = 0;
+  if (!isNaN(dtoPercent) && dtoPercent > 0) {
+    discountValue = Math.round(baseAmount * (dtoPercent / 100) * 100) / 100;
+  } else if (!isNaN(dtoAmount) && dtoAmount > 0) {
+    discountValue = Math.round(Math.min(dtoAmount, baseAmount) * 100) / 100;
+  }
+
+  const neto = Math.round((baseAmount - discountValue) * 100) / 100;
   const iva = isNaN(vat) ? 0 : Math.round(neto * (vat / 100) * 100) / 100;
   const total = Math.round((neto + iva) * 100) / 100;
 
+  const selectedProduct = products.find((p) => p.id === line?.productId);
+
   return (
-    <div className="flex justify-end gap-4 text-sm text-muted-foreground font-mono pt-1">
-      <span>Neto: {formatCurrency(neto)}</span>
-      <span>IVA: {formatCurrency(iva)}</span>
-      <span className="font-semibold text-foreground">Total: {formatCurrency(total)}</span>
+    <div className="py-3 px-2">
+      {/* Desktop: fila tipo tabla */}
+      <div className="hidden lg:grid lg:grid-cols-[minmax(200px,2fr)_80px_100px_90px_80px_100px_100px_100px_36px] gap-2 items-center">
+        {/* Producto + Descripción */}
+        <div className="min-w-0">
+          <FormField
+            control={form.control}
+            name={`lines.${index}.productId`}
+            render={({ field }) => (
+              <Select
+                onValueChange={(value) => {
+                  field.onChange(value);
+                  onProductSelect(index, value);
+                }}
+                value={field.value}
+              >
+                <SelectTrigger className="h-8 text-sm">
+                  <SelectValue placeholder="Seleccionar producto" />
+                </SelectTrigger>
+                <SelectContent>
+                  {products.map((product) => (
+                    <SelectItem key={product.id} value={product.id}>
+                      {product.code} - {product.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          />
+          {selectedProduct && (
+            <p className="text-xs text-muted-foreground truncate mt-0.5 pl-1">
+              {selectedProduct.name}
+            </p>
+          )}
+        </div>
+
+        {/* Cantidad */}
+        <Input
+          {...form.register(`lines.${index}.quantity`)}
+          type="text"
+          placeholder="1"
+          className="h-8 text-sm text-right font-mono"
+        />
+
+        {/* Precio Unit. */}
+        <Input
+          {...form.register(`lines.${index}.unitPrice`)}
+          type="text"
+          placeholder="0.00"
+          className="h-8 text-sm text-right font-mono"
+        />
+
+        {/* Dto. (% o $) */}
+        <div className="flex items-center gap-0.5">
+          <Input
+            {...form.register(`lines.${index}.discountPercent`, {
+              onChange: (e) => {
+                if (e.target.value) {
+                  form.setValue(`lines.${index}.discountAmount`, '');
+                }
+              },
+            })}
+            value={form.watch(`lines.${index}.discountPercent`) ?? ''}
+            type="number"
+            step="0.01"
+            min="0"
+            max="100"
+            placeholder="%"
+            className="h-8 text-sm text-right font-mono w-[52px]"
+          />
+          {discountPresets.length > 0 && (
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button type="button" variant="ghost" size="icon" className="h-7 w-7 shrink-0">
+                  <BadgePercent className="h-3.5 w-3.5" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-44 p-1.5" align="start">
+                <p className="text-xs font-medium text-muted-foreground mb-1.5 px-1">Presets</p>
+                {discountPresets.map((preset) => (
+                  <Button
+                    key={preset.id}
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="w-full justify-between text-xs h-7"
+                    onClick={() => {
+                      form.setValue(`lines.${index}.discountPercent`, preset.percentage.toString());
+                      form.setValue(`lines.${index}.discountAmount`, '');
+                    }}
+                  >
+                    <span>{preset.name}</span>
+                    <span className="text-muted-foreground">{preset.percentage}%</span>
+                  </Button>
+                ))}
+              </PopoverContent>
+            </Popover>
+          )}
+        </div>
+
+        {/* IVA % */}
+        <FormField
+          control={form.control}
+          name={`lines.${index}.vatRate`}
+          render={({ field }) => (
+            <Select onValueChange={field.onChange} value={field.value}>
+              <SelectTrigger className="h-8 text-sm font-mono">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="0">0%</SelectItem>
+                <SelectItem value="10.5">10.5%</SelectItem>
+                <SelectItem value="21">21%</SelectItem>
+                <SelectItem value="27">27%</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
+        />
+
+        {/* Subtotal (calculado) */}
+        <span className="text-sm font-mono text-right">{formatCurrency(neto)}</span>
+
+        {/* IVA (calculado) */}
+        <span className="text-sm font-mono text-right">{formatCurrency(iva)}</span>
+
+        {/* Total (calculado) */}
+        <span className="text-sm font-mono text-right font-semibold">{formatCurrency(total)}</span>
+
+        {/* Eliminar */}
+        <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={onRemove}>
+          <Trash2 className="h-3.5 w-3.5 text-destructive" />
+        </Button>
+      </div>
+
+      {/* Mobile: layout apilado */}
+      <div className="lg:hidden space-y-3">
+        <div className="flex items-start justify-between">
+          <span className="text-sm font-medium text-muted-foreground">Línea {index + 1}</span>
+          <Button type="button" variant="ghost" size="sm" onClick={onRemove}>
+            <Trash2 className="h-4 w-4 text-destructive" />
+          </Button>
+        </div>
+
+        <FormField
+          control={form.control}
+          name={`lines.${index}.productId`}
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel className="text-xs">Producto</FormLabel>
+              <Select
+                onValueChange={(value) => {
+                  field.onChange(value);
+                  onProductSelect(index, value);
+                }}
+                value={field.value}
+              >
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleccionar producto" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  {products.map((product) => (
+                    <SelectItem key={product.id} value={product.id}>
+                      {product.code} - {product.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FormItem>
+          )}
+        />
+
+        <div className="grid grid-cols-2 gap-3">
+          <FormItem>
+            <FormLabel className="text-xs">Cantidad</FormLabel>
+            <Input
+              {...form.register(`lines.${index}.quantity`)}
+              type="text"
+              placeholder="1"
+            />
+          </FormItem>
+          <FormItem>
+            <FormLabel className="text-xs">Precio Unit.</FormLabel>
+            <Input
+              {...form.register(`lines.${index}.unitPrice`)}
+              type="text"
+              placeholder="0.00"
+            />
+          </FormItem>
+          <FormItem>
+            <FormLabel className="text-xs">Dto %</FormLabel>
+            <Input
+              {...form.register(`lines.${index}.discountPercent`, {
+                onChange: (e) => {
+                  if (e.target.value) form.setValue(`lines.${index}.discountAmount`, '');
+                },
+              })}
+              value={form.watch(`lines.${index}.discountPercent`) ?? ''}
+              type="number"
+              step="0.01"
+              min="0"
+              max="100"
+              placeholder="0"
+            />
+          </FormItem>
+          <FormField
+            control={form.control}
+            name={`lines.${index}.vatRate`}
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-xs">IVA %</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="0">0%</SelectItem>
+                    <SelectItem value="10.5">10.5%</SelectItem>
+                    <SelectItem value="21">21%</SelectItem>
+                    <SelectItem value="27">27%</SelectItem>
+                  </SelectContent>
+                </Select>
+              </FormItem>
+            )}
+          />
+        </div>
+
+        <div className="flex flex-wrap justify-end gap-3 text-sm font-mono pt-1">
+          {discountValue > 0 && <span className="text-orange-600">Dto: -{formatCurrency(discountValue)}</span>}
+          <span className="text-muted-foreground">Neto: {formatCurrency(neto)}</span>
+          <span className="text-muted-foreground">IVA: {formatCurrency(iva)}</span>
+          <span className="font-semibold">Total: {formatCurrency(total)}</span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -85,7 +356,19 @@ interface InvoiceFormProps {
 export function InvoiceForm({ customers, pointsOfSale, products, mode = 'create', invoiceId, initialData }: InvoiceFormProps) {
   const router = useRouter();
   const isEdit = mode === 'edit';
-  const [totals, setTotals] = useState({ subtotal: 0, vatAmount: 0, total: 0 });
+  const [totals, setTotals] = useState({
+    subtotalBeforeDiscount: 0,
+    lineDiscounts: 0,
+    globalDiscount: 0,
+    subtotal: 0,
+    vatAmount: 0,
+    total: 0,
+  });
+
+  const { data: discountPresets = [] } = useQuery({
+    queryKey: ['discount-presets-select'],
+    queryFn: getDiscountPresetsForSelect,
+  });
   const [allowedVoucherTypes, setAllowedVoucherTypes] = useState<VoucherType[] | null>(null);
   const [loadingVoucherTypes, setLoadingVoucherTypes] = useState(false);
   const [originalInvoices, setOriginalInvoices] = useState<Awaited<ReturnType<typeof getCustomerInvoicesForSelect>>>([]);
@@ -111,28 +394,65 @@ export function InvoiceForm({ customers, pointsOfSale, products, mode = 'create'
     name: 'lines',
   });
 
-  // Recalcular totales cuando cambien las líneas
+  // Recalcular totales cuando cambien las líneas o descuentos globales
   useEffect(() => {
     const subscription = form.watch((value) => {
       if (value.lines) {
-        let subtotal = 0;
+        let subtotalBeforeDiscount = 0;
+        let totalLineDiscounts = 0;
         let vatAmount = 0;
 
-        value.lines.forEach((line) => {
-          if (line?.quantity && line?.unitPrice && line?.vatRate) {
-            const qty = parseFloat(line.quantity);
-            const price = parseFloat(line.unitPrice);
-            const vat = parseFloat(line.vatRate);
+        // Calcular subtotales por línea con descuentos
+        const lineDetails = value.lines.map((line) => {
+          const qty = parseFloat(line?.quantity ?? '0');
+          const price = parseFloat(line?.unitPrice ?? '0');
+          const vat = parseFloat(line?.vatRate ?? '0');
+          const dtoPercent = parseFloat(line?.discountPercent ?? '0');
+          const dtoAmount = parseFloat(line?.discountAmount ?? '0');
 
-            const lineSubtotal = qty * price;
-            const lineVat = lineSubtotal * (vat / 100);
+          const baseAmount = isNaN(qty) || isNaN(price) ? 0 : Math.round(qty * price * 100) / 100;
 
-            subtotal += lineSubtotal;
-            vatAmount += lineVat;
+          let discountValue = 0;
+          if (!isNaN(dtoPercent) && dtoPercent > 0) {
+            discountValue = Math.round(baseAmount * (dtoPercent / 100) * 100) / 100;
+          } else if (!isNaN(dtoAmount) && dtoAmount > 0) {
+            discountValue = Math.round(Math.min(dtoAmount, baseAmount) * 100) / 100;
           }
+
+          const lineSubtotal = Math.round((baseAmount - discountValue) * 100) / 100;
+
+          subtotalBeforeDiscount += baseAmount;
+          totalLineDiscounts += discountValue;
+
+          return { lineSubtotal, vat: isNaN(vat) ? 0 : vat };
         });
 
+        const sumLineSubtotals = Math.round(lineDetails.reduce((s, l) => s + l.lineSubtotal, 0) * 100) / 100;
+
+        // Descuento global
+        const globalDtoPercent = parseFloat(value.globalDiscountPercent ?? '0');
+        const globalDtoAmount = parseFloat(value.globalDiscountAmount ?? '0');
+        let globalDiscount = 0;
+        if (!isNaN(globalDtoPercent) && globalDtoPercent > 0) {
+          globalDiscount = Math.round(sumLineSubtotals * (globalDtoPercent / 100) * 100) / 100;
+        } else if (!isNaN(globalDtoAmount) && globalDtoAmount > 0) {
+          globalDiscount = Math.round(Math.min(globalDtoAmount, sumLineSubtotals) * 100) / 100;
+        }
+
+        // Distribuir descuento global proporcionalmente para calcular IVA
+        lineDetails.forEach((line) => {
+          const weight = sumLineSubtotals > 0 ? line.lineSubtotal / sumLineSubtotals : 0;
+          const lineGlobalDiscount = globalDiscount * weight;
+          const adjustedSubtotal = Math.max(line.lineSubtotal - lineGlobalDiscount, 0);
+          vatAmount += adjustedSubtotal * (line.vat / 100);
+        });
+
+        const subtotal = Math.round((sumLineSubtotals - globalDiscount) * 100) / 100;
+
         setTotals({
+          subtotalBeforeDiscount: Math.round(subtotalBeforeDiscount * 100) / 100,
+          lineDiscounts: Math.round(totalLineDiscounts * 100) / 100,
+          globalDiscount: Math.round(globalDiscount * 100) / 100,
           subtotal: Math.round(subtotal * 100) / 100,
           vatAmount: Math.round(vatAmount * 100) / 100,
           total: Math.round((subtotal + vatAmount) * 100) / 100,
@@ -211,6 +531,8 @@ export function InvoiceForm({ customers, pointsOfSale, products, mode = 'create'
       quantity: '1',
       unitPrice: '0',
       vatRate: '21',
+      discountPercent: '',
+      discountAmount: '',
     });
   };
 
@@ -428,165 +750,188 @@ export function InvoiceForm({ customers, pointsOfSale, products, mode = 'create'
           </div>
         </Card>
 
-        {/* Líneas de Factura */}
+        {/* Detalle de Productos/Servicios */}
         <Card className="p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold">Líneas de Factura</h3>
+            <h3 className="text-lg font-semibold">Detalle de Productos/Servicios</h3>
             <Button type="button" variant="outline" size="sm" onClick={handleAddLine}>
               <Plus className="h-4 w-4 mr-2" />
               Agregar Línea
             </Button>
           </div>
 
-          <div className="space-y-4">
-            {fields.map((field, index) => (
-              <div key={field.id} className="border rounded-lg p-4 space-y-4">
-                <div className="flex items-start justify-between">
-                  <span className="text-sm font-medium">Línea {index + 1}</span>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => remove(index)}
-                  >
-                    <Trash2 className="h-4 w-4 text-destructive" />
-                  </Button>
-                </div>
-
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                  <FormField
-                    control={form.control}
-                    name={`lines.${index}.productId`}
-                    render={({ field }) => (
-                      <FormItem className="col-span-2">
-                        <FormLabel>Producto</FormLabel>
-                        <Select
-                          onValueChange={(value) => {
-                            field.onChange(value);
-                            handleProductSelect(index, value);
-                          }}
-                          value={field.value}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Seleccionar producto" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {products.map((product) => (
-                              <SelectItem key={product.id} value={product.id}>
-                                {product.code} - {product.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name={`lines.${index}.quantity`}
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Cantidad</FormLabel>
-                        <FormControl>
-                          <Input {...field} type="text" placeholder="1" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name={`lines.${index}.unitPrice`}
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Precio Unit.</FormLabel>
-                        <FormControl>
-                          <Input {...field} type="text" placeholder="0.00" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-
-                <FormField
-                  control={form.control}
-                  name={`lines.${index}.description`}
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Descripción</FormLabel>
-                      <FormControl>
-                        <Input {...field} placeholder="Descripción del producto o servicio" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name={`lines.${index}.vatRate`}
-                  render={({ field }) => (
-                    <FormItem className="max-w-xs">
-                      <FormLabel>Alícuota IVA (%)</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Seleccionar" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="0">0% (Exento)</SelectItem>
-                          <SelectItem value="10.5">10.5%</SelectItem>
-                          <SelectItem value="21">21%</SelectItem>
-                          <SelectItem value="27">27%</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <_LineTotals form={form} index={index} />
+          {fields.length > 0 && (
+            <div className="overflow-x-auto">
+              {/* Header de tabla */}
+              <div className="hidden lg:grid lg:grid-cols-[minmax(200px,2fr)_80px_100px_90px_80px_100px_100px_100px_36px] gap-2 px-2 pb-2 border-b text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                <span>Producto / Descripción</span>
+                <span className="text-right">Cant.</span>
+                <span className="text-right">P. Unit.</span>
+                <span className="text-right">Dto.</span>
+                <span className="text-right">IVA %</span>
+                <span className="text-right">Subtotal</span>
+                <span className="text-right">IVA</span>
+                <span className="text-right">Total</span>
+                <span></span>
               </div>
-            ))}
 
-            {fields.length === 0 && (
-              <div className="text-center py-8 text-muted-foreground">
-                No hay líneas agregadas. Haga clic en "Agregar Línea" para comenzar.
+              <div className="divide-y">
+                {fields.map((field, index) => (
+                  <_InvoiceLineRow
+                    key={field.id}
+                    form={form}
+                    index={index}
+                    products={products}
+                    discountPresets={discountPresets}
+                    onProductSelect={handleProductSelect}
+                    onRemove={() => remove(index)}
+                  />
+                ))}
               </div>
-            )}
-          </div>
+            </div>
+          )}
+
+          {fields.length === 0 && (
+            <div className="text-center py-8 text-muted-foreground">
+              No hay líneas agregadas. Hacé clic en &quot;Agregar Línea&quot; para comenzar.
+            </div>
+          )}
         </Card>
+
+        {/* Descuento Global */}
+        {fields.length > 0 && (
+          <Card className="p-4">
+            <h4 className="text-sm font-semibold mb-3">Descuento Global</h4>
+            <div className="flex flex-wrap items-end gap-4">
+              <FormField
+                control={form.control}
+                name="globalDiscountPercent"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Dto %</FormLabel>
+                    <div className="flex items-center gap-1">
+                      <FormControl>
+                        <Input
+                          {...field}
+                          value={field.value ?? ''}
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          max="100"
+                          placeholder="0"
+                          className="w-20"
+                          onChange={(e) => {
+                            field.onChange(e.target.value);
+                            if (e.target.value) {
+                              form.setValue('globalDiscountAmount', '');
+                            }
+                          }}
+                        />
+                      </FormControl>
+                      {discountPresets.length > 0 && (
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0">
+                              <BadgePercent className="h-4 w-4" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-48 p-2" align="start">
+                            <div className="space-y-1">
+                              <p className="text-xs font-medium text-muted-foreground mb-2">Presets</p>
+                              {discountPresets.map((preset) => (
+                                <Button
+                                  key={preset.id}
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  className="w-full justify-between text-sm"
+                                  onClick={() => {
+                                    form.setValue('globalDiscountPercent', preset.percentage.toString());
+                                    form.setValue('globalDiscountAmount', '');
+                                  }}
+                                >
+                                  <span>{preset.name}</span>
+                                  <span className="text-muted-foreground">{preset.percentage}%</span>
+                                </Button>
+                              ))}
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                      )}
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="globalDiscountAmount"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Dto $</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        value={field.value ?? ''}
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        placeholder="0"
+                        className="w-24"
+                        onChange={(e) => {
+                          field.onChange(e.target.value);
+                          if (e.target.value) {
+                            form.setValue('globalDiscountPercent', '');
+                          }
+                        }}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+          </Card>
+        )}
 
         {/* Totales */}
         {fields.length > 0 && (
           <Card className="p-6">
             <h3 className="text-lg font-semibold mb-4">Totales</h3>
             <div className="space-y-2 max-w-sm ml-auto">
+              {(totals.lineDiscounts > 0 || totals.globalDiscount > 0) && (
+                <>
+                  <div className="flex justify-between">
+                    <span>Subtotal (antes dto):</span>
+                    <span className="font-mono">{formatCurrency(totals.subtotalBeforeDiscount)}</span>
+                  </div>
+                  {totals.lineDiscounts > 0 && (
+                    <div className="flex justify-between text-orange-600">
+                      <span>Descuento líneas:</span>
+                      <span className="font-mono">-{formatCurrency(totals.lineDiscounts)}</span>
+                    </div>
+                  )}
+                  {totals.globalDiscount > 0 && (
+                    <div className="flex justify-between text-orange-600">
+                      <span>Descuento global:</span>
+                      <span className="font-mono">-{formatCurrency(totals.globalDiscount)}</span>
+                    </div>
+                  )}
+                </>
+              )}
               <div className="flex justify-between">
-                <span>Subtotal:</span>
-                <span className="font-mono">
-                  ${totals.subtotal.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
-                </span>
+                <span>Base Imponible:</span>
+                <span className="font-mono">{formatCurrency(totals.subtotal)}</span>
               </div>
               <div className="flex justify-between">
                 <span>IVA:</span>
-                <span className="font-mono">
-                  ${totals.vatAmount.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
-                </span>
+                <span className="font-mono">{formatCurrency(totals.vatAmount)}</span>
               </div>
               <Separator />
               <div className="flex justify-between text-lg font-semibold">
                 <span>Total:</span>
-                <span className="font-mono">
-                  ${totals.total.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
-                </span>
+                <span className="font-mono">{formatCurrency(totals.total)}</span>
               </div>
             </div>
           </Card>
