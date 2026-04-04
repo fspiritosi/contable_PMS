@@ -31,8 +31,7 @@ export type IndustryType = (typeof INDUSTRY_TYPES)[keyof typeof INDUSTRY_TYPES];
  * Todo módulo que NO esté aquí es universal (visible para todos).
  */
 export const INDUSTRY_MODULES: Record<string, IndustryType[]> = {
-  // Se llena cuando se creen módulos específicos, ej:
-  // 'commercial.oem-codes': ['AUTO_PARTS'],
+  'commercial.equivalences': ['AUTO_PARTS'],
 };
 
 // ============================================
@@ -47,10 +46,8 @@ export const INDUSTRY_MODULES: Record<string, IndustryType[]> = {
  * Todo feature que NO esté aquí es universal.
  */
 export const INDUSTRY_FEATURES: Record<string, IndustryType[]> = {
-  // Se llena cuando se implementen features específicas, ej:
-  // 'products.triple-coding': ['AUTO_PARTS'],
-  // 'products.grouped-parts': ['AUTO_PARTS'],
-  // 'products.compare-prices': ['AUTO_PARTS'],
+  'products.triple-coding': ['AUTO_PARTS'],
+  'products.equivalences': ['AUTO_PARTS'],
 };
 
 // ============================================

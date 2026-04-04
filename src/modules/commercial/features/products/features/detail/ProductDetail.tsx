@@ -5,11 +5,13 @@ import { getProductById } from '../list/actions.server';
 import { Button } from '@/shared/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/card';
 import { Badge } from '@/shared/components/ui/badge';
-import { ArrowLeft, Pencil } from 'lucide-react';
+import { Alert, AlertDescription } from '@/shared/components/ui/alert';
+import { ArrowLeft, Pencil, AlertTriangle } from 'lucide-react';
 import {
   PRODUCT_TYPE_LABELS,
   PRODUCT_STATUS_LABELS,
   UNIT_OF_MEASURE_LABELS,
+  getStockLevel,
 } from '../../shared/types';
 
 interface ProductDetailProps {
@@ -45,6 +47,45 @@ export async function ProductDetail({ productId }: ProductDetailProps) {
           </Button>
         </Link>
       </div>
+
+      {/* Alerta de stock bajo */}
+      {(() => {
+        const level = getStockLevel(product);
+        if (level === 'out') {
+          return (
+            <Alert variant="destructive">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>
+                <strong>Sin stock.</strong> Este producto no tiene unidades disponibles.
+                Stock mínimo configurado: {product.minStock || 0}.
+              </AlertDescription>
+            </Alert>
+          );
+        }
+        if (level === 'critical') {
+          return (
+            <Alert variant="destructive">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>
+                <strong>Stock crítico.</strong> El stock actual ({product.currentStock ?? 0}) está por debajo
+                del mínimo configurado ({product.minStock || 0}). Déficit: {(product.minStock || 0) - (product.currentStock ?? 0)} unidades.
+              </AlertDescription>
+            </Alert>
+          );
+        }
+        if (level === 'warning') {
+          return (
+            <Alert>
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>
+                <strong>Stock bajo.</strong> El stock actual ({product.currentStock ?? 0}) está cerca
+                del mínimo configurado ({product.minStock || 0}).
+              </AlertDescription>
+            </Alert>
+          );
+        }
+        return null;
+      })()}
 
       <div className="grid gap-4 md:grid-cols-2">
         {/* Información Básica */}
@@ -144,6 +185,21 @@ export async function ProductDetail({ productId }: ProductDetailProps) {
 
             {product.trackStock && (
               <>
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Stock Actual</p>
+                  {(() => {
+                    const level = getStockLevel(product);
+                    const stockValue = product.currentStock ?? 0;
+                    if (level === 'out' || level === 'critical') {
+                      return <p className="text-2xl font-bold text-destructive">{stockValue}</p>;
+                    }
+                    if (level === 'warning') {
+                      return <p className="text-2xl font-bold text-yellow-600">{stockValue}</p>;
+                    }
+                    return <p className="text-2xl font-bold">{stockValue}</p>;
+                  })()}
+                </div>
+
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Stock Mínimo</p>
                   <p className="text-sm">{product.minStock || 0}</p>

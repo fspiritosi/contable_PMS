@@ -45,6 +45,7 @@ export const MODULES = {
   'commercial.treasury.projections': 'commercial.treasury.projections',
   'commercial.treasury.cashflow': 'commercial.treasury.cashflow',
   'commercial.expenses': 'commercial.expenses',
+  'commercial.equivalences': 'commercial.equivalences',
 
   // Configuración de Empresa - General
   'company.general.users': 'company.general.users',
@@ -138,6 +139,7 @@ export const MODULE_LABELS: Record<Module, string> = {
   'commercial.treasury.projections': 'Proyecciones',
   'commercial.treasury.cashflow': 'Flujo de Caja',
   'commercial.expenses': 'Gastos',
+  'commercial.equivalences': 'Equivalencias',
 
   'company.general.users': 'Usuarios',
   'company.general.roles': 'Roles',
@@ -218,6 +220,7 @@ export const MODULE_GROUPS = {
       'commercial.treasury.projections',
       'commercial.treasury.cashflow',
       'commercial.expenses',
+      'commercial.equivalences',
     ] as Module[],
   },
   configuracionGeneral: {

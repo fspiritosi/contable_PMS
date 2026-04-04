@@ -16,7 +16,7 @@ import {
   SelectValue,
 } from '@/shared/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/card';
-import { Plus, Trash2, AlertCircle } from 'lucide-react';
+import { Plus, Trash2, AlertCircle, ArrowDownToLine } from 'lucide-react';
 import { toast } from 'sonner';
 import { createReceiptSchema, type CreateReceiptFormData, PAYMENT_METHOD_LABELS, WITHHOLDING_TAX_TYPE_LABELS } from '../../../../shared/validators';
 import { createReceipt, getPendingInvoices, getAvailableCashRegisters, getAvailableBankAccounts } from '../../actions.server';
@@ -150,6 +150,21 @@ export function CreateReceiptModal({ onSuccess }: CreateReceiptModalProps) {
   };
 
   const { totalItems, totalPayments, totalWithholdings, difference } = calculateTotals();
+
+  const getRemainingForPayment = (currentIndex: number) => {
+    const items = form.watch('items');
+    const payments = form.watch('payments');
+    const withholdings = form.watch('withholdings');
+
+    const totalItemsCents = items.reduce((sum, item) => sum + Math.round(parseFloat(item.amount || '0') * 100), 0);
+    const totalWithholdingsCents = withholdings.reduce((sum, w) => sum + Math.round(parseFloat(w.amount || '0') * 100), 0);
+    const otherPaymentsCents = payments.reduce((sum, payment, idx) => {
+      if (idx === currentIndex) return sum;
+      return sum + Math.round(parseFloat(payment.amount || '0') * 100);
+    }, 0);
+
+    return Math.max(0, (totalItemsCents - totalWithholdingsCents - otherPaymentsCents) / 100);
+  };
 
   const onSubmit = async (data: CreateReceiptFormData) => {
     try {
@@ -421,9 +436,25 @@ export function CreateReceiptModal({ onSuccess }: CreateReceiptModalProps) {
                           render={({ field }) => (
                             <FormItem>
                               <FormLabel>Monto *</FormLabel>
-                              <FormControl>
-                                <Input type="number" step="0.01" placeholder="0.00" {...field} />
-                              </FormControl>
+                              <div className="flex gap-1">
+                                <FormControl>
+                                  <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                                </FormControl>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="px-2 text-xs shrink-0"
+                                  onClick={() => {
+                                    const remaining = getRemainingForPayment(index);
+                                    form.setValue(`payments.${index}.amount`, remaining.toFixed(2));
+                                  }}
+                                  title="Usar monto restante"
+                                >
+                                  <ArrowDownToLine className="h-3 w-3 mr-1" />
+                                  Resto
+                                </Button>
+                              </div>
                               <FormMessage />
                             </FormItem>
                           )}

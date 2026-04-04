@@ -132,6 +132,7 @@ model Company {
   suppliers         Supplier[]
   productCategories ProductCategory[]
   products          Product[]
+  productGroups     ProductGroup[]
   priceLists        PriceList[]
   warehouses        Warehouse[]
   stockMovements    StockMovement[]
@@ -1936,6 +1937,14 @@ model Product {
   brand               String?
   model               String?
 
+  // Códigos adicionales (industria: AUTO_PARTS)
+  oemCode             String?         @map("oem_code")       // Código original del fabricante
+  auxiliaryCode       String?         @map("auxiliary_code")  // Código del proveedor
+
+  // Grupo de equivalencia (industria: AUTO_PARTS)
+  productGroupId      String?         @map("product_group_id") @db.Uuid
+  productGroup        ProductGroup?   @relation(fields: [productGroupId], references: [id])
+
   // Estado
   status              ProductStatus   @default(ACTIVE)
 
@@ -1957,7 +1966,30 @@ model Product {
   updatedAt           DateTime        @updatedAt @map("updated_at")
 
   @@unique([companyId, code])
+  @@index([companyId, oemCode])
+  @@index([companyId, auxiliaryCode])
   @@map("products")
+}
+
+// ============================================
+// MÓDULO COMERCIAL - Grupos de Equivalencia (AUTO_PARTS)
+// ============================================
+
+model ProductGroup {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId   String   @map("company_id") @db.Uuid
+  name        String   // ej: "Filtro aceite motor 1.6"
+  oemCode     String?  @map("oem_code") // Código OEM de referencia del grupo
+  notes       String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  products Product[]
+
+  @@unique([companyId, name])
+  @@index([companyId])
+  @@map("product_groups")
 }
 
 // ============================================
