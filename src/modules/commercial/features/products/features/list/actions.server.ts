@@ -866,6 +866,39 @@ export async function bulkUpdateProducts(input: BulkUpdateProductsInput) {
 /**
  * Retorna la definición de columnas para la plantilla de importación de productos
  */
+// ============================================================================
+// LABEL PRINTING
+// ============================================================================
+
+/**
+ * Obtiene productos para impresión de etiquetas con código de barras
+ */
+export async function getProductsForLabels(productIds: string[]) {
+  await checkPermission('commercial.products', 'view', { redirect: true });
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  if (!productIds.length) throw new Error('Seleccione al menos un producto');
+
+  const products = await prisma.product.findMany({
+    where: { id: { in: productIds }, companyId },
+    select: {
+      id: true,
+      code: true,
+      name: true,
+      salePrice: true,
+      salePriceWithTax: true,
+      barcode: true,
+    },
+  });
+
+  return products.map((p) => ({
+    ...p,
+    salePrice: Number(p.salePrice),
+    salePriceWithTax: Number(p.salePriceWithTax),
+  }));
+}
+
 export async function getProductImportColumns() {
   return [
     { key: 'code', label: 'Código', required: true, example: 'FIL-001', width: 15 },

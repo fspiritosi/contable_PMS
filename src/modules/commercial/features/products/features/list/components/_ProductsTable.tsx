@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { AlertTriangle, DollarSign, FileSpreadsheet, Pencil, Plus } from 'lucide-react';
+import { AlertTriangle, DollarSign, FileSpreadsheet, Pencil, Plus, Scale, Tag } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { useIndustry } from '@/providers/IndustryProvider';
@@ -32,6 +32,8 @@ import {
 import { deleteProduct } from '../actions.server';
 import { _BulkEditModal } from './_BulkEditModal';
 import { _BulkPriceAdjustModal } from './_BulkPriceAdjustModal';
+import { _OemCompareModal } from './_OemCompareModal';
+import { _LabelPrintModal } from './_LabelPrintModal';
 import { _ProductImportModal } from './_ProductImportModal';
 
 interface FacetCounts {
@@ -59,6 +61,9 @@ export function _ProductsTable({ data, totalRows, searchParams, permissions, fac
   const [bulkPriceOpen, setBulkPriceOpen] = useState(false);
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [oemCompareOpen, setOemCompareOpen] = useState(false);
+  const [labelPrintOpen, setLabelPrintOpen] = useState(false);
+  const showCompareButton = isFeatureAvailable('products.compare-prices');
 
   const isLowStockActive = urlSearchParams.get('stockLevel') === 'low';
 
@@ -217,6 +222,24 @@ export function _ProductsTable({ data, totalRows, searchParams, permissions, fac
                 </Button>
               </>
             )}
+            {selectedIds.length > 0 && permissions.canView && (
+              <Button
+                variant="outline"
+                onClick={() => setLabelPrintOpen(true)}
+              >
+                <Tag className="h-4 w-4 mr-2" />
+                Imprimir Etiquetas ({selectedIds.length})
+              </Button>
+            )}
+            {selectedIds.length === 0 && showCompareButton && (
+              <Button
+                variant="outline"
+                onClick={() => setOemCompareOpen(true)}
+              >
+                <Scale className="h-4 w-4 mr-2" />
+                Comparar por OEM
+              </Button>
+            )}
             {selectedIds.length === 0 && permissions.canCreate && (
               <Button
                 variant="outline"
@@ -235,6 +258,14 @@ export function _ProductsTable({ data, totalRows, searchParams, permissions, fac
           </>
         }
       />
+
+      {/* Modal de comparación por OEM */}
+      {showCompareButton && (
+        <_OemCompareModal
+          open={oemCompareOpen}
+          onOpenChange={setOemCompareOpen}
+        />
+      )}
 
       {/* Modal de importación desde Excel */}
       <_ProductImportModal
@@ -257,6 +288,13 @@ export function _ProductsTable({ data, totalRows, searchParams, permissions, fac
         open={bulkPriceOpen}
         onOpenChange={setBulkPriceOpen}
         onSuccess={handleBulkPriceSuccess}
+      />
+
+      {/* Modal de impresión de etiquetas */}
+      <_LabelPrintModal
+        selectedIds={selectedIds}
+        open={labelPrintOpen}
+        onOpenChange={setLabelPrintOpen}
       />
 
       {/* Diálogo de confirmación para eliminar */}

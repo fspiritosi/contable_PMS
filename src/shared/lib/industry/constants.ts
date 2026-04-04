@@ -48,6 +48,7 @@ export const INDUSTRY_MODULES: Record<string, IndustryType[]> = {
 export const INDUSTRY_FEATURES: Record<string, IndustryType[]> = {
   'products.triple-coding': ['AUTO_PARTS'],
   'products.equivalences': ['AUTO_PARTS'],
+  'products.compare-prices': ['AUTO_PARTS'],
 };
 
 // ============================================

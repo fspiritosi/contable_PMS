@@ -341,3 +341,192 @@ export async function deleteEquivalence(id: string) {
     throw new Error('Error al eliminar grupo de equivalencia');
   }
 }
+
+// ============================================================================
+// COMPARACIÓN DE PRECIOS
+// ============================================================================
+
+export type SupplierPriceComparison = {
+  productId: string;
+  productCode: string;
+  productName: string;
+  brand: string | null;
+  oemCode: string | null;
+  auxiliaryCode: string | null;
+  salePrice: number;
+  costPrice: number;
+  lastPurchasePrice: number | null;
+  lastPurchaseDate: Date | null;
+  supplierName: string | null;
+  margin: number | null;
+  marginPercent: number | null;
+};
+
+/**
+ * Construye datos de comparación de precios para una lista de productos.
+ * Busca la última línea de factura de compra (CONFIRMED) para cada producto.
+ */
+async function buildPriceComparison(
+  productIds: string[],
+  companyId: string,
+): Promise<SupplierPriceComparison[]> {
+  if (productIds.length === 0) return [];
+
+  const products = await prisma.product.findMany({
+    where: { id: { in: productIds }, companyId },
+    select: {
+      id: true,
+      code: true,
+      name: true,
+      brand: true,
+      oemCode: true,
+      auxiliaryCode: true,
+      salePrice: true,
+      costPrice: true,
+      purchaseInvoiceLines: {
+        where: {
+          invoice: {
+            status: 'CONFIRMED',
+            companyId,
+          },
+        },
+        select: {
+          unitCost: true,
+          invoice: {
+            select: {
+              issueDate: true,
+              supplier: {
+                select: {
+                  tradeName: true,
+                  businessName: true,
+                },
+              },
+            },
+          },
+        },
+        orderBy: { invoice: { issueDate: 'desc' } },
+        take: 1,
+      },
+    },
+  });
+
+  const results: SupplierPriceComparison[] = products.map((p) => {
+    const lastPurchase = p.purchaseInvoiceLines[0] ?? null;
+    const lastPurchasePrice = lastPurchase ? Number(lastPurchase.unitCost) : null;
+    const salePrice = Number(p.salePrice);
+    const costPrice = Number(p.costPrice);
+    const referencePrice = lastPurchasePrice ?? costPrice;
+    const margin = referencePrice > 0 ? salePrice - referencePrice : null;
+    const marginPercent =
+      margin !== null && referencePrice > 0
+        ? (margin / referencePrice) * 100
+        : null;
+
+    return {
+      productId: p.id,
+      productCode: p.code,
+      productName: p.name,
+      brand: p.brand,
+      oemCode: p.oemCode,
+      auxiliaryCode: p.auxiliaryCode,
+      salePrice,
+      costPrice,
+      lastPurchasePrice,
+      lastPurchaseDate: lastPurchase?.invoice.issueDate ?? null,
+      supplierName:
+        lastPurchase?.invoice.supplier.tradeName ??
+        lastPurchase?.invoice.supplier.businessName ??
+        null,
+      margin,
+      marginPercent,
+    };
+  });
+
+  // Sort by lastPurchasePrice asc (cheapest first), nulls last
+  results.sort((a, b) => {
+    if (a.lastPurchasePrice === null && b.lastPurchasePrice === null) return 0;
+    if (a.lastPurchasePrice === null) return 1;
+    if (b.lastPurchasePrice === null) return -1;
+    return a.lastPurchasePrice - b.lastPurchasePrice;
+  });
+
+  return results;
+}
+
+/**
+ * Comparación de precios para un grupo de equivalencia
+ */
+export async function getSupplierPriceComparison(productGroupId: string) {
+  await checkPermission('commercial.equivalences', 'view', { redirect: true });
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  try {
+    const group = await prisma.productGroup.findFirst({
+      where: { id: productGroupId, companyId },
+      select: {
+        id: true,
+        name: true,
+        oemCode: true,
+        products: {
+          select: { id: true },
+        },
+      },
+    });
+
+    if (!group) throw new Error('Grupo no encontrado');
+
+    const productIds = group.products.map((p) => p.id);
+    const comparison = await buildPriceComparison(productIds, companyId);
+
+    return {
+      groupName: group.name,
+      groupOemCode: group.oemCode,
+      products: comparison,
+    };
+  } catch (error) {
+    logger.error('Error al obtener comparación de precios', {
+      data: { error, productGroupId },
+    });
+    if (error instanceof Error) throw error;
+    throw new Error('Error al obtener comparación de precios');
+  }
+}
+
+/**
+ * Comparación de precios por código OEM (sin requerir grupo de equivalencia)
+ */
+export async function compareByOemCode(oemCode: string) {
+  await checkPermission('commercial.products', 'view', { redirect: true });
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  try {
+    if (!oemCode.trim()) throw new Error('El código OEM es requerido');
+
+    const products = await prisma.product.findMany({
+      where: {
+        companyId,
+        oemCode: { equals: oemCode.trim(), mode: 'insensitive' },
+        status: 'ACTIVE',
+      },
+      select: { id: true },
+    });
+
+    if (products.length === 0) return { oemCode: oemCode.trim(), products: [] };
+
+    const productIds = products.map((p) => p.id);
+    const comparison = await buildPriceComparison(productIds, companyId);
+
+    return {
+      oemCode: oemCode.trim(),
+      products: comparison,
+    };
+  } catch (error) {
+    logger.error('Error al comparar por código OEM', {
+      data: { error, oemCode },
+    });
+    if (error instanceof Error) throw error;
+    throw new Error('Error al comparar por código OEM');
+  }
+}
