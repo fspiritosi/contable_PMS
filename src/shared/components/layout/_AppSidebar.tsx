@@ -168,6 +168,11 @@ const navMain: NavItemWithSub[] = [
             href: '/dashboard/commercial/reports',
             module: 'commercial',
           },
+          {
+            title: 'Informes Impositivos',
+            href: '/dashboard/commercial/reports/tax',
+            module: 'commercial.invoices',
+          },
         ],
       },
       {
