@@ -69,11 +69,16 @@ jobs:
           GHCR_PAT: ${{ secrets.GHCR_PAT }}
           GHCR_USER: ${{ secrets.GHCR_USER }}
           VPS_HOST: ${{ secrets.VPS_HOST }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
           ssh root@${VPS_HOST} "
             echo '${GHCR_PAT}' | docker login ghcr.io -u '${GHCR_USER}' --password-stdin &&
             docker pull ghcr.io/codecontrolsas/baxer-n:latest &&
             docker tag ghcr.io/codecontrolsas/baxer-n:latest baxer-next-r5wztq:latest &&
+            docker run --rm \
+              --network dokploy-network \
+              ghcr.io/codecontrolsas/baxer-n:latest \
+              npx prisma db push --url '${DATABASE_URL}' --accept-data-loss &&
             docker service update --image baxer-next-r5wztq:latest --force baxer-next-r5wztq &&
             docker image prune -f
           "
