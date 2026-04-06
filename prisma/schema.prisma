@@ -90,6 +90,7 @@ model Company {
   logoUrl         String?  @map("logo_url")
   isActive        Boolean  @default(true) @map("is_active")
   isSingleCompany Boolean  @default(false) @map("is_single_company") // Modo empresa única - sin selector de empresas
+  activeModules   String[] @default([]) @map("active_modules") // Módulos activos (vacío = todos activos)
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
