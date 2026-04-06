@@ -216,15 +216,74 @@ Ya tiene `afipEnabled Boolean`. Agregar:
 | Config UI | Media | Upload certificados, test conexión |
 | Integración confirmación | Media | Modificar flujo existente |
 | PDF con código AFIP | Baja | Barcode interleaved 2of5 |
+| Consulta CUIT (WSPCI) | Baja | REST, reutiliza auth WSAA |
 | Testing/homologación | Alta | Requiere CUIT de prueba AFIP |
 
 **Estimación total:** Proyecto de 2-3 sesiones dedicadas.
 
 ---
 
-## 8. Qué NO incluye
+## 8. Consulta de CUIT en Padrón AFIP (WSPCI)
 
-- FCEM (Factura de Crédito Electrónica MiPyME) — requiere otro web service
+Servicio REST que consulta datos de un contribuyente por CUIT. Reutiliza la autenticación WSAA.
+
+### Endpoint
+
+| Ambiente | URL |
+|----------|-----|
+| Testing | https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA5 |
+| Producción | https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA5 |
+
+### Flujo
+
+1. Obtener token WSAA (mismo cache que WSFE, servicio destino: `ws_sr_padron_a5`)
+2. GET al endpoint con CUIT y token
+3. Parsear respuesta: razón social, condición fiscal, domicilio fiscal, actividades económicas
+
+### Integración en UI
+
+- En el formulario de crear/editar cliente: botón "Consultar AFIP" junto al campo CUIT
+- Al hacer click: busca el CUIT, autocompleta nombre, condición fiscal (mapeo de códigos AFIP a CustomerTaxCondition), y domicilio
+- Si el CUIT no existe en AFIP: mostrar error "CUIT no encontrado"
+- Si no hay certificado AFIP configurado: botón deshabilitado
+
+### Archivos
+
+- `src/shared/lib/afip/wspci-client.ts` — Cliente REST para consulta de CUIT
+- Modificar formulario de cliente para agregar botón de consulta
+
+---
+
+## 9. Nota de Crédito/Débito Electrónica (Fase posterior)
+
+Usa el mismo WSFE (`FECAESolicitar`) pero con diferencias en el flujo. Se implementa **después** de que la facturación electrónica esté funcionando.
+
+### Diferencias con factura
+
+- `CbteTipo` diferente: NC A=3, NC B=8, NC C=13, ND A=2, ND B=7, ND C=12
+- Campo `CbtesAsoc` obligatorio: debe referenciar la factura original (tipo + PdV + número)
+- El sistema ya tiene `originalInvoiceId` en SalesInvoice para vincular NC/ND con su factura
+
+### Flujo
+
+1. Usuario crea NC/ND vinculada a una factura (flujo existente)
+2. Al confirmar, se solicita CAE igual que una factura
+3. Se envía `CbtesAsoc` con los datos de la factura original
+4. Si la factura original tiene CAE, incluir `CAE` en `CbtesAsoc`
+
+### Implementación
+
+- Reutiliza todo el flujo de WSFE (auth, client, mappers)
+- Solo requiere extender `afip-mappers.ts` para mapear `CbtesAsoc`
+- Modificar la validación para requerir factura original cuando se emite NC/ND electrónica
+
+**Complejidad: Baja** — es una extensión del flujo de facturas, no un sistema nuevo.
+
+---
+
+## 10. Qué NO incluye
+
+- FCEM (Factura de Crédito Electrónica MiPyME) — requiere web service WSFECRED
 - Percepciones/retenciones automáticas en factura
-- Nota de crédito/débito electrónica asociada (usa mismo WSFE pero flujo diferente)
-- Consulta de CUIT en padrón AFIP (WSPCI)
+- Consulta masiva de CUITs
+- Exportación de libro IVA digital para AFIP (WSLIDI)
