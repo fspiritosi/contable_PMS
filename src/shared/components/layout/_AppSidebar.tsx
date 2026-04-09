@@ -226,7 +226,7 @@ const navMain: NavItemWithSub[] = [
             module: 'commercial.treasury.cash-registers',
           },
           {
-            title: 'Bancos',
+            title: 'Cuentas',
             href: '/dashboard/commercial/treasury/bank-accounts',
             module: 'commercial.treasury.bank-accounts',
           },
@@ -244,6 +244,11 @@ const navMain: NavItemWithSub[] = [
             title: 'Órdenes de Pago',
             href: '/dashboard/commercial/treasury/payment-orders',
             module: 'commercial.treasury.payment-orders',
+          },
+          {
+            title: 'Retenciones',
+            href: '/dashboard/commercial/treasury/withholdings',
+            module: 'commercial.treasury.receipts',
           },
           {
             title: 'Proyecciones',

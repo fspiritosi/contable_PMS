@@ -62,6 +62,7 @@ export function _SupplierAccountStatementTab({ accountStatement }: SupplierAccou
       cell: ({ row }) => (
         <Link
           href={`/dashboard/commercial/purchases/${row.original.id}`}
+          target="_blank"
           className="font-medium text-blue-600 hover:text-blue-800 hover:underline"
         >
           {row.original.fullNumber}

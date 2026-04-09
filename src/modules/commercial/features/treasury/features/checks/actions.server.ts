@@ -261,6 +261,12 @@ export async function depositCheck(data: DepositCheckFormData) {
         },
       });
 
+      // Actualizar saldo de la cuenta bancaria (cheque deposita = ingreso)
+      await tx.bankAccount.update({
+        where: { id: data.bankAccountId },
+        data: { balance: { increment: check.amount } },
+      });
+
       // Actualizar cheque
       await tx.check.update({
         where: { id: check.id },
@@ -304,13 +310,7 @@ export async function clearCheck(checkId: string) {
     if (!check.bankAccountId) throw new Error('Cheque sin cuenta bancaria asociada');
 
     await prisma.$transaction(async (tx) => {
-      // Actualizar balance de la cuenta bancaria
-      await tx.bankAccount.update({
-        where: { id: check.bankAccountId! },
-        data: { balance: { increment: check.amount } },
-      });
-
-      // Marcar movimiento bancario como conciliado
+      // Marcar movimiento bancario como conciliado (el balance se recalcula dinámicamente)
       if (check.bankMovementId) {
         await tx.bankMovement.update({
           where: { id: check.bankMovementId },

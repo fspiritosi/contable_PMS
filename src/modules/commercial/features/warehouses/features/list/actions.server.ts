@@ -563,6 +563,134 @@ export async function getStockMovements(filters?: {
   }
 }
 
+/**
+ * Resuelve los números de comprobante para movimientos de stock
+ * Agrupa por tipo de referencia y hace batch queries
+ */
+async function resolveReferenceNumbers(
+  movements: Array<{ id: string; referenceType: string | null; referenceId: string | null }>
+): Promise<Map<string, string>> {
+  const result = new Map<string, string>();
+
+  // Agrupar referenceIds por tipo
+  const byType = new Map<string, Array<{ movementId: string; refId: string }>>();
+  for (const m of movements) {
+    if (!m.referenceType || !m.referenceId) continue;
+    const entries = byType.get(m.referenceType) || [];
+    entries.push({ movementId: m.id, refId: m.referenceId });
+    byType.set(m.referenceType, entries);
+  }
+
+  // Resolver cada tipo en batch
+  const promises: Promise<void>[] = [];
+
+  const salesIds = byType.get('sales_invoice') || byType.get('sales_invoice_cancel') || [];
+  const allSalesIds = [
+    ...(byType.get('sales_invoice') || []),
+    ...(byType.get('sales_invoice_cancel') || []),
+  ];
+  if (allSalesIds.length > 0) {
+    promises.push(
+      prisma.salesInvoice
+        .findMany({
+          where: { id: { in: allSalesIds.map((e) => e.refId) } },
+          select: { id: true, fullNumber: true },
+        })
+        .then((docs) => {
+          const docMap = new Map(docs.map((d) => [d.id, d.fullNumber]));
+          for (const entry of allSalesIds) {
+            const num = docMap.get(entry.refId);
+            if (num) result.set(entry.movementId, num);
+          }
+        })
+    );
+  }
+
+  const allPurchaseIds = [
+    ...(byType.get('purchase_invoice') || []),
+    ...(byType.get('purchase_invoice_cancel') || []),
+  ];
+  if (allPurchaseIds.length > 0) {
+    promises.push(
+      prisma.purchaseInvoice
+        .findMany({
+          where: { id: { in: allPurchaseIds.map((e) => e.refId) } },
+          select: { id: true, fullNumber: true },
+        })
+        .then((docs) => {
+          const docMap = new Map(docs.map((d) => [d.id, d.fullNumber]));
+          for (const entry of allPurchaseIds) {
+            const num = docMap.get(entry.refId);
+            if (num) result.set(entry.movementId, num);
+          }
+        })
+    );
+  }
+
+  const allDeliveryIds = [
+    ...(byType.get('delivery_note') || []),
+    ...(byType.get('delivery_note_cancellation') || []),
+  ];
+  if (allDeliveryIds.length > 0) {
+    promises.push(
+      prisma.deliveryNote
+        .findMany({
+          where: { id: { in: allDeliveryIds.map((e) => e.refId) } },
+          select: { id: true, fullNumber: true },
+        })
+        .then((docs) => {
+          const docMap = new Map(docs.map((d) => [d.id, d.fullNumber]));
+          for (const entry of allDeliveryIds) {
+            const num = docMap.get(entry.refId);
+            if (num) result.set(entry.movementId, num);
+          }
+        })
+    );
+  }
+
+  const allReceivingIds = [
+    ...(byType.get('receiving_note') || []),
+    ...(byType.get('receiving_note_cancellation') || []),
+  ];
+  if (allReceivingIds.length > 0) {
+    promises.push(
+      prisma.receivingNote
+        .findMany({
+          where: { id: { in: allReceivingIds.map((e) => e.refId) } },
+          select: { id: true, fullNumber: true },
+        })
+        .then((docs) => {
+          const docMap = new Map(docs.map((d) => [d.id, d.fullNumber]));
+          for (const entry of allReceivingIds) {
+            const num = docMap.get(entry.refId);
+            if (num) result.set(entry.movementId, num);
+          }
+        })
+    );
+  }
+
+  const transferIds = byType.get('transfer') || [];
+  if (transferIds.length > 0) {
+    promises.push(
+      prisma.stockTransfer
+        .findMany({
+          where: { id: { in: transferIds.map((e) => e.refId) } },
+          select: { id: true, transferNumber: true },
+        })
+        .then((docs) => {
+          const docMap = new Map(docs.map((d) => [d.id, d.transferNumber]));
+          for (const entry of transferIds) {
+            const num = docMap.get(entry.refId);
+            if (num) result.set(entry.movementId, num);
+          }
+        })
+    );
+  }
+
+  await Promise.all(promises);
+  return result;
+}
+
 export async function getStockMovementsPaginated(
   searchParams: DataTableSearchParams,
   filters?: {
@@ -647,10 +775,14 @@ export async function getStockMovementsPaginated(
       prisma.stockMovement.count({ where }),
     ]);
 
+    // Resolver números de comprobante para cada referencia
+    const referenceNumbers = await resolveReferenceNumbers(data);
+
     return {
       data: data.map((m) => ({
         ...m,
         quantity: Number(m.quantity),
+        referenceNumber: referenceNumbers.get(m.id) || null,
       })) as StockMovement[],
       total,
     };

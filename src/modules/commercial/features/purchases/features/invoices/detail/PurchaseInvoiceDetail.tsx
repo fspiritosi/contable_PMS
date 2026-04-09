@@ -4,8 +4,8 @@ import { Button } from '@/shared/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/card';
 import { Badge } from '@/shared/components/ui/badge';
 import { Alert, AlertDescription } from '@/shared/components/ui/alert';
-import { ArrowLeft, PackageCheck, PackageMinus, PackageSearch } from 'lucide-react';
-import Link from 'next/link';
+import { PackageCheck, PackageMinus, PackageSearch } from 'lucide-react';
+import { BackButton } from '@/shared/components/common/BackButton';
 import moment from 'moment';
 import { PURCHASE_INVOICE_STATUS_LABELS, VOUCHER_TYPE_LABELS } from '../shared/validators';
 import type { PurchaseInvoiceStatus } from '@/generated/prisma/enums';
@@ -42,11 +42,7 @@ export async function PurchaseInvoiceDetail({ invoiceId }: Props) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Button variant="outline" size="icon" asChild>
-            <Link href="/dashboard/commercial/purchases">
-              <ArrowLeft className="h-4 w-4" />
-            </Link>
-          </Button>
+          <BackButton variant="outline" />
           <div>
             <h1 className="text-3xl font-bold tracking-tight">
               Factura {invoice.fullNumber}

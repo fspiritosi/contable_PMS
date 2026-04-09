@@ -97,20 +97,24 @@ export type StockAdjustmentFormData = z.infer<typeof stockAdjustmentSchema>;
 
 // ============================================
 // Formal Stock Transfer (vista de movimientos)
-// Transferencia con fecha y almacenes nombrados
+// Transferencia multi-producto con fecha y almacenes
 // ============================================
 
-export const stockTransferSchema = z.object({
-  sourceWarehouseId: z.string().uuid('Almacén de origen inválido'),
-  destinationWarehouseId: z.string().uuid('Almacén de destino inválido'),
+export const stockTransferLineSchema = z.object({
   productId: z.string().uuid('Producto inválido'),
   quantity: z
     .string()
     .min(1, 'La cantidad es requerida')
     .regex(/^\d+(\.\d{1,3})?$/, 'Cantidad inválida (máximo 3 decimales)')
     .refine((val) => parseFloat(val) > 0, 'La cantidad debe ser positiva'),
-  notes: z.string().optional(),
+});
+
+export const stockTransferSchema = z.object({
+  sourceWarehouseId: z.string().uuid('Almacén de origen inválido'),
+  destinationWarehouseId: z.string().uuid('Almacén de destino inválido'),
   date: z.date({ message: 'La fecha es requerida' }),
+  notes: z.string().optional(),
+  lines: z.array(stockTransferLineSchema).min(1, 'Debe agregar al menos un producto'),
 }).refine((data) => data.sourceWarehouseId !== data.destinationWarehouseId, {
   message: 'El almacén de origen y destino deben ser diferentes',
   path: ['destinationWarehouseId'],

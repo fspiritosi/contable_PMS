@@ -145,6 +145,19 @@ export function _PurchaseInvoiceForm({
   const watchedSupplierId = form.watch('supplierId');
   const showOriginalInvoice = watchedVoucherType && (isCreditNote(watchedVoucherType) || isDebitNote(watchedVoucherType));
 
+  // Facturas tipo C no llevan IVA — forzar 0% en todas las líneas
+  const isTypeC = watchedVoucherType?.endsWith('_C') || false;
+
+  useEffect(() => {
+    if (!isTypeC) return;
+    const lines = form.getValues('lines');
+    lines.forEach((line, idx) => {
+      if (line.vatRate !== '0') {
+        form.setValue(`lines.${idx}.vatRate`, '0');
+      }
+    });
+  }, [isTypeC]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (!showOriginalInvoice || !watchedSupplierId) {
       setOriginalInvoices([]);
@@ -267,7 +280,7 @@ export function _PurchaseInvoiceForm({
       description: '',
       quantity: '1',
       unitCost: '0',
-      vatRate: '21',
+      vatRate: isTypeC ? '0' : '21',
       purchaseOrderLineId: '',
     });
   };
@@ -278,7 +291,7 @@ export function _PurchaseInvoiceForm({
 
     form.setValue(`lines.${index}.description`, product.name);
     form.setValue(`lines.${index}.unitCost`, product.costPrice.toString());
-    form.setValue(`lines.${index}.vatRate`, product.vatRate.toString());
+    form.setValue(`lines.${index}.vatRate`, isTypeC ? '0' : product.vatRate.toString());
   };
 
   return (
@@ -680,7 +693,7 @@ export function _PurchaseInvoiceForm({
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>IVA % *</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
+                        <Select onValueChange={field.onChange} value={field.value} disabled={isTypeC}>
                           <FormControl>
                             <SelectTrigger>
                               <SelectValue placeholder="Selecciona" />

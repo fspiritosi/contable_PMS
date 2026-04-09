@@ -244,165 +244,150 @@ export async function createStockTransfer(data: unknown) {
   if (!companyId) throw new Error('No hay empresa activa');
 
   try {
-    // Validar datos
     const validatedData = stockTransferSchema.parse(data);
-    const quantity = new Prisma.Decimal(validatedData.quantity);
 
-    // Verificar almacén de origen
-    const sourceWarehouse = await prisma.warehouse.findFirst({
-      where: {
-        id: validatedData.sourceWarehouseId,
-        companyId,
-        isActive: true,
-      },
+    // Verificar almacenes
+    const [sourceWarehouse, destinationWarehouse] = await Promise.all([
+      prisma.warehouse.findFirst({
+        where: { id: validatedData.sourceWarehouseId, companyId, isActive: true },
+        select: { id: true, name: true },
+      }),
+      prisma.warehouse.findFirst({
+        where: { id: validatedData.destinationWarehouseId, companyId, isActive: true },
+        select: { id: true, name: true },
+      }),
+    ]);
+
+    if (!sourceWarehouse) throw new Error('Almacén de origen no encontrado o inactivo');
+    if (!destinationWarehouse) throw new Error('Almacén de destino no encontrado o inactivo');
+
+    // Verificar todos los productos
+    const productIds = validatedData.lines.map((l) => l.productId);
+    const products = await prisma.product.findMany({
+      where: { id: { in: productIds }, companyId, status: 'ACTIVE' },
+      select: { id: true, code: true, name: true, trackStock: true },
     });
 
-    if (!sourceWarehouse) {
-      throw new Error('Almacén de origen no encontrado o inactivo');
+    const productMap = new Map(products.map((p) => [p.id, p]));
+    for (const line of validatedData.lines) {
+      const product = productMap.get(line.productId);
+      if (!product) throw new Error(`Producto no encontrado o inactivo`);
+      if (!product.trackStock) throw new Error(`El producto "${product.name}" no tiene control de stock habilitado`);
     }
 
-    // Verificar almacén de destino
-    const destinationWarehouse = await prisma.warehouse.findFirst({
+    // Verificar stock disponible para cada producto
+    const sourceStocks = await prisma.warehouseStock.findMany({
       where: {
-        id: validatedData.destinationWarehouseId,
-        companyId,
-        isActive: true,
+        warehouseId: sourceWarehouse.id,
+        productId: { in: productIds },
       },
     });
+    const stockMap = new Map(sourceStocks.map((s) => [s.productId, s]));
 
-    if (!destinationWarehouse) {
-      throw new Error('Almacén de destino no encontrado o inactivo');
+    for (const line of validatedData.lines) {
+      const quantity = new Prisma.Decimal(line.quantity);
+      const stock = stockMap.get(line.productId);
+      const available = stock?.quantity || new Prisma.Decimal(0);
+      const product = productMap.get(line.productId)!;
+      if (available.lessThan(quantity)) {
+        throw new Error(
+          `Stock insuficiente de "${product.name}" en ${sourceWarehouse.name}. Disponible: ${available}, Requerido: ${quantity}`
+        );
+      }
     }
 
-    // Verificar producto
-    const product = await prisma.product.findFirst({
-      where: {
-        id: validatedData.productId,
-        companyId,
-        status: 'ACTIVE',
-      },
-      select: {
-        id: true,
-        code: true,
-        name: true,
-        trackStock: true,
-      },
+    // Generar número de transferencia
+    const lastTransfer = await prisma.stockTransfer.findFirst({
+      where: { companyId },
+      orderBy: { createdAt: 'desc' },
+      select: { transferNumber: true },
     });
-
-    if (!product) {
-      throw new Error('Producto no encontrado o inactivo');
-    }
-
-    if (!product.trackStock) {
-      throw new Error('Este producto no tiene control de stock habilitado');
-    }
-
-    // Verificar stock en almacén de origen
-    const sourceStock = await prisma.warehouseStock.findUnique({
-      where: {
-        warehouseId_productId: {
-          warehouseId: sourceWarehouse.id,
-          productId: product.id,
-        },
-      },
-    });
-
-    const currentStock = sourceStock?.quantity || new Prisma.Decimal(0);
-
-    if (currentStock.lessThan(quantity)) {
-      throw new Error(
-        `Stock insuficiente en ${sourceWarehouse.name}. Disponible: ${currentStock}, Requerido: ${quantity}`
-      );
-    }
+    const lastNum = lastTransfer ? parseInt(lastTransfer.transferNumber.replace('TR-', ''), 10) : 0;
+    const transferNumber = `TR-${String(lastNum + 1).padStart(5, '0')}`;
 
     // Crear transferencia en transacción
-    const result = await prisma.$transaction(async (tx) => {
-      // Crear movimiento de salida
-      const outMovement = await tx.stockMovement.create({
+    const transfer = await prisma.$transaction(async (tx) => {
+      // Crear header
+      const stockTransfer = await tx.stockTransfer.create({
         data: {
           companyId,
-          warehouseId: sourceWarehouse.id,
-          productId: product.id,
-          type: 'TRANSFER_OUT',
-          quantity: quantity.negated(), // Negativo para salida
-          referenceType: 'transfer',
-          notes: validatedData.notes || `Transferencia a ${destinationWarehouse.name}`,
+          transferNumber,
+          sourceWarehouseId: sourceWarehouse.id,
+          destinationWarehouseId: destinationWarehouse.id,
           date: validatedData.date,
+          notes: validatedData.notes || null,
           createdBy: userId,
+          lines: {
+            create: validatedData.lines.map((line) => ({
+              productId: line.productId,
+              quantity: new Prisma.Decimal(line.quantity),
+            })),
+          },
         },
       });
 
-      // Crear movimiento de entrada
-      const inMovement = await tx.stockMovement.create({
-        data: {
-          companyId,
-          warehouseId: destinationWarehouse.id,
-          productId: product.id,
-          type: 'TRANSFER_IN',
-          quantity: quantity, // Positivo para entrada
-          referenceType: 'transfer',
-          referenceId: outMovement.id, // Vincular con movimiento de salida
-          notes: validatedData.notes || `Transferencia desde ${sourceWarehouse.name}`,
-          date: validatedData.date,
-          createdBy: userId,
-        },
-        include: {
-          warehouse: true,
-          product: true,
-        },
-      });
+      // Crear movimientos de stock y actualizar cantidades por cada línea
+      for (const line of validatedData.lines) {
+        const quantity = new Prisma.Decimal(line.quantity);
+        const product = productMap.get(line.productId)!;
 
-      // Actualizar stock en almacén de origen (decrementar)
-      await tx.warehouseStock.upsert({
-        where: {
-          warehouseId_productId: {
+        // Movimiento de salida
+        const outMovement = await tx.stockMovement.create({
+          data: {
+            companyId,
             warehouseId: sourceWarehouse.id,
-            productId: product.id,
+            productId: line.productId,
+            type: 'TRANSFER_OUT',
+            quantity: quantity.negated(),
+            referenceType: 'transfer',
+            referenceId: stockTransfer.id,
+            notes: `${transferNumber} → ${destinationWarehouse.name} (${product.code})`,
+            date: validatedData.date,
+            createdBy: userId,
           },
-        },
-        update: {
-          quantity: { decrement: quantity },
-          availableQty: { decrement: quantity },
-        },
-        create: {
-          warehouseId: sourceWarehouse.id,
-          productId: product.id,
-          quantity: quantity.negated(),
-          reservedQty: 0,
-          availableQty: quantity.negated(),
-        },
-      });
+        });
 
-      // Actualizar stock en almacén de destino (incrementar)
-      await tx.warehouseStock.upsert({
-        where: {
-          warehouseId_productId: {
+        // Movimiento de entrada
+        await tx.stockMovement.create({
+          data: {
+            companyId,
             warehouseId: destinationWarehouse.id,
-            productId: product.id,
+            productId: line.productId,
+            type: 'TRANSFER_IN',
+            quantity,
+            referenceType: 'transfer',
+            referenceId: stockTransfer.id,
+            notes: `${transferNumber} ← ${sourceWarehouse.name} (${product.code})`,
+            date: validatedData.date,
+            createdBy: userId,
           },
-        },
-        update: {
-          quantity: { increment: quantity },
-          availableQty: { increment: quantity },
-        },
-        create: {
-          warehouseId: destinationWarehouse.id,
-          productId: product.id,
-          quantity: quantity,
-          reservedQty: 0,
-          availableQty: quantity,
-        },
-      });
+        });
 
-      return inMovement;
+        // Actualizar stock origen (decrementar)
+        await tx.warehouseStock.upsert({
+          where: { warehouseId_productId: { warehouseId: sourceWarehouse.id, productId: line.productId } },
+          update: { quantity: { decrement: quantity }, availableQty: { decrement: quantity } },
+          create: { warehouseId: sourceWarehouse.id, productId: line.productId, quantity: quantity.negated(), reservedQty: 0, availableQty: quantity.negated() },
+        });
+
+        // Actualizar stock destino (incrementar)
+        await tx.warehouseStock.upsert({
+          where: { warehouseId_productId: { warehouseId: destinationWarehouse.id, productId: line.productId } },
+          update: { quantity: { increment: quantity }, availableQty: { increment: quantity } },
+          create: { warehouseId: destinationWarehouse.id, productId: line.productId, quantity, reservedQty: 0, availableQty: quantity },
+        });
+      }
+
+      return stockTransfer;
     });
 
     logger.info('Transferencia de stock creada', {
       data: {
-        movementId: result.id,
+        transferId: transfer.id,
+        transferNumber,
         from: sourceWarehouse.name,
         to: destinationWarehouse.name,
-        quantity: quantity.toString(),
+        lineCount: validatedData.lines.length,
         companyId,
         userId,
       },
@@ -410,7 +395,7 @@ export async function createStockTransfer(data: unknown) {
 
     revalidatePath('/dashboard/commercial/stock');
     revalidatePath('/dashboard/commercial/movements');
-    return { success: true };
+    return { success: true, id: transfer.id, transferNumber };
   } catch (error) {
     logger.error('Error al crear transferencia de stock', {
       data: { companyId, error },
@@ -422,4 +407,34 @@ export async function createStockTransfer(data: unknown) {
 
     throw new Error('Error al crear la transferencia');
   }
+}
+
+// Obtener transferencia por ID (para PDF)
+export async function getStockTransfer(id: string) {
+  await checkPermission('commercial.movements', 'view', { redirect: true });
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  const transfer = await prisma.stockTransfer.findFirst({
+    where: { id, companyId },
+    include: {
+      sourceWarehouse: { select: { code: true, name: true } },
+      destinationWarehouse: { select: { code: true, name: true } },
+      lines: {
+        include: {
+          product: { select: { code: true, name: true, unitOfMeasure: true } },
+        },
+      },
+    },
+  });
+
+  if (!transfer) throw new Error('Transferencia no encontrada');
+
+  return {
+    ...transfer,
+    lines: transfer.lines.map((line) => ({
+      ...line,
+      quantity: Number(line.quantity),
+    })),
+  };
 }

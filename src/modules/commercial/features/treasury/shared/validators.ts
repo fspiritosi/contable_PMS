@@ -115,38 +115,57 @@ export const CASH_MOVEMENT_TYPE_COLORS = {
 // ====================================
 
 // Schema para crear/editar cuenta bancaria
-export const bankAccountSchema = z.object({
-  bankName: z
-    .string()
-    .min(1, 'El nombre del banco es requerido')
-    .max(100, 'El nombre del banco no puede exceder 100 caracteres'),
-  accountNumber: z
-    .string()
-    .min(1, 'El número de cuenta es requerido')
-    .max(50, 'El número de cuenta no puede exceder 50 caracteres'),
-  accountType: z.enum(['CHECKING', 'SAVINGS', 'CREDIT'], {
-    message: 'Debe seleccionar un tipo de cuenta',
-  }),
-  cbu: z
-    .string()
-    .length(22, 'El CBU debe tener exactamente 22 dígitos')
-    .regex(/^\d{22}$/, 'El CBU solo puede contener números')
-    .optional()
-    .nullable(),
-  alias: z
-    .string()
-    .min(6, 'El alias debe tener al menos 6 caracteres')
-    .max(20, 'El alias no puede exceder 20 caracteres')
-    .optional()
-    .nullable(),
-  currency: z.string().default('ARS'),
-  balance: z
-    .string()
-    .regex(/^-?\d+(\.\d{1,2})?$/, 'Saldo inválido (máximo 2 decimales)')
-    .optional()
-    .default('0.00'),
-  accountId: z.string().uuid('Cuenta contable inválida').optional().nullable(),
-});
+const NON_BANK_TYPES = ['CASH', 'VIRTUAL_WALLET'] as const;
+
+export const bankAccountSchema = z
+  .object({
+    bankName: z
+      .string()
+      .max(100, 'El nombre no puede exceder 100 caracteres')
+      .optional()
+      .default(''),
+    accountNumber: z
+      .string()
+      .max(50, 'El número de cuenta no puede exceder 50 caracteres')
+      .optional()
+      .default(''),
+    accountType: z.enum(['CHECKING', 'SAVINGS', 'CREDIT', 'CASH', 'VIRTUAL_WALLET'], {
+      message: 'Debe seleccionar un tipo de cuenta',
+    }),
+    cbu: z
+      .string()
+      .length(22, 'El CBU debe tener exactamente 22 dígitos')
+      .regex(/^\d{22}$/, 'El CBU solo puede contener números')
+      .optional()
+      .nullable(),
+    alias: z
+      .string()
+      .min(6, 'El alias debe tener al menos 6 caracteres')
+      .max(20, 'El alias no puede exceder 20 caracteres')
+      .optional()
+      .nullable(),
+    currency: z.string().default('ARS'),
+    balance: z
+      .string()
+      .regex(/^-?\d+(\.\d{1,2})?$/, 'Saldo inválido (máximo 2 decimales)')
+      .optional()
+      .default('0.00'),
+    accountId: z.string().uuid('Cuenta contable inválida').optional().nullable(),
+  })
+  .refine(
+    (data) => {
+      if (NON_BANK_TYPES.includes(data.accountType as (typeof NON_BANK_TYPES)[number])) return true;
+      return data.bankName && data.bankName.length > 0;
+    },
+    { message: 'El nombre del banco es requerido', path: ['bankName'] }
+  )
+  .refine(
+    (data) => {
+      if (NON_BANK_TYPES.includes(data.accountType as (typeof NON_BANK_TYPES)[number])) return true;
+      return data.accountNumber && data.accountNumber.length > 0;
+    },
+    { message: 'El número de cuenta es requerido', path: ['accountNumber'] }
+  );
 
 // Schema para movimiento bancario
 export const bankMovementSchema = z.object({
@@ -232,6 +251,8 @@ export const BANK_ACCOUNT_TYPE_LABELS = {
   CHECKING: 'Cuenta Corriente',
   SAVINGS: 'Caja de Ahorro',
   CREDIT: 'Cuenta de Crédito',
+  CASH: 'Caja',
+  VIRTUAL_WALLET: 'Billetera Virtual',
 } as const;
 
 export const BANK_ACCOUNT_STATUS_LABELS = {

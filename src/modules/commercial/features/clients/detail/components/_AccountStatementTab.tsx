@@ -61,7 +61,8 @@ export function _AccountStatementTab({ accountStatement }: AccountStatementTabPr
       meta: { title: 'Número' },
       cell: ({ row }) => (
         <Link
-          href={`/dashboard/commercial/sales/${row.original.id}`}
+          href={`/dashboard/commercial/invoices/${row.original.id}`}
+          target="_blank"
           className="font-medium text-blue-600 hover:text-blue-800 hover:underline"
         >
           {row.original.fullNumber}

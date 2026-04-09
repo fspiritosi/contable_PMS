@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/shared/components/ui/select';
-import { Calendar, ChevronLeft, ChevronRight, DollarSign, Loader2, TrendingDown, TrendingUp, X } from 'lucide-react';
+import { AlertTriangle, Calendar, ChevronLeft, ChevronRight, DollarSign, Loader2, TrendingDown, TrendingUp, X } from 'lucide-react';
 import { toast } from 'sonner';
 import moment from 'moment';
 import 'moment/locale/es';
@@ -37,6 +37,7 @@ export function AccountBalances() {
 
   // Filtro de mes: null = todas las fechas (sin filtro)
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
+  const [overdueOnly, setOverdueOnly] = useState(false);
 
   const thisYear = moment().year();
   const years = [thisYear, thisYear - 1, thisYear - 2];
@@ -56,10 +57,10 @@ export function AccountBalances() {
       setLoading(true);
       const { startDate, endDate } = getDateRange();
       if (type === 'receivable') {
-        const data = await getAccountsReceivable(startDate, endDate);
+        const data = await getAccountsReceivable(startDate, endDate, overdueOnly);
         setReceivableData(data);
       } else {
-        const data = await getAccountsPayable(startDate, endDate);
+        const data = await getAccountsPayable(startDate, endDate, overdueOnly);
         setPayableData(data);
       }
     } catch (error) {
@@ -69,12 +70,12 @@ export function AccountBalances() {
     } finally {
       setLoading(false);
     }
-  }, [getDateRange]);
+  }, [getDateRange, overdueOnly]);
 
-  // Generar reporte automáticamente al montar y al cambiar filtro de mes
+  // Generar reporte automáticamente al montar y al cambiar filtros
   useEffect(() => {
     fetchReport(activeTab);
-  }, [selectedMonth]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedMonth, overdueOnly]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleTabChange = (tab: string) => {
     const t = tab as 'receivable' | 'payable';
@@ -86,7 +87,12 @@ export function AccountBalances() {
 
   const handleMonthChange = (month: string | null) => {
     setSelectedMonth(month);
-    // Limpiar datos para forzar recarga
+    setReceivableData(null);
+    setPayableData(null);
+  };
+
+  const handleOverdueToggle = () => {
+    setOverdueOnly((prev) => !prev);
     setReceivableData(null);
     setPayableData(null);
   };
@@ -202,6 +208,18 @@ export function AccountBalances() {
             Todas
           </Button>
         )}
+
+        <div className="h-4 w-px bg-border" />
+
+        <Button
+          variant={overdueOnly ? 'destructive' : 'outline'}
+          size="sm"
+          className="h-7 text-xs gap-1"
+          onClick={handleOverdueToggle}
+        >
+          <AlertTriangle className="h-3 w-3" />
+          Vencidas
+        </Button>
 
         {loading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
       </div>

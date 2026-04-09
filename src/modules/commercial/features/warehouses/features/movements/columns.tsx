@@ -2,6 +2,7 @@
 
 import type { ColumnDef } from '@tanstack/react-table';
 import moment from 'moment';
+import Link from 'next/link';
 import {
   ArrowDown,
   ArrowUp,
@@ -18,6 +19,32 @@ import { DataTableColumnHeader } from '@/shared/components/common/DataTable';
 import type { StockMovement } from '../../shared/types';
 import { STOCK_MOVEMENT_TYPE_LABELS } from '../../shared/types';
 import { cn } from '@/shared/lib/utils';
+
+const REFERENCE_TYPE_LABELS: Record<string, string> = {
+  transfer: 'Transferencia',
+  sales_invoice: 'Factura de Venta',
+  sales_invoice_cancel: 'Anulación Factura Venta',
+  purchase_invoice: 'Factura de Compra',
+  purchase_invoice_cancel: 'Anulación Factura Compra',
+  delivery_note: 'Remito de Entrega',
+  delivery_note_cancellation: 'Anulación Remito',
+  receiving_note: 'Remito de Recepción',
+  receiving_note_cancellation: 'Anulación Recepción',
+  entry: 'Entrada',
+  exit: 'Salida',
+  loss: 'Pérdida/Merma',
+};
+
+const REFERENCE_TYPE_ROUTES: Record<string, string> = {
+  sales_invoice: '/dashboard/commercial/invoices',
+  sales_invoice_cancel: '/dashboard/commercial/invoices',
+  purchase_invoice: '/dashboard/commercial/purchases',
+  purchase_invoice_cancel: '/dashboard/commercial/purchases',
+  delivery_note: '/dashboard/commercial/delivery-notes',
+  delivery_note_cancellation: '/dashboard/commercial/delivery-notes',
+  receiving_note: '/dashboard/commercial/receiving-notes',
+  receiving_note_cancellation: '/dashboard/commercial/receiving-notes',
+};
 
 const MOVEMENT_TYPE_CONFIG: Record<string, {
   icon: typeof ShoppingCart;
@@ -117,19 +144,34 @@ export function getColumns(): ColumnDef<StockMovement>[] {
       accessorKey: 'referenceType',
       meta: { title: 'Referencia' },
       header: ({ column }) => <DataTableColumnHeader column={column} title="Referencia" />,
-      cell: ({ row }) =>
-        row.original.referenceType ? (
+      cell: ({ row }) => {
+        const { referenceType, referenceId, referenceNumber } = row.original;
+        if (!referenceType) return <span className="text-muted-foreground">-</span>;
+
+        const route = referenceType ? REFERENCE_TYPE_ROUTES[referenceType] : null;
+        const hasLink = route && referenceId;
+
+        return (
           <div className="text-sm">
-            <div className="font-medium">{row.original.referenceType}</div>
-            {row.original.referenceId && (
-              <div className="text-xs text-muted-foreground font-mono">
-                {(row.original.referenceId as string).slice(0, 8)}
-              </div>
+            <div>{REFERENCE_TYPE_LABELS[referenceType] || referenceType}</div>
+            {referenceNumber && (
+              hasLink ? (
+                <Link
+                  href={`${route}/${referenceId}`}
+                  target="_blank"
+                  className="text-xs font-mono text-blue-600 hover:text-blue-800 hover:underline"
+                >
+                  {referenceNumber}
+                </Link>
+              ) : (
+                <div className="text-xs text-muted-foreground font-mono">
+                  {referenceNumber}
+                </div>
+              )
             )}
           </div>
-        ) : (
-          <span className="text-muted-foreground">-</span>
-        ),
+        );
+      },
     },
     {
       accessorKey: 'notes',

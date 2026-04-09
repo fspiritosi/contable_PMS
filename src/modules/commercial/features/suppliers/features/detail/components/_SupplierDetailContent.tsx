@@ -14,7 +14,8 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/shared/components/ui/alert-dialog';
-import { Edit, ArrowLeft, Trash2 } from 'lucide-react';
+import { Edit, Trash2 } from 'lucide-react';
+import { BackButton } from '@/shared/components/common/BackButton';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
@@ -63,11 +64,7 @@ export function _SupplierDetailContent({ supplier }: SupplierDetailContentProps)
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Link href="/dashboard/commercial/suppliers">
-            <Button variant="ghost" size="icon">
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-          </Link>
+          <BackButton />
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-2xl font-bold">{supplier.businessName}</h1>

@@ -7,8 +7,14 @@ import { ArrowDown, ArrowUp, CheckCircle2, Circle, Link2, Trash2 } from 'lucide-
 import { Badge } from '@/shared/components/ui/badge';
 import { Button } from '@/shared/components/ui/button';
 import { Checkbox } from '@/shared/components/ui/checkbox';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/shared/components/ui/popover';
 import { DataTableColumnHeader } from '@/shared/components/common/DataTable';
 import { BANK_MOVEMENT_TYPE_LABELS } from '../../../shared/validators';
+import { formatCurrency } from '@/shared/utils/formatters';
 
 interface BankMovement extends Record<string, unknown> {
   id: string;
@@ -21,8 +27,23 @@ interface BankMovement extends Record<string, unknown> {
   reconciled: boolean;
   reconciledAt: Date | null;
   createdAt: Date;
-  receipt?: { id: string; fullNumber: string } | null;
-  paymentOrder?: { id: string; fullNumber: string } | null;
+  receipt?: {
+    id: string;
+    fullNumber: string;
+    date: Date;
+    total: number;
+    status: string;
+    customer: { name: string };
+  } | null;
+  paymentOrder?: {
+    id: string;
+    fullNumber: string;
+    date: Date;
+    total: number;
+    status: string;
+    supplier: { businessName: string } | null;
+    expenseDescription: string | null;
+  } | null;
 }
 
 interface MovementColumnsProps {
@@ -78,7 +99,7 @@ export function getMovementColumns({ onToggleReconcile, onDelete, isLoading, can
       header: ({ column }) => <DataTableColumnHeader column={column} title="Tipo" />,
       cell: ({ row }) => {
         const type = row.original.type;
-        const isIncome = ['DEPOSIT', 'TRANSFER_IN', 'INTEREST'].includes(type);
+        const isIncome = ['DEPOSIT', 'TRANSFER_IN', 'INTEREST', 'CHECK'].includes(type);
 
         return (
           <div className="flex items-center gap-2">
@@ -122,16 +143,61 @@ export function getMovementColumns({ onToggleReconcile, onDelete, isLoading, can
         const { receipt, paymentOrder } = row.original;
         if (receipt) {
           return (
-            <Badge variant="outline" className="text-green-700 border-green-300 bg-green-50">
-              {receipt.fullNumber}
-            </Badge>
+            <Popover>
+              <PopoverTrigger asChild className="cursor-pointer">
+                <Badge variant="outline" className="text-green-700 border-green-300 bg-green-50 cursor-pointer">
+                  {receipt.fullNumber}
+                </Badge>
+              </PopoverTrigger>
+              <PopoverContent className="w-64 text-sm">
+                <div className="space-y-1">
+                  <p className="font-semibold">Recibo de Cobro</p>
+                  <p className="text-muted-foreground">{receipt.fullNumber}</p>
+                  <div className="grid grid-cols-2 gap-1 pt-1">
+                    <span className="text-muted-foreground">Cliente:</span>
+                    <span className="font-medium">{receipt.customer?.name || '-'}</span>
+                    <span className="text-muted-foreground">Fecha:</span>
+                    <span>{moment(receipt.date).format('DD/MM/YYYY')}</span>
+                    <span className="text-muted-foreground">Total:</span>
+                    <span className="font-medium text-green-600">{formatCurrency(receipt.total)}</span>
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
           );
         }
         if (paymentOrder) {
           return (
-            <Badge variant="outline" className="text-blue-700 border-blue-300 bg-blue-50">
-              {paymentOrder.fullNumber}
-            </Badge>
+            <Popover>
+              <PopoverTrigger asChild className="cursor-pointer">
+                <Badge variant="outline" className="text-blue-700 border-blue-300 bg-blue-50 cursor-pointer">
+                  {paymentOrder.fullNumber}
+                </Badge>
+              </PopoverTrigger>
+              <PopoverContent className="w-72 text-sm">
+                <div className="space-y-1">
+                  <p className="font-semibold">Orden de Pago</p>
+                  <p className="text-muted-foreground">{paymentOrder.fullNumber}</p>
+                  <div className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 pt-1">
+                    {paymentOrder.supplier?.businessName ? (
+                      <>
+                        <span className="text-muted-foreground">Proveedor:</span>
+                        <span className="font-medium">{paymentOrder.supplier.businessName}</span>
+                      </>
+                    ) : paymentOrder.expenseDescription ? (
+                      <>
+                        <span className="text-muted-foreground">Concepto:</span>
+                        <span className="font-medium">{paymentOrder.expenseDescription}</span>
+                      </>
+                    ) : null}
+                    <span className="text-muted-foreground">Fecha:</span>
+                    <span>{moment(paymentOrder.date).format('DD/MM/YYYY')}</span>
+                    <span className="text-muted-foreground">Total:</span>
+                    <span className="font-medium text-blue-600">{formatCurrency(paymentOrder.total)}</span>
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
           );
         }
         return null;
@@ -145,7 +211,7 @@ export function getMovementColumns({ onToggleReconcile, onDelete, isLoading, can
       cell: ({ row }) => {
         const type = row.original.type;
         const amount = row.original.amount;
-        const isIncome = ['DEPOSIT', 'TRANSFER_IN', 'INTEREST'].includes(type);
+        const isIncome = ['DEPOSIT', 'TRANSFER_IN', 'INTEREST', 'CHECK'].includes(type);
 
         return (
           <div className={`font-semibold ${isIncome ? 'text-green-600' : 'text-red-600'}`}>
@@ -277,7 +343,7 @@ export function getReconciliationColumns({ onLink }: ReconciliationColumnsProps)
       header: ({ column }) => <DataTableColumnHeader column={column} title="Tipo" />,
       cell: ({ row }) => {
         const type = row.original.type;
-        const isIncome = ['DEPOSIT', 'TRANSFER_IN', 'INTEREST'].includes(type);
+        const isIncome = ['DEPOSIT', 'TRANSFER_IN', 'INTEREST', 'CHECK'].includes(type);
 
         return (
           <div className="flex items-center gap-2">
@@ -320,7 +386,7 @@ export function getReconciliationColumns({ onLink }: ReconciliationColumnsProps)
       cell: ({ row }) => {
         const type = row.original.type;
         const amount = row.original.amount;
-        const isIncome = ['DEPOSIT', 'TRANSFER_IN', 'INTEREST'].includes(type);
+        const isIncome = ['DEPOSIT', 'TRANSFER_IN', 'INTEREST', 'CHECK'].includes(type);
 
         return (
           <div className={`text-right font-semibold ${isIncome ? 'text-green-600' : 'text-red-600'}`}>

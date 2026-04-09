@@ -6,7 +6,8 @@ import { Button } from '@/shared/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/card';
 import { Badge } from '@/shared/components/ui/badge';
 import { Alert, AlertDescription } from '@/shared/components/ui/alert';
-import { ArrowLeft, Pencil, AlertTriangle } from 'lucide-react';
+import { Pencil, AlertTriangle } from 'lucide-react';
+import { BackButton } from '@/shared/components/common/BackButton';
 import {
   PRODUCT_TYPE_LABELS,
   PRODUCT_STATUS_LABELS,
@@ -30,11 +31,7 @@ export async function ProductDetail({ productId }: ProductDetailProps) {
     <div className="flex flex-1 flex-col gap-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Link href="/dashboard/commercial/products">
-            <Button variant="ghost" size="icon">
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-          </Link>
+          <BackButton />
           <div>
             <h1 className="text-2xl font-bold">{product.name}</h1>
             <p className="text-sm text-muted-foreground">Código: {product.code}</p>

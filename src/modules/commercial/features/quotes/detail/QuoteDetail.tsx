@@ -4,7 +4,7 @@ import { Card } from '@/shared/components/ui/card';
 import { Badge } from '@/shared/components/ui/badge';
 import { Button } from '@/shared/components/ui/button';
 import { Separator } from '@/shared/components/ui/separator';
-import { ArrowLeft } from 'lucide-react';
+import { BackButton } from '@/shared/components/common/BackButton';
 import Link from 'next/link';
 import moment from 'moment';
 import { QUOTE_STATUS_LABELS } from '../shared/validators';
@@ -57,11 +57,7 @@ export async function QuoteDetail({ id }: QuoteDetailProps) {
         {/* Header */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" asChild>
-              <Link href="/dashboard/commercial/quotes">
-                <ArrowLeft className="h-4 w-4" />
-              </Link>
-            </Button>
+            <BackButton />
             <div>
               <div className="flex items-center gap-3">
                 <h2 className="text-2xl font-bold tracking-tight">

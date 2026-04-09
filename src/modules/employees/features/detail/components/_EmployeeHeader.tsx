@@ -1,6 +1,7 @@
 'use client';
 
-import { AlertCircle, ArrowLeft, CheckCircle2, Edit, UserX } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Edit, UserX } from 'lucide-react';
+import { BackButton } from '@/shared/components/common/BackButton';
 import Link from 'next/link';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/shared/components/ui/avatar';
@@ -100,11 +101,7 @@ export function _EmployeeHeader({ employee, statusInfo }: Props) {
     <div className="flex flex-col gap-4">
       {/* Row 1: Back button + Avatar + Info */}
       <div className="flex items-start gap-3 sm:gap-4">
-        <Button variant="outline" size="icon" className="shrink-0" asChild>
-          <Link href="/dashboard/employees">
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
-        </Button>
+        <BackButton variant="outline" />
         <Avatar className="h-12 w-12 shrink-0 sm:h-16 sm:w-16">
           <AvatarImage
             src={employee.pictureUrl || undefined}

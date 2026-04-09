@@ -24,17 +24,25 @@ export async function createBankAccount(data: BankAccountFormData) {
     // Validar datos
     const validated = bankAccountSchema.parse(data);
 
-    // Verificar número de cuenta duplicado
-    const existing = await prisma.bankAccount.findFirst({
-      where: {
-        companyId,
-        accountNumber: validated.accountNumber,
-      },
-      select: { id: true },
-    });
+    // Para tipos no bancarios, generar número de cuenta si no se proporcionó
+    const NON_BANK_TYPES = ['CASH', 'VIRTUAL_WALLET'];
+    const accountNumber = !validated.accountNumber && NON_BANK_TYPES.includes(validated.accountType)
+      ? `${validated.accountType}-${Date.now()}`
+      : validated.accountNumber || '';
 
-    if (existing) {
-      throw new Error('Ya existe una cuenta con ese número');
+    // Verificar número de cuenta duplicado
+    if (accountNumber) {
+      const existing = await prisma.bankAccount.findFirst({
+        where: {
+          companyId,
+          accountNumber,
+        },
+        select: { id: true },
+      });
+
+      if (existing) {
+        throw new Error('Ya existe una cuenta con ese número');
+      }
     }
 
     // Crear cuenta bancaria
@@ -43,8 +51,8 @@ export async function createBankAccount(data: BankAccountFormData) {
     const bankAccount = await prisma.bankAccount.create({
       data: {
         companyId,
-        bankName: validated.bankName,
-        accountNumber: validated.accountNumber,
+        bankName: validated.bankName || validated.accountType,
+        accountNumber,
         accountType: validated.accountType,
         cbu: validated.cbu || null,
         alias: validated.alias || null,
@@ -100,12 +108,18 @@ export async function updateBankAccount(id: string, data: BankAccountFormData) {
       throw new Error('Cuenta bancaria no encontrada');
     }
 
+    // Para tipos no bancarios, generar número de cuenta si no se proporcionó
+    const NON_BANK_TYPES = ['CASH', 'VIRTUAL_WALLET'];
+    const accountNumber = !validated.accountNumber && NON_BANK_TYPES.includes(validated.accountType)
+      ? existing.accountNumber
+      : validated.accountNumber || existing.accountNumber;
+
     // Verificar número de cuenta duplicado (excluyendo la cuenta actual)
-    if (validated.accountNumber !== existing.accountNumber) {
+    if (accountNumber !== existing.accountNumber) {
       const duplicate = await prisma.bankAccount.findFirst({
         where: {
           companyId,
-          accountNumber: validated.accountNumber,
+          accountNumber,
           id: { not: id },
         },
         select: { id: true },
@@ -120,8 +134,8 @@ export async function updateBankAccount(id: string, data: BankAccountFormData) {
     const bankAccount = await prisma.bankAccount.update({
       where: { id },
       data: {
-        bankName: validated.bankName,
-        accountNumber: validated.accountNumber,
+        bankName: validated.bankName || validated.accountType,
+        accountNumber,
         accountType: validated.accountType,
         cbu: validated.cbu || null,
         alias: validated.alias || null,
@@ -182,7 +196,7 @@ export async function getBankAccountById(id: string) {
     }
 
     // Calcular saldo real desde los movimientos bancarios
-    const INCOME_TYPES = ['DEPOSIT', 'TRANSFER_IN', 'INTEREST'];
+    const INCOME_TYPES = ['DEPOSIT', 'TRANSFER_IN', 'INTEREST', 'CHECK'];
     const movements = await prisma.bankMovement.findMany({
       where: { bankAccountId: id, companyId },
       select: { type: true, amount: true },

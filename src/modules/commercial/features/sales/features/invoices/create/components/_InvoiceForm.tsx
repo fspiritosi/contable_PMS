@@ -215,7 +215,7 @@ function _InvoiceLineRow({
             control={form.control}
             name={`lines.${index}.vatRate`}
             render={({ field }) => (
-              <Select onValueChange={field.onChange} value={field.value}>
+              <Select onValueChange={field.onChange} value={field.value} disabled={isTypeC}>
                 <SelectTrigger className="h-9 text-sm font-mono">
                   <SelectValue />
                 </SelectTrigger>
@@ -375,7 +375,7 @@ function _InvoiceLineRow({
             render={({ field }) => (
               <FormItem>
                 <FormLabel className="text-xs">IVA %</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
+                <Select onValueChange={field.onChange} value={field.value} disabled={isTypeC}>
                   <FormControl>
                     <SelectTrigger>
                       <SelectValue />
@@ -649,6 +649,19 @@ export function InvoiceForm({ customers, pointsOfSale, products, mode = 'create'
   const watchedCustomerId = form.watch('customerId');
   const showOriginalInvoice = watchedVoucherType && (isCreditNote(watchedVoucherType) || isDebitNote(watchedVoucherType));
 
+  // Facturas tipo C no llevan IVA — forzar 0% en todas las líneas
+  const isTypeC = watchedVoucherType?.endsWith('_C') || false;
+
+  useEffect(() => {
+    if (!isTypeC) return;
+    const lines = form.getValues('lines');
+    lines.forEach((line, idx) => {
+      if (line.vatRate !== '0') {
+        form.setValue(`lines.${idx}.vatRate`, '0');
+      }
+    });
+  }, [isTypeC]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (!showOriginalInvoice || !watchedCustomerId) {
       setOriginalInvoices([]);
@@ -677,7 +690,7 @@ export function InvoiceForm({ customers, pointsOfSale, products, mode = 'create'
       description: '',
       quantity: '1',
       unitPrice: '0',
-      vatRate: '21',
+      vatRate: isTypeC ? '0' : '21',
       discountPercent: '',
       discountAmount: '',
     });
@@ -688,7 +701,7 @@ export function InvoiceForm({ customers, pointsOfSale, products, mode = 'create'
     if (product) {
       form.setValue(`lines.${index}.description`, product.name);
       form.setValue(`lines.${index}.unitPrice`, product.salePrice.toString());
-      form.setValue(`lines.${index}.vatRate`, product.vatRate.toString());
+      form.setValue(`lines.${index}.vatRate`, isTypeC ? '0' : product.vatRate.toString());
     }
   };
 

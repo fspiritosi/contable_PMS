@@ -216,14 +216,6 @@ export async function createJournalEntryForSalesInvoice(
   try {
     const settings = await getAccountingSettings(companyId, tx);
 
-    // Verificar que estén configuradas las cuentas necesarias
-    if (!settings.receivablesAccountId || !settings.salesAccountId || !settings.vatDebitAccountId) {
-      logger.warn('No se puede crear asiento para factura de venta: cuentas no configuradas', {
-        data: { invoiceId, companyId },
-      });
-      return null;
-    }
-
     // Obtener factura
     const invoice = await tx.salesInvoice.findUnique({
       where: { id: invoiceId },
@@ -246,6 +238,15 @@ export async function createJournalEntryForSalesInvoice(
     const vatAmount = parseFloat(invoice.vatAmount.toString());
     const total = parseFloat(invoice.total.toString());
     const isNC = isCreditNote(invoice.voucherType);
+    const hasVat = vatAmount > 0;
+
+    // Verificar cuentas necesarias (IVA solo si tiene monto)
+    if (!settings.receivablesAccountId || !settings.salesAccountId || (hasVat && !settings.vatDebitAccountId)) {
+      logger.warn('No se puede crear asiento para factura de venta: cuentas no configuradas', {
+        data: { invoiceId, companyId },
+      });
+      return null;
+    }
 
     // NC invierte el asiento: Debe=Ventas+IVA, Haber=CtasCobrar
     // ND y Factura: Debe=CtasCobrar, Haber=Ventas+IVA
@@ -264,13 +265,17 @@ export async function createJournalEntryForSalesInvoice(
         credit: isNC ? 0 : subtotal,
         description: `Ventas - ${invoice.fullNumber}`,
       },
-      {
+    ];
+
+    // Solo incluir línea de IVA si hay monto (Facturas tipo C no llevan IVA)
+    if (vatAmount > 0) {
+      lines.push({
         accountId: settings.vatDebitAccountId,
         debit: isNC ? vatAmount : 0,
         credit: isNC ? 0 : vatAmount,
         description: `IVA Débito Fiscal - ${invoice.fullNumber}`,
-      },
-    ];
+      });
+    }
 
     const entryId = await createJournalEntry(
       {
@@ -303,14 +308,6 @@ export async function createJournalEntryForPurchaseInvoice(
   try {
     const settings = await getAccountingSettings(companyId, tx);
 
-    // Verificar que estén configuradas las cuentas necesarias
-    if (!settings.payablesAccountId || !settings.purchasesAccountId || !settings.vatCreditAccountId) {
-      logger.warn('No se puede crear asiento para factura de compra: cuentas no configuradas', {
-        data: { invoiceId, companyId },
-      });
-      return null;
-    }
-
     // Obtener factura
     const invoice = await tx.purchaseInvoice.findUnique({
       where: { id: invoiceId },
@@ -333,6 +330,15 @@ export async function createJournalEntryForPurchaseInvoice(
     const vatAmount = parseFloat(invoice.vatAmount.toString());
     const total = parseFloat(invoice.total.toString());
     const isNC = isCreditNote(invoice.voucherType);
+    const hasVat = vatAmount > 0;
+
+    // Verificar cuentas necesarias (IVA solo si tiene monto)
+    if (!settings.payablesAccountId || !settings.purchasesAccountId || (hasVat && !settings.vatCreditAccountId)) {
+      logger.warn('No se puede crear asiento para factura de compra: cuentas no configuradas', {
+        data: { invoiceId, companyId },
+      });
+      return null;
+    }
 
     // NC invierte: Debe=CtasPagar, Haber=Compras+IVA
     // ND y Factura: Debe=Compras+IVA, Haber=CtasPagar
@@ -346,18 +352,22 @@ export async function createJournalEntryForPurchaseInvoice(
         description: `Compras - ${invoice.fullNumber}`,
       },
       {
-        accountId: settings.vatCreditAccountId,
-        debit: isNC ? 0 : vatAmount,
-        credit: isNC ? vatAmount : 0,
-        description: `IVA Crédito Fiscal - ${invoice.fullNumber}`,
-      },
-      {
         accountId: settings.payablesAccountId,
         debit: isNC ? total : 0,
         credit: isNC ? 0 : total,
         description: `${docLabel} ${invoice.fullNumber} - ${invoice.supplier.businessName}`,
       },
     ];
+
+    // Solo incluir línea de IVA si hay monto (Facturas tipo C no llevan IVA)
+    if (vatAmount > 0) {
+      lines.splice(1, 0, {
+        accountId: settings.vatCreditAccountId,
+        debit: isNC ? 0 : vatAmount,
+        credit: isNC ? vatAmount : 0,
+        description: `IVA Crédito Fiscal - ${invoice.fullNumber}`,
+      });
+    }
 
     const entryId = await createJournalEntry(
       {

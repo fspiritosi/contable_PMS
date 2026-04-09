@@ -1,6 +1,7 @@
 'use client';
 
-import { AlertCircle, ArrowLeft, CheckCircle2, Edit, Trash2 } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Edit, Trash2 } from 'lucide-react';
+import { BackButton } from '@/shared/components/common/BackButton';
 import Link from 'next/link';
 
 import { Badge } from '@/shared/components/ui/badge';
@@ -98,11 +99,7 @@ export function _EquipmentHeader({ vehicle, statusInfo }: Props) {
     <div className="flex flex-col gap-4">
       {/* Row 1: Back button + Info */}
       <div className="flex items-start gap-3 sm:gap-4">
-        <Button variant="outline" size="icon" className="shrink-0" asChild>
-          <Link href="/dashboard/equipment">
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
-        </Button>
+        <BackButton variant="outline" />
         <div className="min-w-0 flex-1">
           {/* Identification and badges - stack on mobile */}
           <div className="flex flex-col gap-1 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">

@@ -2,9 +2,7 @@ import { PermissionGuard } from '@/shared/components/common/PermissionGuard';
 import { getInvoiceById } from '../list/actions.server';
 import { Card } from '@/shared/components/ui/card';
 import { Badge } from '@/shared/components/ui/badge';
-import { Button } from '@/shared/components/ui/button';
-import { ArrowLeft } from 'lucide-react';
-import Link from 'next/link';
+import { BackButton } from '@/shared/components/common/BackButton';
 import moment from 'moment';
 import { VOUCHER_TYPE_LABELS, INVOICE_STATUS_LABELS } from '../shared/validators';
 import { Separator } from '@/shared/components/ui/separator';
@@ -44,11 +42,7 @@ export async function InvoiceDetail({ id }: InvoiceDetailProps) {
       <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" asChild>
-            <Link href="/dashboard/commercial/invoices">
-              <ArrowLeft className="h-4 w-4" />
-            </Link>
-          </Button>
+          <BackButton />
           <div>
             <h2 className="text-2xl font-bold tracking-tight">
               {VOUCHER_TYPE_LABELS[invoice.voucherType as keyof typeof VOUCHER_TYPE_LABELS]}{' '}

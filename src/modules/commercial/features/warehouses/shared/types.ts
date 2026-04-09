@@ -75,6 +75,7 @@ export interface StockMovement extends Record<string, unknown> {
   quantity: number;
   referenceType: string | null;
   referenceId: string | null;
+  referenceNumber: string | null;
   notes: string | null;
   date: Date;
   createdBy: string;

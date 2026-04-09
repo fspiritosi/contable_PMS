@@ -163,7 +163,7 @@ export function _BankMovementsTable({ data, totalRows, searchParams, bankAccount
           width: 18,
           formatter: (value, row) => {
             const type = (row as BankMovement).type;
-            const isIncome = ['DEPOSIT', 'TRANSFER_IN', 'INTEREST'].includes(type);
+            const isIncome = ['DEPOSIT', 'TRANSFER_IN', 'INTEREST', 'CHECK'].includes(type);
             const amount = Number(value);
             return isIncome ? amount : -amount;
           },

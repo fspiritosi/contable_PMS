@@ -248,7 +248,7 @@ export async function importBankMovementsFromExcel(bankAccountId: string, fileBu
 
       for (const movement of movementsToImport) {
         const amount = new Prisma.Decimal(movement.amount);
-        const isIncome = ['DEPOSIT', 'TRANSFER_IN', 'INTEREST'].includes(movement.type);
+        const isIncome = ['DEPOSIT', 'TRANSFER_IN', 'INTEREST', 'CHECK'].includes(movement.type);
 
         // Crear movimiento (sin conciliar)
         await tx.bankMovement.create({

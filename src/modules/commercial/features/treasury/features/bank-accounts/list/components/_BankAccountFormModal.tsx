@@ -69,6 +69,11 @@ export function _BankAccountFormModal({ open, onOpenChange, bankAccount, onSucce
     },
   });
 
+  const watchedAccountType = form.watch('accountType');
+  const isCash = watchedAccountType === 'CASH';
+  const isVirtualWallet = watchedAccountType === 'VIRTUAL_WALLET';
+  const isNonBank = isCash || isVirtualWallet;
+
   // Resetear form cuando cambia el modal o la cuenta
   useEffect(() => {
     if (open) {
@@ -117,66 +122,36 @@ export function _BankAccountFormModal({ open, onOpenChange, bankAccount, onSucce
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
-          <DialogTitle>{isEditing ? 'Editar Cuenta Bancaria' : 'Nueva Cuenta Bancaria'}</DialogTitle>
+          <DialogTitle>{isEditing ? 'Editar Cuenta' : 'Nueva Cuenta'}</DialogTitle>
           <DialogDescription>
             {isEditing
-              ? 'Modifica los datos de la cuenta bancaria'
-              : 'Completa los datos para crear una nueva cuenta bancaria'}
+              ? 'Modifica los datos de la cuenta'
+              : 'Completa los datos para crear una nueva cuenta'}
           </DialogDescription>
         </DialogHeader>
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="bankName"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Banco *</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Banco Nación" {...field} value={field.value || ''} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="accountType"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Tipo de Cuenta *</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Seleccionar tipo" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {Object.entries(BANK_ACCOUNT_TYPE_LABELS).map(([value, label]) => (
-                          <SelectItem key={value} value={value}>
-                            {label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
             <FormField
               control={form.control}
-              name="accountNumber"
+              name="accountType"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Número de Cuenta *</FormLabel>
-                  <FormControl>
-                    <Input placeholder="1234567890" {...field} value={field.value || ''} />
-                  </FormControl>
+                  <FormLabel>Tipo de Cuenta *</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleccionar tipo" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {Object.entries(BANK_ACCOUNT_TYPE_LABELS).map(([value, label]) => (
+                        <SelectItem key={value} value={value}>
+                          {label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <FormMessage />
                 </FormItem>
               )}
@@ -185,39 +160,79 @@ export function _BankAccountFormModal({ open, onOpenChange, bankAccount, onSucce
             <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}
-                name="cbu"
+                name="bankName"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>CBU</FormLabel>
+                    <FormLabel>
+                      {isNonBank ? 'Nombre' : 'Banco'} {!isNonBank && '*'}
+                    </FormLabel>
                     <FormControl>
                       <Input
-                        placeholder="22 dígitos"
+                        placeholder={isNonBank ? 'Ej: Caja Principal' : 'Banco Nación'}
                         {...field}
                         value={field.value || ''}
-                        maxLength={22}
                       />
                     </FormControl>
-                    <FormDescription>22 dígitos</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
               />
 
-              <FormField
-                control={form.control}
-                name="alias"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Alias</FormLabel>
-                    <FormControl>
-                      <Input placeholder="EMPRESA.CAJA" {...field} value={field.value || ''} />
-                    </FormControl>
-                    <FormDescription>Para transferencias</FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              {!isNonBank && (
+                <FormField
+                  control={form.control}
+                  name="accountNumber"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Número de Cuenta *</FormLabel>
+                      <FormControl>
+                        <Input placeholder="1234567890" {...field} value={field.value || ''} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
             </div>
+
+            {!isCash && (
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="cbu"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{isVirtualWallet ? 'CVU' : 'CBU'}</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="22 dígitos"
+                          {...field}
+                          value={field.value || ''}
+                          maxLength={22}
+                        />
+                      </FormControl>
+                      <FormDescription>22 dígitos</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="alias"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Alias</FormLabel>
+                      <FormControl>
+                        <Input placeholder={isVirtualWallet ? 'MI.BILLETERA' : 'EMPRESA.CAJA'} {...field} value={field.value || ''} />
+                      </FormControl>
+                      <FormDescription>Para transferencias</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            )}
 
             {!isEditing && (
               <FormField

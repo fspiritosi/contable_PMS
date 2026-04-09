@@ -5,7 +5,8 @@ import { getPriceListById, getPriceListItems } from '../list/actions.server';
 import { Button } from '@/shared/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/card';
 import { Badge } from '@/shared/components/ui/badge';
-import { ArrowLeft, Pencil, Star } from 'lucide-react';
+import { Pencil, Star } from 'lucide-react';
+import { BackButton } from '@/shared/components/common/BackButton';
 import { _PriceListItemsTable } from './components/_PriceListItemsTable';
 
 interface PriceListDetailProps {
@@ -27,11 +28,7 @@ export async function PriceListDetail({ priceListId }: PriceListDetailProps) {
       <div className="flex flex-1 flex-col gap-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Link href="/dashboard/commercial/price-lists">
-              <Button variant="ghost" size="icon">
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
-            </Link>
+            <BackButton />
             <div className="flex items-center gap-2">
               {priceList.isDefault && (
                 <Star className="h-5 w-5 fill-yellow-400 text-yellow-400" />

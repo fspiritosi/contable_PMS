@@ -39,7 +39,7 @@ interface PayableItem extends PendingInvoiceItem {
 // PENDIENTE DE COBRANZA (Cuentas a Cobrar)
 // ============================================
 
-export async function getAccountsReceivable(startDate?: Date, endDate?: Date) {
+export async function getAccountsReceivable(startDate?: Date, endDate?: Date, overdueOnly?: boolean) {
   await checkPermission('commercial.invoices', 'view', { redirect: true });
   const { userId } = await auth();
   if (!userId) throw new Error('No autenticado');
@@ -116,6 +116,8 @@ export async function getAccountsReceivable(startDate?: Date, endDate?: Date) {
       const daysOverdue = inv.dueDate
         ? Math.max(0, today.diff(moment(inv.dueDate), 'days'))
         : 0;
+
+      if (overdueOnly && daysOverdue === 0) continue;
 
       items.push({
         id: inv.id,
@@ -200,7 +202,7 @@ export async function getAccountsReceivable(startDate?: Date, endDate?: Date) {
 // PENDIENTE DE PAGO (Cuentas a Pagar)
 // ============================================
 
-export async function getAccountsPayable(startDate?: Date, endDate?: Date) {
+export async function getAccountsPayable(startDate?: Date, endDate?: Date, overdueOnly?: boolean) {
   await checkPermission('commercial.purchases', 'view', { redirect: true });
   const { userId } = await auth();
   if (!userId) throw new Error('No autenticado');
@@ -276,6 +278,8 @@ export async function getAccountsPayable(startDate?: Date, endDate?: Date) {
       const daysOverdue = inv.dueDate
         ? Math.max(0, today.diff(moment(inv.dueDate), 'days'))
         : 0;
+
+      if (overdueOnly && daysOverdue === 0) continue;
 
       items.push({
         id: inv.id,

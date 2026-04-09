@@ -1,6 +1,7 @@
 'use client';
 
-import { ArrowLeft, Building2, Edit, Power, PowerOff } from 'lucide-react';
+import { Building2, Edit, Power, PowerOff } from 'lucide-react';
+import { BackButton } from '@/shared/components/common/BackButton';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
@@ -75,11 +76,7 @@ export function _ClientHeader({ client }: Props) {
       <div className="flex flex-col gap-4">
         {/* Row 1: Back button + Avatar + Info */}
         <div className="flex items-start gap-3 sm:gap-4">
-          <Button variant="outline" size="icon" className="shrink-0" asChild>
-            <Link href="/dashboard/company/commercial/clients">
-              <ArrowLeft className="h-4 w-4" />
-            </Link>
-          </Button>
+          <BackButton variant="outline" />
           <Avatar className="h-12 w-12 shrink-0 sm:h-16 sm:w-16">
             <AvatarImage src={client.logoUrl || undefined} alt={client.name} />
             <AvatarFallback className="text-base sm:text-lg">

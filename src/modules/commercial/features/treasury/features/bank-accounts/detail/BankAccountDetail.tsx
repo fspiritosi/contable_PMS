@@ -1,4 +1,4 @@
-import { ArrowLeft } from 'lucide-react';
+import { BackButton } from '@/shared/components/common/BackButton';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
@@ -48,12 +48,7 @@ export async function BankAccountDetail({ bankAccountId, searchParams }: Props) 
       <div className="flex items-center justify-between">
         <div>
           <div className="flex items-center gap-2 mb-2">
-            <Link href="/dashboard/commercial/treasury/bank-accounts">
-              <Button variant="ghost" size="sm">
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Volver
-              </Button>
-            </Link>
+            <BackButton label="Volver" size="sm" />
           </div>
           <h1 className="text-3xl font-bold tracking-tight">
             {bankAccount.bankName} - {bankAccount.accountNumber}

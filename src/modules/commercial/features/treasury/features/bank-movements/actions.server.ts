@@ -78,7 +78,7 @@ export async function createBankMovement(data: BankMovementFormData) {
     }
 
     const amount = new Prisma.Decimal(validated.amount);
-    const isIncome = ['DEPOSIT', 'TRANSFER_IN', 'INTEREST'].includes(validated.type);
+    const isIncome = ['DEPOSIT', 'TRANSFER_IN', 'INTEREST', 'CHECK'].includes(validated.type);
 
     // Crear movimiento, actualizar saldo y generar asiento en transacción
     const movement = await prisma.$transaction(async (tx) => {
@@ -87,7 +87,7 @@ export async function createBankMovement(data: BankMovementFormData) {
 
       if (isIncome) {
         newBalance = bankAccount.balance.add(amount);
-      } else if (['WITHDRAWAL', 'TRANSFER_OUT', 'CHECK', 'DEBIT', 'FEE'].includes(validated.type)) {
+      } else if (['WITHDRAWAL', 'TRANSFER_OUT', 'DEBIT', 'FEE'].includes(validated.type)) {
         newBalance = bankAccount.balance.sub(amount);
       }
 
@@ -353,10 +353,31 @@ export async function getBankMovementsPaginated(
           createdBy: true,
           createdAt: true,
           receipt: {
-            select: { id: true, fullNumber: true },
+            select: {
+              id: true,
+              fullNumber: true,
+              date: true,
+              totalAmount: true,
+              status: true,
+              customer: { select: { name: true } },
+            },
           },
           paymentOrder: {
-            select: { id: true, fullNumber: true },
+            select: {
+              id: true,
+              fullNumber: true,
+              date: true,
+              totalAmount: true,
+              status: true,
+              notes: true,
+              supplier: { select: { businessName: true } },
+              items: {
+                select: {
+                  expense: { select: { description: true } },
+                },
+                take: 1,
+              },
+            },
           },
         },
         orderBy,
@@ -370,6 +391,27 @@ export async function getBankMovementsPaginated(
       data: data.map((m) => ({
         ...m,
         amount: Number(m.amount),
+        receipt: m.receipt
+          ? {
+              id: m.receipt.id,
+              fullNumber: m.receipt.fullNumber,
+              date: m.receipt.date,
+              total: Number(m.receipt.totalAmount),
+              status: m.receipt.status,
+              customer: m.receipt.customer,
+            }
+          : null,
+        paymentOrder: m.paymentOrder
+          ? {
+              id: m.paymentOrder.id,
+              fullNumber: m.paymentOrder.fullNumber,
+              date: m.paymentOrder.date,
+              total: Number(m.paymentOrder.totalAmount),
+              status: m.paymentOrder.status,
+              supplier: m.paymentOrder.supplier,
+              expenseDescription: m.paymentOrder.items?.[0]?.expense?.description || m.paymentOrder.notes || null,
+            }
+          : null,
       })),
       total,
     };
@@ -424,7 +466,7 @@ export async function getBankMovementsTotals(
       select: { type: true, amount: true },
     });
 
-    const INCOME_TYPES = ['DEPOSIT', 'TRANSFER_IN', 'INTEREST'];
+    const INCOME_TYPES = ['DEPOSIT', 'TRANSFER_IN', 'INTEREST', 'CHECK'];
     let totalEntries = 0;
     let totalExits = 0;
 
@@ -639,7 +681,7 @@ export async function deleteBankMovement(movementId: string) {
       let newBalance = movement.bankAccount.balance;
 
       // Movimientos que aumentan el saldo (al revertir, disminuyen)
-      if (['DEPOSIT', 'TRANSFER_IN', 'INTEREST'].includes(movement.type)) {
+      if (['DEPOSIT', 'TRANSFER_IN', 'INTEREST', 'CHECK'].includes(movement.type)) {
         newBalance = movement.bankAccount.balance.sub(movement.amount);
       }
       // Movimientos que disminuyen el saldo (al revertir, aumentan)

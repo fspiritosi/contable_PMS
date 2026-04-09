@@ -3,7 +3,8 @@ import { PermissionGuard } from '@/shared/components/common/PermissionGuard';
 import { Button } from '@/shared/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card';
 import { Badge } from '@/shared/components/ui/badge';
-import { ArrowLeft, Pencil, Plus } from 'lucide-react';
+import { Pencil, Plus } from 'lucide-react';
+import { BackButton } from '@/shared/components/common/BackButton';
 import Link from 'next/link';
 import moment from 'moment';
 import {
@@ -38,11 +39,7 @@ export async function PurchaseOrderDetail({ orderId }: Props) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Button variant="outline" size="icon" asChild>
-            <Link href="/dashboard/commercial/purchase-orders">
-              <ArrowLeft className="h-4 w-4" />
-            </Link>
-          </Button>
+          <BackButton variant="outline" />
           <div>
             <h1 className="text-3xl font-bold tracking-tight">
               {order.fullNumber}

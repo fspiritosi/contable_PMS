@@ -23,7 +23,7 @@ import {
 } from '@/shared/components/ui/select';
 import { Checkbox } from '@/shared/components/ui/checkbox';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/card';
-import { createProductSchema, type CreateProductFormData } from '../../../shared/validators';
+import { createProductSchema, updateProductSchema, type CreateProductFormData, type UpdateProductFormData } from '../../../shared/validators';
 import { ProductType, ProductStatus } from '@/generated/prisma/enums';
 import type { ProductCategory } from '../../../shared/types';
 import {
@@ -41,8 +41,8 @@ interface EquivalenceOption {
 }
 
 interface ProductFormProps {
-  onSubmit: (data: CreateProductFormData) => Promise<void>;
-  defaultValues?: Partial<CreateProductFormData>;
+  onSubmit: (data: UpdateProductFormData) => Promise<void>;
+  defaultValues?: Partial<UpdateProductFormData>;
   isSubmitting?: boolean;
   submitLabel?: string;
   categories: ProductCategory[];
@@ -62,8 +62,9 @@ export function _ProductForm({
   const [salePriceWithTax, setSalePriceWithTax] = useState<number>(0);
   const { isFeatureAvailable } = useIndustry();
 
-  const form = useForm<CreateProductFormData>({
-    resolver: zodResolver(createProductSchema),
+  const schema = showStatus ? updateProductSchema : createProductSchema;
+  const form = useForm<UpdateProductFormData>({
+    resolver: zodResolver(schema),
     defaultValues: {
       name: '',
       description: '',
@@ -129,7 +130,7 @@ export function _ProductForm({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Tipo *</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Seleccionar tipo" />
@@ -174,7 +175,7 @@ export function _ProductForm({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Categoría</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Seleccionar categoría" />
@@ -199,7 +200,7 @@ export function _ProductForm({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Unidad de Medida</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Seleccionar unidad" />
@@ -493,7 +494,7 @@ export function _ProductForm({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Grupo de Equivalencia</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Seleccionar grupo (opcional)" />
@@ -523,7 +524,7 @@ export function _ProductForm({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Estado</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Seleccionar estado" />
