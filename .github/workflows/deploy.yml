@@ -85,6 +85,7 @@ jobs:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
+          export DB_URL_B64=$(echo -n "${DATABASE_URL}" | base64 -w0)
           ssh root@${VPS_HOST} "
             echo '${GHCR_PAT}' | docker login ghcr.io -u '${GHCR_USER}' --password-stdin &&
             docker pull ghcr.io/codecontrolsas/baxer-n:latest &&
@@ -92,7 +93,7 @@ jobs:
             docker tag ghcr.io/codecontrolsas/baxer-n:latest baxer-next-r5wztq:latest &&
             docker run --rm \
               --network dokploy-network \
-              -e DATABASE_URL='${DATABASE_URL}' \
+              -e DATABASE_URL=\$(echo ${DB_URL_B64} | base64 -d) \
               ghcr.io/codecontrolsas/baxer-n:migrate \
               npx prisma db push --accept-data-loss &&
             docker service update --image baxer-next-r5wztq:latest --force baxer-next-r5wztq &&
