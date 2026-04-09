@@ -180,6 +180,8 @@ export interface PriceList extends Record<string, unknown> {
   description: string | null;
   isDefault: boolean;
   isActive: boolean;
+  createdBy: string | null;
+  lastModifiedBy: string | null;
   createdAt: Date;
   updatedAt: Date;
   // Relaciones
@@ -195,6 +197,8 @@ export interface PriceListItem extends Record<string, unknown> {
   productId: string;
   price: number;
   priceWithTax: number;
+  updatedBy: string | null;
+  updatedAt: Date | null;
   // Relaciones
   product?: {
     id: string;

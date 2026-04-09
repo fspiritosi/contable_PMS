@@ -14,6 +14,7 @@ import {
 import type { DeliveryNoteStatus } from '@/generated/prisma/enums';
 import { cn } from '@/shared/lib/utils';
 import { _DeliveryNoteActions } from './components/_DeliveryNoteActions';
+import { _DeliveryNotePDFButton } from './components/_DeliveryNotePDFButton';
 
 interface Props {
   id: string;
@@ -49,6 +50,7 @@ export async function DeliveryNoteDetail({ id }: Props) {
                 </Button>
               </PermissionGuard>
             )}
+            <_DeliveryNotePDFButton note={note} />
             <_DeliveryNoteActions noteId={note.id} status={status} fullNumber={note.fullNumber} />
             <Badge
               variant={statusVariant}

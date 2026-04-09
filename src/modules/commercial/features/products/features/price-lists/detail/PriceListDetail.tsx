@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/sha
 import { Badge } from '@/shared/components/ui/badge';
 import { Pencil, Star } from 'lucide-react';
 import { BackButton } from '@/shared/components/common/BackButton';
+import moment from 'moment';
 import { _PriceListItemsTable } from './components/_PriceListItemsTable';
 
 interface PriceListDetailProps {
@@ -80,6 +81,23 @@ export async function PriceListDetail({ priceListId }: PriceListDetailProps) {
                 <p className="text-sm font-medium text-muted-foreground">Total de Productos</p>
                 <p className="text-3xl font-bold">{priceList._count?.items || 0}</p>
               </div>
+
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Última modificación</p>
+                <p className="text-sm">{moment(priceList.updatedAt).format('DD/MM/YYYY HH:mm')}</p>
+              </div>
+
+              {items.length > 0 && (() => {
+                const recentlyModified = items.filter(
+                  (i) => i.updatedAt && moment(i.updatedAt).isAfter(moment(priceList.createdAt))
+                );
+                return recentlyModified.length > 0 ? (
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Productos modificados</p>
+                    <p className="text-sm">{recentlyModified.length} de {items.length}</p>
+                  </div>
+                ) : null;
+              })()}
             </CardContent>
           </Card>
         </div>

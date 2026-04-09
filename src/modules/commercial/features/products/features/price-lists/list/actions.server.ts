@@ -434,6 +434,7 @@ export async function createPriceListItem(
         productId: validatedData.productId,
         price: validatedData.price,
         priceWithTax,
+        updatedBy: userId,
       },
       include: {
         product: {
@@ -507,11 +508,18 @@ export async function updatePriceListItem(
     const vatRate = Number(existing.product.vatRate);
     const priceWithTax = validatedData.price * (1 + vatRate / 100);
 
+    // Actualizar item y registrar modificación en la lista
+    await prisma.priceList.update({
+      where: { id: existing.priceListId },
+      data: { lastModifiedBy: userId },
+    });
+
     const item = await prisma.priceListItem.update({
       where: { id },
       data: {
         price: validatedData.price,
         priceWithTax,
+        updatedBy: userId,
       },
       include: {
         product: {
@@ -577,5 +585,127 @@ export async function deletePriceListItem(id: string): Promise<void> {
   } catch (error) {
     logger.error('Error al eliminar item de lista de precios', { data: { error } });
     throw new Error('Error al eliminar item de lista de precios');
+  }
+}
+
+export async function bulkDeletePriceListItems(ids: string[]): Promise<number> {
+  await checkPermission('commercial.price-lists', 'delete', { redirect: true });
+  const { userId } = await auth();
+  if (!userId) throw new Error('No autenticado');
+
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No se encontró empresa activa');
+
+  try {
+    const result = await prisma.priceListItem.deleteMany({
+      where: {
+        id: { in: ids },
+        priceList: { companyId },
+      },
+    });
+
+    // Obtener priceListId para revalidar (de cualquier item existente antes del delete)
+    if (ids.length > 0) {
+      revalidatePath('/dashboard/commercial/price-lists');
+    }
+
+    logger.info('Eliminación masiva de items de lista de precios', {
+      data: { count: result.count, userId },
+    });
+
+    return result.count;
+  } catch (error) {
+    logger.error('Error al eliminar items masivamente', { data: { error } });
+    throw new Error('Error al eliminar items de la lista');
+  }
+}
+
+// ============================================
+// CARGA MASIVA DE PRODUCTOS
+// ============================================
+
+interface BulkAddInput {
+  productIds: string[];
+  adjustmentType: 'increase' | 'decrease';
+  adjustmentPercent: number;
+}
+
+export async function bulkAddPriceListItems(
+  priceListId: string,
+  data: BulkAddInput
+): Promise<{ added: number; skipped: number }> {
+  await checkPermission('commercial.price-lists', 'update', { redirect: true });
+  const { userId } = await auth();
+  if (!userId) throw new Error('No autenticado');
+
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No se encontró empresa activa');
+
+  try {
+    // Verificar lista
+    const priceList = await prisma.priceList.findFirst({
+      where: { id: priceListId, companyId },
+    });
+    if (!priceList) throw new Error('Lista de precios no encontrada');
+
+    // Obtener productos con sus precios y IVA
+    const products = await prisma.product.findMany({
+      where: { id: { in: data.productIds }, companyId, status: 'ACTIVE' },
+      select: { id: true, salePrice: true, vatRate: true },
+    });
+
+    // Obtener items ya existentes en la lista
+    const existingItems = await prisma.priceListItem.findMany({
+      where: { priceListId, productId: { in: data.productIds } },
+      select: { productId: true },
+    });
+    const existingProductIds = new Set(existingItems.map((i) => i.productId));
+
+    // Filtrar productos que no están ya en la lista
+    const newProducts = products.filter((p) => !existingProductIds.has(p.id));
+
+    if (newProducts.length === 0) {
+      return { added: 0, skipped: data.productIds.length };
+    }
+
+    // Calcular factor de ajuste
+    const factor = data.adjustmentType === 'increase'
+      ? 1 + data.adjustmentPercent / 100
+      : 1 - data.adjustmentPercent / 100;
+
+    // Crear items en batch
+    const itemsData = newProducts.map((product) => {
+      const basePrice = Number(product.salePrice);
+      const price = Math.round(basePrice * factor * 100) / 100;
+      const vatRate = Number(product.vatRate);
+      const priceWithTax = Math.round(price * (1 + vatRate / 100) * 100) / 100;
+
+      return {
+        priceListId,
+        productId: product.id,
+        price,
+        priceWithTax,
+        updatedBy: userId,
+      };
+    });
+
+    await prisma.$transaction(async (tx) => {
+      await tx.priceListItem.createMany({ data: itemsData });
+      await tx.priceList.update({
+        where: { id: priceListId },
+        data: { lastModifiedBy: userId },
+      });
+    });
+
+    revalidatePath(`/dashboard/commercial/price-lists/${priceListId}`);
+    logger.info('Carga masiva de productos en lista de precios', {
+      data: { priceListId, added: newProducts.length, skipped: existingProductIds.size },
+    });
+
+    return { added: newProducts.length, skipped: existingProductIds.size };
+  } catch (error) {
+    logger.error('Error en carga masiva de lista de precios', { data: { error } });
+    if (error instanceof Error) throw error;
+    throw new Error('Error al agregar productos masivamente');
   }
 }
