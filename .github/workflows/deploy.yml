@@ -85,7 +85,7 @@ jobs:
               --user root \
               -e DATABASE_URL='${DATABASE_URL}' \
               ghcr.io/codecontrolsas/baxer-n:latest \
-              npx prisma db push --accept-data-loss &&
+              node node_modules/prisma/build/index.js db push --accept-data-loss &&
             docker service update --image baxer-next-r5wztq:latest --force baxer-next-r5wztq &&
             docker image prune -f
           "
