@@ -48,6 +48,14 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Build and push migrate image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          target: migrate
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:migrate
+          cache-from: type=gha
 
   deploy:
     needs: build-and-push
