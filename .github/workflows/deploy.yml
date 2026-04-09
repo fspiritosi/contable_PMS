@@ -61,8 +61,13 @@ jobs:
       - name: Add VPS to known hosts
         run: |
           mkdir -p ~/.ssh
-          ssh-keyscan -t ed25519,rsa,ecdsa -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts 2>&1
+          for i in 1 2 3; do
+            ssh-keyscan -T 10 -t ed25519,rsa,ecdsa -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts 2>/dev/null && break
+            echo "Retry $i..."
+            sleep 5
+          done
           echo "Known hosts entries: $(wc -l < ~/.ssh/known_hosts)"
+          test -s ~/.ssh/known_hosts || (echo "ERROR: No known hosts collected" && exit 1)
 
       - name: Deploy to VPS
         env:
