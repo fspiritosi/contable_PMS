@@ -39,6 +39,9 @@ yarn-error.log*
 !.env.production
 !.env.example
 
+# session logs
+.session-logs/
+
 # vercel
 .vercel
 
@@ -60,3 +63,4 @@ notas.md
 .opencode
 .agents
 backup_db.sql
+.devin
