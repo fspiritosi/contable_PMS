@@ -64,3 +64,4 @@ notas.md
 .agents
 backup_db.sql
 .devin
+backups/
