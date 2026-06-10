@@ -27,11 +27,11 @@ interface WeeklySalesChartProps {
 const chartConfig = {
   currentWeek: {
     label: 'Semana actual',
-    color: 'hsl(var(--chart-1))',
+    color: 'var(--chart-1)',
   },
   previousWeek: {
     label: 'Semana anterior',
-    color: 'hsl(var(--chart-2))',
+    color: 'var(--chart-2)',
   },
 } satisfies ChartConfig;
 

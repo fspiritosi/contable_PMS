@@ -12,7 +12,16 @@ const eslintConfig = defineConfig([
     'out/**',
     'build/**',
     'next-env.d.ts',
+    // Código generado por Prisma (no se lintea, es enorme)
+    'src/generated/**',
   ]),
+  // Reglas de seguridad: atrapar componentes/variables sin importar
+  // (evita ReferenceError de runtime como "Button is not defined")
+  {
+    rules: {
+      'react/jsx-no-undef': 'error',
+    },
+  },
   // Disable rules-of-hooks for Client Components with underscore prefix
   // This is SAFE because:
   // 1. Files named _*.tsx are Client Components by project convention

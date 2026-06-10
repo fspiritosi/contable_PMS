@@ -93,21 +93,22 @@ export function getColumns({ onView, onEdit, onConfirm, onCancel, loading }: Col
           | 'default'
           | 'secondary'
           | 'destructive'
-          | 'outline' =
+          | 'outline'
+          | 'success'
+          | 'warning' =
           status === 'CONFIRMED'
-            ? 'default'
+            ? 'success'
             : status === 'PAID'
-            ? 'default'
+            ? 'success'
+            : status === 'PARTIAL_PAID'
+            ? 'warning'
             : status === 'CANCELLED'
             ? 'destructive'
             : 'secondary';
 
         return (
           <div className="flex items-center gap-1.5">
-            <Badge
-              variant={variant}
-              className={status === 'CONFIRMED' ? 'bg-green-600 hover:bg-green-700' : undefined}
-            >
+            <Badge variant={variant}>
               {PURCHASE_INVOICE_STATUS_LABELS[status as PurchaseInvoiceStatus]}
             </Badge>
             {row.original.receptionStatus === 'pending' && (

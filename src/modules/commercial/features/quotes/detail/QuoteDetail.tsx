@@ -25,11 +25,11 @@ function getStatusBadge(status: string) {
     case 'SENT':
       return <Badge variant="default">{label}</Badge>;
     case 'ACCEPTED':
-      return <Badge className="bg-green-600">{label}</Badge>;
+      return <Badge variant="success">{label}</Badge>;
     case 'REJECTED':
       return <Badge variant="destructive">{label}</Badge>;
     case 'EXPIRED':
-      return <Badge className="bg-yellow-600">{label}</Badge>;
+      return <Badge variant="warning">{label}</Badge>;
     case 'COMPLETED':
       return <Badge className="bg-blue-600">{label}</Badge>;
     default:

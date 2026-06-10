@@ -50,19 +50,19 @@ interface ProfitabilityChartProps {
 const chartConfig = {
   sales: {
     label: 'Ventas',
-    color: '#22c55e',
+    color: 'var(--chart-2)',
   },
   purchases: {
     label: 'Compras',
-    color: '#3b82f6',
+    color: 'var(--chart-1)',
   },
   expenses: {
     label: 'Gastos',
-    color: '#f97316',
+    color: 'var(--chart-3)',
   },
   profit: {
     label: 'Rentabilidad',
-    color: '#8b5cf6',
+    color: 'var(--chart-4)',
   },
 } satisfies ChartConfig;
 

@@ -19,7 +19,7 @@ interface SalesTrendChartProps {
 const chartConfig = {
   total: {
     label: 'Ventas',
-    color: 'hsl(var(--chart-1))',
+    color: 'var(--chart-1)',
   },
 } satisfies ChartConfig;
 
@@ -58,8 +58,7 @@ export function _SalesTrendChart({ data, defaultOpen }: SalesTrendChartProps) {
             <Area
               type="monotone"
               dataKey="total"
-              //stroke="var(--color-total)"
-              stroke="#777"
+              stroke="var(--color-total)"
               fill="url(#fillSales)"
               strokeWidth={2}
             />

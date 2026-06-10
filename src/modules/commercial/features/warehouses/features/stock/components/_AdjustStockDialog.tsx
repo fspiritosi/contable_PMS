@@ -140,7 +140,7 @@ export function AdjustStockDialog({
                 <div className="text-sm font-medium">Ajuste a realizar:</div>
                 <div className="flex items-center gap-2">
                   {difference > 0 ? (
-                    <Badge variant="default" className="bg-green-600">
+                    <Badge variant="success">
                       +{difference.toLocaleString()} {stock.product?.unitOfMeasure || 'unidades'}
                     </Badge>
                   ) : (

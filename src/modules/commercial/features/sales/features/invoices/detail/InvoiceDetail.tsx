@@ -1,7 +1,9 @@
+import Link from 'next/link';
 import { PermissionGuard } from '@/shared/components/common/PermissionGuard';
 import { getInvoiceById } from '../list/actions.server';
 import { Card } from '@/shared/components/ui/card';
 import { Badge } from '@/shared/components/ui/badge';
+import { Button } from '@/shared/components/ui/button';
 import { BackButton } from '@/shared/components/common/BackButton';
 import moment from 'moment';
 import { VOUCHER_TYPE_LABELS, INVOICE_STATUS_LABELS } from '../shared/validators';
@@ -27,9 +29,9 @@ export async function InvoiceDetail({ id }: InvoiceDetailProps) {
       case 'CONFIRMED':
         return <Badge variant="default">{INVOICE_STATUS_LABELS[status]}</Badge>;
       case 'PAID':
-        return <Badge className="bg-green-600">{INVOICE_STATUS_LABELS[status]}</Badge>;
+        return <Badge variant="success">{INVOICE_STATUS_LABELS[status]}</Badge>;
       case 'PARTIAL_PAID':
-        return <Badge className="bg-yellow-600">{INVOICE_STATUS_LABELS[status]}</Badge>;
+        return <Badge variant="warning">{INVOICE_STATUS_LABELS[status]}</Badge>;
       case 'CANCELLED':
         return <Badge variant="destructive">{INVOICE_STATUS_LABELS[status]}</Badge>;
       default:

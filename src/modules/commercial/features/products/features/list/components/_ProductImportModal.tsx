@@ -527,7 +527,7 @@ export function _ProductImportModal({
               <Badge variant="default">
                 {parsedRows.length} filas totales
               </Badge>
-              <Badge variant="default" className="bg-green-600">
+              <Badge variant="success">
                 <CheckCircle2 className="h-3 w-3 mr-1" />
                 {validRows.length} válidos
               </Badge>

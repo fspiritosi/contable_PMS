@@ -16,7 +16,7 @@ type SortConfig = { key: string; direction: 'asc' | 'desc' };
 
 function getOverdueBadge(days: number) {
   if (days === 0) return <Badge variant="secondary">Al día</Badge>;
-  if (days <= 30) return <Badge className="bg-yellow-600">Vencida {days}d</Badge>;
+  if (days <= 30) return <Badge variant="warning">Vencida {days}d</Badge>;
   if (days <= 60) return <Badge className="bg-orange-600">Vencida {days}d</Badge>;
   return <Badge variant="destructive">Vencida {days}d</Badge>;
 }

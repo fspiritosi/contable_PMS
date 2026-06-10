@@ -80,7 +80,7 @@ export const CASH_REGISTER_STATUS_LABELS = {
 } as const;
 
 export const CASH_REGISTER_STATUS_BADGES = {
-  ACTIVE: 'default' as const,
+  ACTIVE: 'success' as const,
   INACTIVE: 'secondary' as const,
 };
 
@@ -90,7 +90,7 @@ export const SESSION_STATUS_LABELS = {
 } as const;
 
 export const SESSION_STATUS_BADGES = {
-  OPEN: 'default' as const,
+  OPEN: 'success' as const,
   CLOSED: 'secondary' as const,
 };
 
@@ -262,7 +262,7 @@ export const BANK_ACCOUNT_STATUS_LABELS = {
 } as const;
 
 export const BANK_ACCOUNT_STATUS_BADGES = {
-  ACTIVE: 'default' as const,
+  ACTIVE: 'success' as const,
   INACTIVE: 'secondary' as const,
   CLOSED: 'destructive' as const,
 };
@@ -481,7 +481,7 @@ export const RECEIPT_STATUS_LABELS = {
 
 export const RECEIPT_STATUS_BADGES = {
   DRAFT: 'secondary' as const,
-  CONFIRMED: 'default' as const,
+  CONFIRMED: 'success' as const,
   CANCELLED: 'destructive' as const,
 };
 
@@ -556,7 +556,7 @@ export const PAYMENT_ORDER_STATUS_LABELS = {
 
 export const PAYMENT_ORDER_STATUS_BADGES = {
   DRAFT: 'secondary' as const,
-  CONFIRMED: 'default' as const,
+  CONFIRMED: 'success' as const,
   CANCELLED: 'destructive' as const,
 };
 
@@ -666,12 +666,12 @@ export const CHECK_STATUS_LABELS = {
 
 export const CHECK_STATUS_BADGES = {
   PORTFOLIO: 'default' as const,
-  DEPOSITED: 'secondary' as const,
-  CLEARED: 'default' as const,
+  DEPOSITED: 'warning' as const,
+  CLEARED: 'success' as const,
   REJECTED: 'destructive' as const,
   ENDORSED: 'secondary' as const,
-  DELIVERED: 'secondary' as const,
-  CASHED: 'default' as const,
+  DELIVERED: 'default' as const,
+  CASHED: 'success' as const,
   VOIDED: 'destructive' as const,
 };
 

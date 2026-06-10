@@ -207,14 +207,14 @@ function getStatusBadge(status: string) {
       );
     case 'PAID':
       return (
-        <Badge className="gap-1 bg-green-600">
+        <Badge variant="success" className="gap-1">
           <CheckCircle className="h-3 w-3" />
           {label}
         </Badge>
       );
     case 'PARTIAL_PAID':
       return (
-        <Badge className="gap-1 bg-yellow-600">
+        <Badge variant="warning" className="gap-1">
           <CheckCircle className="h-3 w-3" />
           {label}
         </Badge>

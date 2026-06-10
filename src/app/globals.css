@@ -25,6 +25,11 @@
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -46,80 +51,122 @@
   --radius-4xl: calc(var(--radius) + 16px);
 }
 
+/* ============================================================
+   Tema "Cian Codecontrol" — primario de marca + semánticos.
+   Neutros con un leve tinte frío (no gris muerto) y sidebar
+   oscuro premium en ambos modos.
+   ============================================================ */
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
+  --radius: 0.7rem;
+
+  /* Superficies y texto */
+  --background: oklch(0.985 0.004 230);
+  --foreground: oklch(0.22 0.02 250);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+  --card-foreground: oklch(0.22 0.02 250);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --popover-foreground: oklch(0.22 0.02 250);
+
+  /* Marca Codecontrol — cian/azul */
+  --primary: oklch(0.62 0.125 226);
+  --primary-foreground: oklch(0.99 0 0);
+
+  --secondary: oklch(0.965 0.008 235);
+  --secondary-foreground: oklch(0.28 0.02 250);
+  --muted: oklch(0.965 0.008 235);
+  --muted-foreground: oklch(0.52 0.02 245);
+  --accent: oklch(0.95 0.028 228);
+  --accent-foreground: oklch(0.34 0.07 240);
+
+  /* Semánticos */
+  --destructive: oklch(0.58 0.21 25);
+  --destructive-foreground: oklch(0.99 0 0);
+  --success: oklch(0.62 0.15 152);
+  --success-foreground: oklch(0.99 0 0);
+  --warning: oklch(0.74 0.14 78);
+  --warning-foreground: oklch(0.28 0.05 80);
+
+  --border: oklch(0.91 0.01 240);
+  --input: oklch(0.91 0.01 240);
+  --ring: oklch(0.62 0.125 226);
+
+  /* Charts cohesivos */
+  --chart-1: oklch(0.62 0.125 226);
+  --chart-2: oklch(0.64 0.15 152);
+  --chart-3: oklch(0.74 0.14 78);
+  --chart-4: oklch(0.58 0.18 300);
+  --chart-5: oklch(0.62 0.2 16);
+
+  /* Sidebar — tinta azul profunda con acento cian (premium) */
+  --sidebar: oklch(0.26 0.035 256);
+  --sidebar-foreground: oklch(0.85 0.02 250);
+  --sidebar-primary: oklch(0.62 0.125 226);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.32 0.05 245);
+  --sidebar-accent-foreground: oklch(0.97 0.01 240);
+  --sidebar-border: oklch(0.34 0.03 256);
+  --sidebar-ring: oklch(0.62 0.125 226);
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --background: oklch(0.2 0.02 255);
+  --foreground: oklch(0.96 0.01 250);
+  --card: oklch(0.25 0.025 256);
+  --card-foreground: oklch(0.96 0.01 250);
+  --popover: oklch(0.25 0.025 256);
+  --popover-foreground: oklch(0.96 0.01 250);
+
+  --primary: oklch(0.7 0.13 226);
+  --primary-foreground: oklch(0.18 0.02 255);
+
+  --secondary: oklch(0.3 0.025 256);
+  --secondary-foreground: oklch(0.96 0.01 250);
+  --muted: oklch(0.3 0.025 256);
+  --muted-foreground: oklch(0.7 0.02 250);
+  --accent: oklch(0.32 0.04 245);
+  --accent-foreground: oklch(0.96 0.01 250);
+
+  --destructive: oklch(0.68 0.19 24);
+  --destructive-foreground: oklch(0.99 0 0);
+  --success: oklch(0.68 0.15 152);
+  --success-foreground: oklch(0.16 0.02 255);
+  --warning: oklch(0.79 0.14 80);
+  --warning-foreground: oklch(0.22 0.04 80);
+
+  --border: oklch(0.35 0.025 256);
+  --input: oklch(0.36 0.03 256);
+  --ring: oklch(0.7 0.13 226);
+
+  --chart-1: oklch(0.7 0.13 226);
+  --chart-2: oklch(0.7 0.15 152);
+  --chart-3: oklch(0.79 0.14 80);
+  --chart-4: oklch(0.66 0.18 300);
+  --chart-5: oklch(0.68 0.2 16);
+
+  --sidebar: oklch(0.17 0.02 256);
+  --sidebar-foreground: oklch(0.85 0.02 250);
+  --sidebar-primary: oklch(0.7 0.13 226);
+  --sidebar-primary-foreground: oklch(0.16 0.02 255);
+  --sidebar-accent: oklch(0.28 0.05 245);
+  --sidebar-accent-foreground: oklch(0.96 0.01 240);
+  --sidebar-border: oklch(0.28 0.02 256);
+  --sidebar-ring: oklch(0.7 0.13 226);
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
+  /* Números tabulares para montos/códigos (alinean columnas en contabilidad) */
+  .font-mono {
+    font-variant-numeric: tabular-nums;
+  }
   body {
     @apply bg-background text-foreground;
+    /* Atmósfera: gradiente de marca apenas perceptible */
+    background-image:
+      radial-gradient(900px 480px at 100% -5%, oklch(0.62 0.125 226 / 0.05), transparent 60%),
+      radial-gradient(720px 420px at -5% 108%, oklch(0.64 0.15 152 / 0.045), transparent 55%);
+    background-attachment: fixed;
   }
 }

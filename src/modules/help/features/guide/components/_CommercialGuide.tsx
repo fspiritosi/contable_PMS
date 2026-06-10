@@ -616,7 +616,7 @@ export function _CommercialGuide() {
           <div className="flex flex-wrap gap-2">
             <Badge variant="secondary">Pendiente de Entrega</Badge>
             <span>→</span>
-            <Badge className="bg-green-600">Aceptado</Badge>
+            <Badge variant="success">Aceptado</Badge>
             <span>→</span>
             <Badge className="bg-blue-600">Facturado</Badge>
           </div>

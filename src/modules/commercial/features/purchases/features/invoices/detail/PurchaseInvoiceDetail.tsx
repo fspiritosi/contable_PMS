@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { getPurchaseInvoiceById } from '../list/actions.server';
 import { PermissionGuard } from '@/shared/components/common/PermissionGuard';
 import { Button } from '@/shared/components/ui/button';
@@ -27,11 +28,15 @@ export async function PurchaseInvoiceDetail({ invoiceId }: Props) {
     | 'default'
     | 'secondary'
     | 'destructive'
-    | 'outline' =
+    | 'outline'
+    | 'success'
+    | 'warning' =
     invoice.status === 'CONFIRMED'
-      ? 'default'
+      ? 'success'
       : invoice.status === 'PAID'
-      ? 'default'
+      ? 'success'
+      : invoice.status === 'PARTIAL_PAID'
+      ? 'warning'
       : invoice.status === 'CANCELLED'
       ? 'destructive'
       : 'secondary';
@@ -61,13 +66,7 @@ export async function PurchaseInvoiceDetail({ invoiceId }: Props) {
               total={Number(invoice.total)}
             />
           )}
-          <Badge
-            variant={statusVariant}
-            className={cn(
-              'text-sm px-3 py-1',
-              invoice.status === 'CONFIRMED' && 'bg-green-600 hover:bg-green-700'
-            )}
-          >
+          <Badge variant={statusVariant} className="text-sm px-3 py-1">
             {PURCHASE_INVOICE_STATUS_LABELS[invoice.status as PurchaseInvoiceStatus]}
           </Badge>
         </div>
@@ -338,7 +337,7 @@ export async function PurchaseInvoiceDetail({ invoiceId }: Props) {
                     <p className="text-sm text-muted-foreground">CAE</p>
                     <p className="font-mono text-xs break-all">{invoice.cae}</p>
                     {invoice.validated && (
-                      <Badge variant="default" className="mt-1 bg-green-600 hover:bg-green-700">
+                      <Badge variant="success" className="mt-1">
                         Validado
                       </Badge>
                     )}

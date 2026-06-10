@@ -19,7 +19,7 @@ interface PurchasesTrendChartProps {
 const chartConfig = {
   total: {
     label: 'Compras',
-    color: 'hsl(var(--chart-2))',
+    color: 'var(--chart-2)',
   },
 } satisfies ChartConfig;
 
@@ -58,8 +58,7 @@ export function _PurchasesTrendChart({ data, defaultOpen }: PurchasesTrendChartP
             <Area
               type="monotone"
               dataKey="total"
-              //stroke="var(--color-total)"
-              stroke="#777"
+              stroke="var(--color-total)"
               fill="url(#fillPurchases)"
               strokeWidth={2}
             />

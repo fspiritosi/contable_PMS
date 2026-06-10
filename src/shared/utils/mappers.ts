@@ -27,7 +27,7 @@ import type {
 // TIPOS DE BADGE
 // ============================================
 
-export type BadgeVariant = 'default' | 'secondary' | 'destructive' | 'outline';
+export type BadgeVariant = 'default' | 'secondary' | 'destructive' | 'outline' | 'success' | 'warning';
 
 export interface BadgeConfig {
   label: string;
@@ -85,8 +85,8 @@ export const documentStateLabels: Record<DocumentState, string> = {
 };
 
 export const documentStateBadges: Record<DocumentState, BadgeConfig> = {
-  PENDING: { label: 'Pendiente', variant: 'secondary' },
-  APPROVED: { label: 'Presentado', variant: 'default' }, // Default, use getDocumentStateBadge for context-aware
+  PENDING: { label: 'Pendiente', variant: 'warning' },
+  APPROVED: { label: 'Presentado', variant: 'success' }, // Default, use getDocumentStateBadge for context-aware
   EXPIRED: { label: 'Vencido', variant: 'destructive' },
 };
 
@@ -104,13 +104,13 @@ export function getDocumentStateBadge(
     return { label: 'Vencido', variant: 'destructive' };
   }
   if (state === 'PENDING') {
-    return { label: 'Pendiente', variant: 'secondary' };
+    return { label: 'Pendiente', variant: 'warning' };
   }
   // APPROVED state
   if (hasExpiration) {
-    return { label: 'Vigente', variant: 'default' };
+    return { label: 'Vigente', variant: 'success' };
   }
-  return { label: 'Presentado', variant: 'default' };
+  return { label: 'Presentado', variant: 'success' };
 }
 
 // ============================================
@@ -177,8 +177,8 @@ export const employeeStatusLabels: Record<EmployeeStatus, string> = {
 };
 
 export const employeeStatusBadges: Record<EmployeeStatus, BadgeConfig> = {
-  INCOMPLETE: { label: 'Incompleto', variant: 'secondary' },
-  COMPLETE: { label: 'Completo', variant: 'default' },
+  INCOMPLETE: { label: 'Incompleto', variant: 'warning' },
+  COMPLETE: { label: 'Completo', variant: 'success' },
   COMPLETE_EXPIRED_DOCS: { label: 'Docs Vencidos', variant: 'destructive' },
 };
 
@@ -208,10 +208,10 @@ export const vehicleStatusLabels: Record<VehicleStatus, string> = {
 };
 
 export const vehicleStatusBadges: Record<VehicleStatus, BadgeConfig> = {
-  INCOMPLETE: { label: 'Incompleto', variant: 'secondary' },
-  COMPLETE: { label: 'Completo', variant: 'outline' },
+  INCOMPLETE: { label: 'Incompleto', variant: 'warning' },
+  COMPLETE: { label: 'Completo', variant: 'success' },
   COMPLETE_EXPIRED_DOCS: { label: 'Docs Vencidos', variant: 'destructive' },
-  APPROVED: { label: 'Avalado', variant: 'default' },
+  APPROVED: { label: 'Avalado', variant: 'success' },
   NOT_APPROVED: { label: 'No Avalado', variant: 'destructive' },
 };
 
@@ -228,11 +228,11 @@ export const vehicleConditionLabels: Record<VehicleCondition, string> = {
 };
 
 export const vehicleConditionBadges: Record<VehicleCondition, BadgeConfig> = {
-  OPERATIVE: { label: 'Operativo', variant: 'default' },
+  OPERATIVE: { label: 'Operativo', variant: 'success' },
   NOT_OPERATIVE: { label: 'No Operativo', variant: 'destructive' },
-  IN_REPAIR: { label: 'En Reparación', variant: 'secondary' },
+  IN_REPAIR: { label: 'En Reparación', variant: 'warning' },
   CONDITIONAL_OPERATIVE: { label: 'Op. Condicionado', variant: 'outline' },
-  IN_PREPARATION: { label: 'En Preparación', variant: 'secondary' },
+  IN_PREPARATION: { label: 'En Preparación', variant: 'warning' },
 };
 
 // ============================================
