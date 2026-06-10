@@ -23,8 +23,8 @@ export interface UploadEquipmentDocumentInput {
   documentTypeId: string;
   expirationDate?: Date | null;
   period?: string;
-  // File data from client
-  fileBuffer: number[];
+  // Archivo enviado como File (multipart/binario, sin inflar el payload)
+  file: File;
   fileName: string;
   fileSize: number;
   mimeType: string;
@@ -121,7 +121,7 @@ export async function uploadEquipmentDocument(
     });
 
     // Convertir array de bytes a Buffer
-    const fileBuffer = Buffer.from(input.fileBuffer);
+    const fileBuffer = Buffer.from(await input.file.arrayBuffer());
 
     // Subir archivo a storage
     const uploadResult = await uploadFile(fileBuffer, filename, {

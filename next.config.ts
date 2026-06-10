@@ -7,12 +7,14 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
-  // Aumentar límite de body para Server Actions (subida de archivos)
-  // El límite de storage es 10MB, ponemos 12MB para incluir overhead
+  // Límites de body para subida de archivos (max de storage: 10MB + overhead multipart).
+  // El archivo viaja como File/multipart (binario), no como number[] JSON.
   experimental: {
     serverActions: {
-      bodySizeLimit: '12mb',
+      bodySizeLimit: '15mb',
     },
+    // El request pasa por el proxy (src/proxy.ts), que bufferea el body hasta este límite.
+    middlewareClientMaxBodySize: '15mb',
   },
   // Configuración de imágenes remotas
   images: {

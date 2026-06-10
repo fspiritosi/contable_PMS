@@ -1203,7 +1203,7 @@ interface UploadMultiResourceDocumentInput {
   documentTypeId: string;
   expirationDate: Date | null;
   period?: string;
-  fileBuffer: number[];
+  file: File;
   fileName: string;
   fileSize: number;
   mimeType: string;
@@ -1254,7 +1254,7 @@ export async function uploadMultiResourceDocument(
     }
 
     // 3. Subir archivo a storage
-    const buffer = Buffer.from(input.fileBuffer);
+    const buffer = Buffer.from(await input.file.arrayBuffer());
     const uniqueFilename = generateUniqueFilename(input.fileName);
     // Construir path para documentos multirrecurso: {companySlug}/multirecurso/{entityType}/{docTypeSlug}/
     const folder = `${company.slug}/multirecurso/${input.appliesTo.toLowerCase()}/${documentType.slug}`;

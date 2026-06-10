@@ -152,10 +152,6 @@ export function _MultiResourceUploadModal({
     }
 
     try {
-      // Convertir archivo a array de bytes para enviar al server action
-      const arrayBuffer = await selectedFile.arrayBuffer();
-      const fileBuffer = Array.from(new Uint8Array(arrayBuffer));
-
       uploadMutation.mutate({
         appliesTo,
         documentTypeId: documentType.id,
@@ -163,7 +159,7 @@ export function _MultiResourceUploadModal({
           ? new Date(data.expirationDate)
           : null,
         period: data.period || undefined,
-        fileBuffer,
+        file: selectedFile,
         fileName: selectedFile.name,
         fileSize: selectedFile.size,
         mimeType: selectedFile.type,

@@ -205,13 +205,29 @@ export function _CompanyDocumentsGrid({ initialData, initialSummary, permissions
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            {doc.documentPath && (
+                            {doc.documentKey && (
                               <>
-                                <DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() =>
+                                    window.open(
+                                      `/api/storage/${doc.documentKey}`,
+                                      '_blank',
+                                      'noopener,noreferrer'
+                                    )
+                                  }
+                                >
                                   <Eye className="mr-2 h-4 w-4" />
                                   Ver documento
                                 </DropdownMenuItem>
-                                <DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() =>
+                                    window.open(
+                                      `/api/storage/${doc.documentKey}?download=true`,
+                                      '_blank',
+                                      'noopener,noreferrer'
+                                    )
+                                  }
+                                >
                                   <Download className="mr-2 h-4 w-4" />
                                   Descargar
                                 </DropdownMenuItem>

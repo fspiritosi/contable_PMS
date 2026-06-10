@@ -222,15 +222,13 @@ export function _UniversalUploadModal({ currentTab, companyId }: Props) {
     }
 
     try {
-      // Convertir archivo a array de bytes para enviar al server action
-      const arrayBuffer = await selectedFile.arrayBuffer();
-      const fileBuffer = Array.from(new Uint8Array(arrayBuffer));
-
+      // El archivo se envía como File (binario/multipart). NO convertir a number[]:
+      // serializar el binario como array JSON lo infla ~3-4x y supera el límite de body.
       const baseData = {
         documentTypeId: selectedDocTypeId,
         expirationDate: data.expirationDate ? new Date(data.expirationDate) : null,
         period: data.period || undefined,
-        fileBuffer,
+        file: selectedFile,
         fileName: selectedFile.name,
         fileSize: selectedFile.size,
         mimeType: selectedFile.type,

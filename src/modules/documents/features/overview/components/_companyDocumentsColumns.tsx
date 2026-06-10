@@ -1,7 +1,8 @@
 'use client';
 
 import { ColumnDef } from '@tanstack/react-table';
-import { Download, MoreHorizontal } from 'lucide-react';
+import { Download, Eye, MoreHorizontal } from 'lucide-react';
+import { toast } from 'sonner';
 
 import { Badge } from '@/shared/components/ui/badge';
 import { Button } from '@/shared/components/ui/button';
@@ -17,6 +18,31 @@ import { DataTableColumnHeader } from '@/shared/components/common/DataTable';
 import { getDocumentStateBadge } from '@/shared/utils/mappers';
 import { formatDate } from '@/shared/utils/formatters';
 import type { CompanyDocumentListItem } from '../actions.server';
+import { getCompanyDocumentDownloadUrl } from '../actions.server';
+
+async function handleViewCompanyDocument(documentId: string) {
+  const result = await getCompanyDocumentDownloadUrl(documentId);
+  if (result.success && result.url) {
+    window.open(result.url, '_blank', 'noopener,noreferrer');
+  } else {
+    toast.error(result.error || 'Error al obtener documento');
+  }
+}
+
+async function handleDownloadCompanyDocument(documentId: string, fileName?: string | null) {
+  const result = await getCompanyDocumentDownloadUrl(documentId);
+  if (result.success && result.url) {
+    const link = document.createElement('a');
+    link.href = result.url;
+    link.download = fileName || result.fileName || 'documento';
+    link.target = '_blank';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  } else {
+    toast.error(result.error || 'Error al descargar documento');
+  }
+}
 
 export function getCompanyDocumentsColumns(): ColumnDef<CompanyDocumentListItem>[] {
   return [
@@ -123,13 +149,17 @@ export function getCompanyDocumentsColumns(): ColumnDef<CompanyDocumentListItem>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              {doc.documentPath && (
-                <DropdownMenuItem asChild>
-                  <a href={doc.documentPath} target="_blank" rel="noopener noreferrer">
+              {doc.documentKey && (
+                <>
+                  <DropdownMenuItem onClick={() => handleViewCompanyDocument(doc.id)}>
+                    <Eye className="mr-2 h-4 w-4" />
+                    Ver documento
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleDownloadCompanyDocument(doc.id, doc.fileName)}>
                     <Download className="mr-2 h-4 w-4" />
                     Descargar
-                  </a>
-                </DropdownMenuItem>
+                  </DropdownMenuItem>
+                </>
               )}
             </DropdownMenuContent>
           </DropdownMenu>

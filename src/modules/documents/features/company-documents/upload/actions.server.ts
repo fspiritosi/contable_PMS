@@ -19,8 +19,8 @@ export interface UploadCompanyDocumentInput {
   documentTypeId: string;
   expirationDate?: Date | null;
   period?: string;
-  // File data from client
-  fileBuffer: number[]; // Array de bytes (para serialización)
+  // Archivo enviado como File (multipart/binario, sin inflar el payload)
+  file: File;
   fileName: string;
   fileSize: number;
   mimeType: string;
@@ -97,7 +97,7 @@ export async function uploadCompanyDocument(
       fileName: '', // We just need the folder path
     }).replace(/\/[^/]+$/, ''); // Remove filename to get folder
 
-    const buffer = Buffer.from(new Uint8Array(input.fileBuffer));
+    const buffer = Buffer.from(await input.file.arrayBuffer());
     const uploadResult = await uploadFile(buffer, input.fileName, { folder });
 
     // Check if document already exists for this type/period
