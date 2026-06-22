@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { ColumnDef } from '@tanstack/react-table';
 import { Badge } from '@/shared/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/card';
-import { DataTable } from '@/shared/components/common/DataTable';
+import { ClientDataTable } from '@/shared/components/common/ClientDataTable';
 import { Checkbox } from '@/shared/components/ui/checkbox';
 import { DollarSign, TrendingDown, TrendingUp } from 'lucide-react';
 import type { ClientAccountStatement, ClientInvoiceWithBalance, ClientReceipt } from '../actions.server';
@@ -311,10 +311,9 @@ export function _AccountStatementTab({ accountStatement }: AccountStatementTabPr
           {invoices.length === 0 ? (
             <p className="text-sm text-muted-foreground">No hay facturas registradas</p>
           ) : (
-            <DataTable
+            <ClientDataTable
               columns={invoiceColumns}
               data={invoices}
-              totalRows={invoices.length}
               searchPlaceholder="Buscar facturas..."
               tableId="commercial-client-invoices"
             />
@@ -332,10 +331,9 @@ export function _AccountStatementTab({ accountStatement }: AccountStatementTabPr
           {receipts.length === 0 ? (
             <p className="text-sm text-muted-foreground">No hay recibos registrados</p>
           ) : (
-            <DataTable
+            <ClientDataTable
               columns={receiptColumns}
               data={receipts}
-              totalRows={receipts.length}
               searchPlaceholder="Buscar recibos..."
               tableId="commercial-client-receipts"
             />
