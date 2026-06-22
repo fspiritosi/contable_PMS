@@ -15,6 +15,7 @@ import { notFound, redirect } from 'next/navigation';
 import { getCompanyById } from './actions.server';
 import { _DeleteCompanyButton } from './components/_DeleteCompanyButton';
 import { _SingleModeToggle } from './components/_SingleModeToggle';
+import { _CompanyLogoUpload } from './components/_CompanyLogoUpload';
 
 const ERROR_CODES = {
   NotFound: 'COMPANY_NOT_FOUND',
@@ -195,6 +196,13 @@ export async function CompanyDetailPage(props: CompanyDetailPageProps) {
         companyId={props.companyId}
         isSingleCompany={company.isSingleCompany}
         isOwner={company.isOwner}
+      />
+
+      {/* Logo de la Empresa */}
+      <_CompanyLogoUpload
+        companyId={props.companyId}
+        logoUrl={company.logoUrl}
+        canEdit={company.isOwner}
       />
     </div>
   );

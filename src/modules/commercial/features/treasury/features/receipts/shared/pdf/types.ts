@@ -10,6 +10,7 @@ export interface ReceiptPDFData {
     address: string;
     phone?: string;
     email?: string;
+    logoDataUri?: string;
   };
 
   // Datos del recibo

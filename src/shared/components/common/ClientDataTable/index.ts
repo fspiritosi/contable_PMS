@@ -1,0 +1,1 @@
+export { ClientDataTable, type ClientDataTableProps } from './ClientDataTable';

@@ -10,6 +10,7 @@ import { getActiveCompanyId } from '@/shared/lib/company';
 import { logger } from '@/shared/lib/logger';
 import { generateQuotePDF, getQuoteFileName } from '@/modules/commercial/features/quotes/shared/pdf/generator';
 import { mapQuoteDataForPDF } from '@/modules/commercial/features/quotes/shared/pdf/data-mapper';
+import { getLogoAsDataUri } from '@/shared/utils/logo';
 
 export async function GET(
   request: NextRequest,
@@ -116,7 +117,7 @@ export async function GET(
     };
 
     // Mapear datos al formato del PDF
-    const pdfData = mapQuoteDataForPDF(quoteForMapper, company);
+    const pdfData = mapQuoteDataForPDF(quoteForMapper, company, await getLogoAsDataUri(companyId) ?? undefined);
 
     // Generar PDF
     const pdfBuffer = await generateQuotePDF(pdfData);

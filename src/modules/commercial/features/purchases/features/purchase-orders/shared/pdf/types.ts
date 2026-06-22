@@ -10,6 +10,7 @@ export interface PurchaseOrderPDFData {
     address: string;
     phone?: string;
     email?: string;
+    logoDataUri?: string;
   };
 
   // Datos de la orden de compra

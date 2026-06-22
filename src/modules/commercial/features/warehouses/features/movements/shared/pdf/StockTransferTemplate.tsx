@@ -1,4 +1,4 @@
-import { Document, Page, Text, View } from '@react-pdf/renderer';
+import { Document, Image, Page, Text, View } from '@react-pdf/renderer';
 import moment from 'moment';
 import 'moment/locale/es';
 
@@ -19,8 +19,15 @@ export function StockTransferTemplate({ data }: Props) {
       <Page size="A4" style={styles.page}>
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.title}>TRANSFERENCIA ENTRE ALMACENES</Text>
-          <Text style={styles.subtitle}>{transfer.transferNumber}</Text>
+          <View style={styles.headerTop}>
+            {company.logoDataUri && (
+              <Image src={company.logoDataUri} style={styles.logo} />
+            )}
+            <View style={styles.headerText}>
+              <Text style={styles.title}>TRANSFERENCIA ENTRE ALMACENES</Text>
+              <Text style={styles.subtitle}>{transfer.transferNumber}</Text>
+            </View>
+          </View>
           <Text style={styles.companyInfo}>
             {company.name} | CUIT: {company.taxId} | {company.address}
           </Text>

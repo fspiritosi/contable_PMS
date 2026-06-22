@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { Document, Page, Text, View } from '@react-pdf/renderer';
+import { Document, Image, Page, Text, View } from '@react-pdf/renderer';
 import { styles } from './styles';
 import type { InvoicePDFData } from './types';
 import moment from 'moment';
@@ -31,6 +31,9 @@ export function InvoiceTemplate({ data }: InvoiceTemplateProps) {
         <View style={styles.header}>
           {/* Datos de la empresa */}
           <View style={styles.headerLeft}>
+            {company.logoDataUri && (
+              <Image src={company.logoDataUri} style={styles.logo} />
+            )}
             <Text style={[styles.bold, { fontSize: 12, marginBottom: 5 }]}>
               {company.name}
             </Text>

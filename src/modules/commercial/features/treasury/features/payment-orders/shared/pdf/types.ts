@@ -10,6 +10,7 @@ export interface PaymentOrderPDFData {
     address: string;
     phone?: string;
     email?: string;
+    logoDataUri?: string;
   };
 
   // Datos de la orden de pago

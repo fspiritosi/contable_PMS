@@ -1,5 +1,30 @@
 # Deploy y Multi-instancia
 
+## Migraciones automaticas en el deploy (Docker)
+
+El contenedor de produccion aplica las migraciones de Prisma **automaticamente** al
+arrancar, antes de levantar el servidor. No hace falta correr `prisma migrate deploy`
+manualmente tras un deploy.
+
+Como funciona:
+- El `Dockerfile` copia el CLI de Prisma + engines al stage `runner` (el output
+  standalone de Next.js no los incluye).
+- El `ENTRYPOINT` es `docker-entrypoint.sh`, que ejecuta
+  `node node_modules/prisma/build/index.js migrate deploy` y luego `node server.js`.
+- Si las migraciones fallan, el contenedor **no arranca** (fail-fast), evitando servir
+  contra una BD con el schema desactualizado.
+
+Seguridad ante multiples replicas (Docker Swarm):
+- `prisma migrate deploy` toma un advisory lock en Postgres, asi que aunque varias
+  replicas arranquen a la vez, solo una aplica las migraciones y el resto continua
+  sin reaplicarlas. No hay condiciones de carrera.
+
+Requisitos:
+- `DATABASE_URL` debe estar disponible como variable de entorno en el contenedor.
+- Las migraciones versionadas viven en `prisma/migrations/` (se copian a la imagen).
+
+---
+
 ## Build de Produccion
 
 ```bash

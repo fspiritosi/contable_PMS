@@ -16,6 +16,8 @@ import { _DocumentAttachment } from '@/modules/commercial/shared/components/_Doc
 import { _PurchaseInvoiceLinkedDocuments } from './components/_PurchaseInvoiceLinkedDocuments';
 import { _LinkPurchaseInvoiceToProjection } from './components/_LinkPurchaseInvoiceToProjection';
 import { _PurchaseInvoicePDFButton } from './components/_PurchaseInvoicePDFButton';
+import { _PayPurchaseInvoiceButton } from './components/_PayPurchaseInvoiceButton';
+import { calculatePurchaseInvoiceBalance } from '@/modules/commercial/shared/purchase-invoice-balance';
 
 interface Props {
   invoiceId: string;
@@ -23,6 +25,18 @@ interface Props {
 
 export async function PurchaseInvoiceDetail({ invoiceId }: Props) {
   const invoice = await getPurchaseInvoiceById(invoiceId);
+
+  const balance = calculatePurchaseInvoiceBalance({
+    voucherType: invoice.voucherType,
+    total: invoice.total,
+    paymentOrderItems: invoice.paymentOrderItems,
+    creditNoteApplicationsReceived: invoice.creditNoteApplicationsReceived,
+    creditDebitNotes: invoice.creditDebitNotes,
+  });
+
+  const canPay =
+    (invoice.status === 'CONFIRMED' || invoice.status === 'PARTIAL_PAID') &&
+    balance.pendingBalance > 0;
 
   const statusVariant:
     | 'default'
@@ -64,6 +78,17 @@ export async function PurchaseInvoiceDetail({ invoiceId }: Props) {
               invoiceId={invoice.id}
               fullNumber={invoice.fullNumber}
               total={Number(invoice.total)}
+            />
+          )}
+          {canPay && (
+            <_PayPurchaseInvoiceButton
+              invoiceId={invoice.id}
+              supplierId={invoice.supplierId}
+              fullNumber={invoice.fullNumber}
+              voucherType={invoice.voucherType}
+              total={invoice.total}
+              paidAmount={balance.paidByPaymentOrders + balance.appliedByCreditNotes}
+              pendingAmount={balance.pendingBalance}
             />
           )}
           <Badge variant={statusVariant} className="text-sm px-3 py-1">

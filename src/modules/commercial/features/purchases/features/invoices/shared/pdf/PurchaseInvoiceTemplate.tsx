@@ -3,7 +3,7 @@
  */
 
 import React from 'react';
-import { Document, Page, Text, View } from '@react-pdf/renderer';
+import { Document, Image, Page, Text, View } from '@react-pdf/renderer';
 import { styles } from './styles';
 import type { PurchaseInvoicePDFData } from './types';
 import { LinkedDocumentsSection } from '@/modules/commercial/shared/pdf/LinkedDocumentsSection';
@@ -23,6 +23,9 @@ export function PurchaseInvoiceTemplate({ data }: PurchaseInvoiceTemplateProps) 
         {/* HEADER */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
+            {company.logoDataUri && (
+              <Image src={company.logoDataUri} style={styles.logo} />
+            )}
             <Text style={[styles.bold, { fontSize: 12, marginBottom: 5 }]}>
               {company.name}
             </Text>

@@ -111,7 +111,8 @@ function groupVATByRate(
  */
 export function mapQuoteDataForPDF(
   quote: QuoteData,
-  company: CompanyData
+  company: CompanyData,
+  logoDataUri?: string
 ): QuotePDFData {
   // Determinar destinatario
   const isCustomer = !!quote.contractor;
@@ -125,6 +126,7 @@ export function mapQuoteDataForPDF(
       address: company.address || '',
       phone: company.phone || undefined,
       email: company.email || undefined,
+      logoDataUri,
     },
 
     quote: {

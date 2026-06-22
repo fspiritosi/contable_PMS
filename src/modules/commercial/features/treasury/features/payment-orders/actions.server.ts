@@ -725,6 +725,8 @@ export async function getPaymentOrder(id: string): Promise<PaymentOrderWithDetai
             id: true,
             paymentMethod: true,
             amount: true,
+            cashRegisterId: true,
+            bankAccountId: true,
             cashRegister: {
               select: {
                 code: true,
@@ -853,5 +855,125 @@ export async function deletePaymentOrder(paymentOrderId: string) {
       throw error;
     }
     throw new Error('Error al eliminar orden de pago');
+  }
+}
+
+/**
+ * Actualiza una orden de pago en estado DRAFT.
+ * Reemplaza items, pagos y retenciones. Mantiene number/fullNumber/createdBy.
+ */
+export async function updatePaymentOrder(
+  paymentOrderId: string,
+  data: CreatePaymentOrderFormData
+) {
+  await checkPermission('commercial.treasury.payment-orders', 'update', { redirect: true });
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  try {
+    // Verificar que la OP existe, es de la empresa y está en DRAFT
+    const existing = await prisma.paymentOrder.findFirst({
+      where: { id: paymentOrderId, companyId },
+      select: { id: true, status: true, fullNumber: true },
+    });
+
+    if (!existing) {
+      throw new Error('Orden de pago no encontrada');
+    }
+    if (existing.status !== 'DRAFT') {
+      throw new Error('Solo se pueden editar órdenes de pago en estado borrador');
+    }
+
+    // Recalcular total
+    const totalAmount = data.items.reduce((sum, item) => sum + parseFloat(item.amount), 0);
+
+    // Reemplazar items/pagos/retenciones en transacción
+    await prisma.$transaction(async (tx) => {
+      // 1. Actualizar la OP (mantener number, fullNumber, createdBy)
+      await tx.paymentOrder.update({
+        where: { id: paymentOrderId },
+        data: {
+          supplierId: data.supplierId || null,
+          date: data.date,
+          totalAmount: new Prisma.Decimal(totalAmount),
+          notes: data.notes || null,
+        },
+      });
+
+      // 2. Eliminar items, pagos y retenciones viejos
+      await tx.paymentOrderItem.deleteMany({ where: { paymentOrderId } });
+      await tx.paymentOrderPayment.deleteMany({ where: { paymentOrderId } });
+      await tx.paymentOrderWithholding.deleteMany({ where: { paymentOrderId } });
+
+      // 3. Crear nuevos items
+      if (data.items.length > 0) {
+        await tx.paymentOrderItem.createMany({
+          data: data.items.map((item) => ({
+            paymentOrderId,
+            invoiceId: item.invoiceId || null,
+            expenseId: item.expenseId || null,
+            amount: new Prisma.Decimal(item.amount),
+          })),
+        });
+      }
+
+      // 4. Crear nuevos pagos
+      if (data.payments.length > 0) {
+        await tx.paymentOrderPayment.createMany({
+          data: data.payments.map((payment) => ({
+            paymentOrderId,
+            paymentMethod: payment.paymentMethod,
+            amount: new Prisma.Decimal(payment.amount),
+            cashRegisterId: payment.cashRegisterId || null,
+            bankAccountId: payment.bankAccountId || null,
+            checkNumber: payment.checkNumber || null,
+            cardLast4: payment.cardLast4 || null,
+            reference: payment.reference || null,
+            checkBankName: payment.checkBankName || null,
+            checkIssueDate: payment.checkIssueDate || null,
+            checkDueDate: payment.checkDueDate || null,
+            checkDrawerName: payment.checkDrawerName || null,
+            checkDrawerTaxId: payment.checkDrawerTaxId || null,
+            endorsedCheckId:
+              payment.checkOwnership === 'THIRD_PARTY' ? payment.endorsedCheckId || null : null,
+          })),
+        });
+      }
+
+      // 5. Crear nuevas retenciones
+      if (data.withholdings && data.withholdings.length > 0) {
+        await tx.paymentOrderWithholding.createMany({
+          data: data.withholdings.map((w) => ({
+            paymentOrderId,
+            taxType: w.taxType,
+            rate: new Prisma.Decimal(w.rate),
+            amount: new Prisma.Decimal(w.amount),
+            certificateNumber: w.certificateNumber || null,
+          })),
+        });
+      }
+    });
+
+    logger.info('Orden de pago actualizada', {
+      data: {
+        paymentOrderId,
+        fullNumber: existing.fullNumber,
+        itemsCount: data.items.length,
+        paymentsCount: data.payments.length,
+        totalAmount,
+      },
+    });
+
+    revalidatePath('/dashboard/commercial/treasury/payment-orders');
+
+    return { success: true, id: paymentOrderId };
+  } catch (error) {
+    logger.error('Error al actualizar orden de pago', {
+      data: { error, paymentOrderId },
+    });
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error('Error al actualizar orden de pago');
   }
 }

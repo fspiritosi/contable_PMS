@@ -59,7 +59,8 @@ type CompanyData = {
  */
 export function mapPurchaseOrderDataForPDF(
   order: PurchaseOrderData,
-  company: CompanyData
+  company: CompanyData,
+  logoDataUri?: string
 ): PurchaseOrderPDFData {
   return {
     company: {
@@ -68,6 +69,7 @@ export function mapPurchaseOrderDataForPDF(
       address: company.address || '',
       phone: company.phone || undefined,
       email: company.email || undefined,
+      logoDataUri,
     },
 
     purchaseOrder: {

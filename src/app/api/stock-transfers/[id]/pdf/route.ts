@@ -8,6 +8,7 @@ import {
   getStockTransferFileName,
 } from '@/modules/commercial/features/warehouses/features/movements/shared/pdf';
 import type { StockTransferPDFData } from '@/modules/commercial/features/warehouses/features/movements/shared/pdf';
+import { getLogoAsDataUri } from '@/shared/utils/logo';
 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -51,6 +52,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
         name: company.name,
         taxId: company.taxId || '',
         address: company.address || '',
+        logoDataUri: await getLogoAsDataUri(companyId),
       },
       transfer: {
         transferNumber: transfer.transferNumber,

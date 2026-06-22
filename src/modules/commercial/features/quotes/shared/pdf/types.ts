@@ -11,6 +11,7 @@ export interface QuotePDFData {
     address: string;
     phone?: string;
     email?: string;
+    logoDataUri?: string;
   };
 
   // Datos del presupuesto

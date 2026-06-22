@@ -1,4 +1,4 @@
-import { Document, Page, Text, View } from '@react-pdf/renderer';
+import { Document, Image, Page, Text, View } from '@react-pdf/renderer';
 import { styles } from './styles';
 import type { DeliveryNotePDFData } from './types';
 import moment from 'moment';
@@ -15,11 +15,18 @@ export function DeliveryNoteTemplate({ data }: Props) {
       <Page size="A4" style={styles.page}>
         {/* HEADER */}
         <View style={styles.header}>
-          <Text style={styles.title}>REMITO DE ENTREGA</Text>
-          <Text style={styles.subtitle}>N° {deliveryNote.fullNumber}</Text>
-          <Text style={styles.subtitle}>
-            Fecha de Entrega: {moment(deliveryNote.deliveryDate).format('DD/MM/YYYY')}
-          </Text>
+          <View style={styles.headerTop}>
+            {company.logoDataUri && (
+              <Image src={company.logoDataUri} style={styles.logo} />
+            )}
+            <View style={styles.headerText}>
+              <Text style={styles.title}>REMITO DE ENTREGA</Text>
+              <Text style={styles.subtitle}>N° {deliveryNote.fullNumber}</Text>
+              <Text style={styles.subtitle}>
+                Fecha de Entrega: {moment(deliveryNote.deliveryDate).format('DD/MM/YYYY')}
+              </Text>
+            </View>
+          </View>
           <View style={styles.companyInfo}>
             <Text>{company.name}</Text>
             <Text>CUIT: {company.taxId}</Text>

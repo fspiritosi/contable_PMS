@@ -100,7 +100,8 @@ function groupVATByRate(
 
 export function mapPurchaseInvoiceDataForPDF(
   invoice: PurchaseInvoiceData,
-  company: CompanyData
+  company: CompanyData,
+  logoDataUri?: string
 ): PurchaseInvoicePDFData {
   const invoiceType = extractInvoiceType(invoice.voucherType);
   const voucherTypeLabel =
@@ -114,6 +115,7 @@ export function mapPurchaseInvoiceDataForPDF(
       address: company.address || '',
       phone: company.phone || undefined,
       email: company.email || undefined,
+      logoDataUri,
     },
 
     invoice: {

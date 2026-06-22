@@ -15,6 +15,7 @@ import {
   mapReceiptDataForPDF,
 } from '@/modules/commercial/features/treasury/features/receipts/shared/pdf';
 import type { LinkedDocumentsData, LinkedDocumentSection } from '@/modules/commercial/shared/pdf/linked-documents-types';
+import { getLogoAsDataUri } from '@/shared/utils/logo';
 import moment from 'moment';
 
 function parseIncludes(request: NextRequest): Set<string> {
@@ -138,7 +139,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ error: 'Empresa no encontrada' }, { status: 404 });
     }
 
-    const pdfData = mapReceiptDataForPDF(receipt as any, company);
+    const pdfData = mapReceiptDataForPDF(receipt as any, company, await getLogoAsDataUri(companyId) ?? undefined);
 
     // Agregar documentos vinculados
     if (includes.size > 0) {

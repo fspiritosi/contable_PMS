@@ -5,6 +5,7 @@ export interface DeliveryNotePDFData {
     address: string;
     phone?: string;
     email?: string;
+    logoDataUri?: string;
   };
 
   deliveryNote: {

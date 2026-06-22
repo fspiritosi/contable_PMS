@@ -11,6 +11,7 @@ export interface InvoicePDFData {
     address: string;
     phone?: string;
     email?: string;
+    logoDataUri?: string;
   };
 
   // Datos de la factura

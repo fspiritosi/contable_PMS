@@ -9,6 +9,7 @@ export interface PurchaseInvoicePDFData {
     address: string;
     phone?: string;
     email?: string;
+    logoDataUri?: string;
   };
 
   invoice: {

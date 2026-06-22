@@ -18,7 +18,7 @@ import {
 import { Plus, Trash2, ArrowDownToLine } from 'lucide-react';
 import { toast } from 'sonner';
 import { createPaymentOrderSchema, type CreatePaymentOrderFormData, PAYMENT_METHOD_LABELS, WITHHOLDING_TAX_TYPE_LABELS } from '../../../../shared/validators';
-import { createPaymentOrder, getPendingPurchaseInvoices, getPortfolioChecks } from '../../actions.server';
+import { createPaymentOrder, getPendingPurchaseInvoices, getPortfolioChecks, updatePaymentOrder } from '../../actions.server';
 import { getAvailableCashRegisters, getAvailableBankAccounts } from '../../../receipts/actions.server';
 import { getSuppliersForSelect } from '@/modules/commercial/features/purchases/features/invoices/list/actions.server';
 import { getPendingExpenses } from '@/modules/commercial/features/expenses/actions.server';
@@ -31,22 +31,101 @@ import { formatCurrency } from '@/shared/utils/formatters';
 
 interface CreatePaymentOrderModalProps {
   onSuccess: () => void;
+  /**
+   * Si se pasa, el modal se abre con el proveedor preseleccionado y no editable.
+   * Útil cuando se llama desde una vista donde ya hay un proveedor en contexto
+   * (ej: cuenta corriente del proveedor).
+   */
+  prefilledSupplierId?: string;
+  /**
+   * Si se pasa junto con `prefilledSupplierId`, el modal arranca con esas facturas
+   * ya cargadas como items. El usuario puede seguir editando los montos pero no
+   * puede agregar/quitar facturas (el selector de facturas se deshabilita y el
+   * tab de Gastos se oculta).
+   */
+  prefilledInvoices?: { id: string; pendingAmount: number }[];
+  /**
+   * Si se pasa, el modal arranca con esos gastos ya cargados como items. Aplica
+   * la misma lógica que `prefilledInvoices` pero para el tab de Gastos. Si se
+   * pasan ambos, el modal muestra ambos tabs pre-poblados.
+   */
+  prefilledExpenses?: { id: string; amount: number }[];
+  /**
+   * Si se pasa, el modal se controla externamente. Útil cuando se quiere abrir
+   * desde otra parte (ej: action bar de selección múltiple en cuenta corriente).
+   * En este modo el DialogTrigger interno NO se renderiza.
+   */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  // ─── Modo edición ───
+  /**
+   * Si se pasa, el modal entra en modo edición: en lugar de crear llama a
+   * `updatePaymentOrder(editPaymentOrderId, data)`. El title muestra el número.
+   */
+  editPaymentOrderId?: string;
+  /** Fecha inicial (modo edición) */
+  initialDate?: Date;
+  /** Notas iniciales (modo edición) */
+  initialNotes?: string | null;
+  /** Pagos iniciales (modo edición) */
+  initialPayments?: CreatePaymentOrderFormData['payments'];
+  /** Retenciones iniciales (modo edición) */
+  initialWithholdings?: CreatePaymentOrderFormData['withholdings'];
 }
 
-export function CreatePaymentOrderModal({ onSuccess }: CreatePaymentOrderModalProps) {
-  const [open, setOpen] = useState(false);
-  const [selectedSupplierId, setSelectedSupplierId] = useState<string | null>(null);
+export function CreatePaymentOrderModal({
+  onSuccess,
+  prefilledSupplierId,
+  prefilledInvoices,
+  prefilledExpenses,
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
+  editPaymentOrderId,
+  initialDate,
+  initialNotes,
+  initialPayments,
+  initialWithholdings,
+}: CreatePaymentOrderModalProps) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isControlled = controlledOpen !== undefined;
+  const open = isControlled ? controlledOpen : internalOpen;
+  const setOpen = (next: boolean) => {
+    if (isControlled) {
+      controlledOnOpenChange?.(next);
+    } else {
+      setInternalOpen(next);
+    }
+  };
+  const [selectedSupplierId, setSelectedSupplierId] = useState<string | null>(
+    prefilledSupplierId ?? null
+  );
   const queryClient = useQueryClient();
+  const isPrefilled = Boolean(
+    (prefilledSupplierId && prefilledInvoices) || (prefilledExpenses && prefilledExpenses.length > 0)
+  );
+  const hideInvoiceSelector = Boolean(prefilledSupplierId && prefilledInvoices);
+  const isEdit = Boolean(editPaymentOrderId);
 
   const form = useForm<CreatePaymentOrderFormData>({
     resolver: zodResolver(createPaymentOrderSchema),
     defaultValues: {
-      supplierId: null,
-      date: new Date(),
-      notes: null,
-      items: [],
-      payments: [],
-      withholdings: [],
+      supplierId: prefilledSupplierId ?? null,
+      date: initialDate ?? new Date(),
+      notes: initialNotes ?? null,
+      items: [
+        ...(prefilledInvoices?.map((inv) => ({
+          invoiceId: inv.id,
+          expenseId: null,
+          amount: inv.pendingAmount.toFixed(2),
+        })) ?? []),
+        ...(prefilledExpenses?.map((exp) => ({
+          invoiceId: null,
+          expenseId: exp.id,
+          amount: exp.amount.toFixed(2),
+        })) ?? []),
+      ],
+      payments: initialPayments ?? [],
+      withholdings: initialWithholdings ?? [],
     },
   });
 
@@ -74,13 +153,13 @@ export function CreatePaymentOrderModal({ onSuccess }: CreatePaymentOrderModalPr
   const { data: pendingInvoices = [], isLoading: loadingInvoices } = useQuery({
     queryKey: ['pendingPurchaseInvoices', selectedSupplierId],
     queryFn: () => getPendingPurchaseInvoices(selectedSupplierId!),
-    enabled: Boolean(selectedSupplierId),
+    enabled: Boolean(selectedSupplierId) && open,
   });
 
   const { data: pendingExpenses = [], isLoading: loadingExpenses } = useQuery({
     queryKey: ['pendingExpenses', selectedSupplierId],
     queryFn: () => getPendingExpenses(selectedSupplierId || undefined),
-    enabled: open,
+    enabled: open && !isPrefilled && !(prefilledExpenses && prefilledExpenses.length > 0),
   });
 
   const { data: cashRegisters = [] } = useQuery({
@@ -103,6 +182,7 @@ export function CreatePaymentOrderModal({ onSuccess }: CreatePaymentOrderModalPr
   });
 
   const handleSupplierChange = (supplierId: string) => {
+    if (isPrefilled) return;
     setSelectedSupplierId(supplierId);
     form.setValue('supplierId', supplierId);
     form.setValue('items', []);
@@ -181,30 +261,56 @@ export function CreatePaymentOrderModal({ onSuccess }: CreatePaymentOrderModalPr
 
   const onSubmit = async (data: CreatePaymentOrderFormData) => {
     try {
-      await createPaymentOrder(data);
-      toast.success('Orden de pago creada correctamente');
+      if (isEdit && editPaymentOrderId) {
+        await updatePaymentOrder(editPaymentOrderId, data);
+        toast.success('Orden de pago actualizada correctamente');
+      } else {
+        await createPaymentOrder(data);
+        toast.success('Orden de pago creada correctamente');
+      }
       await queryClient.invalidateQueries({ queryKey: ['paymentOrders'] });
       await queryClient.invalidateQueries({ queryKey: ['pendingPurchaseInvoices'] });
       await queryClient.invalidateQueries({ queryKey: ['pendingExpenses'] });
       setOpen(false);
-      form.reset();
-      setSelectedSupplierId(null);
+      form.reset({
+        supplierId: prefilledSupplierId ?? null,
+        date: initialDate ?? new Date(),
+        notes: initialNotes ?? null,
+        items: [
+          ...(prefilledInvoices?.map((inv) => ({
+            invoiceId: inv.id,
+            expenseId: null,
+            amount: inv.pendingAmount.toFixed(2),
+          })) ?? []),
+          ...(prefilledExpenses?.map((exp) => ({
+            invoiceId: null,
+            expenseId: exp.id,
+            amount: exp.amount.toFixed(2),
+          })) ?? []),
+        ],
+        payments: initialPayments ?? [],
+        withholdings: initialWithholdings ?? [],
+      });
+      if (!isPrefilled) setSelectedSupplierId(null);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Error al crear orden de pago');
+      const fallback = isEdit ? 'Error al actualizar orden de pago' : 'Error al crear orden de pago';
+      toast.error(error instanceof Error ? error.message : fallback);
     }
   };
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button>
-          <Plus className="mr-2 h-4 w-4" />
-          Nueva Orden de Pago
-        </Button>
-      </DialogTrigger>
+      {!isControlled && (
+        <DialogTrigger asChild>
+          <Button>
+            <Plus className="mr-2 h-4 w-4" />
+            Nueva Orden de Pago
+          </Button>
+        </DialogTrigger>
+      )}
       <DialogContent className="md:min-w-[800px] max-h-[90vh]">
         <DialogHeader>
-          <DialogTitle>Crear Orden de Pago</DialogTitle>
+          <DialogTitle>{isEdit ? 'Editar Orden de Pago' : 'Crear Orden de Pago'}</DialogTitle>
         </DialogHeader>
 
         <Form {...form}>
@@ -213,48 +319,58 @@ export function CreatePaymentOrderModal({ onSuccess }: CreatePaymentOrderModalPr
             <section className="space-y-3">
               <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Items a Pagar</h3>
 
-              <Tabs defaultValue="invoices">
-                <TabsList className="grid w-full grid-cols-2 sm:w-auto sm:inline-grid">
-                  <TabsTrigger value="invoices">Facturas</TabsTrigger>
-                  <TabsTrigger value="expenses">Gastos</TabsTrigger>
-                </TabsList>
+              {(() => {
+                const hasInvoicesPrefilled = Boolean(prefilledInvoices && prefilledInvoices.length > 0);
+                const hasExpensesPrefilled = Boolean(prefilledExpenses && prefilledExpenses.length > 0);
+                const showBothTabs = !isPrefilled || (hasInvoicesPrefilled && hasExpensesPrefilled);
+                const defaultTab = hasInvoicesPrefilled ? 'invoices' : 'expenses';
+                return (
+              <Tabs defaultValue={defaultTab}>
+                {showBothTabs && (
+                  <TabsList className="grid w-full grid-cols-2 sm:w-auto sm:inline-grid">
+                    <TabsTrigger value="invoices">Facturas</TabsTrigger>
+                    <TabsTrigger value="expenses">Gastos</TabsTrigger>
+                  </TabsList>
+                )}
 
                 <TabsContent value="invoices" className="mt-3 space-y-3">
-                  <FormField
-                    control={form.control}
-                    name="supplierId"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Proveedor *</FormLabel>
-                        <Select onValueChange={handleSupplierChange} value={field.value || ''}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Seleccionar proveedor" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {suppliersData.length === 0 && (
-                              <div className="p-2 text-sm text-muted-foreground">No hay proveedores</div>
-                            )}
-                            {suppliersData.map((supplier) => (
-                              <SelectItem key={supplier.id} value={supplier.id}>
-                                {supplier.tradeName || supplier.businessName}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  {!selectedSupplierId && (
+                  {!prefilledSupplierId && (
+                    <FormField
+                      control={form.control}
+                      name="supplierId"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Proveedor *</FormLabel>
+                          <Select onValueChange={handleSupplierChange} value={field.value || ''}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Seleccionar proveedor" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {suppliersData.length === 0 && (
+                                <div className="p-2 text-sm text-muted-foreground">No hay proveedores</div>
+                              )}
+                              {suppliersData.map((supplier) => (
+                                <SelectItem key={supplier.id} value={supplier.id}>
+                                  {supplier.tradeName || supplier.businessName}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
+                  {!selectedSupplierId && !prefilledSupplierId && (
                     <p className="text-sm text-muted-foreground">Seleccione un proveedor para ver facturas pendientes</p>
                   )}
                   {selectedSupplierId && loadingInvoices && <Skeleton className="h-9 w-full" />}
-                  {selectedSupplierId && !loadingInvoices && pendingInvoices.length === 0 && (
+                  {selectedSupplierId && !loadingInvoices && pendingInvoices.length === 0 && !hasInvoicesPrefilled && (
                     <p className="text-sm text-muted-foreground">Sin facturas pendientes</p>
                   )}
-                  {selectedSupplierId && !loadingInvoices && pendingInvoices.length > 0 && (
+                  {selectedSupplierId && !loadingInvoices && pendingInvoices.length > 0 && !hasInvoicesPrefilled && (
                     <Select onValueChange={addInvoiceItem}>
                       <SelectTrigger>
                         <SelectValue placeholder="Agregar factura..." />
@@ -291,6 +407,8 @@ export function CreatePaymentOrderModal({ onSuccess }: CreatePaymentOrderModalPr
                   )}
                 </TabsContent>
               </Tabs>
+                );
+              })()}
 
               {/* Items agregados */}
               {itemFields.length > 0 && (

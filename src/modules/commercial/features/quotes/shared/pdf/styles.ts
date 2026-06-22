@@ -26,6 +26,13 @@ export const styles = StyleSheet.create({
     flex: 1,
   },
 
+  logo: {
+    width: 60,
+    height: 60,
+    objectFit: 'contain',
+    marginBottom: 6,
+  },
+
   headerRight: {
     flex: 1,
     paddingLeft: 20,

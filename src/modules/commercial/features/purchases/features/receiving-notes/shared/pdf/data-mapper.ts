@@ -48,7 +48,8 @@ type CompanyData = {
 
 export function mapReceivingNoteDataForPDF(
   note: ReceivingNoteData,
-  company: CompanyData
+  company: CompanyData,
+  logoDataUri?: string
 ): ReceivingNotePDFData {
   let sourceDocument: ReceivingNotePDFData['sourceDocument'];
   if (note.purchaseOrder) {
@@ -60,6 +61,7 @@ export function mapReceivingNoteDataForPDF(
   return {
     company: {
       name: company.name,
+      logoDataUri,
       taxId: company.taxId || '',
       address: company.address || '',
       phone: company.phone || undefined,

@@ -9,6 +9,7 @@ export interface ReceivingNotePDFData {
     address: string;
     phone?: string;
     email?: string;
+    logoDataUri?: string;
   };
 
   receivingNote: {

@@ -8,6 +8,7 @@ import {
   getDeliveryNoteFileName,
 } from '@/modules/commercial/features/sales/features/delivery-notes/shared/pdf';
 import type { DeliveryNotePDFData } from '@/modules/commercial/features/sales/features/delivery-notes/shared/pdf';
+import { getLogoAsDataUri } from '@/shared/utils/logo';
 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -56,6 +57,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
         address: company.address || '',
         phone: company.phone || undefined,
         email: company.email || undefined,
+        logoDataUri: await getLogoAsDataUri(companyId),
       },
       deliveryNote: {
         fullNumber: note.fullNumber,

@@ -337,6 +337,8 @@ export interface PaymentOrderWithDetails extends Record<string, unknown> {
     id: string;
     paymentMethod: PaymentMethod;
     amount: number;
+    cashRegisterId: string | null;
+    bankAccountId: string | null;
     cashRegister: {
       code: string;
       name: string;

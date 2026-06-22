@@ -3,6 +3,7 @@ export interface StockTransferPDFData {
     name: string;
     taxId: string;
     address: string;
+    logoDataUri?: string;
   };
 
   transfer: {

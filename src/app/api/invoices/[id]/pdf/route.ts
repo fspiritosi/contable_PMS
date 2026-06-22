@@ -14,6 +14,7 @@ import { mapInvoiceDataForPDF } from '@/modules/commercial/features/sales/shared
 import { VOUCHER_TYPE_LABELS, INVOICE_STATUS_LABELS } from '@/modules/commercial/features/sales/features/invoices/shared/validators';
 import type { LinkedDocumentsData, LinkedDocumentSection } from '@/modules/commercial/shared/pdf/linked-documents-types';
 import type { SalesInvoiceStatus } from '@/generated/prisma/enums';
+import { getLogoAsDataUri } from '@/shared/utils/logo';
 import moment from 'moment';
 
 function parseIncludes(request: NextRequest): Set<string> {
@@ -170,7 +171,7 @@ export async function GET(
     }
 
     // Mapear datos al formato del PDF
-    const pdfData = mapInvoiceDataForPDF(invoice as any, company);
+    const pdfData = mapInvoiceDataForPDF(invoice as any, company, await getLogoAsDataUri(companyId) ?? undefined);
 
     // Agregar documentos vinculados si se solicitaron
     if (includes.size > 0) {

@@ -16,6 +16,7 @@ import {
 } from '@/modules/commercial/features/purchases/features/invoices/shared/pdf';
 import { VOUCHER_TYPE_LABELS, PURCHASE_INVOICE_STATUS_LABELS } from '@/modules/commercial/features/purchases/features/invoices/shared/validators';
 import type { LinkedDocumentsData, LinkedDocumentSection } from '@/modules/commercial/shared/pdf/linked-documents-types';
+import { getLogoAsDataUri } from '@/shared/utils/logo';
 import type { PurchaseInvoiceStatus } from '@/generated/prisma/enums';
 import moment from 'moment';
 
@@ -179,7 +180,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ error: 'Empresa no encontrada' }, { status: 404 });
     }
 
-    const pdfData = mapPurchaseInvoiceDataForPDF(invoice as any, company);
+    const pdfData = mapPurchaseInvoiceDataForPDF(invoice as any, company, await getLogoAsDataUri(companyId) ?? undefined);
 
     // Agregar documentos vinculados
     if (includes.size > 0) {

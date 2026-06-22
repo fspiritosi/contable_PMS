@@ -18,6 +18,24 @@ export const styles = StyleSheet.create({
     paddingBottom: 15,
   },
 
+  headerTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 5,
+    gap: 12,
+  },
+
+  logo: {
+    width: 60,
+    height: 60,
+    objectFit: 'contain',
+  },
+
+  headerText: {
+    flex: 1,
+  },
+
   title: {
     fontSize: 18,
     fontFamily: 'Helvetica-Bold',

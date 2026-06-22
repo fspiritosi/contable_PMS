@@ -63,7 +63,11 @@ type CompanyData = {
 /**
  * Convierte datos de recibo + company a formato para PDF
  */
-export function mapReceiptDataForPDF(receipt: ReceiptData, company: CompanyData): ReceiptPDFData {
+export function mapReceiptDataForPDF(
+  receipt: ReceiptData,
+  company: CompanyData,
+  logoDataUri?: string
+): ReceiptPDFData {
   return {
     company: {
       name: company.name,
@@ -71,6 +75,7 @@ export function mapReceiptDataForPDF(receipt: ReceiptData, company: CompanyData)
       address: company.address || '',
       phone: company.phone || undefined,
       email: company.email || undefined,
+      logoDataUri,
     },
 
     receipt: {

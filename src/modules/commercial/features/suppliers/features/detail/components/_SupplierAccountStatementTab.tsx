@@ -5,12 +5,15 @@ import moment from 'moment';
 import Link from 'next/link';
 import { ColumnDef } from '@tanstack/react-table';
 import { Badge } from '@/shared/components/ui/badge';
+import { Button } from '@/shared/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/card';
-import { DataTable } from '@/shared/components/common/DataTable';
+import { ClientDataTable } from '@/shared/components/common/ClientDataTable';
 import { Checkbox } from '@/shared/components/ui/checkbox';
-import { DollarSign, TrendingDown, TrendingUp } from 'lucide-react';
+import { CreditCard, DollarSign, TrendingDown, TrendingUp, X } from 'lucide-react';
+import { CreatePaymentOrderModal } from '@/modules/commercial/features/treasury/features/payment-orders/list/components/_CreatePaymentOrderModal';
 import type { SupplierAccountStatement, SupplierInvoiceWithBalance, SupplierPayment } from '../actions.server';
 import { isCreditNote } from '@/modules/commercial/shared/voucher-utils';
+import { formatCurrency } from '@/shared/utils/formatters';
 
 interface SupplierAccountStatementTabProps {
   accountStatement: SupplierAccountStatement;
@@ -30,9 +33,20 @@ const VOUCHER_TYPE_LABELS: Record<string, string> = {
 };
 
 export function _SupplierAccountStatementTab({ accountStatement }: SupplierAccountStatementTabProps) {
-  const { invoices, payments, summary } = accountStatement;
-  const [selectedInvoices, setSelectedInvoices] = useState<string[]>([]);
-  const [selectedPayments, setSelectedPayments] = useState<string[]>([]);
+  const { invoices, payments, summary, supplier } = accountStatement;
+  const [selectedInvoices, setSelectedInvoices] = useState<SupplierInvoiceWithBalance[]>([]);
+  const [payModalOpen, setPayModalOpen] = useState(false);
+
+  const handleSelectionChange = (rows: SupplierInvoiceWithBalance[]) => {
+    setSelectedInvoices(rows);
+  };
+
+  const closePayModal = () => {
+    setPayModalOpen(false);
+    setSelectedInvoices([]);
+  };
+
+  const totalSelectedPending = selectedInvoices.reduce((sum, inv) => sum + inv.balance, 0);
 
   // Columnas para facturas de compra
   const invoiceColumns: ColumnDef<SupplierInvoiceWithBalance>[] = [
@@ -43,15 +57,20 @@ export function _SupplierAccountStatementTab({ accountStatement }: SupplierAccou
           checked={table.getIsAllPageRowsSelected()}
           onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
           aria-label="Seleccionar todas"
+          disabled={!table.getRowModel().rows.some((r) => r.getCanSelect())}
         />
       ),
-      cell: ({ row }) => (
-        <Checkbox
-          checked={row.getIsSelected()}
-          onCheckedChange={(value) => row.toggleSelected(!!value)}
-          aria-label="Seleccionar fila"
-        />
-      ),
+      cell: ({ row }) => {
+        const payable = !isCreditNote(row.original.voucherType) && row.original.balance > 0.01;
+        return (
+          <Checkbox
+            checked={row.getIsSelected()}
+            onCheckedChange={(value) => row.toggleSelected(!!value)}
+            disabled={!payable}
+            aria-label={payable ? 'Seleccionar fila' : 'Factura no pagable'}
+          />
+        );
+      },
       enableSorting: false,
       enableHiding: false,
     },
@@ -311,12 +330,15 @@ export function _SupplierAccountStatementTab({ accountStatement }: SupplierAccou
           {invoices.length === 0 ? (
             <p className="text-sm text-muted-foreground">No hay facturas registradas</p>
           ) : (
-            <DataTable
+            <ClientDataTable
               columns={invoiceColumns}
               data={invoices}
-              totalRows={invoices.length}
               searchPlaceholder="Buscar facturas..."
               tableId="commercial-supplier-invoices"
+              enableRowSelection={(row) =>
+                !isCreditNote(row.voucherType) && row.balance > 0.01
+              }
+              onSelectionChange={handleSelectionChange}
             />
           )}
         </CardContent>
@@ -332,16 +354,60 @@ export function _SupplierAccountStatementTab({ accountStatement }: SupplierAccou
           {payments.length === 0 ? (
             <p className="text-sm text-muted-foreground">No hay órdenes de pago registradas</p>
           ) : (
-            <DataTable
+            <ClientDataTable
               columns={paymentColumns}
               data={payments}
-              totalRows={payments.length}
               searchPlaceholder="Buscar pagos..."
               tableId="commercial-supplier-payments"
             />
           )}
         </CardContent>
       </Card>
+
+      {/* Action bar flotante: aparece cuando hay facturas seleccionadas */}
+      {selectedInvoices.length > 0 && (
+        <div className="sticky bottom-4 z-10 mx-auto flex max-w-3xl items-center justify-between gap-4 rounded-lg border bg-background p-3 shadow-lg">
+          <div className="flex items-center gap-3">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-semibold">
+              {selectedInvoices.length}
+            </div>
+            <div>
+              <p className="text-sm font-medium">
+                {selectedInvoices.length === 1 ? '1 factura seleccionada' : `${selectedInvoices.length} facturas seleccionadas`}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Pendiente total: {formatCurrency(totalSelectedPending)}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setSelectedInvoices([])}>
+              <X className="mr-1 h-3.5 w-3.5" />
+              Limpiar
+            </Button>
+            <Button onClick={() => setPayModalOpen(true)}>
+              <CreditCard className="mr-2 h-4 w-4" />
+              Pagar {selectedInvoices.length > 1 ? 'seleccionadas' : 'seleccionada'}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de pago pre-cargado con las facturas seleccionadas */}
+      {supplier?.id && (
+        <CreatePaymentOrderModal
+          onSuccess={closePayModal}
+          prefilledSupplierId={supplier.id}
+          prefilledInvoices={selectedInvoices.map((inv) => ({
+            id: inv.id,
+            pendingAmount: inv.balance,
+          }))}
+          open={payModalOpen}
+          onOpenChange={(next) => {
+            if (!next) closePayModal();
+          }}
+        />
+      )}
     </div>
   );
 }
