@@ -33,9 +33,22 @@ export interface PartnerMovement extends Record<string, unknown> {
 }
 
 /** Detalle de la cuenta corriente del socio. */
+export interface PartnerInstallment extends Record<string, unknown> {
+  id: string;
+  number: number;
+  dueDate: Date;
+  amount: number;
+  status: 'PENDING' | 'PAID';
+  cardName: string;
+  originFullNumber: string;
+  settledByFullNumber: string | null;
+}
+
 export interface PartnerAccountStatement {
   movements: PartnerMovement[];
+  installments: PartnerInstallment[];
   balance: number;
+  pendingInstallments: number;
   totalOwed: number;
   totalRepayment: number;
   totalAdjustment: number;

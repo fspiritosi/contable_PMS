@@ -22,7 +22,10 @@ import { getColumns } from '../columns';
 import { PaymentOrderDetailModal } from './_PaymentOrderDetailModal';
 import { EditPaymentOrderModal } from './_EditPaymentOrderModal';
 import { CreatePaymentOrderModal } from './_CreatePaymentOrderModal';
+import { _PartnerRepaymentDialog } from '../../../partners/features/detail/components/_PartnerRepaymentDialog';
 import { usePermissions } from '@/shared/hooks/usePermissions';
+import { Button } from '@/shared/components/ui/button';
+import { Undo2 } from 'lucide-react';
 
 interface FacetCounts {
   status: Record<string, number>;
@@ -44,6 +47,7 @@ export function _PaymentOrdersTable({ data, totalRows, searchParams, facetCounts
   const [selectedPaymentOrderId, setSelectedPaymentOrderId] = useState<string | null>(null);
   const [isConfirming, setIsConfirming] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [repayOpen, setRepayOpen] = useState(false);
   const { hasPermission } = usePermissions();
 
   const handleConfirm = async () => {
@@ -154,8 +158,27 @@ export function _PaymentOrdersTable({ data, totalRows, searchParams, facetCounts
         facetedFilters={facetedFilters}
         tableId="commercial-payment-orders"
         showFilterToggle
-        toolbarActions={canCreate ? <CreatePaymentOrderModal onSuccess={() => router.refresh()} /> : undefined}
+        toolbarActions={
+          canCreate ? (
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setRepayOpen(true)}>
+                <Undo2 className="mr-2 h-4 w-4" />
+                Devolver a socio
+              </Button>
+              <CreatePaymentOrderModal onSuccess={() => router.refresh()} />
+            </div>
+          ) : undefined
+        }
       />
+
+      {/* Devolución a un socio (OP de devolución de cuenta corriente) */}
+      {canCreate && (
+        <_PartnerRepaymentDialog
+          open={repayOpen}
+          onOpenChange={setRepayOpen}
+          onSuccess={() => router.refresh()}
+        />
+      )}
 
       {/* Diálogo de Confirmación */}
       <AlertDialog open={confirmDialogOpen} onOpenChange={setConfirmDialogOpen}>

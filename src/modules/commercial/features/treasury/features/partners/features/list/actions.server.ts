@@ -22,7 +22,7 @@ import type { Partner, PartnerWithBalance } from '../../shared/types';
 
 /**
  * Calcula el balance (lo que la empresa le debe al socio) para un conjunto de socios.
- * balance = Σ(OWED) + Σ(ADJUSTMENT) − Σ(REPAYMENT)
+ * balance = Σ(cuotas PENDING) + Σ(OWED) + Σ(ADJUSTMENT) − Σ(REPAYMENT)
  */
 async function getBalancesByPartner(
   companyId: string,
@@ -31,17 +31,31 @@ async function getBalancesByPartner(
   const balances = new Map<string, number>();
   if (partnerIds.length === 0) return balances;
 
-  const grouped = await prisma.partnerAccountMovement.groupBy({
-    by: ['partnerId', 'type'],
-    where: { companyId, partnerId: { in: partnerIds } },
-    _sum: { amount: true },
-  });
+  const [grouped, installmentsByPartner] = await Promise.all([
+    prisma.partnerAccountMovement.groupBy({
+      by: ['partnerId', 'type'],
+      where: { companyId, partnerId: { in: partnerIds } },
+      _sum: { amount: true },
+    }),
+    prisma.paymentOrderInstallment.groupBy({
+      by: ['partnerId'],
+      where: { companyId, partnerId: { in: partnerIds }, status: 'PENDING' },
+      _sum: { amount: true },
+    }),
+  ]);
 
   for (const row of grouped) {
     const sign = PARTNER_MOVEMENT_TYPE_SIGN[row.type];
     const amount = row._sum.amount ? Number(row._sum.amount) : 0;
     const current = balances.get(row.partnerId) ?? 0;
     balances.set(row.partnerId, current + sign * amount);
+  }
+
+  for (const row of installmentsByPartner) {
+    if (!row.partnerId) continue;
+    const amount = row._sum.amount ? Number(row._sum.amount) : 0;
+    const current = balances.get(row.partnerId) ?? 0;
+    balances.set(row.partnerId, current + amount);
   }
 
   return balances;

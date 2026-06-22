@@ -2962,15 +2962,20 @@ model PaymentOrder {
   // Relación con contabilidad
   journalEntryId String? @map("journal_entry_id") @db.Uuid
 
-  company          Company                   @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  supplier         Supplier?                 @relation(fields: [supplierId], references: [id])
-  items            PaymentOrderItem[]
-  payments         PaymentOrderPayment[]
-  withholdings     PaymentOrderWithholding[]
-  bankMovements    BankMovement[]
-  journalEntry     JournalEntry?             @relation(fields: [journalEntryId], references: [id])
-  installments     PaymentOrderInstallment[]
-  partnerMovements PartnerAccountMovement[]
+  // Beneficiario socio (OP de devolución de cuenta corriente de socio). Excluyente con supplierId.
+  partnerId String? @map("partner_id") @db.Uuid
+
+  company             Company                   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  supplier            Supplier?                 @relation(fields: [supplierId], references: [id])
+  partner             Partner?                  @relation(fields: [partnerId], references: [id])
+  items               PaymentOrderItem[]
+  payments            PaymentOrderPayment[]
+  withholdings        PaymentOrderWithholding[]
+  bankMovements       BankMovement[]
+  journalEntry        JournalEntry?             @relation(fields: [journalEntryId], references: [id])
+  installments        PaymentOrderInstallment[] @relation("InstallmentOrigin")
+  settledInstallments PaymentOrderInstallment[] @relation("InstallmentSettlement")
+  partnerMovements    PartnerAccountMovement[]
 
   createdBy   String    @map("created_by")
   confirmedBy String?   @map("confirmed_by")
@@ -3842,9 +3847,11 @@ model Partner {
   notes     String?
   isActive  Boolean @default(true) @map("is_active")
 
-  company   Company                  @relation(fields: [companyId], references: [id])
-  cards     Card[]
-  movements PartnerAccountMovement[]
+  company       Company                   @relation(fields: [companyId], references: [id])
+  cards         Card[]
+  movements     PartnerAccountMovement[]
+  installments  PaymentOrderInstallment[]
+  paymentOrders PaymentOrder[]
 
   createdBy String   @map("created_by")
   createdAt DateTime @default(now()) @map("created_at")
@@ -3885,24 +3892,32 @@ model Card {
 
 /// Cuota de una Orden de Pago abonada con tarjeta de crédito.
 model PaymentOrderInstallment {
-  id             String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  companyId      String                   @map("company_id") @db.Uuid
-  paymentOrderId String                   @map("payment_order_id") @db.Uuid
-  cardId         String?                  @map("card_id") @db.Uuid
-  number         Int
-  dueDate        DateTime                 @map("due_date") @db.Date
-  amount         Decimal                  @db.Decimal(15, 2)
-  status         PaymentInstallmentStatus @default(PENDING)
+  id                      String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId               String                   @map("company_id") @db.Uuid
+  paymentOrderId          String                   @map("payment_order_id") @db.Uuid
+  cardId                  String?                  @map("card_id") @db.Uuid
+  // Socio titular de la tarjeta (si la tarjeta es de un socio): la cuota es deuda con él
+  partnerId               String?                  @map("partner_id") @db.Uuid
+  number                  Int
+  dueDate                 DateTime                 @map("due_date") @db.Date
+  amount                  Decimal                  @db.Decimal(15, 2)
+  status                  PaymentInstallmentStatus @default(PENDING)
+  // OP de devolución que saldó esta cuota (cuando es de un socio) + fecha de pago
+  settledByPaymentOrderId String?                  @map("settled_by_payment_order_id") @db.Uuid
+  paidAt                  DateTime?                @map("paid_at")
 
-  company      Company      @relation(fields: [companyId], references: [id])
-  paymentOrder PaymentOrder @relation(fields: [paymentOrderId], references: [id], onDelete: Cascade)
-  card         Card?        @relation(fields: [cardId], references: [id])
+  company      Company       @relation(fields: [companyId], references: [id])
+  paymentOrder PaymentOrder  @relation("InstallmentOrigin", fields: [paymentOrderId], references: [id], onDelete: Cascade)
+  card         Card?         @relation(fields: [cardId], references: [id])
+  partner      Partner?      @relation(fields: [partnerId], references: [id])
+  settledBy    PaymentOrder? @relation("InstallmentSettlement", fields: [settledByPaymentOrderId], references: [id])
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@index([companyId])
   @@index([paymentOrderId])
+  @@index([partnerId, status])
   @@map("payment_order_installments")
 }
 

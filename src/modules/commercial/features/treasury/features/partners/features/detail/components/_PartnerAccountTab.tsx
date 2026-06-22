@@ -1,12 +1,13 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ColumnDef } from '@tanstack/react-table';
 import moment from 'moment';
-import { Wallet, TrendingDown, TrendingUp } from 'lucide-react';
+import { Wallet, TrendingDown, TrendingUp, CreditCard, Undo2 } from 'lucide-react';
 
 import { Badge } from '@/shared/components/ui/badge';
+import { Button } from '@/shared/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/card';
 import { ClientDataTable } from '@/shared/components/common/ClientDataTable';
 import { formatCurrency } from '@/shared/utils/formatters';
@@ -16,19 +17,24 @@ import {
   PARTNER_MOVEMENT_TYPE_LABELS,
   PARTNER_MOVEMENT_TYPE_SIGN,
   type PartnerAccountStatement,
+  type PartnerInstallment,
   type PartnerMovement,
 } from '../../../shared/types';
 import { getPartnerAccountStatement } from '../actions.server';
 import { _PartnerMovementDialog } from './_PartnerMovementDialog';
+import { _PartnerRepaymentDialog } from './_PartnerRepaymentDialog';
 
 interface PartnerAccountTabProps {
   partnerId: string;
+  partnerName?: string;
   initialStatement: PartnerAccountStatement;
 }
 
-export function _PartnerAccountTab({ partnerId, initialStatement }: PartnerAccountTabProps) {
+export function _PartnerAccountTab({ partnerId, partnerName, initialStatement }: PartnerAccountTabProps) {
   const { hasPermission } = usePermissions();
   const canRegister = hasPermission('commercial.treasury.partners', 'update');
+  const canRepay = hasPermission('commercial.treasury.payment-orders', 'create');
+  const [repayOpen, setRepayOpen] = useState(false);
 
   const { data: statement } = useQuery({
     queryKey: ['partner-account', partnerId],
@@ -36,7 +42,8 @@ export function _PartnerAccountTab({ partnerId, initialStatement }: PartnerAccou
     initialData: initialStatement,
   });
 
-  const { movements, balance, totalOwed, totalRepayment } = statement;
+  const { movements, installments, balance, pendingInstallments, totalOwed, totalRepayment } = statement;
+  const hasPendingInstallments = installments.some((i) => i.status === 'PENDING');
 
   const columns = useMemo<ColumnDef<PartnerMovement>[]>(
     () => [
@@ -92,6 +99,65 @@ export function _PartnerAccountTab({ partnerId, initialStatement }: PartnerAccou
     []
   );
 
+  const installmentColumns = useMemo<ColumnDef<PartnerInstallment>[]>(
+    () => [
+      {
+        accessorKey: 'dueDate',
+        header: 'Vencimiento',
+        meta: { title: 'Vencimiento' },
+        cell: ({ row }) => moment(row.original.dueDate).format('DD/MM/YYYY'),
+      },
+      {
+        accessorKey: 'cardName',
+        header: 'Tarjeta',
+        meta: { title: 'Tarjeta' },
+        cell: ({ row }) => <span className="text-sm">{row.original.cardName || '—'}</span>,
+      },
+      {
+        accessorKey: 'originFullNumber',
+        header: 'Origen',
+        meta: { title: 'Origen' },
+        cell: ({ row }) => (
+          <span className="text-sm text-muted-foreground">{row.original.originFullNumber}</span>
+        ),
+      },
+      {
+        accessorKey: 'number',
+        header: 'Cuota',
+        meta: { title: 'Cuota' },
+        cell: ({ row }) => <span className="text-sm">{row.original.number}</span>,
+      },
+      {
+        accessorKey: 'amount',
+        header: 'Monto',
+        meta: { title: 'Monto' },
+        cell: ({ row }) => (
+          <div className="text-right font-medium">{formatCurrency(row.original.amount)}</div>
+        ),
+      },
+      {
+        accessorKey: 'status',
+        header: 'Estado',
+        meta: { title: 'Estado' },
+        cell: ({ row }) => {
+          const { status, settledByFullNumber } = row.original;
+          if (status === 'PAID') {
+            return (
+              <div className="flex flex-col gap-0.5">
+                <Badge variant="default" className="w-fit">Pagada</Badge>
+                {settledByFullNumber && (
+                  <span className="text-xs text-muted-foreground">{settledByFullNumber}</span>
+                )}
+              </div>
+            );
+          }
+          return <Badge variant="secondary">Pendiente</Badge>;
+        },
+      },
+    ],
+    []
+  );
+
   return (
     <div className="space-y-6">
       {/* Resumen */}
@@ -116,6 +182,11 @@ export function _PartnerAccountTab({ partnerId, initialStatement }: PartnerAccou
                 ? 'La empresa le debe al socio'
                 : 'Sin saldo pendiente con el socio'}
             </p>
+            {pendingInstallments > 0 && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                Cuotas pendientes: {formatCurrency(pendingInstallments)}
+              </p>
+            )}
           </CardContent>
         </Card>
 
@@ -143,6 +214,48 @@ export function _PartnerAccountTab({ partnerId, initialStatement }: PartnerAccou
           </CardContent>
         </Card>
       </div>
+
+      {/* Cuotas (deuda por tarjetas) */}
+      <Card>
+        <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <CreditCard className="h-5 w-5" />
+              Cuotas (deuda por tarjetas)
+            </CardTitle>
+            <CardDescription>
+              Cuotas que la empresa le debe al socio por pagos con su tarjeta
+            </CardDescription>
+          </div>
+          {canRepay && hasPendingInstallments && (
+            <Button onClick={() => setRepayOpen(true)}>
+              <Undo2 className="mr-2 h-4 w-4" />
+              Devolver / Pagar al socio
+            </Button>
+          )}
+        </CardHeader>
+        <CardContent>
+          {installments.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No hay cuotas registradas</p>
+          ) : (
+            <ClientDataTable
+              columns={installmentColumns}
+              data={installments}
+              searchPlaceholder="Buscar cuotas..."
+              tableId="commercial-treasury-partner-installments"
+            />
+          )}
+        </CardContent>
+      </Card>
+
+      {canRepay && (
+        <_PartnerRepaymentDialog
+          partnerId={partnerId}
+          partnerName={partnerName}
+          open={repayOpen}
+          onOpenChange={setRepayOpen}
+        />
+      )}
 
       {/* Movimientos */}
       <Card>

@@ -557,12 +557,24 @@ export const createPaymentOrderSchema = z
     }
   );
 
+// Schema para devolución a un socio (OP dirigida a un socio que salda cuotas de su cuenta corriente)
+export const partnerRepaymentSchema = z
+  .object({
+    partnerId: z.string().uuid('Socio inválido'),
+    date: z.date({ message: 'La fecha es requerida' }),
+    notes: z.string().max(500, 'Las notas no pueden exceder 500 caracteres').optional().nullable(),
+    // Cuotas seleccionadas a saldar (cuota por cuota o todas para el total)
+    installmentIds: z.array(z.string().uuid()).min(1, 'Debe seleccionar al menos una cuota a devolver'),
+    payments: z.array(paymentOrderPaymentSchema).min(1, 'Debe indicar cómo se devuelve el dinero'),
+  });
+
 // ====================================
 // TYPE INFERENCE - PAYMENT ORDERS
 // ====================================
 
 export type PaymentOrderItemFormData = z.infer<typeof paymentOrderItemSchema>;
 export type PaymentOrderPaymentFormData = z.infer<typeof paymentOrderPaymentSchema>;
+export type PartnerRepaymentFormData = z.infer<typeof partnerRepaymentSchema>;
 export type CreatePaymentOrderFormData = z.infer<typeof createPaymentOrderSchema>;
 
 // ====================================

@@ -26,10 +26,28 @@ export async function getPartnerAccountStatement(
   if (!companyId) throw new Error('No hay empresa activa');
 
   try {
-    const movements = await prisma.partnerAccountMovement.findMany({
-      where: { companyId, partnerId },
-      orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
-    });
+    const [movements, installments] = await Promise.all([
+      prisma.partnerAccountMovement.findMany({
+        where: { companyId, partnerId },
+        orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
+      }),
+      // Cuotas de tarjetas del socio: las PENDING son la deuda principal (se saldan con
+      // una OP de devolución); las PAID quedan como historial.
+      prisma.paymentOrderInstallment.findMany({
+        where: { companyId, partnerId },
+        select: {
+          id: true,
+          number: true,
+          dueDate: true,
+          amount: true,
+          status: true,
+          card: { select: { name: true } },
+          paymentOrder: { select: { fullNumber: true } },
+          settledBy: { select: { fullNumber: true } },
+        },
+        orderBy: [{ dueDate: 'asc' }],
+      }),
+    ]);
 
     let totalOwed = 0;
     let totalRepayment = 0;
@@ -55,11 +73,29 @@ export async function getPartnerAccountStatement(
       };
     });
 
-    const balance = totalOwed + totalAdjustment - totalRepayment;
+    const mappedInstallments = installments.map((inst) => ({
+      id: inst.id,
+      number: inst.number,
+      dueDate: inst.dueDate,
+      amount: Number(inst.amount),
+      status: inst.status,
+      cardName: inst.card?.name ?? '',
+      originFullNumber: inst.paymentOrder.fullNumber,
+      settledByFullNumber: inst.settledBy?.fullNumber ?? null,
+    }));
+
+    const pendingInstallments = mappedInstallments
+      .filter((i) => i.status === 'PENDING')
+      .reduce((sum, i) => sum + i.amount, 0);
+
+    // Saldo a favor del socio = cuotas pendientes (deuda por tarjetas) + ajustes manuales
+    const balance = pendingInstallments + totalOwed + totalAdjustment - totalRepayment;
 
     return {
       movements: mappedMovements,
+      installments: mappedInstallments,
       balance,
+      pendingInstallments,
       totalOwed,
       totalRepayment,
       totalAdjustment,

@@ -10,7 +10,8 @@ import type { DataTableSearchParams } from '@/shared/components/common/DataTable
 import { buildFiltersWhere, buildDateRangeFiltersWhere, parseSearchParams, stateToPrismaParams } from '@/shared/components/common/DataTable/helpers';
 import { CREDIT_NOTE_TYPES, isCreditNote } from '@/modules/commercial/shared/voucher-utils';
 import moment from 'moment';
-import type { CreatePaymentOrderFormData } from '../../shared/validators';
+import type { CreatePaymentOrderFormData, PartnerRepaymentFormData } from '../../shared/validators';
+import { partnerRepaymentSchema } from '../../shared/validators';
 import type { PendingPurchaseInvoice, PaymentOrderListItem, PaymentOrderWithDetails } from '../../shared/types';
 import { createJournalEntryForPaymentOrder } from '@/modules/accounting/features/integrations/commercial';
 import { checkPermission } from '@/shared/lib/permissions';
@@ -164,6 +165,144 @@ export async function getActiveCardsForPayment() {
     ownerType: c.ownerType,
     ownerName: c.ownerType === 'PARTNER' ? c.partner?.name ?? 'Socio' : 'Empresa',
   }));
+}
+
+/**
+ * Cuotas pendientes (no saldadas) que la empresa le debe a un socio.
+ */
+export async function getPartnerPendingInstallments(partnerId: string) {
+  await checkPermission('commercial.treasury.partners', 'view', { redirect: true });
+  const companyId = await getActiveCompanyId();
+  if (!companyId) return [];
+
+  const installments = await prisma.paymentOrderInstallment.findMany({
+    where: { companyId, partnerId, status: 'PENDING', settledByPaymentOrderId: null },
+    select: {
+      id: true,
+      number: true,
+      dueDate: true,
+      amount: true,
+      card: { select: { name: true } },
+      paymentOrder: { select: { fullNumber: true } },
+    },
+    orderBy: [{ dueDate: 'asc' }],
+  });
+
+  return installments.map((i) => ({
+    id: i.id,
+    number: i.number,
+    dueDate: i.dueDate,
+    amount: Number(i.amount),
+    cardName: i.card?.name ?? '',
+    originFullNumber: i.paymentOrder.fullNumber,
+  }));
+}
+
+/**
+ * Crea una OP de devolución a un socio: salda las cuotas seleccionadas de su cuenta
+ * corriente. La OP queda en DRAFT; al confirmarla se registran los egresos de caja/banco
+ * y las cuotas pasan a PAID.
+ */
+export async function createPartnerRepaymentOrder(data: PartnerRepaymentFormData) {
+  await checkPermission('commercial.treasury.payment-orders', 'create', { redirect: true });
+  const userId = await getCurrentUserId();
+  if (!userId) throw new Error('No autenticado');
+
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  const parsed = partnerRepaymentSchema.safeParse(data);
+  if (!parsed.success) {
+    throw new Error(parsed.error.issues[0]?.message ?? 'Datos inválidos');
+  }
+  const { partnerId, date, notes, installmentIds, payments } = parsed.data;
+
+  try {
+    // Validar que las cuotas existan, sean del socio y estén pendientes/no reservadas
+    const installments = await prisma.paymentOrderInstallment.findMany({
+      where: {
+        id: { in: installmentIds },
+        companyId,
+        partnerId,
+        status: 'PENDING',
+        settledByPaymentOrderId: null,
+      },
+      select: { id: true, amount: true },
+    });
+
+    if (installments.length !== installmentIds.length) {
+      throw new Error('Algunas cuotas ya no están disponibles para devolver');
+    }
+
+    const totalCents = installments.reduce((sum, i) => sum + Math.round(Number(i.amount) * 100), 0);
+    const payCents = payments.reduce((sum, p) => sum + Math.round(parseFloat(p.amount) * 100), 0);
+    if (totalCents !== payCents) {
+      throw new Error('El total a devolver debe coincidir con las formas de pago');
+    }
+
+    const lastPaymentOrder = await prisma.paymentOrder.findFirst({
+      where: { companyId },
+      orderBy: { number: 'desc' },
+      select: { number: true },
+    });
+    const nextNumber = (lastPaymentOrder?.number ?? 0) + 1;
+    const fullNumber = `OP-${String(nextNumber).padStart(5, '0')}`;
+
+    const op = await prisma.$transaction(async (tx) => {
+      const newOp = await tx.paymentOrder.create({
+        data: {
+          companyId,
+          partnerId,
+          supplierId: null,
+          number: nextNumber,
+          fullNumber,
+          date,
+          totalAmount: new Prisma.Decimal((totalCents / 100).toFixed(2)),
+          notes: notes || null,
+          status: 'DRAFT',
+          createdBy: userId,
+        },
+      });
+
+      await tx.paymentOrderPayment.createMany({
+        data: payments.map((payment) => ({
+          paymentOrderId: newOp.id,
+          paymentMethod: payment.paymentMethod,
+          amount: new Prisma.Decimal(payment.amount),
+          cashRegisterId: payment.cashRegisterId || null,
+          bankAccountId: payment.bankAccountId || null,
+          checkNumber: payment.checkNumber || null,
+          reference: payment.reference || null,
+          checkBankName: payment.checkBankName || null,
+          checkIssueDate: payment.checkIssueDate || null,
+          checkDueDate: payment.checkDueDate || null,
+          checkDrawerName: payment.checkDrawerName || null,
+          checkDrawerTaxId: payment.checkDrawerTaxId || null,
+          endorsedCheckId:
+            payment.checkOwnership === 'THIRD_PARTY' ? payment.endorsedCheckId || null : null,
+        })),
+      });
+
+      // Reservar las cuotas para esta OP (se marcan PAID al confirmar)
+      await tx.paymentOrderInstallment.updateMany({
+        where: { id: { in: installmentIds } },
+        data: { settledByPaymentOrderId: newOp.id },
+      });
+
+      return newOp;
+    });
+
+    logger.info('OP de devolución a socio creada', {
+      data: { paymentOrderId: op.id, partnerId, totalAmount: totalCents / 100 },
+    });
+
+    revalidatePath('/dashboard/commercial/treasury/payment-orders');
+    return { success: true, id: op.id };
+  } catch (error) {
+    logger.error('Error al crear devolución a socio', { data: { error, partnerId } });
+    if (error instanceof Error) throw error;
+    throw new Error('Error al crear la devolución al socio');
+  }
 }
 
 /**
@@ -371,6 +510,12 @@ export async function confirmPaymentOrder(paymentOrderId: string) {
 
       // 3. Crear movimientos de caja/banco según formas de pago
       for (const payment of paymentOrder.payments) {
+        // Si se pagó con la tarjeta de un socio, la empresa NO mueve plata ahora:
+        // el socio adelantó el pago. El egreso ocurre al devolverle (OP de devolución).
+        if (payment.card && payment.card.ownerType === 'PARTNER') {
+          continue;
+        }
+
         if (payment.cashRegisterId) {
           // Obtener sesión activa de la caja
           const activeSession = await tx.cashRegisterSession.findFirst({
@@ -493,100 +638,111 @@ export async function confirmPaymentOrder(paymentOrderId: string) {
         }
       }
 
-      // 3c. Tarjetas: cuotas (crédito) + saldo deudor con el socio titular
+      // 3c. Tarjetas: generar el cronograma de cuotas (la deuda).
+      //  - Crédito (empresa o socio): N cuotas mensuales.
+      //  - Débito de un socio: 1 cuota (la empresa le debe el total al socio).
+      //  - Débito de empresa: nada (el dinero ya salió del banco en el paso 3).
+      // Si la tarjeta es de un socio, la cuota queda asociada a él (partnerId) y representa
+      // lo que la empresa le debe; se salda con una OP de devolución.
       for (const payment of paymentOrder.payments) {
-        const isCard =
-          payment.paymentMethod === 'CREDIT_CARD' || payment.paymentMethod === 'DEBIT_CARD';
-        if (!isCard || !payment.card) continue;
-
+        if (!payment.card) continue;
         const card = payment.card;
+        const isPartnerCard = card.ownerType === 'PARTNER' && Boolean(card.partnerId);
         const paymentAmount = Number(payment.amount);
 
-        // Cuotas: solo tarjeta de crédito. Genera cronograma + proyecciones de cashflow.
+        let installmentsCount = 0;
         if (payment.paymentMethod === 'CREDIT_CARD') {
-          const installmentsCount = Math.max(1, payment.installmentsCount ?? 1);
-          // Reparto en centavos para que la suma cuadre exactamente con el total
-          const totalCents = Math.round(paymentAmount * 100);
-          const baseCents = Math.floor(totalCents / installmentsCount);
-          const remainderCents = totalCents - baseCents * installmentsCount;
-
-          for (let i = 1; i <= installmentsCount; i++) {
-            const cents = baseCents + (i <= remainderCents ? 1 : 0);
-            const amount = new Prisma.Decimal((cents / 100).toFixed(2));
-
-            // Vencimiento: i meses después de la fecha de la OP; si la tarjeta tiene día de
-            // vencimiento configurado, se ajusta a ese día del mes correspondiente.
-            let dueDate = moment(paymentOrder.date).add(i, 'months');
-            if (card.dueDay) {
-              dueDate = dueDate.date(Math.min(card.dueDay, dueDate.daysInMonth()));
-            }
-
-            await tx.paymentOrderInstallment.create({
-              data: {
-                companyId,
-                paymentOrderId,
-                cardId: card.id,
-                number: i,
-                dueDate: dueDate.toDate(),
-                amount,
-                status: 'PENDING',
-              },
-            });
-
-            // Proyección de cashflow (egreso futuro)
-            await tx.cashflowProjection.create({
-              data: {
-                companyId,
-                type: 'EXPENSE',
-                category: 'OTHER',
-                description: `Cuota ${i}/${installmentsCount} ${paymentOrder.fullNumber} — ${card.name}`,
-                amount,
-                date: dueDate.toDate(),
-                status: 'PENDING',
-                createdBy: userId,
-              },
-            });
-          }
+          installmentsCount = Math.max(1, payment.installmentsCount ?? 1);
+        } else if (payment.paymentMethod === 'DEBIT_CARD' && isPartnerCard) {
+          installmentsCount = 1;
         }
+        if (installmentsCount === 0) continue;
 
-        // Saldo deudor con el socio: si la tarjeta es de un socio, la empresa pasa a deberle
-        // el importe abonado (aplica tanto a crédito como a débito).
-        if (card.ownerType === 'PARTNER' && card.partnerId) {
-          await tx.partnerAccountMovement.create({
+        // Reparto en centavos para que la suma cuadre exactamente con el total
+        const totalCents = Math.round(paymentAmount * 100);
+        const baseCents = Math.floor(totalCents / installmentsCount);
+        const remainderCents = totalCents - baseCents * installmentsCount;
+
+        for (let i = 1; i <= installmentsCount; i++) {
+          const cents = baseCents + (i <= remainderCents ? 1 : 0);
+          const amount = new Prisma.Decimal((cents / 100).toFixed(2));
+
+          // Vencimiento: cuotas de crédito vencen i meses después; la cuota única de débito
+          // de socio vence en la fecha de la OP (se le debe ya). Si la tarjeta tiene día de
+          // vencimiento configurado, se ajusta a ese día del mes correspondiente.
+          let dueDate =
+            payment.paymentMethod === 'CREDIT_CARD'
+              ? moment(paymentOrder.date).add(i, 'months')
+              : moment(paymentOrder.date);
+          if (card.dueDay) {
+            dueDate = dueDate.date(Math.min(card.dueDay, dueDate.daysInMonth()));
+          }
+
+          await tx.paymentOrderInstallment.create({
             data: {
               companyId,
-              partnerId: card.partnerId,
-              date: paymentOrder.date,
-              type: 'OWED',
-              amount: payment.amount,
-              description: `Pago ${paymentOrder.fullNumber} con tarjeta ${card.name}`,
               paymentOrderId,
+              cardId: card.id,
+              partnerId: isPartnerCard ? card.partnerId : null,
+              number: i,
+              dueDate: dueDate.toDate(),
+              amount,
+              status: 'PENDING',
+            },
+          });
+
+          // Proyección de cashflow (egreso futuro: pago a la tarjeta o devolución al socio)
+          await tx.cashflowProjection.create({
+            data: {
+              companyId,
+              type: 'EXPENSE',
+              category: 'OTHER',
+              description:
+                installmentsCount > 1
+                  ? `Cuota ${i}/${installmentsCount} ${paymentOrder.fullNumber} — ${card.name}`
+                  : `${paymentOrder.fullNumber} — ${card.name}`,
+              amount,
+              date: dueDate.toDate(),
+              status: 'PENDING',
               createdBy: userId,
             },
           });
         }
       }
 
-      // Crear asiento contable automáticamente
-      try {
-        const journalEntryId = await createJournalEntryForPaymentOrder(paymentOrderId, companyId, tx);
-
-        if (journalEntryId) {
-          // Actualizar orden de pago con referencia al asiento contable
-          await tx.paymentOrder.update({
-            where: { id: paymentOrderId },
-            data: { journalEntryId },
-          });
-
-          logger.info('Asiento contable generado para orden de pago', {
-            data: { paymentOrderId, journalEntryId },
-          });
-        }
-      } catch (error) {
-        logger.warn('No se pudo generar asiento contable para orden de pago', {
-          data: { paymentOrderId, error },
+      // 3d. OP de devolución a un socio: saldar las cuotas reservadas por esta OP.
+      // La cuota pasa a PAID (deja de contar en el saldo del socio); el egreso real de
+      // caja/banco ya se registró en el paso 3.
+      if (paymentOrder.partnerId) {
+        await tx.paymentOrderInstallment.updateMany({
+          where: { settledByPaymentOrderId: paymentOrderId, status: 'PENDING' },
+          data: { status: 'PAID', paidAt: paymentOrder.date },
         });
-        // No lanzar error para no interrumpir la confirmación de la orden
+      }
+
+      // Crear asiento contable automáticamente (solo OP a proveedor; las de devolución
+      // a socio no generan asiento de compra)
+      if (!paymentOrder.partnerId) {
+        try {
+          const journalEntryId = await createJournalEntryForPaymentOrder(paymentOrderId, companyId, tx);
+
+          if (journalEntryId) {
+            // Actualizar orden de pago con referencia al asiento contable
+            await tx.paymentOrder.update({
+              where: { id: paymentOrderId },
+              data: { journalEntryId },
+            });
+
+            logger.info('Asiento contable generado para orden de pago', {
+              data: { paymentOrderId, journalEntryId },
+            });
+          }
+        } catch (error) {
+          logger.warn('No se pudo generar asiento contable para orden de pago', {
+            data: { paymentOrderId, error },
+          });
+          // No lanzar error para no interrumpir la confirmación de la orden
+        }
       }
     });
 

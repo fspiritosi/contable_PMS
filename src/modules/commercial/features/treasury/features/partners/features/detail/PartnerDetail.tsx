@@ -33,7 +33,7 @@ export async function PartnerDetail({ partnerId }: PartnerDetailProps) {
         </TabsContent>
 
         <TabsContent value="account" className="mt-6">
-          <_PartnerAccountTab partnerId={partnerId} initialStatement={accountStatement} />
+          <_PartnerAccountTab partnerId={partnerId} partnerName={partner.name} initialStatement={accountStatement} />
         </TabsContent>
       </Tabs>
     </PermissionGuard>
