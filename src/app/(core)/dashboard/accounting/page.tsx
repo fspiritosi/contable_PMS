@@ -1,7 +1,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/card';
 import { Button } from '@/shared/components/ui/button';
 import Link from 'next/link';
-import { FileText, Layers, PieChart, Settings } from 'lucide-react';
+import { BarChart3, FileText, Layers, PieChart, Settings } from 'lucide-react';
 
 export default function AccountingPage() {
   return (
@@ -47,6 +47,25 @@ export default function AccountingPage() {
             <Button asChild className="w-full">
               <Link href="/dashboard/company/accounting/entries">
                 Ir a Asientos
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5" />
+              Balance del Mes
+            </CardTitle>
+            <CardDescription>
+              Resumen rápido de ingresos, gastos y resultado del mes
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button asChild className="w-full">
+              <Link href="/dashboard/company/accounting/monthly-balance">
+                Ver Balance del Mes
               </Link>
             </Button>
           </CardContent>
