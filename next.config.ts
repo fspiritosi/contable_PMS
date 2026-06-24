@@ -2,7 +2,6 @@ import type { NextConfig } from "next";
 import { instanceConfig } from "./instance.config";
 
 const nextConfig: NextConfig = {
-  output: 'standalone',
   // Ignorar errores de TS en build (hay errores preexistentes en opening-balances)
   typescript: {
     ignoreBuildErrors: true,
