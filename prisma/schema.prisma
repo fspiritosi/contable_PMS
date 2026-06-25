@@ -238,6 +238,24 @@ enum AccountingPeriodType {
   @@map("accounting_period_type")
 }
 
+// Tipo de línea de factura (gravado, no gravado, exento)
+enum InvoiceLineType {
+  TAXED // Gravado (IVA > 0%)
+  NON_TAXED // No gravado
+  EXEMPT // Exento
+
+  @@map("invoice_line_type")
+}
+
+// Tipo de percepción fiscal
+enum PerceptionType {
+  IVA
+  IIBB
+  MUNICIPAL
+
+  @@map("perception_type")
+}
+
 // Tipo de Auxiliar requerido por una cuenta
 enum AuxiliaryType {
   CUSTOMER
@@ -305,6 +323,11 @@ model Account {
   settingsAsAccumulatedDepr     AccountingSettings[] @relation("AccumulatedDepreciationAccount")
   settingsAsDepreciationExpense AccountingSettings[] @relation("DepreciationExpenseAccount")
   settingsAsAssetDisposalGL     AccountingSettings[] @relation("AssetDisposalGainLossAccount")
+  settingsAsPercIvaCollected    AccountingSettings[] @relation("PercIvaCollectedAccount")
+  settingsAsPercIibbCollected   AccountingSettings[] @relation("PercIibbCollectedAccount")
+  settingsAsPercIvaSuffered     AccountingSettings[] @relation("PercIvaSufferedAccount")
+  settingsAsPercIibbSuffered    AccountingSettings[] @relation("PercIibbSufferedAccount")
+  vatAccountMappings            AccountingVatAccount[]
   recurringEntryLines           RecurringEntryLine[]
   budgets                       Budget[]
 
@@ -504,10 +527,70 @@ model AccountingSettings {
   depreciationExpenseAccount     Account? @relation("DepreciationExpenseAccount", fields: [depreciationExpenseAccountId], references: [id])
   assetDisposalGainLossAccount   Account? @relation("AssetDisposalGainLossAccount", fields: [assetDisposalGainLossAccountId], references: [id])
 
+  // Cuentas de Percepciones - Cobradas (pasivo, a depositar)
+  perceptionIvaCollectedAccountId  String? @map("perception_iva_collected_account_id") @db.Uuid
+  perceptionIibbCollectedAccountId String? @map("perception_iibb_collected_account_id") @db.Uuid
+  // Cuentas de Percepciones - Sufridas (activo, crédito fiscal)
+  perceptionIvaSufferedAccountId   String? @map("perception_iva_suffered_account_id") @db.Uuid
+  perceptionIibbSufferedAccountId  String? @map("perception_iibb_suffered_account_id") @db.Uuid
+
+  perceptionIvaCollectedAccount  Account? @relation("PercIvaCollectedAccount", fields: [perceptionIvaCollectedAccountId], references: [id])
+  perceptionIibbCollectedAccount Account? @relation("PercIibbCollectedAccount", fields: [perceptionIibbCollectedAccountId], references: [id])
+  perceptionIvaSufferedAccount   Account? @relation("PercIvaSufferedAccount", fields: [perceptionIvaSufferedAccountId], references: [id])
+  perceptionIibbSufferedAccount  Account? @relation("PercIibbSufferedAccount", fields: [perceptionIibbSufferedAccountId], references: [id])
+
+  // Cuentas de IVA por alícuota (overrides opcionales)
+  vatAccounts AccountingVatAccount[]
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("accounting_settings")
+}
+
+// Mapeo de IVA por alícuota a cuenta contable
+model AccountingVatAccount {
+  id         String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  settingsId String  @map("settings_id") @db.Uuid
+  vatRate    Decimal @map("vat_rate") @db.Decimal(5, 2)
+  side       String  // 'DEBIT' (ventas) o 'CREDIT' (compras)
+  accountId  String  @map("account_id") @db.Uuid
+
+  settings   AccountingSettings @relation(fields: [settingsId], references: [id], onDelete: Cascade)
+  account    Account            @relation(fields: [accountId], references: [id])
+
+  @@unique([settingsId, vatRate, side])
+  @@map("accounting_vat_accounts")
+}
+
+// Percepción en Factura de Venta
+model SalesInvoicePerception {
+  id           String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  invoiceId    String         @map("invoice_id") @db.Uuid
+  type         PerceptionType
+  jurisdiction String?
+  rate         Decimal        @db.Decimal(6, 3)
+  baseAmount   Decimal        @map("base_amount") @db.Decimal(12, 2)
+  amount       Decimal        @db.Decimal(12, 2)
+
+  invoice      SalesInvoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@map("sales_invoice_perceptions")
+}
+
+// Percepción en Factura de Compra
+model PurchaseInvoicePerception {
+  id           String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  invoiceId    String          @map("invoice_id") @db.Uuid
+  type         PerceptionType
+  jurisdiction String?
+  rate         Decimal         @db.Decimal(6, 3)
+  baseAmount   Decimal         @map("base_amount") @db.Decimal(12, 2)
+  amount       Decimal         @db.Decimal(12, 2)
+
+  invoice      PurchaseInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@map("purchase_invoice_perceptions")
 }
 
 // Ejercicio Fiscal
@@ -2550,10 +2633,13 @@ model SalesInvoice {
   caeExpiryDate DateTime? @map("cae_expiry_date")
 
   // Importes
-  subtotal   Decimal @default(0) @db.Decimal(12, 2) // Base imponible
-  vatAmount  Decimal @default(0) @map("vat_amount") @db.Decimal(12, 2)
-  otherTaxes Decimal @default(0) @map("other_taxes") @db.Decimal(12, 2)
-  total      Decimal @default(0) @db.Decimal(12, 2)
+  subtotal    Decimal @default(0) @db.Decimal(12, 2) // Base imponible
+  netTaxed    Decimal @default(0) @map("net_taxed") @db.Decimal(12, 2)
+  netNonTaxed Decimal @default(0) @map("net_non_taxed") @db.Decimal(12, 2)
+  netExempt   Decimal @default(0) @map("net_exempt") @db.Decimal(12, 2)
+  vatAmount   Decimal @default(0) @map("vat_amount") @db.Decimal(12, 2)
+  otherTaxes  Decimal @default(0) @map("other_taxes") @db.Decimal(12, 2)
+  total       Decimal @default(0) @db.Decimal(12, 2)
 
   // Descuentos
   globalDiscountPercent Decimal? @map("global_discount_percent") @db.Decimal(5, 2)
@@ -2583,6 +2669,7 @@ model SalesInvoice {
   customer                       Contractor                   @relation(fields: [customerId], references: [id])
   pointOfSale                    SalesPointOfSale             @relation(fields: [pointOfSaleId], references: [id])
   lines                          SalesInvoiceLine[]
+  perceptions                    SalesInvoicePerception[]
   journalEntry                   JournalEntry?                @relation(fields: [journalEntryId], references: [id])
   cashMovements                  CashMovement[]
   receiptItems                   ReceiptItem[]
@@ -2615,8 +2702,9 @@ model SalesInvoiceLine {
   discountAmount  Decimal? @map("discount_amount") @db.Decimal(12, 2)
 
   // Impuestos
-  vatRate   Decimal @map("vat_rate") @db.Decimal(5, 2)
-  vatAmount Decimal @map("vat_amount") @db.Decimal(12, 2)
+  lineType  InvoiceLineType @default(TAXED) @map("line_type")
+  vatRate   Decimal         @map("vat_rate") @db.Decimal(5, 2)
+  vatAmount Decimal         @map("vat_amount") @db.Decimal(12, 2)
 
   subtotal Decimal @db.Decimal(12, 2) // quantity * unitPrice
   total    Decimal @db.Decimal(12, 2) // subtotal + vatAmount
@@ -2671,10 +2759,13 @@ model PurchaseInvoice {
   validated Boolean @default(false)
 
   // Importes
-  subtotal   Decimal @default(0) @db.Decimal(12, 2)
-  vatAmount  Decimal @default(0) @map("vat_amount") @db.Decimal(12, 2)
-  otherTaxes Decimal @default(0) @map("other_taxes") @db.Decimal(12, 2)
-  total      Decimal @default(0) @db.Decimal(12, 2)
+  subtotal    Decimal @default(0) @db.Decimal(12, 2)
+  netTaxed    Decimal @default(0) @map("net_taxed") @db.Decimal(12, 2)
+  netNonTaxed Decimal @default(0) @map("net_non_taxed") @db.Decimal(12, 2)
+  netExempt   Decimal @default(0) @map("net_exempt") @db.Decimal(12, 2)
+  vatAmount   Decimal @default(0) @map("vat_amount") @db.Decimal(12, 2)
+  otherTaxes  Decimal @default(0) @map("other_taxes") @db.Decimal(12, 2)
+  total       Decimal @default(0) @db.Decimal(12, 2)
 
   // Observaciones
   notes String?
@@ -2699,6 +2790,7 @@ model PurchaseInvoice {
   company                        Company                         @relation(fields: [companyId], references: [id])
   supplier                       Supplier                        @relation(fields: [supplierId], references: [id])
   lines                          PurchaseInvoiceLine[]
+  perceptions                    PurchaseInvoicePerception[]
   journalEntry                   JournalEntry?                   @relation(fields: [journalEntryId], references: [id])
   cashMovements                  CashMovement[]
   paymentOrderItems              PaymentOrderItem[]
@@ -2730,8 +2822,9 @@ model PurchaseInvoiceLine {
   unitCost    Decimal @map("unit_cost") @db.Decimal(12, 2)
 
   // Impuestos
-  vatRate   Decimal @map("vat_rate") @db.Decimal(5, 2)
-  vatAmount Decimal @map("vat_amount") @db.Decimal(12, 2)
+  lineType  InvoiceLineType @default(TAXED) @map("line_type")
+  vatRate   Decimal         @map("vat_rate") @db.Decimal(5, 2)
+  vatAmount Decimal         @map("vat_amount") @db.Decimal(12, 2)
 
   subtotal Decimal @db.Decimal(12, 2)
   total    Decimal @db.Decimal(12, 2)

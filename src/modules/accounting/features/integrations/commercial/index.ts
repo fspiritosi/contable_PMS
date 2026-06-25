@@ -80,6 +80,7 @@ async function getAccountingSettings(companyId: string, tx?: PrismaTransactionCl
       defaultCashAccount: true,
       defaultBankAccount: true,
       expensesAccount: true,
+      vatAccounts: { select: { vatRate: true, side: true, accountId: true } },
     },
   });
 
@@ -88,6 +89,36 @@ async function getAccountingSettings(companyId: string, tx?: PrismaTransactionCl
   }
 
   return settings;
+}
+
+function getVatAccountId(
+  settings: Awaited<ReturnType<typeof getAccountingSettings>>,
+  vatRate: number,
+  side: 'DEBIT' | 'CREDIT'
+): string | null {
+  const override = settings.vatAccounts.find(
+    (va) => Number(va.vatRate) === vatRate && va.side === side
+  );
+  if (override) return override.accountId;
+  return side === 'DEBIT' ? settings.vatDebitAccountId : settings.vatCreditAccountId;
+}
+
+function getPerceptionAccountId(
+  settings: Awaited<ReturnType<typeof getAccountingSettings>>,
+  type: string,
+  role: 'collected' | 'suffered'
+): string | null {
+  const map: Record<string, Record<string, string | null | undefined>> = {
+    collected: {
+      IVA: settings.perceptionIvaCollectedAccountId,
+      IIBB: settings.perceptionIibbCollectedAccountId,
+    },
+    suffered: {
+      IVA: settings.perceptionIvaSufferedAccountId,
+      IIBB: settings.perceptionIibbSufferedAccountId,
+    },
+  };
+  return map[role]?.[type] ?? null;
 }
 
 // ============================================
@@ -237,7 +268,6 @@ export async function createJournalEntryForSalesInvoice(
   try {
     const settings = await getAccountingSettings(companyId, tx);
 
-    // Obtener factura
     const invoice = await tx.salesInvoice.findUnique({
       where: { id: invoiceId },
       select: {
@@ -249,6 +279,8 @@ export async function createJournalEntryForSalesInvoice(
         vatAmount: true,
         total: true,
         customer: { select: { name: true } },
+        lines: { select: { lineType: true, vatRate: true, vatAmount: true, subtotal: true } },
+        perceptions: { select: { type: true, amount: true, jurisdiction: true } },
       },
     });
 
@@ -257,21 +289,16 @@ export async function createJournalEntryForSalesInvoice(
     }
 
     const subtotal = parseFloat(invoice.subtotal.toString());
-    const vatAmount = parseFloat(invoice.vatAmount.toString());
     const total = parseFloat(invoice.total.toString());
     const isNC = isCreditNote(invoice.voucherType);
-    const hasVat = vatAmount > 0;
 
-    // Verificar cuentas necesarias (IVA solo si tiene monto)
-    if (!settings.receivablesAccountId || !settings.salesAccountId || (hasVat && !settings.vatDebitAccountId)) {
+    if (!settings.receivablesAccountId || !settings.salesAccountId) {
       logger.warn('No se puede crear asiento para factura de venta: cuentas no configuradas', {
         data: { invoiceId, companyId },
       });
       return null;
     }
 
-    // NC invierte el asiento: Debe=Ventas+IVA, Haber=CtasCobrar
-    // ND y Factura: Debe=CtasCobrar, Haber=Ventas+IVA
     const docLabel = isNC ? 'Nota de crédito' : 'Factura de venta';
 
     const lines: JournalEntryLineInput[] = [
@@ -290,13 +317,49 @@ export async function createJournalEntryForSalesInvoice(
       },
     ];
 
-    // Solo incluir línea de IVA si hay monto (Facturas tipo C no llevan IVA)
-    if (vatAmount > 0) {
+    // IVA discriminado por alícuota
+    const vatByRate = new Map<number, number>();
+    for (const line of invoice.lines) {
+      if (line.lineType !== 'TAXED') continue;
+      const rate = parseFloat(line.vatRate.toString());
+      const vat = parseFloat(line.vatAmount.toString());
+      if (vat <= 0) continue;
+      vatByRate.set(rate, (vatByRate.get(rate) ?? 0) + vat);
+    }
+
+    for (const [rate, vatTotal] of vatByRate) {
+      const accountId = getVatAccountId(settings, rate, 'DEBIT');
+      if (!accountId) {
+        logger.warn('No se encontró cuenta de IVA DF para alícuota', {
+          data: { invoiceId, rate },
+        });
+        continue;
+      }
       lines.push({
-        accountId: settings.vatDebitAccountId!,
-        debit: isNC ? vatAmount : 0,
-        credit: isNC ? 0 : vatAmount,
-        description: `IVA Débito Fiscal - ${invoice.fullNumber}`,
+        accountId,
+        debit: isNC ? vatTotal : 0,
+        credit: isNC ? 0 : vatTotal,
+        description: `IVA DF ${rate}% - ${invoice.fullNumber}`,
+      });
+    }
+
+    // Percepciones cobradas (pasivo)
+    for (const perc of invoice.perceptions) {
+      const percAmount = parseFloat(perc.amount.toString());
+      if (percAmount <= 0) continue;
+      const accountId = getPerceptionAccountId(settings, perc.type, 'collected');
+      if (!accountId) {
+        logger.warn('No se encontró cuenta de percepción cobrada', {
+          data: { invoiceId, type: perc.type },
+        });
+        continue;
+      }
+      const jurisdLabel = perc.jurisdiction ? ` ${perc.jurisdiction}` : '';
+      lines.push({
+        accountId,
+        debit: isNC ? percAmount : 0,
+        credit: isNC ? 0 : percAmount,
+        description: `Perc. ${perc.type}${jurisdLabel} - ${invoice.fullNumber}`,
       });
     }
 
@@ -331,7 +394,6 @@ export async function createJournalEntryForPurchaseInvoice(
   try {
     const settings = await getAccountingSettings(companyId, tx);
 
-    // Obtener factura
     const invoice = await tx.purchaseInvoice.findUnique({
       where: { id: invoiceId },
       select: {
@@ -343,6 +405,8 @@ export async function createJournalEntryForPurchaseInvoice(
         vatAmount: true,
         total: true,
         supplier: { select: { businessName: true } },
+        lines: { select: { lineType: true, vatRate: true, vatAmount: true, subtotal: true } },
+        perceptions: { select: { type: true, amount: true, jurisdiction: true } },
       },
     });
 
@@ -351,21 +415,16 @@ export async function createJournalEntryForPurchaseInvoice(
     }
 
     const subtotal = parseFloat(invoice.subtotal.toString());
-    const vatAmount = parseFloat(invoice.vatAmount.toString());
     const total = parseFloat(invoice.total.toString());
     const isNC = isCreditNote(invoice.voucherType);
-    const hasVat = vatAmount > 0;
 
-    // Verificar cuentas necesarias (IVA solo si tiene monto)
-    if (!settings.payablesAccountId || !settings.purchasesAccountId || (hasVat && !settings.vatCreditAccountId)) {
+    if (!settings.payablesAccountId || !settings.purchasesAccountId) {
       logger.warn('No se puede crear asiento para factura de compra: cuentas no configuradas', {
         data: { invoiceId, companyId },
       });
       return null;
     }
 
-    // NC invierte: Debe=CtasPagar, Haber=Compras+IVA
-    // ND y Factura: Debe=Compras+IVA, Haber=CtasPagar
     const docLabel = isNC ? 'Nota de crédito de compra' : 'Factura de compra';
 
     const lines: JournalEntryLineInput[] = [
@@ -375,24 +434,62 @@ export async function createJournalEntryForPurchaseInvoice(
         credit: isNC ? subtotal : 0,
         description: `Compras - ${invoice.fullNumber}`,
       },
-      {
-        accountId: settings.payablesAccountId,
-        debit: isNC ? total : 0,
-        credit: isNC ? 0 : total,
-        description: `${docLabel} ${invoice.fullNumber} - ${invoice.supplier.businessName}`,
-        supplierId: invoice.supplierId,
-      },
     ];
 
-    // Solo incluir línea de IVA si hay monto (Facturas tipo C no llevan IVA)
-    if (vatAmount > 0) {
-      lines.splice(1, 0, {
-        accountId: settings.vatCreditAccountId!,
-        debit: isNC ? 0 : vatAmount,
-        credit: isNC ? vatAmount : 0,
-        description: `IVA Crédito Fiscal - ${invoice.fullNumber}`,
+    // IVA discriminado por alícuota
+    const vatByRate = new Map<number, number>();
+    for (const line of invoice.lines) {
+      if (line.lineType !== 'TAXED') continue;
+      const rate = parseFloat(line.vatRate.toString());
+      const vat = parseFloat(line.vatAmount.toString());
+      if (vat <= 0) continue;
+      vatByRate.set(rate, (vatByRate.get(rate) ?? 0) + vat);
+    }
+
+    for (const [rate, vatTotal] of vatByRate) {
+      const accountId = getVatAccountId(settings, rate, 'CREDIT');
+      if (!accountId) {
+        logger.warn('No se encontró cuenta de IVA CF para alícuota', {
+          data: { invoiceId, rate },
+        });
+        continue;
+      }
+      lines.push({
+        accountId,
+        debit: isNC ? 0 : vatTotal,
+        credit: isNC ? vatTotal : 0,
+        description: `IVA CF ${rate}% - ${invoice.fullNumber}`,
       });
     }
+
+    // Percepciones sufridas (activo, crédito fiscal)
+    for (const perc of invoice.perceptions) {
+      const percAmount = parseFloat(perc.amount.toString());
+      if (percAmount <= 0) continue;
+      const accountId = getPerceptionAccountId(settings, perc.type, 'suffered');
+      if (!accountId) {
+        logger.warn('No se encontró cuenta de percepción sufrida', {
+          data: { invoiceId, type: perc.type },
+        });
+        continue;
+      }
+      const jurisdLabel = perc.jurisdiction ? ` ${perc.jurisdiction}` : '';
+      lines.push({
+        accountId,
+        debit: isNC ? 0 : percAmount,
+        credit: isNC ? percAmount : 0,
+        description: `Perc. ${perc.type}${jurisdLabel} - ${invoice.fullNumber}`,
+      });
+    }
+
+    // Cuentas por pagar (total incluye percepciones)
+    lines.push({
+      accountId: settings.payablesAccountId,
+      debit: isNC ? total : 0,
+      credit: isNC ? 0 : total,
+      description: `${docLabel} ${invoice.fullNumber} - ${invoice.supplier.businessName}`,
+      supplierId: invoice.supplierId,
+    });
 
     const entryId = await createJournalEntry(
       {

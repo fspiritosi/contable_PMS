@@ -79,10 +79,15 @@ export function _LibroIVATable({ type, fetchData }: Props) {
         formatter: (value) =>
           taxConditionLabels[value as keyof typeof taxConditionLabels] || String(value),
       },
-      { key: 'subtotal', title: 'Neto Gravado', width: 15 },
+      { key: 'netTaxed', title: 'Neto Gravado', width: 15 },
+      { key: 'netNonTaxed', title: 'No Gravado', width: 13 },
+      { key: 'netExempt', title: 'Exento', width: 13 },
+      { key: 'iva25', title: 'IVA 2.5%', width: 13 },
+      { key: 'iva5', title: 'IVA 5%', width: 13 },
       { key: 'iva105', title: 'IVA 10.5%', width: 13 },
       { key: 'iva21', title: 'IVA 21%', width: 13 },
       { key: 'iva27', title: 'IVA 27%', width: 13 },
+      { key: 'perceptions', title: 'Percepciones', width: 13 },
       { key: 'otherTaxes', title: 'Otros Imp.', width: 13 },
       { key: 'total', title: 'Total', width: 15 },
     ];
@@ -182,72 +187,68 @@ export function _LibroIVATable({ type, fetchData }: Props) {
                       <th className="pb-3">Número</th>
                       <th className="pb-3">{entityLabel}</th>
                       <th className="pb-3">CUIT</th>
-                      <th className="pb-3 text-right">Neto Gravado</th>
+                      <th className="pb-3 text-right">Neto Grav.</th>
+                      <th className="pb-3 text-right">No Grav.</th>
+                      <th className="pb-3 text-right">Exento</th>
+                      <th className="pb-3 text-right">IVA 2.5%</th>
+                      <th className="pb-3 text-right">IVA 5%</th>
                       <th className="pb-3 text-right">IVA 10.5%</th>
                       <th className="pb-3 text-right">IVA 21%</th>
                       <th className="pb-3 text-right">IVA 27%</th>
-                      <th className="pb-3 text-right">Otros Imp.</th>
+                      <th className="pb-3 text-right">Perc.</th>
+                      <th className="pb-3 text-right">Otros</th>
                       <th className="pb-3 text-right">Total</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
-                    {data.entries.map((entry) => (
-                      <tr key={entry.id}>
-                        <td className="py-3 whitespace-nowrap">
-                          {moment(entry.issueDate).format('DD/MM/YYYY')}
-                        </td>
-                        <td className="py-3 text-xs">
-                          {VOUCHER_TYPE_LABELS[entry.voucherType as keyof typeof VOUCHER_TYPE_LABELS] || entry.voucherType}
-                        </td>
-                        <td className="py-3 font-mono text-xs">{entry.fullNumber}</td>
-                        <td className="py-3 max-w-[200px] truncate" title={entry.entityName}>
-                          {entry.entityName}
-                        </td>
-                        <td className="py-3 font-mono text-xs">{entry.entityTaxId || '-'}</td>
-                        <td className="py-3 text-right font-mono">
-                          {formatCurrency(entry.subtotal)}
-                        </td>
-                        <td className="py-3 text-right font-mono">
-                          {entry.iva105 > 0 ? formatCurrency(entry.iva105) : '-'}
-                        </td>
-                        <td className="py-3 text-right font-mono">
-                          {entry.iva21 > 0 ? formatCurrency(entry.iva21) : '-'}
-                        </td>
-                        <td className="py-3 text-right font-mono">
-                          {entry.iva27 > 0 ? formatCurrency(entry.iva27) : '-'}
-                        </td>
-                        <td className="py-3 text-right font-mono">
-                          {entry.otherTaxes > 0 ? formatCurrency(entry.otherTaxes) : '-'}
-                        </td>
-                        <td className="py-3 text-right font-mono font-semibold">
-                          {formatCurrency(entry.total)}
-                        </td>
-                      </tr>
-                    ))}
+                    {data.entries.map((entry) => {
+                      const c = (v: number) => v > 0 ? formatCurrency(v) : '-';
+                      return (
+                        <tr key={entry.id}>
+                          <td className="py-3 whitespace-nowrap">
+                            {moment(entry.issueDate).format('DD/MM/YYYY')}
+                          </td>
+                          <td className="py-3 text-xs">
+                            {VOUCHER_TYPE_LABELS[entry.voucherType as keyof typeof VOUCHER_TYPE_LABELS] || entry.voucherType}
+                          </td>
+                          <td className="py-3 font-mono text-xs">{entry.fullNumber}</td>
+                          <td className="py-3 max-w-[180px] truncate" title={entry.entityName}>
+                            {entry.entityName}
+                          </td>
+                          <td className="py-3 font-mono text-xs">{entry.entityTaxId || '-'}</td>
+                          <td className="py-3 text-right font-mono">{c(entry.netTaxed)}</td>
+                          <td className="py-3 text-right font-mono">{c(entry.netNonTaxed)}</td>
+                          <td className="py-3 text-right font-mono">{c(entry.netExempt)}</td>
+                          <td className="py-3 text-right font-mono">{c(entry.iva25)}</td>
+                          <td className="py-3 text-right font-mono">{c(entry.iva5)}</td>
+                          <td className="py-3 text-right font-mono">{c(entry.iva105)}</td>
+                          <td className="py-3 text-right font-mono">{c(entry.iva21)}</td>
+                          <td className="py-3 text-right font-mono">{c(entry.iva27)}</td>
+                          <td className="py-3 text-right font-mono">{c(entry.perceptions)}</td>
+                          <td className="py-3 text-right font-mono">{c(entry.otherTaxes)}</td>
+                          <td className="py-3 text-right font-mono font-semibold">
+                            {formatCurrency(entry.total)}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                   <tfoot className="border-t-2 font-semibold">
                     <tr>
                       <td className="pt-3" colSpan={5}>
                         TOTALES ({data.totals.entryCount} comprobantes)
                       </td>
-                      <td className="pt-3 text-right font-mono">
-                        {formatCurrency(data.totals.subtotal)}
-                      </td>
-                      <td className="pt-3 text-right font-mono">
-                        {formatCurrency(data.totals.iva105)}
-                      </td>
-                      <td className="pt-3 text-right font-mono">
-                        {formatCurrency(data.totals.iva21)}
-                      </td>
-                      <td className="pt-3 text-right font-mono">
-                        {formatCurrency(data.totals.iva27)}
-                      </td>
-                      <td className="pt-3 text-right font-mono">
-                        {formatCurrency(data.totals.otherTaxes)}
-                      </td>
-                      <td className="pt-3 text-right font-mono">
-                        {formatCurrency(data.totals.total)}
-                      </td>
+                      <td className="pt-3 text-right font-mono">{formatCurrency(data.totals.netTaxed)}</td>
+                      <td className="pt-3 text-right font-mono">{formatCurrency(data.totals.netNonTaxed)}</td>
+                      <td className="pt-3 text-right font-mono">{formatCurrency(data.totals.netExempt)}</td>
+                      <td className="pt-3 text-right font-mono">{formatCurrency(data.totals.iva25)}</td>
+                      <td className="pt-3 text-right font-mono">{formatCurrency(data.totals.iva5)}</td>
+                      <td className="pt-3 text-right font-mono">{formatCurrency(data.totals.iva105)}</td>
+                      <td className="pt-3 text-right font-mono">{formatCurrency(data.totals.iva21)}</td>
+                      <td className="pt-3 text-right font-mono">{formatCurrency(data.totals.iva27)}</td>
+                      <td className="pt-3 text-right font-mono">{formatCurrency(data.totals.perceptions)}</td>
+                      <td className="pt-3 text-right font-mono">{formatCurrency(data.totals.otherTaxes)}</td>
+                      <td className="pt-3 text-right font-mono">{formatCurrency(data.totals.total)}</td>
                     </tr>
                   </tfoot>
                 </table>

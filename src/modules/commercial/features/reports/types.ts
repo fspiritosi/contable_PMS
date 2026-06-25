@@ -12,9 +12,15 @@ export interface LibroIVAEntry {
   entityTaxId: string | null;
   entityTaxCondition: string;
   subtotal: number;
+  netTaxed: number;
+  netNonTaxed: number;
+  netExempt: number;
+  iva25: number;
+  iva5: number;
   iva105: number;
   iva21: number;
   iva27: number;
+  perceptions: number;
   otherTaxes: number;
   total: number;
   cae: string | null;
@@ -25,9 +31,15 @@ export interface LibroIVAResult {
   entries: LibroIVAEntry[];
   totals: {
     subtotal: number;
+    netTaxed: number;
+    netNonTaxed: number;
+    netExempt: number;
+    iva25: number;
+    iva5: number;
     iva105: number;
     iva21: number;
     iva27: number;
+    perceptions: number;
     otherTaxes: number;
     total: number;
     entryCount: number;

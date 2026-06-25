@@ -8,7 +8,7 @@ import { checkPermission } from '@/shared/lib/permissions';
 import { revalidatePath } from 'next/cache';
 import ExcelJS from 'exceljs';
 import moment from 'moment';
-import type { VoucherType, SupplierTaxCondition } from '@/generated/prisma/enums';
+import type { VoucherType, SupplierTaxCondition, InvoiceLineType } from '@/generated/prisma/enums';
 
 // Mapeo de códigos AFIP a VoucherType del sistema
 const AFIP_VOUCHER_MAP: Record<number, VoucherType> = {
@@ -299,6 +299,7 @@ export async function importPurchaseInvoicesFromAFIP(
           description: string;
           quantity: number;
           unitCost: number;
+          lineType: InvoiceLineType;
           vatRate: number;
           vatAmount: number;
           subtotal: number;
@@ -320,6 +321,7 @@ export async function importPurchaseInvoicesFromAFIP(
               description: `Compra según comprobante AFIP (IVA ${rate}%)`,
               quantity: 1,
               unitCost: neto,
+              lineType: 'TAXED',
               vatRate: rate,
               vatAmount: iva,
               subtotal: neto,
@@ -334,6 +336,7 @@ export async function importPurchaseInvoicesFromAFIP(
             description: 'No gravado',
             quantity: 1,
             unitCost: rowData.netoNoGravado,
+            lineType: 'NON_TAXED',
             vatRate: 0,
             vatAmount: 0,
             subtotal: rowData.netoNoGravado,
@@ -347,6 +350,7 @@ export async function importPurchaseInvoicesFromAFIP(
             description: 'Operaciones exentas',
             quantity: 1,
             unitCost: rowData.opExentas,
+            lineType: 'EXEMPT',
             vatRate: 0,
             vatAmount: 0,
             subtotal: rowData.opExentas,
@@ -360,6 +364,7 @@ export async function importPurchaseInvoicesFromAFIP(
             description: 'Compra según comprobante AFIP',
             quantity: 1,
             unitCost: rowData.impTotal,
+            lineType: 'TAXED',
             vatRate: 0,
             vatAmount: 0,
             subtotal: rowData.impTotal,
@@ -367,7 +372,10 @@ export async function importPurchaseInvoicesFromAFIP(
           });
         }
 
-        const subtotal = rowData.netoGravadoTotal + rowData.netoNoGravado + rowData.opExentas;
+        const netTaxed = rowData.netoGravadoTotal;
+        const netNonTaxed = rowData.netoNoGravado;
+        const netExempt = rowData.opExentas;
+        const subtotal = netTaxed + netNonTaxed + netExempt;
         const vatAmount = rowData.totalIva;
         const otherTaxes = rowData.otrosTributos;
         const total = rowData.impTotal;
@@ -384,6 +392,9 @@ export async function importPurchaseInvoicesFromAFIP(
             cae: rowData.cae || null,
             validated: !!rowData.cae,
             subtotal,
+            netTaxed,
+            netNonTaxed,
+            netExempt,
             vatAmount,
             otherTaxes,
             total,

@@ -32,6 +32,9 @@ export async function getLibroIVAVentas(
         voucherType: true,
         issueDate: true,
         subtotal: true,
+        netTaxed: true,
+        netNonTaxed: true,
+        netExempt: true,
         otherTaxes: true,
         total: true,
         cae: true,
@@ -44,25 +47,35 @@ export async function getLibroIVAVentas(
         },
         lines: {
           select: {
+            lineType: true,
             vatRate: true,
             vatAmount: true,
+            subtotal: true,
           },
+        },
+        perceptions: {
+          select: { amount: true },
         },
       },
       orderBy: [{ issueDate: 'asc' }, { fullNumber: 'asc' }],
     });
 
     const entries: LibroIVAEntry[] = invoices.map((inv) => {
-      const ivaByRate = { 105: 0, 21: 0, 27: 0 };
+      const ivaByRate = { 25: 0, 5: 0, 105: 0, 21: 0, 27: 0 };
 
       for (const line of inv.lines) {
+        if (line.lineType !== 'TAXED') continue;
         const rate = Number(line.vatRate);
         const amount = Number(line.vatAmount);
 
-        if (rate === 10.5) ivaByRate[105] += amount;
+        if (rate === 2.5) ivaByRate[25] += amount;
+        else if (rate === 5) ivaByRate[5] += amount;
+        else if (rate === 10.5) ivaByRate[105] += amount;
         else if (rate === 21) ivaByRate[21] += amount;
         else if (rate === 27) ivaByRate[27] += amount;
       }
+
+      const percTotal = inv.perceptions.reduce((s, p) => s + Number(p.amount), 0);
 
       return {
         id: inv.id,
@@ -73,26 +86,44 @@ export async function getLibroIVAVentas(
         entityTaxId: inv.customer.taxId,
         entityTaxCondition: inv.customer.taxCondition,
         subtotal: Number(inv.subtotal),
+        netTaxed: Number(inv.netTaxed),
+        netNonTaxed: Number(inv.netNonTaxed),
+        netExempt: Number(inv.netExempt),
+        iva25: ivaByRate[25],
+        iva5: ivaByRate[5],
         iva105: ivaByRate[105],
         iva21: ivaByRate[21],
         iva27: ivaByRate[27],
+        perceptions: percTotal,
         otherTaxes: Number(inv.otherTaxes),
         total: Number(inv.total),
         cae: inv.cae,
       };
     });
 
+    const ZERO_TOTALS = {
+      subtotal: 0, netTaxed: 0, netNonTaxed: 0, netExempt: 0,
+      iva25: 0, iva5: 0, iva105: 0, iva21: 0, iva27: 0,
+      perceptions: 0, otherTaxes: 0, total: 0, entryCount: 0,
+    };
+
     const totals = entries.reduce(
       (acc, e) => ({
         subtotal: acc.subtotal + e.subtotal,
+        netTaxed: acc.netTaxed + e.netTaxed,
+        netNonTaxed: acc.netNonTaxed + e.netNonTaxed,
+        netExempt: acc.netExempt + e.netExempt,
+        iva25: acc.iva25 + e.iva25,
+        iva5: acc.iva5 + e.iva5,
         iva105: acc.iva105 + e.iva105,
         iva21: acc.iva21 + e.iva21,
         iva27: acc.iva27 + e.iva27,
+        perceptions: acc.perceptions + e.perceptions,
         otherTaxes: acc.otherTaxes + e.otherTaxes,
         total: acc.total + e.total,
         entryCount: acc.entryCount + 1,
       }),
-      { subtotal: 0, iva105: 0, iva21: 0, iva27: 0, otherTaxes: 0, total: 0, entryCount: 0 }
+      ZERO_TOTALS
     );
 
     return { entries, totals };
@@ -128,6 +159,9 @@ export async function getLibroIVACompras(
         voucherType: true,
         issueDate: true,
         subtotal: true,
+        netTaxed: true,
+        netNonTaxed: true,
+        netExempt: true,
         otherTaxes: true,
         total: true,
         cae: true,
@@ -140,25 +174,35 @@ export async function getLibroIVACompras(
         },
         lines: {
           select: {
+            lineType: true,
             vatRate: true,
             vatAmount: true,
+            subtotal: true,
           },
+        },
+        perceptions: {
+          select: { amount: true },
         },
       },
       orderBy: [{ issueDate: 'asc' }, { fullNumber: 'asc' }],
     });
 
     const entries: LibroIVAEntry[] = invoices.map((inv) => {
-      const ivaByRate = { 105: 0, 21: 0, 27: 0 };
+      const ivaByRate = { 25: 0, 5: 0, 105: 0, 21: 0, 27: 0 };
 
       for (const line of inv.lines) {
+        if (line.lineType !== 'TAXED') continue;
         const rate = Number(line.vatRate);
         const amount = Number(line.vatAmount);
 
-        if (rate === 10.5) ivaByRate[105] += amount;
+        if (rate === 2.5) ivaByRate[25] += amount;
+        else if (rate === 5) ivaByRate[5] += amount;
+        else if (rate === 10.5) ivaByRate[105] += amount;
         else if (rate === 21) ivaByRate[21] += amount;
         else if (rate === 27) ivaByRate[27] += amount;
       }
+
+      const percTotal = inv.perceptions.reduce((s, p) => s + Number(p.amount), 0);
 
       return {
         id: inv.id,
@@ -169,26 +213,44 @@ export async function getLibroIVACompras(
         entityTaxId: inv.supplier.taxId,
         entityTaxCondition: inv.supplier.taxCondition,
         subtotal: Number(inv.subtotal),
+        netTaxed: Number(inv.netTaxed),
+        netNonTaxed: Number(inv.netNonTaxed),
+        netExempt: Number(inv.netExempt),
+        iva25: ivaByRate[25],
+        iva5: ivaByRate[5],
         iva105: ivaByRate[105],
         iva21: ivaByRate[21],
         iva27: ivaByRate[27],
+        perceptions: percTotal,
         otherTaxes: Number(inv.otherTaxes),
         total: Number(inv.total),
         cae: inv.cae,
       };
     });
 
+    const ZERO_TOTALS = {
+      subtotal: 0, netTaxed: 0, netNonTaxed: 0, netExempt: 0,
+      iva25: 0, iva5: 0, iva105: 0, iva21: 0, iva27: 0,
+      perceptions: 0, otherTaxes: 0, total: 0, entryCount: 0,
+    };
+
     const totals = entries.reduce(
       (acc, e) => ({
         subtotal: acc.subtotal + e.subtotal,
+        netTaxed: acc.netTaxed + e.netTaxed,
+        netNonTaxed: acc.netNonTaxed + e.netNonTaxed,
+        netExempt: acc.netExempt + e.netExempt,
+        iva25: acc.iva25 + e.iva25,
+        iva5: acc.iva5 + e.iva5,
         iva105: acc.iva105 + e.iva105,
         iva21: acc.iva21 + e.iva21,
         iva27: acc.iva27 + e.iva27,
+        perceptions: acc.perceptions + e.perceptions,
         otherTaxes: acc.otherTaxes + e.otherTaxes,
         total: acc.total + e.total,
         entryCount: acc.entryCount + 1,
       }),
-      { subtotal: 0, iva105: 0, iva21: 0, iva27: 0, otherTaxes: 0, total: 0, entryCount: 0 }
+      ZERO_TOTALS
     );
 
     return { entries, totals };
@@ -214,9 +276,10 @@ export async function getIVAPositionReport(
   if (!companyId) throw new Error('No hay empresa activa');
 
   try {
-    // Obtener IVA de ventas por alícuota
+    // Obtener IVA de ventas por alícuota (solo líneas gravadas)
     const salesLines = await prisma.salesInvoiceLine.findMany({
       where: {
+        lineType: 'TAXED',
         invoice: {
           companyId,
           issueDate: { gte: from, lte: to },
@@ -230,9 +293,10 @@ export async function getIVAPositionReport(
       },
     });
 
-    // Obtener IVA de compras por alícuota
+    // Obtener IVA de compras por alícuota (solo líneas gravadas)
     const purchaseLines = await prisma.purchaseInvoiceLine.findMany({
       where: {
+        lineType: 'TAXED',
         invoice: {
           companyId,
           issueDate: { gte: from, lte: to },
@@ -248,7 +312,7 @@ export async function getIVAPositionReport(
 
     // Agrupar por alícuota
     const rateMap = new Map<number, VATRateDetail>();
-    const rates = [10.5, 21, 27];
+    const rates = [2.5, 5, 10.5, 21, 27];
 
     for (const rate of rates) {
       rateMap.set(rate, {

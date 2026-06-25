@@ -456,7 +456,7 @@ Este patrón hace `SELECT FOR UPDATE` implícito (el `UPDATE` bloquea la fila) y
 
 ## Bloque 4 — IVA discriminado por alícuota
 
-`[ESTADO: PENDIENTE]`
+`[ESTADO: COMPLETADO]`
 
 **Problema**: El puente contable genera una sola línea de IVA por factura (sumando todas las alícuotas). El Libro IVA pierde las alícuotas 0%, 2.5%, 5%. No se distingue neto gravado / no gravado / exento.
 
@@ -598,7 +598,7 @@ Agregar columnas `netTaxed`, `netNonTaxed`, `netExempt` a la respuesta del repor
 
 ## Bloque 5 — Percepciones en facturas
 
-`[ESTADO: PENDIENTE]`
+`[ESTADO: COMPLETADO]`
 
 **Problema**: Las percepciones (IIBB, IVA, Municipal) están enterradas en el campo `otherTaxes` de las facturas, sin discriminar. No se puede generar CITI ni depositar percepciones.
 
