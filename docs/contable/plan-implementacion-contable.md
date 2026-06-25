@@ -1282,7 +1282,7 @@ vatBalanceAccountId   String? @map("vat_balance_account_id") @db.Uuid     // IVA
 
 ## Bloque 12 — Integración ARCA (WSAA + WSFEv1)
 
-`[ESTADO: PENDIENTE]`
+`[ESTADO: COMPLETADO]`
 
 ### 12.1 Modelo de credenciales
 

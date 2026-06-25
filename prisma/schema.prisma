@@ -200,6 +200,10 @@ model Company {
   // Multi-moneda
   exchangeRates ExchangeRate[]
 
+  // ARCA (AFIP)
+  arcaCredentials ArcaCredential[]
+  arcaRequests    ArcaRequest[]
+
   @@map("companies")
 }
 
@@ -2732,6 +2736,7 @@ model SalesInvoice {
   creditNoteApplicationsReceived SalesCreditNoteApplication[] @relation("CreditNoteApplicationsReceived")
   projectionLinks                ProjectionDocumentLink[]
   deliveryNotes                  DeliveryNote[]
+  arcaRequests                   ArcaRequest[]
 
   createdBy String   @map("created_by")
   createdAt DateTime @default(now()) @map("created_at")
@@ -4234,4 +4239,52 @@ model PartnerAccountMovement {
 
   @@index([companyId, partnerId])
   @@map("partner_account_movements")
+}
+
+// ============================================
+// INTEGRACIÓN ARCA (AFIP)
+// ============================================
+
+model ArcaCredential {
+  id          String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId   String  @map("company_id") @db.Uuid
+  cuit        String  @db.VarChar(13)
+  certificate Bytes
+  privateKey  Bytes   @map("private_key")
+  environment String  @default("HOMOLOGACION") @db.VarChar(20)
+
+  token       String?   @db.Text
+  sign        String?   @db.Text
+  tokenExpiry DateTime? @map("token_expiry")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([companyId, environment])
+  @@map("arca_credentials")
+}
+
+model ArcaRequest {
+  id        String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId String  @map("company_id") @db.Uuid
+  invoiceId String? @map("invoice_id") @db.Uuid
+
+  service      String  @db.VarChar(15)
+  method       String  @db.VarChar(30)
+  request      Json
+  response     Json?
+  cae          String? @db.VarChar(14)
+  result       String? @db.Char(1)
+  observations String? @db.Text
+
+  company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  salesInvoice SalesInvoice? @relation(fields: [invoiceId], references: [id])
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([companyId, createdAt])
+  @@index([invoiceId])
+  @@map("arca_requests")
 }
