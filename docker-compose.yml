@@ -1,16 +1,16 @@
-# Docker Compose para servicios locales
+# Docker Compose para servicios locales — Contable PMS
 # Uso: docker-compose up -d
 #
-# PostgreSQL (siempre):
+# PostgreSQL:
 # - Host: localhost
-# - Puerto: 5533
+# - Puerto: 5534
 # - Usuario: postgres
 # - Password: postgres
-# - Base de datos: nahuel-boxer-db-boxer-db
+# - Base de datos: contable_pms
 #
 # MinIO (solo si STORAGE_PROVIDER=s3):
-# - API S3: http://localhost:9002
-# - Console: http://localhost:9003
+# - API S3: http://localhost:9004
+# - Console: http://localhost:9005
 # - Usuario: minioadmin
 # - Password: minioadmin123
 #
@@ -19,24 +19,24 @@
 #
 # Para levantar PostgreSQL + MinIO:
 #   docker-compose --profile storage up -d
-# Para Bajar
-# docker-compose --profile storage down
+# Para Bajar:
+#   docker-compose --profile storage down
 
-name: nahuel-boxer
+name: contable-pms
 
 services:
   db:
     image: postgres:16-alpine
-    container_name: nahuel-boxer-db
+    container_name: contable-pms-db
     restart: "no"
     ports:
-      - '5533:5432'
+      - '5534:5432'
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_DB: ${POSTGRES_DB:-nahuel-boxer-db-boxer-db}
+      POSTGRES_DB: ${POSTGRES_DB:-contable_pms}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - contable_pms_data:/var/lib/postgresql/data
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U postgres']
       interval: 5s
@@ -45,18 +45,18 @@ services:
 
   minio:
     image: minio/minio:latest
-    container_name: nahuel-boxer-minio
+    container_name: contable-pms-minio
     profiles:
       - storage
     restart: "no"
     ports:
-      - '9002:9000'   # API S3
-      - '9003:9001'   # Console Web
+      - '9004:9000'   # API S3
+      - '9005:9001'   # Console Web
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin123}
     volumes:
-      - minio_data:/data
+      - contable_pms_minio:/data
     command: server /data --console-address ":9001"
     healthcheck:
       test: ['CMD', 'mc', 'ready', 'local']
@@ -64,10 +64,9 @@ services:
       timeout: 5s
       retries: 5
 
-  # Servicio para crear el bucket inicial automáticamente
   minio-init:
     image: minio/mc:latest
-    container_name: nahuel-boxer-minio-init
+    container_name: contable-pms-minio-init
     profiles:
       - storage
     depends_on:
@@ -76,16 +75,16 @@ services:
     entrypoint: >
       /bin/sh -c "
       mc alias set myminio http://minio:9000 $${MINIO_ROOT_USER:-minioadmin} $${MINIO_ROOT_PASSWORD:-minioadmin123};
-      mc mb myminio/$${S3_BUCKET:-nahuel-boxer-docs-boxer-docs-docs-docs} --ignore-existing;
-      mc anonymous set download myminio/$${S3_BUCKET:-documents}/public;
+      mc mb myminio/$${S3_BUCKET:-contable} --ignore-existing;
+      mc anonymous set download myminio/$${S3_BUCKET:-contable}/public;
       echo 'Bucket created successfully';
       exit 0;
       "
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin123}
-      S3_BUCKET: ${S3_BUCKET:-documents}
+      S3_BUCKET: ${S3_BUCKET:-contable}
 
 volumes:
-  postgres_data:
-  minio_data:
+  contable_pms_data:
+  contable_pms_minio:

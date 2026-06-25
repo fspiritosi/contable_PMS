@@ -205,12 +205,16 @@ FROM "fiscal_years" fy;
 UPDATE "journal_entries" je
 SET
   "fiscal_year_id" = fy."id",
-  "period_id" = ap."id"
+  "period_id" = (
+    SELECT ap."id"
+    FROM "accounting_periods" ap
+    WHERE ap."fiscal_year_id" = fy."id"
+      AND ap."type" = 'MONTHLY'
+      AND ap."year" = EXTRACT(YEAR FROM je."date")::int
+      AND ap."month" = EXTRACT(MONTH FROM je."date")::int
+    LIMIT 1
+  )
 FROM "fiscal_years" fy
-LEFT JOIN "accounting_periods" ap ON ap."fiscal_year_id" = fy."id"
-  AND ap."type" = 'MONTHLY'
-  AND ap."year" = EXTRACT(YEAR FROM je."date")::int
-  AND ap."month" = EXTRACT(MONTH FROM je."date")::int
 WHERE fy."company_id" = je."company_id"
   AND je."date" >= fy."start_date"
   AND je."date" <= fy."end_date";
