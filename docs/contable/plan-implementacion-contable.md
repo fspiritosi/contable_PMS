@@ -1374,7 +1374,7 @@ src/modules/commercial/features/arca/
 
 ## Bloque 13 — Libro IVA Digital y archivos fiscales
 
-`[ESTADO: PENDIENTE]`
+`[ESTADO: COMPLETADO]`
 
 **Depende de**: Bloques 4 y 5 (IVA por alícuota, percepciones discriminadas).
 
