@@ -171,6 +171,94 @@ import { PermissionGuardClient } from '@/shared/components/common';
 </PermissionGuardClient>
 ```
 
+---
+
+## Espacios de Trabajo
+
+### Concepto
+
+La aplicacion tiene dos espacios fijos: **Gestion** y **Contable**. Cada espacio agrupa un subconjunto de modulos del sidebar. El usuario puede cambiar de espacio mediante el selector de tabs en el header (arriba a la derecha), visible unicamente cuando tiene acceso a ambos.
+
+### Permisos RBAC
+
+Archivo: `src/shared/lib/permissions/constants.ts` — grupo **"Espacios de Trabajo"**
+
+| Modulo RBAC       | Accion | Efecto                                         |
+|-------------------|--------|------------------------------------------------|
+| `workspace.gestion`  | `view` | Acceso al espacio Gestion                    |
+| `workspace.contable` | `view` | Acceso al espacio Contable                   |
+
+Solo se usa la accion `view`. No existe `create`, `update` ni `delete` para estos modulos.
+
+### Regla de Mapeo (modulos ⇒ espacio)
+
+Archivo: `src/shared/lib/workspaces/helpers.ts`
+
+```typescript
+// Por modulo de permiso:
+accounting / accounting.* ⇒ contable
+(todo lo demas)           ⇒ gestion
+
+// Por ruta:
+/dashboard/accounting     ⇒ contable
+/dashboard/company/accounting ⇒ contable
+(todo lo demas)           ⇒ gestion
+```
+
+Los items de administracion y configuracion transversal (sin `module` explicito en el nav) pertenecen a Gestion.
+
+### 4a Capa de Filtrado del Sidebar
+
+El sidebar aplica 4 capas en orden:
+
+1. **RBAC** — Permisos del usuario/rol (`checkPermission`)
+2. **Industria** — Tipo de empresa (`INDUSTRY_MODULES`, `INDUSTRY_FEATURES`)
+3. **Modulos activos** — Activacion por empresa (`activeModules`)
+4. **Espacio de trabajo** — Derivado de la URL via `usePathname` en `_AppSidebar.tsx`
+
+La capa 4 usa `resolveEffectiveWorkspace(pathname, accessibleWorkspaces, saved)` para determinar el espacio efectivo y filtra cada `NavItem` con `getWorkspaceForModule(item.module) !== effectiveWorkspace`.
+
+### Persistencia
+
+El espacio activo se persiste en `UserPreference.activeWorkspaceId`. Se accede via:
+
+```typescript
+import { getActiveWorkspace, setActiveWorkspace } from '@/shared/lib/workspace';
+```
+
+Al guardar, `setActiveWorkspace` valida que el usuario tenga acceso al espacio destino antes de persistir.
+
+### Backward-Compatibility
+
+Un usuario **sin ningun permiso** `workspace.*` asignado (por ejemplo, empresas anteriores al sprint que no configuraron roles para esto) ve **ambos** espacios. La funcion `resolveAccessibleWorkspaces` aplica esta logica:
+
+```typescript
+// Sin ningun permiso workspace.* ⇒ ambos espacios accesibles
+if (!input.gestion && !input.contable) return [...WORKSPACE_IDS];
+```
+
+Los roles privilegiados (`owner`, `developer`, `isOwner`) siempre ven ambos espacios.
+
+### Sin Aislamiento Estricto de Rutas
+
+No existe un guard de ruta que redirija al usuario si accede por URL directa a un modulo del otro espacio. En cambio, al navegar a una URL, el selector del header y el sidebar se auto-ajustan para reflejar el espacio de esa ruta (la capa 4 usa `usePathname`).
+
+### Archivos Clave
+
+```
+src/shared/lib/workspaces/
+  constants.ts     # WorkspaceId, WORKSPACES, WORKSPACE_IDS
+  helpers.ts       # getWorkspaceForModule, getWorkspaceForRoute,
+                   # resolveAccessibleWorkspaces, resolveEffectiveWorkspace
+  index.ts         # re-exports
+
+src/shared/lib/workspace.ts              # getAccessibleWorkspaces, getActiveWorkspace, setActiveWorkspace (server actions)
+src/shared/components/layout/_WorkspaceSelector.tsx  # UI del selector (Tabs en el header)
+src/shared/components/layout/_AppSidebar.tsx         # canViewItem — capa 4 de filtrado
+```
+
+---
+
 ### Auditoria
 
 Archivo: `src/shared/lib/permissions/audit.server.ts`
