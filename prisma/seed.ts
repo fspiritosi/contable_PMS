@@ -545,8 +545,6 @@ async function main() {
       'company.type-operatives',
       'company.contractors',
       'company.document-types',
-      'workspace.gestion',
-      'workspace.contable',
     ];
 
     const actionSlugs = ['view', 'create', 'update', 'delete'];
@@ -583,6 +581,20 @@ async function main() {
            VALUES (gen_random_uuid(), $1, $2, $3, NOW())
            ON CONFLICT (role_id, module, action_id) DO NOTHING`,
           [adminRoleId, module, actionId]
+        );
+        permissionsCreated++;
+      }
+    }
+    // Permisos de Espacios de Trabajo: SOLO acción 'view'
+    const workspaceModules = ['workspace.gestion', 'workspace.contable'];
+    for (const roleSlug of ['owner', 'developer', 'admin']) {
+      const roleId = roleIds[roleSlug];
+      for (const moduleName of workspaceModules) {
+        await client.query(
+          `INSERT INTO company_role_permissions (id, role_id, module, action_id, created_at)
+           VALUES (gen_random_uuid(), $1, $2, $3, NOW())
+           ON CONFLICT (role_id, module, action_id) DO NOTHING`,
+          [roleId, moduleName, actionIds['view']]
         );
         permissionsCreated++;
       }

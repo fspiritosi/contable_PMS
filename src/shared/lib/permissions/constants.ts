@@ -181,6 +181,7 @@ export const MODULE_LABELS: Record<Module, string> = {
   'accounting.recurring-entries': 'Asientos Recurrentes',
   'accounting.opening-balances': 'Saldos de Apertura',
   'accounting.budgets': 'Presupuestos Contables',
+  // Espacios de Trabajo
   'workspace.gestion': 'Espacio Gestión',
   'workspace.contable': 'Espacio Contable',
 };
