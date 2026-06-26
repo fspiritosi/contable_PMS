@@ -3,6 +3,7 @@
 import { usePathname } from 'next/navigation';
 import { Separator } from '@/shared/components/ui/separator';
 import { SidebarTrigger } from '@/shared/components/ui/sidebar';
+import type { WorkspaceId } from '@/shared/lib/workspaces';
 
 // Mapeo de rutas a títulos
 const routeTitles: Record<string, string> = {
@@ -35,12 +36,19 @@ function getPageTitle(pathname: string): string {
   return 'Dashboard';
 }
 
+interface SiteHeaderProps {
+  activeWorkspace: WorkspaceId;
+  accessibleWorkspaces: WorkspaceId[];
+}
+
 /**
  * Header del sitio con trigger del sidebar
  */
-export function _SiteHeader() {
+export function _SiteHeader({ activeWorkspace, accessibleWorkspaces }: SiteHeaderProps) {
   const pathname = usePathname();
   const pageTitle = getPageTitle(pathname);
+  void activeWorkspace;
+  void accessibleWorkspaces;
 
   return (
     <header className="flex h-14 shrink-0 items-center gap-2 border-b transition-[width,height] ease-linear group-has-[[data-collapsible=icon]]/sidebar-wrapper:h-12">

@@ -4,6 +4,7 @@ import type { CompanyListItem } from '@/modules/companies/features/list/actions.
 import { IndustryProvider } from '@/providers/IndustryProvider';
 import type { SidebarPermissions } from '@/shared/actions/sidebar';
 import type { IndustryType } from '@/shared/lib/industry';
+import type { WorkspaceId } from '@/shared/lib/workspaces';
 import { SidebarInset, SidebarProvider } from '@/shared/components/ui/sidebar';
 import { _AppSidebar } from './_AppSidebar';
 import { _SiteHeader } from './_SiteHeader';
@@ -15,6 +16,8 @@ interface DashboardLayoutProps {
   isSingleMode?: boolean;
   sidebarPermissions: SidebarPermissions;
   industryType: IndustryType;
+  activeWorkspace: WorkspaceId;
+  accessibleWorkspaces: WorkspaceId[];
 }
 
 /**
@@ -30,6 +33,8 @@ export function DashboardLayout({
   isSingleMode = false,
   sidebarPermissions,
   industryType,
+  activeWorkspace,
+  accessibleWorkspaces,
 }: DashboardLayoutProps) {
   return (
     <SidebarProvider>
@@ -38,9 +43,14 @@ export function DashboardLayout({
         activeCompany={activeCompany}
         isSingleMode={isSingleMode}
         permissions={sidebarPermissions}
+        activeWorkspace={activeWorkspace}
+        accessibleWorkspaces={accessibleWorkspaces}
       />
       <SidebarInset>
-        <_SiteHeader />
+        <_SiteHeader
+          activeWorkspace={activeWorkspace}
+          accessibleWorkspaces={accessibleWorkspaces}
+        />
         <IndustryProvider industryType={industryType}>
           <div className="flex flex-1 flex-col gap-4 p-4">{children}</div>
         </IndustryProvider>

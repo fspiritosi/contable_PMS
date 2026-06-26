@@ -48,6 +48,7 @@ import {
   SidebarMenuSubItem,
 } from '@/shared/components/ui/sidebar';
 import type { Module } from '@/shared/lib/permissions';
+import type { WorkspaceId } from '@/shared/lib/workspaces';
 import { _CompanyDisplay } from './_CompanyDisplay';
 import { _CompanySelector } from './_CompanySelector';
 import { _NavUser } from './nav/_NavUser';
@@ -514,6 +515,8 @@ interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
   activeCompany: CompanyListItem;
   isSingleMode?: boolean;
   permissions: SidebarPermissions;
+  activeWorkspace: WorkspaceId;
+  accessibleWorkspaces: WorkspaceId[];
 }
 
 export function _AppSidebar({
@@ -521,6 +524,8 @@ export function _AppSidebar({
   activeCompany,
   isSingleMode = false,
   permissions,
+  activeWorkspace: _activeWorkspace,
+  accessibleWorkspaces: _accessibleWorkspaces,
   ...props
 }: AppSidebarProps) {
   const pathname = usePathname();

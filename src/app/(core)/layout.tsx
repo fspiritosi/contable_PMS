@@ -6,6 +6,7 @@ import { getSidebarPermissions } from '@/shared/actions/sidebar';
 import { getIndustryType } from '@/shared/lib/industry';
 import { DashboardLayout } from '@/shared/components/layout/DashboardLayout';
 import { OnboardingGate } from '@/modules/onboarding/features/company-setup';
+import { getActiveWorkspace, getAccessibleWorkspaces } from '@/shared/lib/workspace';
 
 /**
  * Layout del Dashboard
@@ -23,9 +24,11 @@ export default async function Layout({ children }: { children: React.ReactNode }
   const industryType = getIndustryType(activeCompany.industry);
 
   // Obtener companies y permisos del sidebar en paralelo
-  const [companies, sidebarPermissions] = await Promise.all([
+  const [companies, sidebarPermissions, activeWorkspace, accessibleWorkspaces] = await Promise.all([
     getMyCompanies(),
     getSidebarPermissions(activeCompany.industry, activeCompany.activeModules),
+    getActiveWorkspace(),
+    getAccessibleWorkspaces(),
   ]);
 
   return (
@@ -35,6 +38,8 @@ export default async function Layout({ children }: { children: React.ReactNode }
       isSingleMode={activeCompany.isSingleMode}
       sidebarPermissions={sidebarPermissions}
       industryType={industryType}
+      activeWorkspace={activeWorkspace}
+      accessibleWorkspaces={accessibleWorkspaces}
     >
       {children}
       <OnboardingGate />
