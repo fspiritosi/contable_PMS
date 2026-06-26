@@ -585,6 +585,20 @@ async function main() {
         permissionsCreated++;
       }
     }
+    // Permisos de Espacios de Trabajo: SOLO acción 'view'
+    const workspaceModules = ['workspace.gestion', 'workspace.contable'];
+    for (const roleSlug of ['owner', 'developer', 'admin']) {
+      const roleId = roleIds[roleSlug];
+      for (const moduleName of workspaceModules) {
+        await client.query(
+          `INSERT INTO company_role_permissions (id, role_id, module, action_id, created_at)
+           VALUES (gen_random_uuid(), $1, $2, $3, NOW())
+           ON CONFLICT (role_id, module, action_id) DO NOTHING`,
+          [roleId, moduleName, actionIds['view']]
+        );
+        permissionsCreated++;
+      }
+    }
     console.log(`    ✅ ${permissionsCreated} permisos asignados`);
 
     // 6.5.4 Asignar rol Owner al usuario

@@ -3,6 +3,8 @@
 import { usePathname } from 'next/navigation';
 import { Separator } from '@/shared/components/ui/separator';
 import { SidebarTrigger } from '@/shared/components/ui/sidebar';
+import type { WorkspaceId } from '@/shared/lib/workspaces';
+import { _WorkspaceSelector } from './_WorkspaceSelector';
 
 // Mapeo de rutas a títulos
 const routeTitles: Record<string, string> = {
@@ -35,10 +37,15 @@ function getPageTitle(pathname: string): string {
   return 'Dashboard';
 }
 
+interface SiteHeaderProps {
+  activeWorkspace: WorkspaceId;
+  accessibleWorkspaces: WorkspaceId[];
+}
+
 /**
  * Header del sitio con trigger del sidebar
  */
-export function _SiteHeader() {
+export function _SiteHeader({ activeWorkspace, accessibleWorkspaces }: SiteHeaderProps) {
   const pathname = usePathname();
   const pageTitle = getPageTitle(pathname);
 
@@ -51,6 +58,12 @@ export function _SiteHeader() {
           className="mx-2 data-[orientation=vertical]:h-4"
         />
         <h1 className="text-base font-medium">{pageTitle}</h1>
+        <div className="ml-auto">
+          <_WorkspaceSelector
+            activeWorkspace={activeWorkspace}
+            accessibleWorkspaces={accessibleWorkspaces}
+          />
+        </div>
       </div>
     </header>
   );

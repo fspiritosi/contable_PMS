@@ -2,14 +2,18 @@
 
 import {
   Building2,
+  Calculator,
   CheckCircle2,
   ClipboardList,
+  Info,
   KeyRound,
+  LayoutDashboard,
   Settings,
   Users,
 } from 'lucide-react';
 
 import { Alert, AlertDescription } from '@/shared/components/ui/alert';
+import { Badge } from '@/shared/components/ui/badge';
 import {
   Card,
   CardContent,
@@ -227,6 +231,96 @@ export function _GettingStarted() {
               necesitas controlar
             </li>
           </ul>
+        </CardContent>
+      </Card>
+
+      <Separator />
+
+      {/* Espacios de Trabajo */}
+      <div>
+        <h3 className="text-xl font-semibold mb-4">Espacios de Trabajo</h3>
+        <p className="text-muted-foreground mb-4">
+          El sistema organiza los módulos en dos espacios independientes que
+          puedes alternar desde el header.
+        </p>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <LayoutDashboard className="h-5 w-5" />
+            Espacio Gestión
+          </CardTitle>
+          <CardDescription>
+            Operaciones del día a día de la empresa
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p>
+            Agrupa los módulos operativos y de administración de la empresa:
+          </p>
+          <ul className="list-disc pl-6 space-y-1 text-muted-foreground">
+            <li>Empleados, Equipamiento y Documentos</li>
+            <li>Comercial (ventas, compras, stock, tesorería)</li>
+            <li>Dashboard con KPIs y alertas</li>
+            <li>Configuración de empresa, usuarios y roles</li>
+          </ul>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Calculator className="h-5 w-5" />
+            Espacio Contable
+          </CardTitle>
+          <CardDescription>
+            Módulos de contabilidad y cierre fiscal
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p>Agrupa los módulos del área contable:</p>
+          <ul className="list-disc pl-6 space-y-1 text-muted-foreground">
+            <li>Plan de cuentas y asientos contables</li>
+            <li>Reportes contables (balance, estado de resultados)</li>
+            <li>Cierre de ejercicio fiscal</li>
+            <li>Asientos recurrentes y ajuste por inflación (RECPAM)</li>
+          </ul>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Info className="h-5 w-5" />
+            Cómo cambiar de espacio
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p>
+            En la parte superior derecha del header encontrarás el selector de
+            espacio de trabajo (dos pestañas:{' '}
+            <Badge variant="secondary">Gestión</Badge> /{' '}
+            <Badge variant="secondary">Contable</Badge>).
+          </p>
+          <ol className="list-decimal pl-6 space-y-1 text-muted-foreground">
+            <li>Haz clic en la pestaña del espacio al que quieras ir</li>
+            <li>El sidebar se actualiza mostrando solo los módulos de ese espacio</li>
+            <li>El sistema te lleva a la sección de inicio del espacio elegido</li>
+            <li>Tu preferencia queda guardada para la próxima vez</li>
+          </ol>
+          <p className="text-sm text-muted-foreground">
+            El selector solo es visible cuando tu rol tiene acceso a ambos
+            espacios (también verás ambos espacios si tu rol todavía no tiene
+            ningún permiso de espacio configurado). Si solo ves los módulos de
+            Gestión o solo los de Contable, consulta con el administrador los
+            permisos de tu rol.
+          </p>
+          <p className="text-sm text-muted-foreground">
+            <strong>Importante:</strong> el espacio de trabajo organiza lo que
+            ves en el menú; lo que podés abrir y editar depende de los permisos
+            de tu rol en cada módulo.
+          </p>
         </CardContent>
       </Card>
 

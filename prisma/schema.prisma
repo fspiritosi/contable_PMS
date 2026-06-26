@@ -760,8 +760,9 @@ model CompanyInvitation {
 model UserPreference {
   id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   userId           String   @unique @map("user_id") // Clerk user ID
-  activeCompanyId  String?  @map("active_company_id") @db.Uuid
-  theme            String   @default("system")
+  activeCompanyId   String?  @map("active_company_id") @db.Uuid
+  activeWorkspaceId String?  @map("active_workspace_id")
+  theme             String   @default("system")
   locale           String   @default("es")
   tablePreferences Json     @default("{}") @map("table_preferences")
   updatedAt        DateTime @updatedAt @map("updated_at")

@@ -86,6 +86,10 @@ export const MODULES = {
   'accounting.recurring-entries': 'accounting.recurring-entries',
   'accounting.opening-balances': 'accounting.opening-balances',
   'accounting.budgets': 'accounting.budgets',
+
+  // Espacios de Trabajo
+  'workspace.gestion': 'workspace.gestion',
+  'workspace.contable': 'workspace.contable',
 } as const;
 
 export type Module = (typeof MODULES)[keyof typeof MODULES];
@@ -177,6 +181,9 @@ export const MODULE_LABELS: Record<Module, string> = {
   'accounting.recurring-entries': 'Asientos Recurrentes',
   'accounting.opening-balances': 'Saldos de Apertura',
   'accounting.budgets': 'Presupuestos Contables',
+  // Espacios de Trabajo
+  'workspace.gestion': 'Espacio Gestión',
+  'workspace.contable': 'Espacio Contable',
 };
 
 export const ACTION_LABELS: Record<Action, string> = {
@@ -280,6 +287,10 @@ export const MODULE_GROUPS = {
       'accounting.settings',
       'accounting.fiscal-year-close',
     ] as Module[],
+  },
+  espaciosDeTrabajo: {
+    label: 'Espacios de Trabajo',
+    modules: ['workspace.gestion', 'workspace.contable'] as Module[],
   },
 } as const;
 
