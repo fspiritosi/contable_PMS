@@ -82,14 +82,14 @@ export function _OnboardingDialog({ companyId, defaultName }: Props) {
         onEscapeKeyDown={(e) => e.preventDefault()}
         onPointerDownOutside={(e) => e.preventDefault()}
         onInteractOutside={(e) => e.preventDefault()}
-        className="!max-w-4xl !p-0 !gap-0 overflow-hidden sm:rounded-2xl"
+        className="!max-w-4xl !p-0 !gap-0 overflow-hidden sm:rounded-2xl flex max-h-[90dvh] flex-col"
       >
         <DialogTitle className="sr-only">Configurá tu empresa</DialogTitle>
         <DialogDescription className="sr-only">
           Completá los datos de tu empresa en cuatro pasos para comenzar.
         </DialogDescription>
 
-        <div className="grid md:grid-cols-[2fr_3fr] min-h-[640px]">
+        <div className="grid md:grid-cols-[2fr_3fr] h-[640px] max-h-[90dvh] min-h-0">
           <aside className="relative bg-zinc-50 dark:bg-zinc-900 hidden md:block border-r">
             <div
               aria-hidden
@@ -105,7 +105,7 @@ export function _OnboardingDialog({ companyId, defaultName }: Props) {
           </aside>
 
           <main className="flex flex-col">
-            <div className="flex-1 px-8 py-10 md:px-12 md:py-14 overflow-y-auto">
+            <div className="flex-1 min-h-0 px-8 py-10 md:px-12 md:py-14 overflow-y-auto">
               <form
                 onSubmit={handleSubmit}
                 key={step}
