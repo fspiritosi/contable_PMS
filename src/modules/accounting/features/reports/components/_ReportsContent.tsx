@@ -32,68 +32,72 @@ export function _ReportsContent({ companyId }: ReportsContentProps) {
         </p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Informes Disponibles</CardTitle>
-          <CardDescription>
-            Selecciona el tipo de informe que deseas generar
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <_ReportsSelector
-            selectedReport={selectedReport}
-            onSelect={setSelectedReport}
-          />
-        </CardContent>
-      </Card>
+      <div className="grid gap-4 lg:grid-cols-3">
+        <Card className="h-fit lg:col-span-1 lg:sticky lg:top-4">
+          <CardHeader>
+            <CardTitle>Informes Disponibles</CardTitle>
+            <CardDescription>
+              Selecciona el tipo de informe que deseas generar
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <_ReportsSelector
+              selectedReport={selectedReport}
+              onSelect={setSelectedReport}
+            />
+          </CardContent>
+        </Card>
 
-      {selectedReport === 'trial-balance' && (
-        <_TrialBalanceReport companyId={companyId} />
-      )}
+        <div className="lg:col-span-2">
+          {selectedReport === 'trial-balance' && (
+            <_TrialBalanceReport companyId={companyId} />
+          )}
 
-      {selectedReport === 'balance-sheet' && (
-        <_BalanceSheetReport companyId={companyId} />
-      )}
+          {selectedReport === 'balance-sheet' && (
+            <_BalanceSheetReport companyId={companyId} />
+          )}
 
-      {selectedReport === 'income-statement' && (
-        <_IncomeStatementReport companyId={companyId} />
-      )}
+          {selectedReport === 'income-statement' && (
+            <_IncomeStatementReport companyId={companyId} />
+          )}
 
-      {selectedReport === 'journal-book' && (
-        <_JournalBookReport companyId={companyId} />
-      )}
+          {selectedReport === 'journal-book' && (
+            <_JournalBookReport companyId={companyId} />
+          )}
 
-      {selectedReport === 'general-ledger' && (
-        <_GeneralLedgerReport companyId={companyId} />
-      )}
+          {selectedReport === 'general-ledger' && (
+            <_GeneralLedgerReport companyId={companyId} />
+          )}
 
-      {selectedReport === 'monthly-vat' && (
-        <_MonthlyVATReport companyId={companyId} />
-      )}
+          {selectedReport === 'monthly-vat' && (
+            <_MonthlyVATReport companyId={companyId} />
+          )}
 
-      {selectedReport === 'entries-without-documents' && (
-        <_EntriesWithoutDocumentsReport companyId={companyId} />
-      )}
+          {selectedReport === 'entries-without-documents' && (
+            <_EntriesWithoutDocumentsReport companyId={companyId} />
+          )}
 
-      {selectedReport === 'reversal-log' && (
-        <_ReversalLogReport companyId={companyId} />
-      )}
+          {selectedReport === 'reversal-log' && (
+            <_ReversalLogReport companyId={companyId} />
+          )}
 
-      {selectedReport === 'document-traceability' && (
-        <_DocumentTraceabilityReport companyId={companyId} />
-      )}
+          {selectedReport === 'document-traceability' && (
+            <_DocumentTraceabilityReport companyId={companyId} />
+          )}
 
-      {selectedReport === 'fixed-assets' && (
-        <_FixedAssetsReport companyId={companyId} />
-      )}
+          {selectedReport === 'fixed-assets' && (
+            <_FixedAssetsReport companyId={companyId} />
+          )}
 
-      {selectedReport === 'period-depreciations' && (
-        <_PeriodDepreciationsReport companyId={companyId} />
-      )}
+          {selectedReport === 'period-depreciations' && (
+            <_PeriodDepreciationsReport companyId={companyId} />
+          )}
 
-      {selectedReport === 'budget-variance' && (
-        <_BudgetVarianceReport companyId={companyId} />
-      )}
+          {selectedReport === 'budget-variance' && (
+            <_BudgetVarianceReport companyId={companyId} />
+          )}
+        </div>
+      </div>
     </div>
   );
 }

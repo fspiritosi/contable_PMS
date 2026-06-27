@@ -1,6 +1,7 @@
 'use client';
 
 import { Button } from '@/shared/components/ui/button';
+import { cn } from '@/shared/lib/utils';
 import { FileText, Book, BookOpen, Scale, TrendingUp, AlertTriangle, RotateCcw, ArrowLeftRight, Calculator, CalendarRange, Target, Receipt } from 'lucide-react';
 
 export type ReportType =
@@ -116,13 +117,20 @@ export function _ReportsSelector({ selectedReport, onSelect }: ReportsSelectorPr
       <Button
         key={report.id}
         variant={selectedReport === report.id ? 'default' : 'outline'}
-        className="flex h-auto flex-col items-center gap-2 p-6"
+        className="flex h-auto w-full flex-row items-center justify-start gap-3 whitespace-normal p-3 text-left"
         onClick={() => onSelect(report.id)}
       >
-        <Icon className="h-6 w-6" />
-        <div className="text-center">
+        <Icon className="h-5 w-5 shrink-0" />
+        <div>
           <div className="font-medium">{report.name}</div>
-          <div className="text-sm text-muted-foreground">
+          <div
+            className={cn(
+              'text-xs',
+              selectedReport === report.id
+                ? 'text-primary-foreground/80'
+                : 'text-muted-foreground',
+            )}
+          >
             {report.description}
           </div>
         </div>
@@ -132,34 +140,34 @@ export function _ReportsSelector({ selectedReport, onSelect }: ReportsSelectorPr
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="flex flex-col gap-2">
         {financialReports.map(renderReportButton)}
       </div>
 
       <div>
         <h3 className="text-sm font-medium text-muted-foreground mb-3">Impositivos</h3>
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="flex flex-col gap-2">
           {taxReports.map(renderReportButton)}
         </div>
       </div>
 
       <div>
         <h3 className="text-sm font-medium text-muted-foreground mb-3">Presupuestarios</h3>
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="flex flex-col gap-2">
           {budgetReports.map(renderReportButton)}
         </div>
       </div>
 
       <div>
         <h3 className="text-sm font-medium text-muted-foreground mb-3">Bienes de Uso</h3>
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="flex flex-col gap-2">
           {fixedAssetReports.map(renderReportButton)}
         </div>
       </div>
 
       <div>
         <h3 className="text-sm font-medium text-muted-foreground mb-3">Auditoría</h3>
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="flex flex-col gap-2">
           {auditReports.map(renderReportButton)}
         </div>
       </div>
