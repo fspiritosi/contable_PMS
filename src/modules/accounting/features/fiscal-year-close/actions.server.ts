@@ -40,7 +40,7 @@ interface ClosePreview {
 /**
  * Obtiene el estado del ejercicio fiscal
  */
-export async function getFiscalYearStatus(companyId: string): Promise<FiscalYearStatus> {
+export async function getFiscalYearStatus(companyId: string): Promise<FiscalYearStatus | null> {
   const userId = await getCurrentUserId();
   if (!userId) throw new Error('No autenticado');
   await checkPermission('accounting.fiscal-year-close', 'view', { redirect: true });
@@ -53,8 +53,10 @@ export async function getFiscalYearStatus(companyId: string): Promise<FiscalYear
       },
     });
 
+    // Condición esperada (sin configuración contable): se devuelve null para que
+    // la UI muestre un empty state guía, en vez de propagar un error boundary.
     if (!settings) {
-      throw new Error('No hay configuración contable. Configure el ejercicio fiscal primero.');
+      return null;
     }
 
     const fiscalYear = await prisma.fiscalYear.findFirst({

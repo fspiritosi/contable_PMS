@@ -2,10 +2,7 @@ import { getActiveCompanyId } from '@/shared/lib/company';
 import { PermissionGuard } from '@/shared/components/common/PermissionGuard';
 import { getOpeningBalancesPageData } from './actions.server';
 import { _OpeningBalancesTabs } from './components/_OpeningBalancesTabs';
-import { Alert, AlertDescription, AlertTitle } from '@/shared/components/ui/alert';
-import { AlertTriangle } from 'lucide-react';
-import Link from 'next/link';
-import { Button } from '@/shared/components/ui/button';
+import { ConfigRequired } from '../../shared/components/ConfigRequired';
 
 async function OpeningBalancesContent() {
   const data = await getOpeningBalancesPageData();
@@ -16,20 +13,7 @@ async function OpeningBalancesContent() {
         <div>
           <h1 className="text-2xl font-bold">Saldos de Apertura</h1>
         </div>
-        <Alert variant="destructive">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Requisito previo</AlertTitle>
-          <AlertDescription className="flex flex-col gap-2">
-            <p>
-              Configurá el ejercicio fiscal antes de cargar saldos de apertura.
-            </p>
-            <Link href="/dashboard/company/accounting/settings">
-              <Button variant="outline" size="sm">
-                Ir a Configuración Contable
-              </Button>
-            </Link>
-          </AlertDescription>
-        </Alert>
+        <ConfigRequired description="Configurá el ejercicio fiscal antes de cargar saldos de apertura." />
       </div>
     );
   }
@@ -40,21 +24,12 @@ async function OpeningBalancesContent() {
         <div>
           <h1 className="text-2xl font-bold">Saldos de Apertura</h1>
         </div>
-        <Alert variant="destructive">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Requisito previo</AlertTitle>
-          <AlertDescription className="flex flex-col gap-2">
-            <p>
-              Creá o importá el plan de cuentas antes de cargar saldos de
-              apertura.
-            </p>
-            <Link href="/dashboard/company/accounting/accounts">
-              <Button variant="outline" size="sm">
-                Ir a Plan de Cuentas
-              </Button>
-            </Link>
-          </AlertDescription>
-        </Alert>
+        <ConfigRequired
+          title="Plan de cuentas requerido"
+          description="Creá o importá el plan de cuentas antes de cargar saldos de apertura."
+          ctaHref="/dashboard/company/accounting/accounts"
+          ctaLabel="Ir a Plan de Cuentas"
+        />
       </div>
     );
   }

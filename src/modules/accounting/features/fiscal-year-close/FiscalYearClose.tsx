@@ -2,6 +2,7 @@ import { getActiveCompanyId } from '@/shared/lib/company';
 import { PermissionGuard } from '@/shared/components/common/PermissionGuard';
 import { getFiscalYearStatus } from './actions.server';
 import { _FiscalYearStatus } from './components/_FiscalYearStatus';
+import { ConfigRequired } from '../../shared/components/ConfigRequired';
 
 async function FiscalYearCloseContent({ companyId }: { companyId: string }) {
   const status = await getFiscalYearStatus(companyId);
@@ -15,7 +16,11 @@ async function FiscalYearCloseContent({ companyId }: { companyId: string }) {
         </p>
       </div>
 
-      <_FiscalYearStatus companyId={companyId} status={status} />
+      {status === null ? (
+        <ConfigRequired description="Para generar cierres de ejercicio, configurá primero el ejercicio fiscal y las cuentas contables." />
+      ) : (
+        <_FiscalYearStatus companyId={companyId} status={status} />
+      )}
     </div>
   );
 }
