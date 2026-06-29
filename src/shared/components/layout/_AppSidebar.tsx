@@ -14,6 +14,7 @@ import {
   Shield,
   ShoppingBag,
   ShoppingCart,
+  Ticket,
   TrendingUp,
   Truck,
   Users,
@@ -41,6 +42,7 @@ import {
   SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
+  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarMenuSub,
@@ -53,6 +55,7 @@ import { getWorkspaceForModule, resolveEffectiveWorkspace } from '@/shared/lib/w
 import { _CompanyDisplay } from './_CompanyDisplay';
 import { _CompanySelector } from './_CompanySelector';
 import { _NavUser } from './nav/_NavUser';
+import { useUnreadSupportTicketsCount } from '@/features/Ayuda/hooks/useUnreadSupportTicketsCount';
 
 // Tipos para navegación
 interface NavItem {
@@ -507,8 +510,8 @@ const getNavConfig = (isSingleMode: boolean, activeCompanyId?: string): NavItemW
 
 // Navegación secundaria
 const navSecondary: NavItem[] = [
-  { title: 'Ayuda', href: '/dashboard/help', icon: HelpCircle },
-  { title: 'Buscar', href: '/dashboard/search', icon: Search, disabled: true },
+  { title: 'Documentación', href: '/dashboard/help', icon: HelpCircle },
+  { title: 'Soporte', href: '/dashboard/support/help', icon: Ticket },
 ];
 
 interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
@@ -619,6 +622,7 @@ export function _AppSidebar({
       .filter((item) => (item.items?.length ?? 0) > 0 || (item.subGroups?.length ?? 0) > 0);
   };
 
+  const unreadHelpCount = useUnreadSupportTicketsCount();
   // Aplicar filtros
   const filteredNavMain = filterNavMainItems(navMain);
   const filteredNavConfig = filterNavConfig(navConfig);
@@ -881,6 +885,13 @@ export function _AppSidebar({
                       </Link>
                     </SidebarMenuButton>
                   )}
+                  {!item.disabled &&
+                    item.href === '/dashboard/support/help' &&
+                    unreadHelpCount > 0 && (
+                      <SidebarMenuBadge className="rounded-full bg-destructive text-white shadow-sm ring-2 ring-sidebar">
+                        {unreadHelpCount > 99 ? '99+' : unreadHelpCount}
+                      </SidebarMenuBadge>
+                    )}
                 </SidebarMenuItem>
               ))}
             </SidebarMenu>

@@ -7,6 +7,7 @@ import { getIndustryType } from '@/shared/lib/industry';
 import { DashboardLayout } from '@/shared/components/layout/DashboardLayout';
 import { OnboardingGate } from '@/modules/onboarding/features/company-setup';
 import { getActiveWorkspace, getAccessibleWorkspaces } from '@/shared/lib/workspace';
+import { SupportTicketsRealtimeProvider } from '@/features/Ayuda/components/SupportTicketsRealtimeProvider';
 
 /**
  * Layout del Dashboard
@@ -32,6 +33,7 @@ export default async function Layout({ children }: { children: React.ReactNode }
   ]);
 
   return (
+    <SupportTicketsRealtimeProvider>
     <DashboardLayout
       companies={companies}
       activeCompany={activeCompany}
@@ -44,5 +46,7 @@ export default async function Layout({ children }: { children: React.ReactNode }
       {children}
       <OnboardingGate />
     </DashboardLayout>
+
+    </SupportTicketsRealtimeProvider>
   );
 }
