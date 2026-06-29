@@ -169,7 +169,7 @@ Resolucion: Owner/Developer → acceso total. Otros → rol base + overrides ind
 | Modelo | Descripcion | Campos clave |
 |--------|-------------|--------------|
 | `ProductCategory` | Categoria (arbol) | name, parentId (self-referential) |
-| `Product` | Producto/servicio | name, code, barcode, type, salePrice, purchasePrice, trackStock |
+| `Product` | Producto/servicio | name, code, barcode, type, salePrice, purchasePrice, trackStock, defaultExpenseAccountId?, defaultIncomeAccountId?, defaultCostCenterId?, defaultWarehouseId?, defaultSupplierId? |
 | `Supplier` | Proveedor | businessName, taxId, taxCondition, status |
 | `PriceList` | Lista de precios | name, isDefault |
 | `PriceListItem` | Item de lista | priceListId, productId, price |
@@ -179,6 +179,15 @@ Resolucion: Owner/Developer → acceso total. Otros → rol base + overrides ind
 - `ProductStatus`: ACTIVE, INACTIVE
 - `SupplierTaxCondition`: MONOTRIBUTISTA, RESPONSABLE_INSCRIPTO, EXENTO, CONSUMIDOR_FINAL, NO_RESPONSABLE
 - `SupplierStatus`: ACTIVE, INACTIVE
+
+**Conceptos contables por producto (Product):**
+- `defaultExpenseAccountId` → Account (naturaleza DEBIT, cuentas hoja). Sobrescribe `purchasesAccountId` de AccountingSettings al generar asientos de compra.
+- `defaultIncomeAccountId` → Account (naturaleza CREDIT, cuentas hoja). Sobrescribe `salesAccountId` de AccountingSettings al generar asientos de venta.
+- `defaultCostCenterId` → CostCenter. Se asigna a las lineas del asiento contable del producto.
+- `defaultWarehouseId` → Warehouse. Almacen predeterminado para operaciones del producto.
+- `defaultSupplierId` → Supplier. Proveedor habitual del producto.
+
+Cuando se confirma una factura (venta o compra), la integracion contable agrupa las lineas por cuenta contable: si un producto tiene override (defaultIncomeAccountId o defaultExpenseAccountId), se usa ese; sino, se usa la cuenta global de AccountingSettings.
 
 ---
 
@@ -319,7 +328,7 @@ Resolucion: Owner/Developer → acceso total. Otros → rol base + overrides ind
 | `Account` | Cuenta contable (arbol) | code, name, type, nature, parentId, level |
 | `JournalEntry` | Asiento contable | number, date, description, status, isAutomatic, reversedById |
 | `JournalEntryLine` | Linea de asiento | accountId, debit, credit, description |
-| `AccountingSettings` | Config contable | salesAccountId, purchasesAccountId, vatAccountId, fixedAssetAccountId, depreciationExpenseAccountId, lockedUntilDate, etc. |
+| `AccountingSettings` | Config contable | salesAccountId, purchasesAccountId, vatAccountId, fixedAssetAccountId, depreciationExpenseAccountId, lockedUntilDate, productCodePrefix (default "PROD"), lastProductNumber (default 0), etc. |
 | `RecurringEntry` | Asiento recurrente | frequency, nextExecution, templateLines |
 | `RecurringEntryLine` | Linea de asiento recurrente | accountId, debitAmount, creditAmount |
 
@@ -334,6 +343,7 @@ Resolucion: Owner/Developer → acceso total. Otros → rol base + overrides ind
 - JournalEntry puede ser automatico (generado por comercial) o manual
 - JournalEntry puede ser reversado (reversedById → otro entry)
 - AccountingSettings mapea cuentas contables a funciones (ventas, compras, IVA, bancos, etc.)
+- `productCodePrefix` + `lastProductNumber`: generacion automatica de codigos de producto. Al crear un producto se ejecuta un `UPDATE...SET last_product_number = last_product_number + 1 RETURNING` atomico y se genera el codigo `{prefix}-{number:04d}`.
 - Saldos de Apertura: implementado como JournalEntry (description='Asiento de Apertura', status=POSTED) sin modelo nuevo. Facturas de apertura se identifican por internalNotes='opening-balance' y journalEntryId=null.
 
 ### Presupuestos

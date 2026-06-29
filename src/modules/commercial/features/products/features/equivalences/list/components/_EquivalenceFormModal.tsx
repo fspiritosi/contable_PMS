@@ -88,7 +88,7 @@ export function _EquivalenceFormModal({
           <DialogDescription>
             {isEditing
               ? 'Modificá los datos del grupo de equivalencia.'
-              : 'Creá un grupo para agrupar productos equivalentes de diferentes marcas.'}
+              : 'Creá un grupo para agrupar artículos equivalentes de diferentes marcas.'}
           </DialogDescription>
         </DialogHeader>
 

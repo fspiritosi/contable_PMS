@@ -3,7 +3,7 @@ import { PriceListsList } from '@/modules/commercial/features/products/features/
 
 export const metadata: Metadata = {
   title: 'Listas de Precios',
-  description: 'Gestión de listas de precios y asignación de precios por producto',
+  description: 'Gestión de listas de precios y asignación de precios por artículo',
 };
 
 interface Props {

@@ -292,68 +292,70 @@ enum RecurringFrequency {
 
 // Plan de Cuentas
 model Account {
-  id            String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  companyId     String             @map("company_id") @db.Uuid
-  code          String // Código contable (ej: 1.1.1)
-  name          String // Nombre de la cuenta
-  type          AccountType
-  nature        AccountNature
-  description   String?
-  parentId      String?            @map("parent_id") @db.Uuid
-  parent        Account?           @relation("AccountHierarchy", fields: [parentId], references: [id])
-  children      Account[]          @relation("AccountHierarchy")
-  currency          String          @default("ARS") @db.Char(3)
-  isActive          Boolean         @default(true) @map("is_active")
-  isLeaf                Boolean        @default(true) @map("is_leaf")
-  adjustableByInflation Boolean        @default(false) @map("adjustable_by_inflation")
-  requiresAuxiliary     AuxiliaryType? @map("requires_auxiliary")
-  createdAt         DateTime        @default(now()) @map("created_at")
-  updatedAt         DateTime        @updatedAt @map("updated_at")
-  company           Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  entries           JournalEntryLine[]
-  suppliers     Supplier[] // Relación con proveedores (para cuentas predeterminadas)
-  contractors   Contractor[] // Relación con clientes/contratistas (para cuentas predeterminadas)
-  bankAccounts  BankAccount[] // Relación con cuentas bancarias (para cuentas contables)
-  cashRegisters CashRegister[] // Relación con cajas (para cuentas contables)
+  id                    String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId             String             @map("company_id") @db.Uuid
+  code                  String // Código contable (ej: 1.1.1)
+  name                  String // Nombre de la cuenta
+  type                  AccountType
+  nature                AccountNature
+  description           String?
+  parentId              String?            @map("parent_id") @db.Uuid
+  parent                Account?           @relation("AccountHierarchy", fields: [parentId], references: [id])
+  children              Account[]          @relation("AccountHierarchy")
+  currency              String             @default("ARS") @db.Char(3)
+  isActive              Boolean            @default(true) @map("is_active")
+  isLeaf                Boolean            @default(true) @map("is_leaf")
+  adjustableByInflation Boolean            @default(false) @map("adjustable_by_inflation")
+  requiresAuxiliary     AuxiliaryType?     @map("requires_auxiliary")
+  createdAt             DateTime           @default(now()) @map("created_at")
+  updatedAt             DateTime           @updatedAt @map("updated_at")
+  company               Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  entries               JournalEntryLine[]
+  suppliers             Supplier[] // Relación con proveedores (para cuentas predeterminadas)
+  contractors           Contractor[] // Relación con clientes/contratistas (para cuentas predeterminadas)
+  bankAccounts          BankAccount[] // Relación con cuentas bancarias (para cuentas contables)
+  cashRegisters         CashRegister[] // Relación con cajas (para cuentas contables)
 
   // Relaciones inversas para AccountingSettings (many-to-one)
-  settingsAsSalesAccount        AccountingSettings[] @relation("SalesAccount")
-  settingsAsPurchasesAccount    AccountingSettings[] @relation("PurchasesAccount")
-  settingsAsReceivablesAccount  AccountingSettings[] @relation("ReceivablesAccount")
-  settingsAsPayablesAccount     AccountingSettings[] @relation("PayablesAccount")
-  settingsAsVatDebitAccount     AccountingSettings[] @relation("VatDebitAccount")
-  settingsAsVatCreditAccount    AccountingSettings[] @relation("VatCreditAccount")
-  settingsAsDefaultCashAccount  AccountingSettings[] @relation("DefaultCashAccount")
-  settingsAsDefaultBankAccount  AccountingSettings[] @relation("DefaultBankAccount")
-  settingsAsExpensesAccount     AccountingSettings[] @relation("ExpensesAccount")
-  settingsAsResultAccount       AccountingSettings[] @relation("ResultAccount")
-  settingsAsWhIvaEmitted        AccountingSettings[] @relation("WhIvaEmittedAccount")
-  settingsAsWhGananciasEmitted  AccountingSettings[] @relation("WhGananciasEmittedAccount")
-  settingsAsWhIibbEmitted       AccountingSettings[] @relation("WhIibbEmittedAccount")
-  settingsAsWhSussEmitted       AccountingSettings[] @relation("WhSussEmittedAccount")
-  settingsAsWhIvaSuffered       AccountingSettings[] @relation("WhIvaSufferedAccount")
-  settingsAsWhGananciasSuffered AccountingSettings[] @relation("WhGananciasSufferedAccount")
-  settingsAsWhIibbSuffered      AccountingSettings[] @relation("WhIibbSufferedAccount")
-  settingsAsWhSussSuffered      AccountingSettings[] @relation("WhSussSufferedAccount")
-  settingsAsFixedAsset          AccountingSettings[] @relation("FixedAssetAccount")
-  settingsAsAccumulatedDepr     AccountingSettings[] @relation("AccumulatedDepreciationAccount")
-  settingsAsDepreciationExpense AccountingSettings[] @relation("DepreciationExpenseAccount")
-  settingsAsAssetDisposalGL     AccountingSettings[] @relation("AssetDisposalGainLossAccount")
-  settingsAsPercIvaCollected    AccountingSettings[] @relation("PercIvaCollectedAccount")
-  settingsAsPercIibbCollected   AccountingSettings[] @relation("PercIibbCollectedAccount")
-  settingsAsPercIvaSuffered     AccountingSettings[] @relation("PercIvaSufferedAccount")
-  settingsAsPercIibbSuffered    AccountingSettings[] @relation("PercIibbSufferedAccount")
-  settingsAsCogs                AccountingSettings[] @relation("CogsAccount")
-  settingsAsInventory           AccountingSettings[] @relation("InventoryAccount")
-  settingsAsChecksReceived      AccountingSettings[] @relation("ChecksReceivedAccount")
-  settingsAsChecksRejected      AccountingSettings[] @relation("ChecksRejectedAccount")
-  settingsAsVatPayable          AccountingSettings[] @relation("VatPayableAccount")
-  settingsAsVatBalance          AccountingSettings[] @relation("VatBalanceAccount")
-  settingsAsRecpam              AccountingSettings[] @relation("RecpamAccount")
+  settingsAsSalesAccount        AccountingSettings[]   @relation("SalesAccount")
+  settingsAsPurchasesAccount    AccountingSettings[]   @relation("PurchasesAccount")
+  settingsAsReceivablesAccount  AccountingSettings[]   @relation("ReceivablesAccount")
+  settingsAsPayablesAccount     AccountingSettings[]   @relation("PayablesAccount")
+  settingsAsVatDebitAccount     AccountingSettings[]   @relation("VatDebitAccount")
+  settingsAsVatCreditAccount    AccountingSettings[]   @relation("VatCreditAccount")
+  settingsAsDefaultCashAccount  AccountingSettings[]   @relation("DefaultCashAccount")
+  settingsAsDefaultBankAccount  AccountingSettings[]   @relation("DefaultBankAccount")
+  settingsAsExpensesAccount     AccountingSettings[]   @relation("ExpensesAccount")
+  settingsAsResultAccount       AccountingSettings[]   @relation("ResultAccount")
+  settingsAsWhIvaEmitted        AccountingSettings[]   @relation("WhIvaEmittedAccount")
+  settingsAsWhGananciasEmitted  AccountingSettings[]   @relation("WhGananciasEmittedAccount")
+  settingsAsWhIibbEmitted       AccountingSettings[]   @relation("WhIibbEmittedAccount")
+  settingsAsWhSussEmitted       AccountingSettings[]   @relation("WhSussEmittedAccount")
+  settingsAsWhIvaSuffered       AccountingSettings[]   @relation("WhIvaSufferedAccount")
+  settingsAsWhGananciasSuffered AccountingSettings[]   @relation("WhGananciasSufferedAccount")
+  settingsAsWhIibbSuffered      AccountingSettings[]   @relation("WhIibbSufferedAccount")
+  settingsAsWhSussSuffered      AccountingSettings[]   @relation("WhSussSufferedAccount")
+  settingsAsFixedAsset          AccountingSettings[]   @relation("FixedAssetAccount")
+  settingsAsAccumulatedDepr     AccountingSettings[]   @relation("AccumulatedDepreciationAccount")
+  settingsAsDepreciationExpense AccountingSettings[]   @relation("DepreciationExpenseAccount")
+  settingsAsAssetDisposalGL     AccountingSettings[]   @relation("AssetDisposalGainLossAccount")
+  settingsAsPercIvaCollected    AccountingSettings[]   @relation("PercIvaCollectedAccount")
+  settingsAsPercIibbCollected   AccountingSettings[]   @relation("PercIibbCollectedAccount")
+  settingsAsPercIvaSuffered     AccountingSettings[]   @relation("PercIvaSufferedAccount")
+  settingsAsPercIibbSuffered    AccountingSettings[]   @relation("PercIibbSufferedAccount")
+  settingsAsCogs                AccountingSettings[]   @relation("CogsAccount")
+  settingsAsInventory           AccountingSettings[]   @relation("InventoryAccount")
+  settingsAsChecksReceived      AccountingSettings[]   @relation("ChecksReceivedAccount")
+  settingsAsChecksRejected      AccountingSettings[]   @relation("ChecksRejectedAccount")
+  settingsAsVatPayable          AccountingSettings[]   @relation("VatPayableAccount")
+  settingsAsVatBalance          AccountingSettings[]   @relation("VatBalanceAccount")
+  settingsAsRecpam              AccountingSettings[]   @relation("RecpamAccount")
   vatAccountMappings            AccountingVatAccount[]
   recurringEntryLines           RecurringEntryLine[]
   budgets                       Budget[]
   withholdingRegimes            WithholdingRegime[]
+  productsAsExpenseAccount      Product[]              @relation("ProductExpenseAccount")
+  productsAsIncomeAccount       Product[]              @relation("ProductIncomeAccount")
 
   @@unique([companyId, code])
   @@map("accounts")
@@ -379,20 +381,20 @@ model JournalEntry {
   reversedBy      String?   @map("reversed_by")
   reversedAt      DateTime? @map("reversed_at")
 
-  company                    Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  fiscalYear                 FiscalYear?        @relation(fields: [fiscalYearId], references: [id])
-  period                     AccountingPeriod?  @relation(fields: [periodId], references: [id])
-  lines                      JournalEntryLine[]
-  salesInvoices              SalesInvoice[]
-  purchaseInvoices           PurchaseInvoice[]
-  receipts                   Receipt[]
-  paymentOrders              PaymentOrder[]
-  expenses                   Expense[]
-  fiscalYearAsClosingEntry   FiscalYear?        @relation("FiscalYearClosingEntry")
-  fiscalYearAsOpeningEntry   FiscalYear?        @relation("FiscalYearOpeningEntry")
-  createdBy        String             @map("created_by") // userId
-  createdAt        DateTime           @default(now()) @map("created_at")
-  updatedAt        DateTime           @updatedAt @map("updated_at")
+  company                  Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  fiscalYear               FiscalYear?        @relation(fields: [fiscalYearId], references: [id])
+  period                   AccountingPeriod?  @relation(fields: [periodId], references: [id])
+  lines                    JournalEntryLine[]
+  salesInvoices            SalesInvoice[]
+  purchaseInvoices         PurchaseInvoice[]
+  receipts                 Receipt[]
+  paymentOrders            PaymentOrder[]
+  expenses                 Expense[]
+  fiscalYearAsClosingEntry FiscalYear?        @relation("FiscalYearClosingEntry")
+  fiscalYearAsOpeningEntry FiscalYear?        @relation("FiscalYearOpeningEntry")
+  createdBy                String             @map("created_by") // userId
+  createdAt                DateTime           @default(now()) @map("created_at")
+  updatedAt                DateTime           @updatedAt @map("updated_at")
 
   // Relaciones de trazabilidad (self-referencing opcional)
   originalEntry JournalEntry?  @relation("ReversalOriginal", fields: [originalEntryId], references: [id], onDelete: SetNull)
@@ -410,12 +412,12 @@ model JournalEntry {
 
 // Líneas de Asiento
 model JournalEntryLine {
-  id          String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  entryId     String       @map("entry_id") @db.Uuid
-  accountId   String       @map("account_id") @db.Uuid
+  id          String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  entryId     String  @map("entry_id") @db.Uuid
+  accountId   String  @map("account_id") @db.Uuid
   description String?
-  debit       Decimal      @default(0) @db.Decimal(12, 2)
-  credit      Decimal      @default(0) @db.Decimal(12, 2)
+  debit       Decimal @default(0) @db.Decimal(12, 2)
+  credit      Decimal @default(0) @db.Decimal(12, 2)
 
   // Multi-moneda
   currency       String   @default("ARS") @db.Char(3)
@@ -427,11 +429,11 @@ model JournalEntryLine {
   supplierId   String? @map("supplier_id") @db.Uuid
   costCenterId String? @map("cost_center_id") @db.Uuid
 
-  entry       JournalEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
-  account     Account      @relation(fields: [accountId], references: [id])
-  customer    Contractor?  @relation(fields: [customerId], references: [id])
-  supplier    Supplier?    @relation(fields: [supplierId], references: [id])
-  costCenter  CostCenter?  @relation(fields: [costCenterId], references: [id])
+  entry      JournalEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  account    Account      @relation(fields: [accountId], references: [id])
+  customer   Contractor?  @relation(fields: [customerId], references: [id])
+  supplier   Supplier?    @relation(fields: [supplierId], references: [id])
+  costCenter CostCenter?  @relation(fields: [costCenterId], references: [id])
 
   @@map("journal_entry_lines")
 }
@@ -596,6 +598,10 @@ model AccountingSettings {
 
   recpamAccount Account? @relation("RecpamAccount", fields: [recpamAccountId], references: [id])
 
+  // Configuración de código de producto
+  productCodePrefix String @default("PROD") @map("product_code_prefix")
+  lastProductNumber Int    @default(0) @map("last_product_number")
+
   // Cuentas de IVA por alícuota (overrides opcionales)
   vatAccounts AccountingVatAccount[]
 
@@ -610,11 +616,11 @@ model AccountingVatAccount {
   id         String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   settingsId String  @map("settings_id") @db.Uuid
   vatRate    Decimal @map("vat_rate") @db.Decimal(5, 2)
-  side       String  // 'DEBIT' (ventas) o 'CREDIT' (compras)
+  side       String // 'DEBIT' (ventas) o 'CREDIT' (compras)
   accountId  String  @map("account_id") @db.Uuid
 
-  settings   AccountingSettings @relation(fields: [settingsId], references: [id], onDelete: Cascade)
-  account    Account            @relation(fields: [accountId], references: [id])
+  settings AccountingSettings @relation(fields: [settingsId], references: [id], onDelete: Cascade)
+  account  Account            @relation(fields: [accountId], references: [id])
 
   @@unique([settingsId, vatRate, side])
   @@map("accounting_vat_accounts")
@@ -630,45 +636,45 @@ model SalesInvoicePerception {
   baseAmount   Decimal        @map("base_amount") @db.Decimal(12, 2)
   amount       Decimal        @db.Decimal(12, 2)
 
-  invoice      SalesInvoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoice SalesInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 
   @@map("sales_invoice_perceptions")
 }
 
 // Percepción en Factura de Compra
 model PurchaseInvoicePerception {
-  id           String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  invoiceId    String          @map("invoice_id") @db.Uuid
+  id           String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  invoiceId    String         @map("invoice_id") @db.Uuid
   type         PerceptionType
   jurisdiction String?
-  rate         Decimal         @db.Decimal(6, 3)
-  baseAmount   Decimal         @map("base_amount") @db.Decimal(12, 2)
-  amount       Decimal         @db.Decimal(12, 2)
+  rate         Decimal        @db.Decimal(6, 3)
+  baseAmount   Decimal        @map("base_amount") @db.Decimal(12, 2)
+  amount       Decimal        @db.Decimal(12, 2)
 
-  invoice      PurchaseInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoice PurchaseInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 
   @@map("purchase_invoice_perceptions")
 }
 
 // Ejercicio Fiscal
 model FiscalYear {
-  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  companyId String   @map("company_id") @db.Uuid
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId String    @map("company_id") @db.Uuid
   number    Int
-  startDate DateTime @map("start_date")
-  endDate   DateTime @map("end_date")
-  isClosed  Boolean  @default(false) @map("is_closed")
+  startDate DateTime  @map("start_date")
+  endDate   DateTime  @map("end_date")
+  isClosed  Boolean   @default(false) @map("is_closed")
   closedAt  DateTime? @map("closed_at")
-  closedBy  String?  @map("closed_by")
+  closedBy  String?   @map("closed_by")
 
   closingEntryId String? @unique @map("closing_entry_id") @db.Uuid
   openingEntryId String? @unique @map("opening_entry_id") @db.Uuid
 
-  company       Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  closingEntry  JournalEntry?      @relation("FiscalYearClosingEntry", fields: [closingEntryId], references: [id])
-  openingEntry  JournalEntry?      @relation("FiscalYearOpeningEntry", fields: [openingEntryId], references: [id])
-  periods       AccountingPeriod[]
-  entries       JournalEntry[]
+  company      Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  closingEntry JournalEntry?      @relation("FiscalYearClosingEntry", fields: [closingEntryId], references: [id])
+  openingEntry JournalEntry?      @relation("FiscalYearOpeningEntry", fields: [openingEntryId], references: [id])
+  periods      AccountingPeriod[]
+  entries      JournalEntry[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -688,11 +694,11 @@ model AccountingPeriod {
   closedAt     DateTime?            @map("closed_at")
   closedBy     String?              @map("closed_by")
 
-  fiscalYear   FiscalYear     @relation(fields: [fiscalYearId], references: [id], onDelete: Cascade)
-  entries      JournalEntry[]
+  fiscalYear FiscalYear     @relation(fields: [fiscalYearId], references: [id], onDelete: Cascade)
+  entries    JournalEntry[]
 
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@unique([fiscalYearId, year, month, type])
   @@map("accounting_periods")
@@ -758,14 +764,14 @@ model CompanyInvitation {
 // ============================================
 
 model UserPreference {
-  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId           String   @unique @map("user_id") // Clerk user ID
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId            String   @unique @map("user_id") // Clerk user ID
   activeCompanyId   String?  @map("active_company_id") @db.Uuid
   activeWorkspaceId String?  @map("active_workspace_id")
   theme             String   @default("system")
-  locale           String   @default("es")
-  tablePreferences Json     @default("{}") @map("table_preferences")
-  updatedAt        DateTime @updatedAt @map("updated_at")
+  locale            String   @default("es")
+  tablePreferences  Json     @default("{}") @map("table_preferences")
+  updatedAt         DateTime @updatedAt @map("updated_at")
 
   @@map("user_preferences")
 }
@@ -998,6 +1004,7 @@ model CostCenter {
   employees         Employee[]
   vehicles          Vehicle[]
   journalEntryLines JournalEntryLine[]
+  defaultProducts   Product[]          @relation("ProductCostCenter")
 
   @@unique([companyId, name])
   @@map("cost_centers")
@@ -2117,16 +2124,17 @@ model Supplier {
   notes  String?
 
   // Relaciones
-  company          Company           @relation(fields: [companyId], references: [id])
-  defaultAccount   Account?          @relation(fields: [defaultAccountId], references: [id])
-  purchaseInvoices PurchaseInvoice[]
-  purchaseOrders   PurchaseOrder[]
-  paymentOrders    PaymentOrder[]
-  expenses         Expense[]
-  checks           Check[]
+  company           Company            @relation(fields: [companyId], references: [id])
+  defaultAccount    Account?           @relation(fields: [defaultAccountId], references: [id])
+  purchaseInvoices  PurchaseInvoice[]
+  purchaseOrders    PurchaseOrder[]
+  paymentOrders     PaymentOrder[]
+  expenses          Expense[]
+  checks            Check[]
   receivingNotes    ReceivingNote[]
   productSuppliers  ProductSupplier[]
   journalEntryLines JournalEntryLine[]
+  defaultProducts   Product[]          @relation("ProductDefaultSupplier")
 
   createdBy String   @map("created_by")
   createdAt DateTime @default(now()) @map("created_at")
@@ -2219,23 +2227,35 @@ model Product {
   productGroupId String?       @map("product_group_id") @db.Uuid
   productGroup   ProductGroup? @relation(fields: [productGroupId], references: [id])
 
+  // Conceptos contables y logísticos por defecto
+  defaultExpenseAccountId String? @map("default_expense_account_id") @db.Uuid
+  defaultIncomeAccountId  String? @map("default_income_account_id") @db.Uuid
+  defaultCostCenterId     String? @map("default_cost_center_id") @db.Uuid
+  defaultWarehouseId      String? @map("default_warehouse_id") @db.Uuid
+  defaultSupplierId       String? @map("default_supplier_id") @db.Uuid
+
   // Estado
   status ProductStatus @default(ACTIVE)
 
   // Relaciones
-  company              Company               @relation(fields: [companyId], references: [id])
-  category             ProductCategory?      @relation(fields: [categoryId], references: [id])
-  priceListItems       PriceListItem[]
-  stockMovements       StockMovement[]
-  stockTransferLines   StockTransferLine[]
-  productSuppliers     ProductSupplier[]
-  warehouseStocks      WarehouseStock[]
-  salesInvoiceLines    SalesInvoiceLine[]
-  purchaseInvoiceLines PurchaseInvoiceLine[]
-  purchaseOrderLines   PurchaseOrderLine[]
-  receivingNoteLines   ReceivingNoteLine[]
-  deliveryNoteLines    DeliveryNoteLine[]
-  quoteLines           QuoteLine[]
+  company               Company               @relation(fields: [companyId], references: [id])
+  category              ProductCategory?      @relation(fields: [categoryId], references: [id])
+  defaultExpenseAccount Account?              @relation("ProductExpenseAccount", fields: [defaultExpenseAccountId], references: [id])
+  defaultIncomeAccount  Account?              @relation("ProductIncomeAccount", fields: [defaultIncomeAccountId], references: [id])
+  defaultCostCenter     CostCenter?           @relation("ProductCostCenter", fields: [defaultCostCenterId], references: [id])
+  defaultWarehouse      Warehouse?            @relation("ProductDefaultWarehouse", fields: [defaultWarehouseId], references: [id])
+  defaultSupplier       Supplier?             @relation("ProductDefaultSupplier", fields: [defaultSupplierId], references: [id])
+  priceListItems        PriceListItem[]
+  stockMovements        StockMovement[]
+  stockTransferLines    StockTransferLine[]
+  productSuppliers      ProductSupplier[]
+  warehouseStocks       WarehouseStock[]
+  salesInvoiceLines     SalesInvoiceLine[]
+  purchaseInvoiceLines  PurchaseInvoiceLine[]
+  purchaseOrderLines    PurchaseOrderLine[]
+  receivingNoteLines    ReceivingNoteLine[]
+  deliveryNoteLines     DeliveryNoteLine[]
+  quoteLines            QuoteLine[]
 
   createdBy String   @map("created_by")
   createdAt DateTime @default(now()) @map("created_at")
@@ -2327,13 +2347,14 @@ model Warehouse {
 
   isActive Boolean @default(true) @map("is_active")
 
-  company        Company          @relation(fields: [companyId], references: [id])
-  stocks         WarehouseStock[]
-  movements      StockMovement[]
-  receivingNotes ReceivingNote[]
-  deliveryNotes  DeliveryNote[]
-  transfersFrom  StockTransfer[]  @relation("TransfersFrom")
-  transfersTo    StockTransfer[]  @relation("TransfersTo")
+  company         Company          @relation(fields: [companyId], references: [id])
+  stocks          WarehouseStock[]
+  movements       StockMovement[]
+  receivingNotes  ReceivingNote[]
+  deliveryNotes   DeliveryNote[]
+  transfersFrom   StockTransfer[]  @relation("TransfersFrom")
+  transfersTo     StockTransfer[]  @relation("TransfersTo")
+  defaultProducts Product[]        @relation("ProductDefaultWarehouse")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -3320,18 +3341,18 @@ model PaymentOrderWithholding {
 // ============================================
 
 model WithholdingRegime {
-  id              String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  companyId       String             @map("company_id") @db.Uuid
-  tax             WithholdingTaxType
-  jurisdiction    String?
-  regimeCode      String?            @map("regime_code")
-  name            String
-  accountId       String             @map("account_id") @db.Uuid
-  baseCalculation String             @default("NET") @map("base_calculation") // NET | TOTAL
-  defaultRate     Decimal            @map("default_rate") @db.Decimal(6, 3)
-  minimumNotSubject Decimal          @default(0) @map("minimum_not_subject") @db.Decimal(12, 2)
-  minimumRetention  Decimal          @default(0) @map("minimum_retention") @db.Decimal(12, 2)
-  isActive        Boolean            @default(true) @map("is_active")
+  id                String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId         String             @map("company_id") @db.Uuid
+  tax               WithholdingTaxType
+  jurisdiction      String?
+  regimeCode        String?            @map("regime_code")
+  name              String
+  accountId         String             @map("account_id") @db.Uuid
+  baseCalculation   String             @default("NET") @map("base_calculation") // NET | TOTAL
+  defaultRate       Decimal            @map("default_rate") @db.Decimal(6, 3)
+  minimumNotSubject Decimal            @default(0) @map("minimum_not_subject") @db.Decimal(12, 2)
+  minimumRetention  Decimal            @default(0) @map("minimum_retention") @db.Decimal(12, 2)
+  isActive          Boolean            @default(true) @map("is_active")
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
   account Account @relation(fields: [accountId], references: [id])
@@ -3371,7 +3392,7 @@ model ExchangeRate {
   date      DateTime @db.Date
   buyRate   Decimal  @map("buy_rate") @db.Decimal(18, 6)
   sellRate  Decimal  @map("sell_rate") @db.Decimal(18, 6)
-  source    String?  // BNA, BCRA, MANUAL
+  source    String? // BNA, BCRA, MANUAL
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
@@ -4277,12 +4298,12 @@ model InflationIndex {
 // ============================================
 
 model ArcaCredential {
-  id          String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  companyId   String  @map("company_id") @db.Uuid
-  cuit        String  @db.VarChar(13)
+  id          String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId   String @map("company_id") @db.Uuid
+  cuit        String @db.VarChar(13)
   certificate Bytes
-  privateKey  Bytes   @map("private_key")
-  environment String  @default("HOMOLOGACION") @db.VarChar(20)
+  privateKey  Bytes  @map("private_key")
+  environment String @default("HOMOLOGACION") @db.VarChar(20)
 
   token       String?   @db.Text
   sign        String?   @db.Text

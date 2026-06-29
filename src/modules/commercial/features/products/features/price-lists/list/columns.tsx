@@ -96,13 +96,13 @@ export function getColumns({ onEdit, onDelete, onSetDefault, permissions }: Colu
     },
     {
       accessorKey: '_count.items',
-      meta: { title: 'Productos' },
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Productos" />,
+      meta: { title: 'Artículos' },
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Artículos" />,
       cell: ({ row }) => {
         const count = row.original._count?.items || 0;
         return (
           <Badge variant="outline">
-            {count} {count === 1 ? 'producto' : 'productos'}
+            {count} {count === 1 ? 'artículo' : 'artículos'}
           </Badge>
         );
       },

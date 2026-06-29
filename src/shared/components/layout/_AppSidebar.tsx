@@ -291,7 +291,7 @@ const navMain: NavItemWithSub[] = [
         module: 'commercial.warehouses',
       },
       {
-        title: 'Productos',
+        title: 'Artículos',
         href: '/dashboard/commercial/products',
         module: 'commercial.products',
       },

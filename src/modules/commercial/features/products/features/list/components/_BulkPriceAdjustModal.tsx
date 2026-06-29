@@ -120,14 +120,14 @@ export function _BulkPriceAdjustModal({ selectedIds, open, onOpenChange, onSucce
         applyCostPrice: data.applyCostPrice,
       }),
     onSuccess: (result) => {
-      toast.success(`Precios actualizados en ${result.count} productos`);
+      toast.success(`Precios actualizados en ${result.count} artículos`);
       queryClient.invalidateQueries({ queryKey: ['products'] });
       form.reset();
       onOpenChange(false);
       onSuccess();
     },
     onError: (error) => {
-      const message = error instanceof Error ? error.message : 'Error al ajustar precios';
+      const message = error instanceof Error ? error.message : 'Error al ajustar precios de artículos';
       toast.error(message);
     },
   });
@@ -152,7 +152,7 @@ export function _BulkPriceAdjustModal({ selectedIds, open, onOpenChange, onSucce
             Ajuste Masivo de Precios
           </DialogTitle>
           <DialogDescription>
-            {selectedIds.length} producto{selectedIds.length !== 1 ? 's' : ''} seleccionado{selectedIds.length !== 1 ? 's' : ''}
+            {selectedIds.length} artículo{selectedIds.length !== 1 ? 's' : ''} seleccionado{selectedIds.length !== 1 ? 's' : ''}
           </DialogDescription>
         </DialogHeader>
 
@@ -251,13 +251,13 @@ export function _BulkPriceAdjustModal({ selectedIds, open, onOpenChange, onSucce
             {(showPreview || previewLoading) && (
               <div className="space-y-2">
                 <p className="text-sm font-medium">
-                  Vista previa {selectedIds.length > 5 ? '(primeros 5 productos)' : ''}
+                  Vista previa {selectedIds.length > 5 ? '(primeros 5 artículos)' : ''}
                 </p>
                 <div className="rounded-md border overflow-auto max-h-[250px]">
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Producto</TableHead>
+                        <TableHead>Artículo</TableHead>
                         {(debouncedApplySale) && (
                           <TableHead className="text-right">Precio Venta</TableHead>
                         )}

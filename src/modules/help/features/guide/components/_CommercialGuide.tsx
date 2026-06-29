@@ -135,6 +135,46 @@ export function _CommercialGuide() {
           </p>
 
           <p className="mt-3">
+            <strong>Configuración Contable y Logística (opcional):</strong>
+          </p>
+          <p className="text-muted-foreground">
+            En el formulario de creación o edición del producto, encontrarás una
+            sección adicional con campos opcionales que permiten personalizar el
+            comportamiento contable y logístico de cada artículo:
+          </p>
+          <ul className="list-disc pl-6 space-y-1 text-muted-foreground">
+            <li>
+              <strong>Cuenta de Gastos</strong>: cuenta contable que se usará al
+              registrar compras de este producto, en lugar de la cuenta de
+              compras general
+            </li>
+            <li>
+              <strong>Cuenta de Ingresos</strong>: cuenta contable que se usará
+              al registrar ventas de este producto, en lugar de la cuenta de
+              ventas general
+            </li>
+            <li>
+              <strong>Centro de Costos</strong>: centro de costos que se asignará
+              automáticamente en los asientos contables del producto
+            </li>
+            <li>
+              <strong>Almacén Predeterminado</strong>: almacén sugerido para
+              operaciones con este producto
+            </li>
+            <li>
+              <strong>Proveedor Predeterminado</strong>: proveedor habitual de
+              este producto
+            </li>
+          </ul>
+          <p className="text-sm text-muted-foreground mt-2">
+            Estos campos son <strong>opcionales</strong>. Si no se asignan, el
+            sistema usa las cuentas contables globales configuradas en{' '}
+            <strong>Contabilidad → Configuración</strong>. Cuando están asignados,
+            tienen prioridad sobre la configuración global al generar asientos
+            automáticos de venta o compra.
+          </p>
+
+          <p className="mt-3">
             <strong>Categorías de Productos:</strong>
           </p>
           <ul className="list-disc pl-6 space-y-1 text-muted-foreground">

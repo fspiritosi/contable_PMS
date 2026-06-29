@@ -53,7 +53,7 @@ export async function ProductDetail({ productId }: ProductDetailProps) {
             <Alert variant="destructive">
               <AlertTriangle className="h-4 w-4" />
               <AlertDescription>
-                <strong>Sin stock.</strong> Este producto no tiene unidades disponibles.
+                <strong>Sin stock.</strong> Este artículo no tiene unidades disponibles.
                 Stock mínimo configurado: {product.minStock || 0}.
               </AlertDescription>
             </Alert>
@@ -208,6 +208,60 @@ export async function ProductDetail({ productId }: ProductDetailProps) {
                 </div>
               </>
             )}
+          </CardContent>
+        </Card>
+
+        {/* Configuración Contable y Logística */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Configuración Contable</CardTitle>
+            <CardDescription>Cuentas y valores predeterminados para este artículo</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Cuenta de Gastos</p>
+              <p className="text-sm">
+                {product.defaultExpenseAccount
+                  ? `${product.defaultExpenseAccount.code} - ${product.defaultExpenseAccount.name}`
+                  : 'Sin asignar'}
+              </p>
+            </div>
+
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Cuenta de Ingresos</p>
+              <p className="text-sm">
+                {product.defaultIncomeAccount
+                  ? `${product.defaultIncomeAccount.code} - ${product.defaultIncomeAccount.name}`
+                  : 'Sin asignar'}
+              </p>
+            </div>
+
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Centro de Costos</p>
+              <p className="text-sm">
+                {product.defaultCostCenter
+                  ? product.defaultCostCenter.name
+                  : 'Sin asignar'}
+              </p>
+            </div>
+
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Almacén Predeterminado</p>
+              <p className="text-sm">
+                {product.defaultWarehouse
+                  ? `${product.defaultWarehouse.code} - ${product.defaultWarehouse.name}`
+                  : 'Sin asignar'}
+              </p>
+            </div>
+
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Proveedor Predeterminado</p>
+              <p className="text-sm">
+                {product.defaultSupplier
+                  ? product.defaultSupplier.businessName
+                  : 'Sin asignar'}
+              </p>
+            </div>
           </CardContent>
         </Card>
 

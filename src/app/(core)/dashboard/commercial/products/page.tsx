@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import { ProductsList } from '@/modules/commercial/features/products/features/list';
 
 export const metadata: Metadata = {
-  title: 'Productos',
-  description: 'Gestión de productos y servicios',
+  title: 'Artículos',
+  description: 'Gestión de artículos y servicios',
 };
 
 interface Props {

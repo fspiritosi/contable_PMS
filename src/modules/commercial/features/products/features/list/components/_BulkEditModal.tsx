@@ -70,14 +70,14 @@ export function _BulkEditModal({ selectedIds, open, onOpenChange, onSuccess }: P
       return bulkUpdateProducts({ productIds: selectedIds, updates });
     },
     onSuccess: (result) => {
-      toast.success(`${result.count} producto${result.count !== 1 ? 's' : ''} actualizado${result.count !== 1 ? 's' : ''}`);
+      toast.success(`${result.count} artículo${result.count !== 1 ? 's' : ''} actualizado${result.count !== 1 ? 's' : ''}`);
       queryClient.invalidateQueries({ queryKey: ['products'] });
       handleReset();
       onOpenChange(false);
       onSuccess();
     },
     onError: (error) => {
-      const message = error instanceof Error ? error.message : 'Error al actualizar productos';
+      const message = error instanceof Error ? error.message : 'Error al actualizar artículos';
       toast.error(message);
     },
   });
@@ -120,7 +120,7 @@ export function _BulkEditModal({ selectedIds, open, onOpenChange, onSuccess }: P
             Edición Masiva
           </DialogTitle>
           <DialogDescription>
-            {selectedIds.length} producto{selectedIds.length !== 1 ? 's' : ''} seleccionado{selectedIds.length !== 1 ? 's' : ''}.
+            {selectedIds.length} artículo{selectedIds.length !== 1 ? 's' : ''} seleccionado{selectedIds.length !== 1 ? 's' : ''}.
             Active los campos que desea modificar.
           </DialogDescription>
         </DialogHeader>

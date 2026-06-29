@@ -1,8 +1,8 @@
 import { CreateProduct } from '@/modules/commercial/features/products/features/create';
 
 export const metadata = {
-  title: 'Nuevo Producto | Commercial',
-  description: 'Crear nuevo producto o servicio',
+  title: 'Nuevo Artículo | Commercial',
+  description: 'Crear nuevo artículo o servicio',
 };
 
 export default function NewProductPage() {

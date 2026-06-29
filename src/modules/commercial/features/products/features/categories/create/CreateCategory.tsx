@@ -9,7 +9,7 @@ export async function CreateCategory() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Nueva Categoría</h1>
           <p className="text-muted-foreground">
-            Crea una nueva categoría para organizar tus productos
+            Crea una nueva categoría para organizar tus artículos
           </p>
         </div>
 

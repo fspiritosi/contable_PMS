@@ -44,7 +44,7 @@ export function _PriceComparisonView({
   if (products.length === 0) {
     return (
       <p className="text-center text-muted-foreground py-6">
-        No se encontraron productos para comparar
+        No se encontraron artículos para comparar
       </p>
     );
   }
@@ -65,7 +65,7 @@ export function _PriceComparisonView({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Producto</TableHead>
+            <TableHead>Artículo</TableHead>
             <TableHead className="hidden sm:table-cell">Cód. OEM</TableHead>
             <TableHead className="hidden md:table-cell">Cód. Auxiliar</TableHead>
             <TableHead>Proveedor</TableHead>

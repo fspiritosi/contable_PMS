@@ -70,8 +70,8 @@ export function _AddPriceListItemDialog({ priceListId }: AddPriceListItemDialogP
       const result = await getProducts();
       setProducts(result.data.filter((p) => p.status === 'ACTIVE'));
     } catch (error) {
-      logger.error('Error al cargar productos', { data: { error } });
-      toast.error('Error al cargar productos');
+      logger.error('Error al cargar artículos', { data: { error } });
+      toast.error('Error al cargar artículos');
     } finally {
       setLoading(false);
     }
@@ -97,13 +97,13 @@ export function _AddPriceListItemDialog({ priceListId }: AddPriceListItemDialogP
     setIsSubmitting(true);
     try {
       await createPriceListItem(priceListId, data);
-      toast.success('Producto agregado a la lista');
+      toast.success('Artículo agregado a la lista');
       form.reset();
       setOpen(false);
       router.refresh();
     } catch (error) {
-      logger.error('Error al agregar producto', { data: { error } });
-      toast.error(error instanceof Error ? error.message : 'Error al agregar producto');
+      logger.error('Error al agregar artículo', { data: { error } });
+      toast.error(error instanceof Error ? error.message : 'Error al agregar artículo');
     } finally {
       setIsSubmitting(false);
     }
@@ -114,14 +114,14 @@ export function _AddPriceListItemDialog({ priceListId }: AddPriceListItemDialogP
       <DialogTrigger asChild>
         <Button>
           <Plus className="mr-2 h-4 w-4" />
-          Agregar Producto
+          Agregar Artículo
         </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Agregar Producto a la Lista</DialogTitle>
+          <DialogTitle>Agregar Artículo a la Lista</DialogTitle>
           <DialogDescription>
-            Selecciona un producto y asigna su precio
+            Selecciona un artículo y asigna su precio
           </DialogDescription>
         </DialogHeader>
 
@@ -132,7 +132,7 @@ export function _AddPriceListItemDialog({ priceListId }: AddPriceListItemDialogP
               name="productId"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Producto *</FormLabel>
+                  <FormLabel>Artículo *</FormLabel>
                   <Select
                     onValueChange={field.onChange}
                     value={field.value}
@@ -140,7 +140,7 @@ export function _AddPriceListItemDialog({ priceListId }: AddPriceListItemDialogP
                   >
                     <FormControl>
                       <SelectTrigger>
-                        <SelectValue placeholder={loading ? 'Cargando...' : 'Seleccionar producto'} />
+                        <SelectValue placeholder={loading ? 'Cargando...' : 'Seleccionar artículo'} />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>

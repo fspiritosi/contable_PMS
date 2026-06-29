@@ -78,7 +78,7 @@ export async function PriceListDetail({ priceListId }: PriceListDetailProps) {
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Total de Productos</p>
+                <p className="text-sm font-medium text-muted-foreground">Total de Artículos</p>
                 <p className="text-3xl font-bold">{priceList._count?.items || 0}</p>
               </div>
 
@@ -93,7 +93,7 @@ export async function PriceListDetail({ priceListId }: PriceListDetailProps) {
                 );
                 return recentlyModified.length > 0 ? (
                   <div>
-                    <p className="text-sm font-medium text-muted-foreground">Productos modificados</p>
+                    <p className="text-sm font-medium text-muted-foreground">Artículos modificados</p>
                     <p className="text-sm">{recentlyModified.length} de {items.length}</p>
                   </div>
                 ) : null;
@@ -104,9 +104,9 @@ export async function PriceListDetail({ priceListId }: PriceListDetailProps) {
 
         <Card>
           <CardHeader>
-            <CardTitle>Precios de Productos</CardTitle>
+            <CardTitle>Precios de Artículos</CardTitle>
             <CardDescription>
-              Gestiona los precios de los productos en esta lista
+              Gestiona los precios de los artículos en esta lista
             </CardDescription>
           </CardHeader>
           <CardContent>

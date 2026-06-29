@@ -62,7 +62,7 @@ export function _OemCompareModal({ open, onOpenChange }: OemCompareModalProps) {
             Comparar Precios por Código OEM
           </DialogTitle>
           <DialogDescription>
-            Ingresá un código OEM para comparar precios entre productos equivalentes de distintos proveedores.
+            Ingresá un código OEM para comparar precios entre artículos equivalentes de distintos proveedores.
           </DialogDescription>
         </DialogHeader>
 
@@ -93,8 +93,8 @@ export function _OemCompareModal({ open, onOpenChange }: OemCompareModalProps) {
               {!isLoading && data && (
                 <p className="text-sm text-muted-foreground mb-2">
                   {data.products.length === 0
-                    ? `No se encontraron productos con código OEM "${data.oemCode}"`
-                    : `${data.products.length} producto${data.products.length !== 1 ? 's' : ''} encontrado${data.products.length !== 1 ? 's' : ''} para OEM "${data.oemCode}"`}
+                    ? `No se encontraron artículos con código OEM "${data.oemCode}"`
+                    : `${data.products.length} artículo${data.products.length !== 1 ? 's' : ''} encontrado${data.products.length !== 1 ? 's' : ''} para OEM "${data.oemCode}"`}
                 </p>
               )}
               <_PriceComparisonView

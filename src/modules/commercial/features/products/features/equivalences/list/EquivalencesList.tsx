@@ -25,7 +25,7 @@ export async function EquivalencesList({ searchParams = {} }: Props) {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Equivalencias</h1>
           <p className="text-muted-foreground">
-            Grupos de productos equivalentes de diferentes marcas
+            Grupos de artículos equivalentes de diferentes marcas
           </p>
         </div>
 

@@ -60,8 +60,8 @@ export function getColumns({ onEdit, onDelete, permissions, showOemCode = false 
     },
     {
       accessorKey: 'name',
-      meta: { title: 'Producto' },
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Producto" />,
+      meta: { title: 'Artículo' },
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Artículo" />,
       cell: ({ row }) => {
         const product = row.original;
         return (

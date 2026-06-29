@@ -4,7 +4,7 @@ import { CommercialOverview } from '@/modules/commercial';
 
 export const metadata: Metadata = {
   title: 'Comercial',
-  description: 'Gestión comercial - Proveedores, productos y catálogos',
+  description: 'Gestión comercial - Proveedores, artículos y catálogos',
 };
 
 export default function CommercialPage() {

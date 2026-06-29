@@ -54,6 +54,12 @@ export interface Product extends Record<string, unknown> {
   oemCode: string | null;
   auxiliaryCode: string | null;
   productGroupId: string | null;
+  // Conceptos contables y logísticos
+  defaultExpenseAccountId: string | null;
+  defaultIncomeAccountId: string | null;
+  defaultCostCenterId: string | null;
+  defaultWarehouseId: string | null;
+  defaultSupplierId: string | null;
   status: ProductStatus;
   createdBy: string;
   createdAt: Date;
@@ -61,6 +67,11 @@ export interface Product extends Record<string, unknown> {
   // Relaciones
   category?: { id: string; name: string } | null;
   productGroup?: { id: string; name: string } | null;
+  defaultExpenseAccount?: { id: string; code: string; name: string } | null;
+  defaultIncomeAccount?: { id: string; code: string; name: string } | null;
+  defaultCostCenter?: { id: string; name: string } | null;
+  defaultWarehouse?: { id: string; code: string; name: string } | null;
+  defaultSupplier?: { id: string; code: string; businessName: string } | null;
   // Calculado desde warehouseStocks
   currentStock?: number;
 }
@@ -116,6 +127,11 @@ export interface CreateProductInput {
   internalCode?: string;
   brand?: string;
   model?: string;
+  defaultExpenseAccountId?: string;
+  defaultIncomeAccountId?: string;
+  defaultCostCenterId?: string;
+  defaultWarehouseId?: string;
+  defaultSupplierId?: string;
 }
 
 export interface UpdateProductInput extends Partial<CreateProductInput> {

@@ -55,6 +55,12 @@ export const createProductSchema = z.object({
   oemCode: emptyStringToUndefined.pipe(z.string().max(100).optional()),
   auxiliaryCode: emptyStringToUndefined.pipe(z.string().max(100).optional()),
   productGroupId: emptyStringToUndefined.pipe(z.string().uuid().optional()),
+  // Conceptos contables y logísticos
+  defaultExpenseAccountId: emptyStringToUndefined.pipe(z.string().uuid().optional()),
+  defaultIncomeAccountId: emptyStringToUndefined.pipe(z.string().uuid().optional()),
+  defaultCostCenterId: emptyStringToUndefined.pipe(z.string().uuid().optional()),
+  defaultWarehouseId: emptyStringToUndefined.pipe(z.string().uuid().optional()),
+  defaultSupplierId: emptyStringToUndefined.pipe(z.string().uuid().optional()),
 });
 
 export const updateProductSchema = createProductSchema.partial().extend({

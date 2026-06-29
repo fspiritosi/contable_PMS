@@ -119,7 +119,7 @@ export function _ProductImportModal({
       workbook.created = new Date();
 
       // Sheet 1: Template
-      const dataSheet = workbook.addWorksheet('Productos', {
+      const dataSheet = workbook.addWorksheet('Artículos', {
         views: [{ state: 'frozen', ySplit: 1 }],
       });
 
@@ -180,7 +180,7 @@ export function _ProductImportModal({
       let row = 1;
       instrSheet.mergeCells(row, 1, row, 2);
       const titleCell = instrSheet.getCell(row, 1);
-      titleCell.value = 'Instrucciones para Importar Productos';
+      titleCell.value = 'Instrucciones para Importar Artículos';
       titleCell.font = { bold: true, size: 16, color: { argb: THEME.primary } };
       titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
       instrSheet.getRow(row).height = 30;
@@ -190,29 +190,29 @@ export function _ProductImportModal({
         {
           title: '1. Campos Obligatorios',
           points: [
-            'Código: Código único del producto (SKU). Si el código ya existe, se actualizará el producto.',
-            'Nombre: Nombre del producto.',
+            'Código: Código único del artículo (SKU). Si el código ya existe, se actualizará el artículo.',
+            'Nombre: Nombre del artículo.',
           ],
         },
         {
           title: '2. Campos Opcionales',
           points: [
-            'Descripción: Descripción detallada del producto.',
+            'Descripción: Descripción detallada del artículo.',
             'Categoría: Nombre de la categoría. Si no existe, se creará automáticamente.',
             'Precio Costo: Precio de costo (sin IVA). Dejar vacío para 0.',
             'Precio Venta (sin IVA): Precio de venta sin IVA. Dejar vacío para 0.',
             'IVA %: Alícuota de IVA (ej: 21, 10.5, 27). Dejar vacío para 21%.',
             'Unidad Medida: UN (unidad), KG, M, L, etc. Dejar vacío para UN.',
-            'Código de Barras: Código EAN/UPC del producto.',
-            'Marca: Marca del producto.',
-            'Modelo: Modelo del producto.',
+            'Código de Barras: Código EAN/UPC del artículo.',
+            'Marca: Marca del artículo.',
+            'Modelo: Modelo del artículo.',
           ],
         },
         {
           title: '3. Comportamiento',
           points: [
-            'Si el código ya existe en el sistema, el producto se ACTUALIZA con los nuevos datos.',
-            'Si el código no existe, se CREA un nuevo producto.',
+            'Si el código ya existe en el sistema, el artículo se ACTUALIZA con los nuevos datos.',
+            'Si el código no existe, se CREA un nuevo artículo.',
             'Las categorías se buscan por nombre (sin importar mayúsculas/minúsculas).',
             'La fila 2 es un ejemplo; debe eliminarse antes de importar.',
           ],
@@ -252,7 +252,7 @@ export function _ProductImportModal({
       const blob = new Blob([buffer], {
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       });
-      saveAs(blob, 'plantilla-importacion-productos.xlsx');
+      saveAs(blob, 'plantilla-importacion-articulos.xlsx');
     } catch (error) {
       logger.error('Error al generar plantilla', { data: { error } });
       toast.error('Error al generar la plantilla');
@@ -388,7 +388,7 @@ export function _ProductImportModal({
         });
 
         if (rows.length === 0) {
-          toast.error('El archivo no contiene datos para importar');
+          toast.error('El archivo no contiene artículos para importar');
           return;
         }
 
@@ -446,7 +446,7 @@ export function _ProductImportModal({
     onError: (error) => {
       logger.error('Error en importación masiva', { data: { error } });
       toast.error(
-        error instanceof Error ? error.message : 'Error al importar productos'
+        error instanceof Error ? error.message : 'Error al importar artículos'
       );
     },
   });
@@ -460,10 +460,10 @@ export function _ProductImportModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileSpreadsheet className="h-5 w-5" />
-            Importar Productos desde Excel
+            Importar Artículos desde Excel
           </DialogTitle>
           <DialogDescription>
-            {step === 'upload' && 'Subí un archivo Excel (.xlsx) con los productos a importar.'}
+            {step === 'upload' && 'Subí un archivo Excel (.xlsx) con los artículos a importar.'}
             {step === 'preview' && 'Revisá los datos antes de confirmar la importación.'}
             {step === 'result' && 'Resultado de la importación.'}
           </DialogDescription>
@@ -491,7 +491,7 @@ export function _ProductImportModal({
               <div className="flex flex-col items-center gap-2">
                 <Upload className="h-8 w-8 text-muted-foreground" />
                 <p className="text-sm text-muted-foreground">
-                  Luego subí el archivo completado con tus productos
+                  Luego subí el archivo completado con tus artículos
                 </p>
               </div>
               <div>
@@ -633,7 +633,7 @@ export function _ProductImportModal({
               <div className="text-center space-y-1">
                 <p className="text-lg font-medium">Importación completada</p>
                 <p className="text-muted-foreground">
-                  Se procesaron los productos correctamente.
+                  Se procesaron los artículos correctamente.
                 </p>
               </div>
             </div>
@@ -694,7 +694,7 @@ export function _ProductImportModal({
                 ) : (
                   <>
                     <Upload className="h-4 w-4 mr-2" />
-                    Importar {validRows.length} productos
+                    Importar {validRows.length} artículos
                   </>
                 )}
               </Button>

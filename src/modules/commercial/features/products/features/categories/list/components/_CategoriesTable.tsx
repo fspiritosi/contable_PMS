@@ -63,7 +63,7 @@ export function CategoriesTable({ categories }: CategoriesTableProps) {
         <FolderTree className="h-12 w-12 text-muted-foreground mb-4" />
         <p className="text-lg font-medium">No hay categorías</p>
         <p className="text-sm text-muted-foreground">
-          Crea tu primera categoría para organizar tus productos
+          Crea tu primera categoría para organizar tus artículos
         </p>
       </div>
     );
@@ -78,7 +78,7 @@ export function CategoriesTable({ categories }: CategoriesTableProps) {
             <TableHead>Nombre</TableHead>
             <TableHead>Descripción</TableHead>
             <TableHead>Categoría Padre</TableHead>
-            <TableHead>Productos</TableHead>
+            <TableHead>Artículos</TableHead>
             <TableHead>Subcategorías</TableHead>
             <TableHead className="text-right">Acciones</TableHead>
           </TableRow>

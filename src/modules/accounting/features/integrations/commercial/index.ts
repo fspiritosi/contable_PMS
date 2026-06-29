@@ -285,7 +285,12 @@ export async function createJournalEntryForSalesInvoice(
         vatAmount: true,
         total: true,
         customer: { select: { name: true } },
-        lines: { select: { lineType: true, vatRate: true, vatAmount: true, subtotal: true } },
+        lines: {
+          select: {
+            lineType: true, vatRate: true, vatAmount: true, subtotal: true,
+            product: { select: { defaultIncomeAccountId: true, defaultCostCenterId: true } },
+          },
+        },
         perceptions: { select: { type: true, amount: true, jurisdiction: true } },
       },
     });
@@ -315,13 +320,31 @@ export async function createJournalEntryForSalesInvoice(
         description: `${docLabel} ${invoice.fullNumber} - ${invoice.customer.name}`,
         customerId: invoice.customerId,
       },
-      {
-        accountId: settings.salesAccountId,
-        debit: isNC ? subtotal : 0,
-        credit: isNC ? 0 : subtotal,
-        description: `Ventas - ${invoice.fullNumber}`,
-      },
     ];
+
+    // Agrupar subtotales de líneas por cuenta contable (override por producto o global)
+    const salesByAccount = new Map<string, { total: number; costCenterId?: string }>();
+    for (const line of invoice.lines) {
+      const lineSubtotal = parseFloat(line.subtotal.toString());
+      if (lineSubtotal <= 0) continue;
+      const accountId = line.product?.defaultIncomeAccountId || settings.salesAccountId;
+      const existing = salesByAccount.get(accountId) || { total: 0 };
+      existing.total += lineSubtotal;
+      if (line.product?.defaultCostCenterId && !existing.costCenterId) {
+        existing.costCenterId = line.product.defaultCostCenterId;
+      }
+      salesByAccount.set(accountId, existing);
+    }
+
+    for (const [accountId, { total: accountTotal, costCenterId }] of salesByAccount) {
+      lines.push({
+        accountId,
+        debit: isNC ? accountTotal : 0,
+        credit: isNC ? 0 : accountTotal,
+        description: `Ventas - ${invoice.fullNumber}`,
+        ...(costCenterId && { costCenterId }),
+      });
+    }
 
     // IVA discriminado por alícuota
     const vatByRate = new Map<number, number>();
@@ -411,7 +434,12 @@ export async function createJournalEntryForPurchaseInvoice(
         vatAmount: true,
         total: true,
         supplier: { select: { businessName: true } },
-        lines: { select: { lineType: true, vatRate: true, vatAmount: true, subtotal: true } },
+        lines: {
+          select: {
+            lineType: true, vatRate: true, vatAmount: true, subtotal: true,
+            product: { select: { defaultExpenseAccountId: true, defaultCostCenterId: true } },
+          },
+        },
         perceptions: { select: { type: true, amount: true, jurisdiction: true } },
       },
     });
@@ -420,7 +448,6 @@ export async function createJournalEntryForPurchaseInvoice(
       throw new Error('Factura de compra no encontrada');
     }
 
-    const subtotal = parseFloat(invoice.subtotal.toString());
     const total = parseFloat(invoice.total.toString());
     const isNC = isCreditNote(invoice.voucherType);
 
@@ -433,14 +460,30 @@ export async function createJournalEntryForPurchaseInvoice(
 
     const docLabel = isNC ? 'Nota de crédito de compra' : 'Factura de compra';
 
-    const lines: JournalEntryLineInput[] = [
-      {
-        accountId: settings.purchasesAccountId,
-        debit: isNC ? 0 : subtotal,
-        credit: isNC ? subtotal : 0,
+    // Agrupar subtotales de líneas por cuenta contable (override por producto o global)
+    const purchasesByAccount = new Map<string, { total: number; costCenterId?: string }>();
+    for (const line of invoice.lines) {
+      const lineSubtotal = parseFloat(line.subtotal.toString());
+      if (lineSubtotal <= 0) continue;
+      const accountId = line.product?.defaultExpenseAccountId || settings.purchasesAccountId;
+      const existing = purchasesByAccount.get(accountId) || { total: 0 };
+      existing.total += lineSubtotal;
+      if (line.product?.defaultCostCenterId && !existing.costCenterId) {
+        existing.costCenterId = line.product.defaultCostCenterId;
+      }
+      purchasesByAccount.set(accountId, existing);
+    }
+
+    const lines: JournalEntryLineInput[] = [];
+    for (const [accountId, { total: accountTotal, costCenterId }] of purchasesByAccount) {
+      lines.push({
+        accountId,
+        debit: isNC ? 0 : accountTotal,
+        credit: isNC ? accountTotal : 0,
         description: `Compras - ${invoice.fullNumber}`,
-      },
-    ];
+        ...(costCenterId && { costCenterId }),
+      });
+    }
 
     // IVA discriminado por alícuota
     const vatByRate = new Map<number, number>();

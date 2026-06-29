@@ -14,13 +14,51 @@ interface EquivalenceOption {
   name: string;
 }
 
+interface AccountOption {
+  id: string;
+  code: string;
+  name: string;
+  type: string;
+  nature: string;
+}
+
+interface CostCenterOption {
+  id: string;
+  name: string;
+}
+
+interface WarehouseOption {
+  id: string;
+  code: string;
+  name: string;
+}
+
+interface SupplierOption {
+  id: string;
+  code: string;
+  businessName: string;
+  tradeName: string | null;
+}
+
 interface EditProductFormProps {
   product: Product;
   categories: ProductCategory[];
   equivalences?: EquivalenceOption[];
+  accounts?: AccountOption[];
+  costCenters?: CostCenterOption[];
+  warehouses?: WarehouseOption[];
+  suppliers?: SupplierOption[];
 }
 
-export function _EditProductForm({ product, categories, equivalences = [] }: EditProductFormProps) {
+export function _EditProductForm({
+  product,
+  categories,
+  equivalences = [],
+  accounts = [],
+  costCenters = [],
+  warehouses = [],
+  suppliers = [],
+}: EditProductFormProps) {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -28,12 +66,12 @@ export function _EditProductForm({ product, categories, equivalences = [] }: Edi
     setIsSubmitting(true);
     try {
       await updateProduct(product.id, data);
-      toast.success('Producto actualizado correctamente');
+      toast.success('Artículo actualizado correctamente');
       router.push('/dashboard/commercial/products');
       router.refresh();
     } catch (error) {
-      logger.error('Error al actualizar producto', { data: { error } });
-      toast.error(error instanceof Error ? error.message : 'Error al actualizar producto');
+      logger.error('Error al actualizar artículo', { data: { error } });
+      toast.error(error instanceof Error ? error.message : 'Error al actualizar artículo');
     } finally {
       setIsSubmitting(false);
     }
@@ -60,6 +98,11 @@ export function _EditProductForm({ product, categories, equivalences = [] }: Edi
     oemCode: product.oemCode || '',
     auxiliaryCode: product.auxiliaryCode || '',
     productGroupId: product.productGroupId || undefined,
+    defaultExpenseAccountId: product.defaultExpenseAccountId || undefined,
+    defaultIncomeAccountId: product.defaultIncomeAccountId || undefined,
+    defaultCostCenterId: product.defaultCostCenterId || undefined,
+    defaultWarehouseId: product.defaultWarehouseId || undefined,
+    defaultSupplierId: product.defaultSupplierId || undefined,
     status: product.status,
   };
 
@@ -71,6 +114,10 @@ export function _EditProductForm({ product, categories, equivalences = [] }: Edi
       submitLabel="Guardar Cambios"
       categories={categories}
       equivalences={equivalences}
+      accounts={accounts}
+      costCenters={costCenters}
+      warehouses={warehouses}
+      suppliers={suppliers}
       showStatus
     />
   );

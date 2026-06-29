@@ -77,7 +77,7 @@ export function _EditPriceListItemDialog({ item, open, onOpenChange }: EditPrice
         <DialogHeader>
           <DialogTitle>Editar Precio</DialogTitle>
           <DialogDescription>
-            Producto: {item.product?.name || '-'}
+            Artículo: {item.product?.name || '-'}
           </DialogDescription>
         </DialogHeader>
 

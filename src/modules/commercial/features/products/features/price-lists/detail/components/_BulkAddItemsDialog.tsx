@@ -90,7 +90,7 @@ export function _BulkAddItemsDialog({ priceListId, existingProductIds }: Props) 
 
   const handleSubmit = async () => {
     if (selectedIds.size === 0) {
-      toast.error('Seleccioná al menos un producto');
+      toast.error('Seleccioná al menos un artículo');
       return;
     }
 
@@ -103,7 +103,7 @@ export function _BulkAddItemsDialog({ priceListId, existingProductIds }: Props) 
       });
 
       toast.success(
-        `${result.added} producto${result.added !== 1 ? 's' : ''} agregado${result.added !== 1 ? 's' : ''}` +
+        `${result.added} artículo${result.added !== 1 ? 's' : ''} agregado${result.added !== 1 ? 's' : ''}` +
           (result.skipped > 0 ? ` (${result.skipped} ya existían)` : '')
       );
 
@@ -113,7 +113,7 @@ export function _BulkAddItemsDialog({ priceListId, existingProductIds }: Props) 
       setAdjustmentPercent('0');
       router.refresh();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Error al agregar productos');
+      toast.error(error instanceof Error ? error.message : 'Error al agregar artículos');
     } finally {
       setIsSubmitting(false);
     }
@@ -129,9 +129,9 @@ export function _BulkAddItemsDialog({ priceListId, existingProductIds }: Props) 
       </DialogTrigger>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Carga Masiva de Productos</DialogTitle>
+          <DialogTitle>Carga Masiva de Artículos</DialogTitle>
           <DialogDescription>
-            Seleccioná los productos y definí el porcentaje de ajuste sobre el precio de venta base
+            Seleccioná los artículos y definí el porcentaje de ajuste sobre el precio de venta base
           </DialogDescription>
         </DialogHeader>
 
@@ -165,7 +165,7 @@ export function _BulkAddItemsDialog({ priceListId, existingProductIds }: Props) 
             </div>
           </div>
           <p className="text-xs text-muted-foreground pb-2">
-            Sobre el precio de venta de cada producto
+            Sobre el precio de venta de cada artículo
           </p>
         </div>
 
@@ -196,17 +196,17 @@ export function _BulkAddItemsDialog({ priceListId, existingProductIds }: Props) 
           </Badge>
         </div>
 
-        {/* Lista de productos */}
+        {/* Lista de artículos */}
         <ScrollArea className="h-[300px] border rounded-md">
           {isLoading ? (
             <div className="flex items-center justify-center h-full text-muted-foreground">
-              Cargando productos...
+              Cargando artículos...
             </div>
           ) : filteredProducts.length === 0 ? (
             <div className="flex items-center justify-center h-full text-muted-foreground">
               {availableProducts.length === 0
-                ? 'Todos los productos ya están en la lista'
-                : 'No se encontraron productos'}
+                ? 'Todos los artículos ya están en la lista'
+                : 'No se encontraron artículos'}
             </div>
           ) : (
             <div className="divide-y">
@@ -244,7 +244,7 @@ export function _BulkAddItemsDialog({ priceListId, existingProductIds }: Props) 
           <Button onClick={handleSubmit} disabled={isSubmitting || selectedIds.size === 0}>
             {isSubmitting
               ? 'Agregando...'
-              : `Agregar ${selectedIds.size} producto${selectedIds.size !== 1 ? 's' : ''}`}
+              : `Agregar ${selectedIds.size} artículo${selectedIds.size !== 1 ? 's' : ''}`}
           </Button>
         </DialogFooter>
       </DialogContent>

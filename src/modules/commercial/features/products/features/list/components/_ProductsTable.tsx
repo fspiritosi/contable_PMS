@@ -107,10 +107,10 @@ export function _ProductsTable({ data, totalRows, searchParams, permissions, fac
     if (!deletingProduct) return;
     try {
       await deleteProduct(deletingProduct.id);
-      toast.success('Producto eliminado correctamente');
+      toast.success('Artículo eliminado correctamente');
       handleRefresh();
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Error al eliminar producto';
+      const message = error instanceof Error ? error.message : 'Error al eliminar artículo';
       toast.error(message);
     } finally {
       setDeletingProduct(null);
@@ -132,7 +132,7 @@ export function _ProductsTable({ data, totalRows, searchParams, permissions, fac
     () => [
       {
         columnId: 'name',
-        title: 'Producto',
+        title: 'Artículo',
         type: 'text' as const,
         placeholder: 'Buscar por nombre...',
       },
@@ -252,7 +252,7 @@ export function _ProductsTable({ data, totalRows, searchParams, permissions, fac
             {permissions.canCreate && (
               <Button onClick={() => router.push('/dashboard/commercial/products/new')}>
                 <Plus className="h-4 w-4 mr-2" />
-                Nuevo Producto
+                Nuevo Artículo
               </Button>
             )}
           </>
@@ -304,9 +304,9 @@ export function _ProductsTable({ data, totalRows, searchParams, permissions, fac
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>¿Eliminar este producto?</AlertDialogTitle>
+            <AlertDialogTitle>¿Eliminar este artículo?</AlertDialogTitle>
             <AlertDialogDescription>
-              El producto "{deletingProduct?.name}" será eliminado permanentemente.
+              El artículo "{deletingProduct?.name}" será eliminado permanentemente.
               Esta acción no se puede deshacer.
             </AlertDialogDescription>
           </AlertDialogHeader>

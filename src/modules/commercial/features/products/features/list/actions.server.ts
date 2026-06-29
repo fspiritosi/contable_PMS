@@ -144,8 +144,8 @@ export async function getProducts(params: GetProductsParams = {}) {
       },
     };
   } catch (error) {
-    logger.error('Error al obtener productos', { data: { error } });
-    throw new Error('Error al obtener productos');
+    logger.error('Error al obtener artículos', { data: { error } });
+    throw new Error('Error al obtener artículos');
   }
 }
 
@@ -193,6 +193,11 @@ export async function getProductById(id: string): Promise<Product | null> {
       include: {
         category: { select: { id: true, name: true } },
         warehouseStocks: { select: { quantity: true } },
+        defaultExpenseAccount: { select: { id: true, code: true, name: true } },
+        defaultIncomeAccount: { select: { id: true, code: true, name: true } },
+        defaultCostCenter: { select: { id: true, name: true } },
+        defaultWarehouse: { select: { id: true, code: true, name: true } },
+        defaultSupplier: { select: { id: true, code: true, businessName: true } },
       },
     });
 
@@ -216,8 +221,8 @@ export async function getProductById(id: string): Promise<Product | null> {
       currentStock,
     } as unknown as Product;
   } catch (error) {
-    logger.error('Error al obtener producto', { data: { error, id } });
-    throw new Error('Error al obtener producto');
+    logger.error('Error al obtener artículo', { data: { error, id } });
+    throw new Error('Error al obtener artículo');
   }
 }
 
@@ -235,21 +240,40 @@ export async function createProduct(data: CreateProductFormData): Promise<Produc
 
     const validatedData = createProductSchema.parse(data);
 
-    // Generar código automático (PROD-001, PROD-002, etc.)
-    const lastProduct = await prisma.product.findFirst({
-      where: { companyId },
-      orderBy: { code: 'desc' },
-      select: { code: true },
-    });
+    // Generar código atómico desde AccountingSettings (secuencia sin race conditions)
+    let code: string;
+    try {
+      const result = await prisma.$queryRaw<
+        { last_product_number: number; product_code_prefix: string }[]
+      >`
+        UPDATE accounting_settings
+        SET last_product_number = last_product_number + 1, updated_at = NOW()
+        WHERE company_id = ${companyId}::uuid
+        RETURNING last_product_number, product_code_prefix
+      `;
 
-    let nextNumber = 1;
-    if (lastProduct && lastProduct.code.startsWith('PROD-')) {
-      const lastNumber = parseInt(lastProduct.code.split('-')[1]);
-      if (!isNaN(lastNumber)) {
-        nextNumber = lastNumber + 1;
+      if (result.length > 0) {
+        const { last_product_number: nextNumber, product_code_prefix: prefix } = result[0];
+        code = `${prefix}-${nextNumber.toString().padStart(4, '0')}`;
+      } else {
+        // Fallback: empresa sin AccountingSettings
+        const lastProduct = await prisma.product.findFirst({
+          where: { companyId },
+          orderBy: { createdAt: 'desc' },
+          select: { code: true },
+        });
+        let nextNumber = 1;
+        if (lastProduct) {
+          const match = lastProduct.code.match(/-(\d+)$/);
+          if (match) nextNumber = parseInt(match[1]) + 1;
+        }
+        code = `PROD-${nextNumber.toString().padStart(4, '0')}`;
       }
+    } catch {
+      // Fallback si falla el raw query
+      const count = await prisma.product.count({ where: { companyId } });
+      code = `PROD-${(count + 1).toString().padStart(4, '0')}`;
     }
-    const code = `PROD-${nextNumber.toString().padStart(4, '0')}`;
 
     // Calcular precio de venta y con IVA
     const vatRate = validatedData.vatRate || 21;
@@ -285,6 +309,11 @@ export async function createProduct(data: CreateProductFormData): Promise<Produc
         oemCode: validatedData.oemCode,
         auxiliaryCode: validatedData.auxiliaryCode,
         productGroupId: validatedData.productGroupId || null,
+        defaultExpenseAccountId: validatedData.defaultExpenseAccountId || null,
+        defaultIncomeAccountId: validatedData.defaultIncomeAccountId || null,
+        defaultCostCenterId: validatedData.defaultCostCenterId || null,
+        defaultWarehouseId: validatedData.defaultWarehouseId || null,
+        defaultSupplierId: validatedData.defaultSupplierId || null,
         createdBy: userId,
       },
       include: {
@@ -292,7 +321,7 @@ export async function createProduct(data: CreateProductFormData): Promise<Produc
       },
     });
 
-    logger.info('Producto creado', {
+    logger.info('Artículo creado', {
       data: { productId: product.id, code: product.code, companyId },
     });
 
@@ -309,11 +338,11 @@ export async function createProduct(data: CreateProductFormData): Promise<Produc
       maxStock: product.maxStock ? Number(product.maxStock) : null,
     } as unknown as Product;
   } catch (error) {
-    logger.error('Error al crear producto', { data: { error, data } });
+    logger.error('Error al crear artículo', { data: { error, data } });
     if (error instanceof Error) {
       throw error;
     }
-    throw new Error('Error al crear producto');
+    throw new Error('Error al crear artículo');
   }
 }
 
@@ -339,7 +368,7 @@ export async function updateProduct(
     });
 
     if (!existing) {
-      throw new Error('Producto no encontrado');
+      throw new Error('Artículo no encontrado');
     }
 
     // Recalcular precio de venta si cambiaron costo o margen
@@ -380,6 +409,11 @@ export async function updateProduct(
         oemCode: validatedData.oemCode,
         auxiliaryCode: validatedData.auxiliaryCode,
         productGroupId: validatedData.productGroupId || null,
+        defaultExpenseAccountId: validatedData.defaultExpenseAccountId || null,
+        defaultIncomeAccountId: validatedData.defaultIncomeAccountId || null,
+        defaultCostCenterId: validatedData.defaultCostCenterId || null,
+        defaultWarehouseId: validatedData.defaultWarehouseId || null,
+        defaultSupplierId: validatedData.defaultSupplierId || null,
         status: validatedData.status,
       },
       include: {
@@ -387,7 +421,7 @@ export async function updateProduct(
       },
     });
 
-    logger.info('Producto actualizado', {
+    logger.info('Artículo actualizado', {
       data: { productId: id, companyId, userId },
     });
 
@@ -405,11 +439,11 @@ export async function updateProduct(
       maxStock: product.maxStock ? Number(product.maxStock) : null,
     } as unknown as Product;
   } catch (error) {
-    logger.error('Error al actualizar producto', { data: { error, id, data } });
+    logger.error('Error al actualizar artículo', { data: { error, id, data } });
     if (error instanceof Error) {
       throw error;
     }
-    throw new Error('Error al actualizar producto');
+    throw new Error('Error al actualizar artículo');
   }
 }
 
@@ -430,7 +464,7 @@ export async function deleteProduct(id: string): Promise<void> {
     });
 
     if (!product) {
-      throw new Error('Producto no encontrado');
+      throw new Error('Artículo no encontrado');
     }
 
     // Soft delete
@@ -439,14 +473,14 @@ export async function deleteProduct(id: string): Promise<void> {
       data: { status: 'INACTIVE' },
     });
 
-    logger.info('Producto eliminado', {
+    logger.info('Artículo eliminado', {
       data: { productId: id, companyId, userId },
     });
 
     revalidatePath('/dashboard/commercial/products');
   } catch (error) {
-    logger.error('Error al eliminar producto', { data: { error, id } });
-    throw new Error('Error al eliminar producto');
+    logger.error('Error al eliminar artículo', { data: { error, id } });
+    throw new Error('Error al eliminar artículo');
   }
 }
 
@@ -526,8 +560,8 @@ export async function getProductsBelowMinStock(): Promise<LowStockProduct[]> {
 
     return lowStockProducts;
   } catch (error) {
-    logger.error('Error al obtener productos bajo stock mínimo', { data: { error } });
-    throw new Error('Error al obtener productos bajo stock mínimo');
+    logger.error('Error al obtener artículos bajo stock mínimo', { data: { error } });
+    throw new Error('Error al obtener artículos bajo stock mínimo');
   }
 }
 

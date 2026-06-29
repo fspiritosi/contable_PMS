@@ -257,7 +257,7 @@ export async function deletePriceList(id: string): Promise<void> {
 
     // No permitir eliminar si tiene items
     if (existing._count.items > 0) {
-      throw new Error('No se puede eliminar una lista de precios con productos asignados');
+      throw new Error('No se puede eliminar una lista de precios con artículos asignados');
     }
 
     await prisma.priceList.delete({
@@ -409,7 +409,7 @@ export async function createPriceListItem(
     });
 
     if (!product) {
-      throw new Error('Producto no encontrado');
+      throw new Error('Artículo no encontrado');
     }
 
     // Verificar que el producto no esté ya en la lista
@@ -421,7 +421,7 @@ export async function createPriceListItem(
     });
 
     if (existingItem) {
-      throw new Error('El producto ya está en esta lista de precios');
+      throw new Error('El artículo ya está en esta lista de precios');
     }
 
     // Calcular precio con IVA
@@ -698,7 +698,7 @@ export async function bulkAddPriceListItems(
     });
 
     revalidatePath(`/dashboard/commercial/price-lists/${priceListId}`);
-    logger.info('Carga masiva de productos en lista de precios', {
+    logger.info('Carga masiva de artículos en lista de precios', {
       data: { priceListId, added: newProducts.length, skipped: existingProductIds.size },
     });
 
@@ -706,6 +706,6 @@ export async function bulkAddPriceListItems(
   } catch (error) {
     logger.error('Error en carga masiva de lista de precios', { data: { error } });
     if (error instanceof Error) throw error;
-    throw new Error('Error al agregar productos masivamente');
+    throw new Error('Error al agregar artículos masivamente');
   }
 }

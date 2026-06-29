@@ -35,10 +35,37 @@ import {
 } from '../../../shared/types';
 import { useEffect, useState } from 'react';
 import { useIndustry } from '@/providers/IndustryProvider';
+import { _AccountingDefaultsSection } from './_AccountingDefaultsSection';
 
 interface EquivalenceOption {
   id: string;
   name: string;
+}
+
+interface AccountOption {
+  id: string;
+  code: string;
+  name: string;
+  type: string;
+  nature: string;
+}
+
+interface CostCenterOption {
+  id: string;
+  name: string;
+}
+
+interface WarehouseOption {
+  id: string;
+  code: string;
+  name: string;
+}
+
+interface SupplierOption {
+  id: string;
+  code: string;
+  businessName: string;
+  tradeName: string | null;
 }
 
 interface ProductFormProps {
@@ -49,16 +76,24 @@ interface ProductFormProps {
   categories: ProductCategory[];
   showStatus?: boolean;
   equivalences?: EquivalenceOption[];
+  accounts?: AccountOption[];
+  costCenters?: CostCenterOption[];
+  warehouses?: WarehouseOption[];
+  suppliers?: SupplierOption[];
 }
 
 export function _ProductForm({
   onSubmit,
   defaultValues,
   isSubmitting = false,
-  submitLabel = 'Crear Producto',
+  submitLabel = 'Crear Artículo',
   categories,
   showStatus = false,
   equivalences = [],
+  accounts = [],
+  costCenters = [],
+  warehouses = [],
+  suppliers = [],
 }: ProductFormProps) {
   const [salePriceWithTax, setSalePriceWithTax] = useState<number>(0);
   const { isFeatureAvailable } = useIndustry();
@@ -87,6 +122,11 @@ export function _ProductForm({
       oemCode: '',
       auxiliaryCode: '',
       productGroupId: undefined,
+      defaultExpenseAccountId: undefined,
+      defaultIncomeAccountId: undefined,
+      defaultCostCenterId: undefined,
+      defaultWarehouseId: undefined,
+      defaultSupplierId: undefined,
       ...defaultValues,
     },
   });
@@ -121,7 +161,7 @@ export function _ProductForm({
         <Card>
           <CardHeader>
             <CardTitle>Información Básica</CardTitle>
-            <CardDescription>Datos principales del producto o servicio</CardDescription>
+            <CardDescription>Datos principales del artículo o servicio</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -132,7 +172,7 @@ export function _ProductForm({
                   <FormItem>
                     <FormLabel>Nombre *</FormLabel>
                     <FormControl>
-                      <Input placeholder="Nombre del producto" {...field} />
+                      <Input placeholder="Nombre del artículo" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -198,7 +238,7 @@ export function _ProductForm({
                   <FormLabel>Descripción</FormLabel>
                   <FormControl>
                     <Textarea
-                      placeholder="Descripción detallada del producto"
+                      placeholder="Descripción detallada del artículo"
                       className="resize-none"
                       {...field}
                     />
@@ -392,7 +432,7 @@ export function _ProductForm({
                   <div className="space-y-1 leading-none">
                     <FormLabel>Controlar Stock</FormLabel>
                     <FormDescription>
-                      Activar para llevar control de inventario de este producto
+                      Activar para llevar control de inventario de este artículo
                     </FormDescription>
                   </div>
                 </FormItem>
@@ -449,6 +489,16 @@ export function _ProductForm({
           </CardContent>
         </Card>
 
+        {(accounts.length > 0 || costCenters.length > 0 || warehouses.length > 0 || suppliers.length > 0) && (
+          <_AccountingDefaultsSection
+            form={form}
+            accounts={accounts}
+            costCenters={costCenters}
+            warehouses={warehouses}
+            suppliers={suppliers}
+          />
+        )}
+
         {/* Información Adicional */}
         <Card>
           <CardHeader>
@@ -492,7 +542,7 @@ export function _ProductForm({
                   <FormItem>
                     <FormLabel>Marca</FormLabel>
                     <FormControl>
-                      <Input placeholder="Marca del producto" {...field} />
+                      <Input placeholder="Marca del artículo" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -506,7 +556,7 @@ export function _ProductForm({
                   <FormItem>
                     <FormLabel>Modelo</FormLabel>
                     <FormControl>
-                      <Input placeholder="Modelo del producto" {...field} />
+                      <Input placeholder="Modelo del artículo" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -574,7 +624,7 @@ export function _ProductForm({
                       </SelectContent>
                     </Select>
                     <FormDescription>
-                      Agrupar con productos equivalentes de otras marcas
+                      Agrupar con artículos equivalentes de otras marcas
                     </FormDescription>
                     <FormMessage />
                   </FormItem>

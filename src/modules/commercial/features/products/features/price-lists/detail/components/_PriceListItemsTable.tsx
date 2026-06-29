@@ -61,7 +61,7 @@ export function _PriceListItemsTable({ priceListId, items }: PriceListItemsTable
     setDeleteTarget(null);
     try {
       await deletePriceListItem(deleteTarget.id);
-      toast.success('Producto eliminado de la lista');
+      toast.success('Artículo eliminado de la lista');
       router.refresh();
     } catch (error) {
       logger.error('Error al eliminar item', { data: { error } });
@@ -81,7 +81,7 @@ export function _PriceListItemsTable({ priceListId, items }: PriceListItemsTable
     setBulkDeleteOpen(false);
     try {
       const count = await bulkDeletePriceListItems(selectedIds);
-      toast.success(`${count} producto${count !== 1 ? 's' : ''} eliminado${count !== 1 ? 's' : ''} de la lista`);
+      toast.success(`${count} artículo${count !== 1 ? 's' : ''} eliminado${count !== 1 ? 's' : ''} de la lista`);
       setRowSelection({});
       router.refresh();
     } catch (error) {
@@ -125,8 +125,8 @@ export function _PriceListItemsTable({ priceListId, items }: PriceListItemsTable
       },
       {
         accessorKey: 'product.name',
-        header: 'Producto',
-        meta: { title: 'Producto' },
+        header: 'Artículo',
+        meta: { title: 'Artículo' },
         cell: ({ row }) => (
           <span className="font-medium">{row.original.product?.name || '-'}</span>
         ),
@@ -189,7 +189,7 @@ export function _PriceListItemsTable({ priceListId, items }: PriceListItemsTable
                   <>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
-                      onClick={() => setDeleteTarget({ id: item.id, name: item.product?.name || 'el producto' })}
+                      onClick={() => setDeleteTarget({ id: item.id, name: item.product?.name || 'el artículo' })}
                       disabled={deletingId === item.id}
                       className="text-destructive focus:text-destructive"
                     >
@@ -272,9 +272,9 @@ export function _PriceListItemsTable({ priceListId, items }: PriceListItemsTable
       <AlertDialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Eliminar {selectedCount} producto{selectedCount !== 1 ? 's' : ''}</AlertDialogTitle>
+            <AlertDialogTitle>Eliminar {selectedCount} artículo{selectedCount !== 1 ? 's' : ''}</AlertDialogTitle>
             <AlertDialogDescription>
-              Vas a eliminar {selectedCount} producto{selectedCount !== 1 ? 's' : ''} de esta lista de precios. Esta acción no se puede deshacer.
+              Vas a eliminar {selectedCount} artículo{selectedCount !== 1 ? 's' : ''} de esta lista de precios. Esta acción no se puede deshacer.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

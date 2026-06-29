@@ -3,7 +3,7 @@ import { EquivalencesList } from '@/modules/commercial/features/products/feature
 
 export const metadata: Metadata = {
   title: 'Equivalencias',
-  description: 'Grupos de productos equivalentes',
+  description: 'Grupos de artículos equivalentes',
 };
 
 interface Props {
