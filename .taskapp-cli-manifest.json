@@ -1,0 +1,189 @@
+{
+  "version": "0.2.0",
+  "updatedAt": "2026-06-29T22:03:45.024Z",
+  "files": {
+    "src/features/Ayuda/actions/support-approval.ts": {
+      "hash": "2520b01a305e0f99085625d3e1f479e064a8051183a398141679057b9a0d65fb"
+    },
+    "src/features/Ayuda/actions/support-attachments.ts": {
+      "hash": "ef3f3b061d2d18a7f402fcc3a28af48cf46800ffee2b73a2deb931f108724fdd"
+    },
+    "src/features/Ayuda/actions/support-comments.ts": {
+      "hash": "591c37ecdc726b203986f93145cd57da39537bff2a6f40e2f69bd2c15005b6bd"
+    },
+    "src/features/Ayuda/actions/support-reopen.ts": {
+      "hash": "b7bc1742aca44972268d3d80dfd1d141792f5c9ff9171690b411480aab7419a2"
+    },
+    "src/features/Ayuda/actions/support-ticket-views.ts": {
+      "hash": "c454c38dce0ea3995c59d9dc8bc877fedfcd48cb42bcbb89dc5eff873e1be59b"
+    },
+    "src/features/Ayuda/actions/support-tickets.ts": {
+      "hash": "48f331d24dc3fe221d48a4ab19aafe12c7a829c3ec44c5eaed4ee85e85a63285"
+    },
+    "src/features/Ayuda/components/ApproverAllTickets.tsx": {
+      "hash": "9e14b29f63df6ef6b6a0be9ae26accacd8cace38e62fe18891c320dcbe27c688"
+    },
+    "src/features/Ayuda/components/ApproverInbox.tsx": {
+      "hash": "74c2812ac3707e43caf8005f59aa75272344a5dd38d7044183a15a78af743a35"
+    },
+    "src/features/Ayuda/components/EmptyTicketsState.tsx": {
+      "hash": "772acfdc75df2a154f0f50f7d7a35f3aca5e64ef4f6da554c7fb109885671ac8"
+    },
+    "src/features/Ayuda/components/HelpCenter.tsx": {
+      "hash": "1363f88e34d87982bf004fbfdd1f36099713978fe08e340c819fb539585ca004"
+    },
+    "src/features/Ayuda/components/MyTicketsList.tsx": {
+      "hash": "a9d9e182c12299883ae422cb7a32c096e2a3f0a73311264efd7338a0bf783704"
+    },
+    "src/features/Ayuda/components/PaginationNav.tsx": {
+      "hash": "319432fa44b2c74db1433d7bd885ddd9ca1779a3d20b82f9300a58fc0fca7315"
+    },
+    "src/features/Ayuda/components/SupportTicketsRealtimeProvider.tsx": {
+      "hash": "f981f2177a78c4e4a0d1d5e678fc3f4c7ba1bc4e6f4b06c18dd3802b6b75d012"
+    },
+    "src/features/Ayuda/components/TicketAttachmentInput.tsx": {
+      "hash": "d2f8ff66fc1b96b8e72e7edc97de32a5d6f7948c9ed1bbc4c7d11b87f538a89b"
+    },
+    "src/features/Ayuda/components/TicketCard.tsx": {
+      "hash": "99b4f49b33221e36ea51ef1658583c4d92d6ff585039589572f727eb10e07139"
+    },
+    "src/features/Ayuda/components/TicketCategoryBadge.tsx": {
+      "hash": "684764cb85db13c9517095d98470d4a6f8f2bdd9562695feaca0fca4fa59b6e0"
+    },
+    "src/features/Ayuda/components/TicketForm.tsx": {
+      "hash": "e10dadb3b2c5fb802fe10b213b410d1669fb36ed0113c704b2ca32d923b67b5e"
+    },
+    "src/features/Ayuda/components/TicketPriorityBadge.tsx": {
+      "hash": "228df7da1d115af2e9e444adb4be0565a515ff5f59404536a54c3197058e49cf"
+    },
+    "src/features/Ayuda/components/TicketPrioritySelect.tsx": {
+      "hash": "1842f9e94470dcece9903ce6fe86755b1815e53b6b9911401ab24c5adc75c22d"
+    },
+    "src/features/Ayuda/components/TicketStatusBadge.tsx": {
+      "hash": "3069f84057386b61eb8ce1a1415f0c739ee7dd29d049e6e12ddac9579d15f6e3"
+    },
+    "src/features/Ayuda/components/detail/TicketApprovalBanner.tsx": {
+      "hash": "4a1f2d6952533ec84354b182ad87856f1ec8e44486dd72bbf8492fe8fafbaed1"
+    },
+    "src/features/Ayuda/components/detail/TicketAttachmentsList.tsx": {
+      "hash": "ee60f627b05ddf9d20b01de881311cdb62945ee4671f19d5531c628428356dca"
+    },
+    "src/features/Ayuda/components/detail/TicketCommentComposer.tsx": {
+      "hash": "969e5b27fc3743cdd7da52b952cb1b96e9ece09f95d5b35ab77e93aaee368e6b"
+    },
+    "src/features/Ayuda/components/detail/TicketCommentItem.tsx": {
+      "hash": "40a65014fceba54a5d54626ddc82b10676de57d039978a6fb9c19091e4a989a6"
+    },
+    "src/features/Ayuda/components/detail/TicketCommentsThread.tsx": {
+      "hash": "706e9d2457a76d66d4246b91c633742baa229aeea7f21248fdb9d2296aefee29"
+    },
+    "src/features/Ayuda/components/detail/TicketDetailBody.tsx": {
+      "hash": "4fcfbb010de2cda92915e8710f956f9ae1f4266874780503dfbd2f697e9eee3f"
+    },
+    "src/features/Ayuda/components/detail/TicketDetailHeader.tsx": {
+      "hash": "d828549751f962f925e400de364549b7e7b97179383e9588c9c9d60570f7fccb"
+    },
+    "src/features/Ayuda/components/detail/TicketDetailSheet.tsx": {
+      "hash": "27a5684dc1ca562771d490525139ab22e1e34d794fcbedae6373ba26871fe293"
+    },
+    "src/features/Ayuda/components/detail/TicketReopenRequestBanner.tsx": {
+      "hash": "6954b7b11fc22812278ac0a2981add8b668c99f5b177f5e6d6eed2711760acf0"
+    },
+    "src/features/Ayuda/components/detail/TicketReopenRequestDialog.tsx": {
+      "hash": "0c61ca0681eafa0bf863734f1987c374432868a24a7f7eba9a59404c7f3069b2"
+    },
+    "src/features/Ayuda/constants/categories.ts": {
+      "hash": "f1d41f5d831a320163d4c3abf3506b0b6125958a0c048a8b1b48a667876e449a"
+    },
+    "src/features/Ayuda/constants/ticket-priority.ts": {
+      "hash": "ee4075c77f0c98f1ae22fb5b2ed8266067aeeb8198146cca630e3efce60b3ff8"
+    },
+    "src/features/Ayuda/constants/ticket-status.ts": {
+      "hash": "b243c7948d61deede61996bab10fc257a59aa61e08e5802c6e219a064dcde7e5"
+    },
+    "src/features/Ayuda/fallback/ApproverAllTicketsSkeleton.tsx": {
+      "hash": "1b6ed98dffe1338caab5e0f50f4df5d4edfb9280ddd1da13e634331b3fc6c954"
+    },
+    "src/features/Ayuda/fallback/ApproverInboxSkeleton.tsx": {
+      "hash": "4632d810a0eb70cb34d1d224ea32fcf0ff2ba1d595fe257b9468ae88cf27b74d"
+    },
+    "src/features/Ayuda/fallback/MyTicketsListSkeleton.tsx": {
+      "hash": "f0e43453353583ad53dea21191a706cdfe5bfaa10f9084cb9ce20d51b8bb18cf"
+    },
+    "src/features/Ayuda/fallback/TicketCommentsThreadSkeleton.tsx": {
+      "hash": "e9647ac9ee948aba95406d1952530935fecd9f843a2631d7525f1bc94a4cdf5d"
+    },
+    "src/features/Ayuda/fallback/TicketDetailSheetSkeleton.tsx": {
+      "hash": "7b6705e2b2d470faeb936cc41d5acd26f0c88bf70718b28825f171e06fac75d4"
+    },
+    "src/features/Ayuda/hooks/queryKeys.ts": {
+      "hash": "fbcb642b9b34b0924bd1aff96b95186ff613336434b9370cb1b03f9f88ab427b"
+    },
+    "src/features/Ayuda/hooks/useApproveTicket.ts": {
+      "hash": "66be943265653c63568edf80d7a5d610cea3c01c15b65d79abfba2ad93573938"
+    },
+    "src/features/Ayuda/hooks/useApproverTickets.ts": {
+      "hash": "a59dc094d149adfab1ba8c2ce516a29628a191addb4678edabd5107a82192987"
+    },
+    "src/features/Ayuda/hooks/useCreateComment.ts": {
+      "hash": "ae616e2983e57102680a226bcbdae71090c6b7b18f30dc4b04ce62a961c132f3"
+    },
+    "src/features/Ayuda/hooks/useCreateTicket.ts": {
+      "hash": "a78134ce30fd34adb1a77db018da4a5143b4516b9ddad97b2f710f62e7c8045a"
+    },
+    "src/features/Ayuda/hooks/useMarkTicketAsReadMutation.ts": {
+      "hash": "3abd29312d51bf5fe4da1e64901f3b424962b896f067d8958166b0c62c3bc42f"
+    },
+    "src/features/Ayuda/hooks/useMyTickets.ts": {
+      "hash": "521f089374c097a10399e438a2399143b759960c2f6afcfc21a5eea69e107ec7"
+    },
+    "src/features/Ayuda/hooks/useMyTicketsPage.ts": {
+      "hash": "f921526ed648cadd49045aa146dff51febacdf911fa2c77145bda69e1ee4e297"
+    },
+    "src/features/Ayuda/hooks/useMyTicketsWithUnread.ts": {
+      "hash": "8e0677921e1931a729222473c7a6464f0884e6b7c5eb4d5955087bf20dab9588"
+    },
+    "src/features/Ayuda/hooks/useRejectTicket.ts": {
+      "hash": "13d1c2ff840c59da9b368f0c877d28373b9b4791902f98eb23bf9101e2607acc"
+    },
+    "src/features/Ayuda/hooks/useRequestTicketReopen.ts": {
+      "hash": "80f01493d796642fac6f57005cc23ea9bf3ad8d6cf7ae18447076b0b47cdba64"
+    },
+    "src/features/Ayuda/hooks/useSupportTicketsRealtimeSync.ts": {
+      "hash": "0f8fcf57dbca6f8ee2e72e47e2bf57b949d4bd11fd7c428ea273a08db8d30e15"
+    },
+    "src/features/Ayuda/hooks/useTicketComments.ts": {
+      "hash": "6ad7d0af2ae51f99a142e8f07600326d3fa1678af9326aff5b3a6a0ab031bc26"
+    },
+    "src/features/Ayuda/hooks/useTicketDetail.ts": {
+      "hash": "4578c45953f32a3d038d3557f2cc2c971d0155bf2580966a9c3c8aa94c231d17"
+    },
+    "src/features/Ayuda/hooks/useUnreadSupportTicketsCount.ts": {
+      "hash": "520b75b9c60a7578d9b499046099de4eaa94e2656d3de37262277b029a865106"
+    },
+    "src/features/Ayuda/hooks/useUploadAttachment.ts": {
+      "hash": "70f7d49632bfa46399cddec67b0d063b261b0fcd119b7825243435dc1a94e981"
+    },
+    "src/features/Ayuda/types/index.ts": {
+      "hash": "a2eb7782e9c4d4a3ccbf9c3b8c7a0c71bc361bf6fdeebfd0fb569084dbcb6600"
+    },
+    "src/shared/lib/taskapp/client.ts": {
+      "hash": "30ef679962d88b05317d604c2edaa12b49893a2926f2b69a0c03bee3ba8669d4"
+    },
+    "src/shared/lib/taskapp/errors.ts": {
+      "hash": "83b2c0c6b340c13db9ad970375398629950d18b4aff217fea15973eda7c72d08"
+    },
+    "src/shared/lib/taskapp/types.ts": {
+      "hash": "d9725433b049b119a0e40b13d520a323d00a2ae22cec1bffb091c4c59fbfc834"
+    },
+    "src/app/\"(core)/dashboard/support\"/help/page.tsx": {
+      "hash": "d41a3084112f245a4ae02f235cfb069b7e2d4c728d690508702ba0436dd1d2ac"
+    },
+    "src/app/api/taskapp/events/route.ts": {
+      "hash": "27e8ffabe8f7690c13068e6b1ce4129d095decc3f4741bbbef7b455268813e63"
+    },
+    "src/app/(core)/dashboard/support/help/page.tsx": {
+      "hash": "d41a3084112f245a4ae02f235cfb069b7e2d4c728d690508702ba0436dd1d2ac"
+    }
+  }
+}
