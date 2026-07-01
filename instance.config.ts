@@ -90,9 +90,9 @@ export const instanceConfig: InstanceConfig = {
   id: 'nahuel-boxer',
 
   // Branding
-  name: 'CC Contable',
-  shortName: 'CC',
-  description: 'Sistema contable - Codecontrol',
+  name: 'PMS Contable',
+  shortName: 'PMS',
+  description: 'Sistema contable - PMS',
 
   // Puertos (cambiar si corres múltiples instancias)
   ports: {
