@@ -184,7 +184,13 @@ export function _CommercialGuide() {
             </li>
             <li>
               Cada categoría puede tener <strong>subcategorías</strong>{' '}
-              (categoría padre/hijo)
+              (categoría padre/hijo). En el listado, usa las flechas para{' '}
+              <strong>expandir o colapsar</strong> las ramas del árbol
+            </li>
+            <li>
+              Al crear o editar una categoría, el selector de{' '}
+              <strong>categoría padre</strong> muestra la jerarquía indentada y
+              evita seleccionar una categoría que genere un ciclo
             </li>
             <li>
               Al crear o editar un producto, selecciona la categoría

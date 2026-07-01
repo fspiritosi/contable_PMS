@@ -9,7 +9,14 @@ import { getActiveCompanyId } from '@/shared/lib/company';
 
 async function AccountingSettingsContent({ companyId }: { companyId: string }) {
   const settings = await getAccountingSettings(companyId);
-  const accounts = await getActiveAccounts(companyId);
+  // Preservar las cuentas ya configuradas (campos *AccountId) aunque hoy no
+  // sean imputables, para que sigan mostrándose en los selectores.
+  const configuredAccountIds = settings
+    ? Object.entries(settings)
+        .filter(([key, value]) => key.endsWith('AccountId') && typeof value === 'string')
+        .map(([, value]) => value as string)
+    : [];
+  const accounts = await getActiveAccounts(companyId, configuredAccountIds);
 
   return (
     <div className="flex flex-1 flex-col gap-4">

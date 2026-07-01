@@ -39,7 +39,9 @@ interface CreateAccountModalProps {
 export function _CreateAccountModal({ companyId, onClose }: CreateAccountModalProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
-  const [accounts, setAccounts] = useState<Array<{ id: string; code: string; name: string }>>([]);
+  const [accounts, setAccounts] = useState<
+    Array<{ id: string; code: string; name: string; type: AccountType }>
+  >([]);
 
   const form = useForm<CreateAccountInput>({
     resolver: zodResolver(accountSchema),
@@ -105,9 +107,14 @@ export function _CreateAccountModal({ companyId, onClose }: CreateAccountModalPr
             </Label>
             <Input
               id="code"
+              placeholder="1.1.1/00/00"
               {...form.register('code')}
               disabled={isLoading}
             />
+            <p className="text-xs text-muted-foreground">
+              Formato x.x.x/xx/xx. Los segmentos que no completes se rellenan con 0; el
+              primero no puede ser 0.
+            </p>
             {form.formState.errors.code && (
               <p className="text-sm text-destructive">
                 {form.formState.errors.code.message}
@@ -149,6 +156,8 @@ export function _CreateAccountModal({ companyId, onClose }: CreateAccountModalPr
                     [AccountType.EXPENSE]: AccountNature.DEBIT,
                   };
                   form.setValue('nature', validNatures[type]);
+                  // El padre debe ser del mismo tipo: limpiar si cambia el tipo.
+                  form.setValue('parentId', undefined);
                 }}
                 value={form.watch('type')}
                 disabled={isLoading}
@@ -204,19 +213,32 @@ export function _CreateAccountModal({ companyId, onClose }: CreateAccountModalPr
             <Select
               onValueChange={(value) => form.setValue('parentId', value)}
               value={form.watch('parentId')}
-              disabled={isLoading}
+              disabled={isLoading || !form.watch('type')}
             >
               <SelectTrigger id="parentId">
-                <SelectValue placeholder="Seleccionar cuenta padre" />
+                <SelectValue
+                  placeholder={
+                    form.watch('type')
+                      ? 'Seleccionar cuenta padre'
+                      : 'Elegí primero el tipo'
+                  }
+                />
               </SelectTrigger>
               <SelectContent>
-                {accounts.map((account) => (
-                  <SelectItem key={account.id} value={account.id}>
-                    {account.code} - {account.name}
-                  </SelectItem>
-                ))}
+                {accounts
+                  .filter((account) => account.type === form.watch('type'))
+                  .map((account) => (
+                    <SelectItem key={account.id} value={account.id}>
+                      {account.code} - {account.name}
+                    </SelectItem>
+                  ))}
               </SelectContent>
             </Select>
+            <p className="text-xs text-muted-foreground">
+              Solo se listan cuentas del mismo tipo. Sin padre, la cuenta es imputable
+              (recibe movimientos); al asignarle una hija, el padre pasa a ser de
+              sumatoria.
+            </p>
           </div>
 
           <div className="space-y-2">

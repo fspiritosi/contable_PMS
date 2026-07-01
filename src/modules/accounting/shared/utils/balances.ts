@@ -115,6 +115,80 @@ export async function calculateAllAccountBalances(
 }
 
 /**
+ * Calcula saldos por cuenta cubriendo hojas Y cuentas de sumatoria.
+ *
+ * Para cada cuenta de sumatoria (con hijas) suma en memoria los saldos de sus
+ * hojas descendientes (roll-up del árbol). Reutiliza `calculateAllAccountBalances`
+ * (saldos de hojas con movimientos) y construye la jerarquía a partir de las
+ * cuentas de la empresa. Devuelve todo en `number` (sin Decimals).
+ *
+ * @returns Map<accountId, { debit; credit; balance }> con hojas y padres.
+ */
+export async function getAccountRollupBalances(
+  companyId: string,
+  upToDate?: Date
+): Promise<Map<string, { debit: number; credit: number; balance: number }>> {
+  try {
+    // 1) Saldos de hojas (cuentas con líneas de asiento POSTED).
+    const leafBalances = await calculateAllAccountBalances(companyId, upToDate);
+
+    // 2) Estructura de parentesco de todas las cuentas de la empresa.
+    const accounts = await prisma.account.findMany({
+      where: { companyId },
+      select: { id: true, parentId: true },
+    });
+
+    const childrenByParent = new Map<string, string[]>();
+    const allIds: string[] = [];
+    for (const acc of accounts) {
+      allIds.push(acc.id);
+      if (acc.parentId) {
+        const siblings = childrenByParent.get(acc.parentId) ?? [];
+        siblings.push(acc.id);
+        childrenByParent.set(acc.parentId, siblings);
+      }
+    }
+
+    const result = new Map<string, { debit: number; credit: number; balance: number }>();
+
+    // 3) DFS post-orden con memo: el saldo de un nodo es su saldo hoja (si tiene
+    //    movimientos) más la suma de los saldos de sus hijas.
+    const compute = (id: string): { debit: number; credit: number; balance: number } => {
+      const cached = result.get(id);
+      if (cached) return cached;
+
+      const own = leafBalances.get(id) ?? { debit: 0, credit: 0, balance: 0 };
+      let debit = own.debit;
+      let credit = own.credit;
+
+      const children = childrenByParent.get(id);
+      if (children) {
+        for (const childId of children) {
+          const childTotals = compute(childId);
+          debit += childTotals.debit;
+          credit += childTotals.credit;
+        }
+      }
+
+      const totals = { debit, credit, balance: debit - credit };
+      result.set(id, totals);
+      return totals;
+    };
+
+    for (const id of allIds) {
+      compute(id);
+    }
+
+    return result;
+  } catch (error) {
+    logger.error('Error calculando roll-up de saldos', {
+      data: { companyId, error },
+    });
+    throw new Error('Error al calcular roll-up de saldos');
+  }
+}
+
+/**
  * Calcula balance por tipo de cuenta (query única optimizada)
  */
 export async function calculateBalanceByType(

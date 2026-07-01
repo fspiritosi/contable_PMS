@@ -5,6 +5,7 @@ import { prisma } from '@/shared/lib/prisma';
 import { logger } from '@/shared/lib/logger';
 import { getActiveCompanyId } from '@/shared/lib/company';
 import { checkPermission } from '@/shared/lib/permissions';
+import { buildImputableAccountsWhere } from '@/shared/lib/accounts/imputable-accounts';
 import { revalidateAccountingRoutes } from '../../shared/utils';
 import {
   AccountType,
@@ -46,9 +47,10 @@ export async function getOpeningBalancesPageData() {
   try {
     const [accounts, settings, contractors, suppliers, pointsOfSale] =
       await Promise.all([
-        // Cuentas activas
+        // Cuentas imputables (hojas): los saldos de apertura se cargan solo
+        // sobre cuentas imputables, no sobre cuentas de sumatoria.
         prisma.account.findMany({
-          where: { companyId, isActive: true },
+          where: buildImputableAccountsWhere({ companyId }),
           select: {
             id: true,
             code: true,

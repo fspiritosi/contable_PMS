@@ -7,6 +7,7 @@ import { checkPermission } from '@/shared/lib/permissions';
 import ExcelJS from 'exceljs';
 import { AccountType, AccountNature } from '@/generated/prisma/enums';
 import { generateAccountsTemplate } from './excel-template';
+import { validateAccountCodeFormat, AccountCodeFormatError } from '../../../shared/utils/account-code';
 
 /**
  * Descarga la plantilla vacía de Excel para importar cuentas
@@ -242,13 +243,33 @@ export async function importAccountsFromExcel(companyId: string, fileBuffer: num
         return;
       }
 
+      // Normalizar código (y código padre) al formato canónico x.x.x/xx/xx.
+      let normalizedCode: string;
+      let normalizedParentCode: string | undefined;
+      try {
+        normalizedCode = validateAccountCodeFormat(rowData.code);
+        normalizedParentCode = rowData.parentCode
+          ? validateAccountCodeFormat(rowData.parentCode)
+          : undefined;
+      } catch (error) {
+        errors.push({
+          row: rowNumber,
+          errors: [
+            error instanceof AccountCodeFormatError
+              ? error.message
+              : 'Código con formato inválido',
+          ],
+        });
+        return;
+      }
+
       accountsToImport.push({
-        code: rowData.code,
+        code: normalizedCode,
         name: rowData.name,
         type: rowData.type as AccountType,
         nature: rowData.nature as AccountNature,
         description: rowData.description || undefined,
-        parentCode: rowData.parentCode || undefined,
+        parentCode: normalizedParentCode,
       });
     });
 
@@ -287,13 +308,18 @@ export async function importAccountsFromExcel(companyId: string, fileBuffer: num
 
       // Mapa de códigos a IDs para resolver parentId
       const codeToId = new Map<string, string>();
+      // Mapa de códigos a tipo, para validar padre mismo-tipo.
+      const codeToType = new Map<string, AccountType>();
 
       // Obtener cuentas existentes para mapear códigos a IDs
       const existingAccounts = await tx.account.findMany({
         where: { companyId },
-        select: { id: true, code: true },
+        select: { id: true, code: true, type: true },
       });
-      existingAccounts.forEach((acc) => codeToId.set(acc.code, acc.id));
+      existingAccounts.forEach((acc) => {
+        codeToId.set(acc.code, acc.id);
+        codeToType.set(acc.code, acc.type);
+      });
 
       // Importar en orden (por nivel de jerarquía)
       for (const accountData of accountsToImport) {
@@ -324,9 +350,21 @@ export async function importAccountsFromExcel(companyId: string, fileBuffer: num
               });
               continue;
             }
+
+            // Validar padre mismo-tipo (ticket #376).
+            const parentType = codeToType.get(accountData.parentCode);
+            if (parentType && parentType !== accountData.type) {
+              importErrors.push({
+                row: accountsToImport.indexOf(accountData) + 2,
+                errors: [
+                  `La cuenta padre "${accountData.parentCode}" debe ser del mismo tipo que la cuenta`,
+                ],
+              });
+              continue;
+            }
           }
 
-          // Crear cuenta
+          // Crear cuenta (nace hoja/imputable)
           const newAccount = await tx.account.create({
             data: {
               companyId,
@@ -336,11 +374,21 @@ export async function importAccountsFromExcel(companyId: string, fileBuffer: num
               nature: accountData.nature,
               description: accountData.description,
               parentId,
+              isLeaf: true,
             },
           });
 
+          // Si tiene padre, el padre deja de ser hoja.
+          if (parentId) {
+            await tx.account.update({
+              where: { id: parentId },
+              data: { isLeaf: false },
+            });
+          }
+
           // Agregar al mapa para futuras referencias
           codeToId.set(newAccount.code, newAccount.id);
+          codeToType.set(newAccount.code, newAccount.type);
           imported++;
         } catch (error) {
           importErrors.push({

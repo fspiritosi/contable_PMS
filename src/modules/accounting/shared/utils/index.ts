@@ -9,7 +9,27 @@ export {
   calculateBalanceByType,
   calculateOpeningBalance,
   verifyAccountingEquation,
+  getAccountRollupBalances,
 } from './balances';
+
+/**
+ * Determina si una cuenta está vigente en el ejercicio consultado.
+ *
+ * Reglas (ticket #376):
+ * - `isActive: false` → nunca vigente (soft-delete global).
+ * - Sin corte de deshabilitado (`disabledFrom == null`) → vigente.
+ * - Con corte: vigente sólo si el ejercicio consultado es anterior al de corte,
+ *   es decir `fiscalYearStart < disabledFrom`.
+ *
+ * @param account campos mínimos: `isActive` y `disabledFrom`.
+ * @param fiscalYearStart fecha de inicio del ejercicio consultado.
+ */
+export function isAccountEnabled(
+  account: { isActive: boolean; disabledFrom: Date | null },
+  fiscalYearStart: Date
+): boolean {
+  return account.isActive && (!account.disabledFrom || fiscalYearStart < account.disabledFrom);
+}
 
 /**
  * Convierte una lista plana de cuentas en una estructura jerárquica

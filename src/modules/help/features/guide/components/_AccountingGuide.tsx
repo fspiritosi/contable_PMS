@@ -64,7 +64,9 @@ export function _AccountingGuide() {
               Completa:
               <ul className="list-disc pl-6 mt-1 space-y-1">
                 <li>
-                  <strong>Código</strong>: formato X.X.X (ej: 1.1.1)
+                  <strong>Código</strong>: formato X.X.X/XX/XX (ej: 1.1.1/00/00).
+                  Los segmentos que no completes se rellenan con 0; el primero
+                  nunca puede ser 0
                 </li>
                 <li>
                   <strong>Nombre</strong> de la cuenta
@@ -78,11 +80,37 @@ export function _AccountingGuide() {
                   el tipo (deudora o acreedora)
                 </li>
                 <li>
-                  <strong>Cuenta padre</strong>: para crear subcuentas
+                  <strong>Cuenta padre</strong>: para crear subcuentas. Solo se
+                  listan cuentas del <strong>mismo tipo</strong>
                 </li>
               </ul>
             </li>
           </ol>
+          <p className="mt-2">
+            <strong>Cuentas imputables vs. de sumatoria:</strong>
+          </p>
+          <ul className="list-disc pl-6 space-y-1 text-muted-foreground">
+            <li>
+              Las <strong>imputables</strong> son las cuentas hoja (sin hijas):
+              reciben los movimientos de los asientos y muestran su{' '}
+              <strong>saldo</strong>. Son las únicas que aparecen en los
+              selectores de imputación (asientos, movimientos bancarios,
+              configuración contable, artículos)
+            </li>
+            <li>
+              Las <strong>de sumatoria</strong> son las que tienen hijas: no
+              reciben movimientos directos y muestran la <strong>suma</strong>{' '}
+              de sus cuentas hijas. Al asignarle una hija a una cuenta, esta
+              pasa automáticamente a ser de sumatoria
+            </li>
+          </ul>
+          <p className="mt-2">
+            <strong>Deshabilitar una cuenta:</strong> desde el menú de acciones.
+            Las cuentas con <strong>saldo 0</strong> se deshabilitan en el
+            ejercicio en curso; las que tienen saldo, a partir del{' '}
+            <strong>próximo ejercicio</strong>. Si deshabilitas una cuenta de
+            sumatoria, la baja se aplica <strong>en cascada</strong> a sus hijas.
+          </p>
           <p className="text-sm text-muted-foreground mt-2">
             Puedes <strong>importar</strong> un plan de cuentas desde Excel o{' '}
             <strong>exportar</strong> el actual.

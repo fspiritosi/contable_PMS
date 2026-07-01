@@ -304,7 +304,11 @@ model Account {
   children              Account[]          @relation("AccountHierarchy")
   currency              String             @default("ARS") @db.Char(3)
   isActive              Boolean            @default(true) @map("is_active")
-  isLeaf                Boolean            @default(true) @map("is_leaf")
+  isLeaf                Boolean            @default(true) @map("is_leaf") // = imputable (hoja). Mantenido automáticamente.
+  // Corte de deshabilitado por ejercicio (ticket #376). isActive sigue siendo el estado global/soft-delete.
+  disabledFrom             DateTime?   @map("disabled_from") // fecha efectiva del corte (= startDate del ejercicio de corte)
+  disabledFromFiscalYearId String?     @map("disabled_from_fiscal_year_id") @db.Uuid
+  disabledFromFiscalYear   FiscalYear? @relation("AccountDisabledFrom", fields: [disabledFromFiscalYearId], references: [id], onDelete: SetNull)
   adjustableByInflation Boolean            @default(false) @map("adjustable_by_inflation")
   requiresAuxiliary     AuxiliaryType?     @map("requires_auxiliary")
   createdAt             DateTime           @default(now()) @map("created_at")
@@ -358,6 +362,7 @@ model Account {
   productsAsIncomeAccount       Product[]              @relation("ProductIncomeAccount")
 
   @@unique([companyId, code])
+  @@index([companyId, disabledFromFiscalYearId])
   @@map("accounts")
 }
 
@@ -675,6 +680,9 @@ model FiscalYear {
   openingEntry JournalEntry?      @relation("FiscalYearOpeningEntry", fields: [openingEntryId], references: [id])
   periods      AccountingPeriod[]
   entries      JournalEntry[]
+
+  // Cuentas deshabilitadas a partir de este ejercicio (ticket #376)
+  disabledAccounts Account[] @relation("AccountDisabledFrom")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")

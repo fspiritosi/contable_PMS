@@ -325,7 +325,7 @@ Cuando se confirma una factura (venta o compra), la integracion contable agrupa 
 
 | Modelo | Descripcion | Campos clave |
 |--------|-------------|--------------|
-| `Account` | Cuenta contable (arbol) | code, name, type, nature, parentId, level |
+| `Account` | Cuenta contable (arbol) | code (formato x.x.x/xx/xx), name, type, nature, parentId, isLeaf, isActive, disabledFrom, disabledFromFiscalYearId |
 | `JournalEntry` | Asiento contable | number, date, description, status, isAutomatic, reversedById |
 | `JournalEntryLine` | Linea de asiento | accountId, debit, credit, description |
 | `AccountingSettings` | Config contable | salesAccountId, purchasesAccountId, vatAccountId, fixedAssetAccountId, depreciationExpenseAccountId, lockedUntilDate, productCodePrefix (default "PROD"), lastProductNumber (default 0), etc. |
@@ -338,8 +338,20 @@ Cuando se confirma una factura (venta o compra), la integracion contable agrupa 
 - `JournalEntryStatus`: DRAFT, POSTED, REVERSED
 - `RecurringFrequency`: DAILY, WEEKLY, MONTHLY, QUARTERLY, YEARLY
 
+**Cuentas imputables vs. de sumatoria (TSK-376):**
+- `isLeaf = true` → cuenta **imputable** (hoja): recibe movimientos de asientos y tiene saldo propio. Se mantiene automáticamente: una cuenta pasa a `isLeaf = false` al adquirir hijas.
+- `isLeaf = false` → cuenta **de sumatoria**: agrupa a sus hijas; su saldo se calcula por roll-up (suma de las imputables descendientes). No es imputable.
+- Solo las imputables aparecen en los selects de imputación (asientos, movimientos bancarios, config contable, artículos, saldos de apertura), vía el filtro compartido `buildImputableAccountsWhere` en `src/shared/lib/accounts/`.
+- El `code` sigue el formato `x.x.x/xx/xx` (segmentos vacíos = 0, primer segmento ≠ 0); se valida/normaliza con `validateAccountCodeFormat`.
+
+**Deshabilitación por ejercicio (TSK-376):**
+- `disabledFrom` (fecha de corte) + `disabledFromFiscalYearId` (FK a `FiscalYear`): la cuenta queda vigente mientras `!disabledFrom || fiscalYearStart < disabledFrom`.
+- Regla: saldo 0 → corte en el ejercicio en curso; con saldo → corte en el próximo ejercicio; deshabilitar una cuenta de sumatoria cascadea a sus hijas.
+- `isActive = false` es la baja global inmediata (distinta de la baja programada por ejercicio).
+
 **Relaciones clave:**
 - Account es self-referential (parentId → arbol jerarquico)
+- Account.disabledFromFiscalYear → FiscalYear (ejercicio desde el que rige la baja)
 - JournalEntry puede ser automatico (generado por comercial) o manual
 - JournalEntry puede ser reversado (reversedById → otro entry)
 - AccountingSettings mapea cuentas contables a funciones (ventas, compras, IVA, bancos, etc.)

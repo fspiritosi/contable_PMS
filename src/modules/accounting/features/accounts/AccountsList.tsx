@@ -2,6 +2,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/sha
 import { PermissionGuard } from '@/shared/components/common/PermissionGuard';
 import { getAccounts } from './actions.server';
 import { buildAccountTree } from '../../shared/utils';
+import { getAccountRollupBalances } from '../../shared/utils/balances';
+import { getCurrentFiscalYear } from '../../shared/utils/fiscal-year';
 import { _AccountsTable } from './components/_AccountsTable';
 import { _CreateAccountButton } from './components/_CreateAccountButton';
 import { _ImportExportButtons } from './components/_ImportExportButtons';
@@ -22,6 +24,19 @@ export async function AccountsList() {
 async function AccountsListContent({ companyId }: { companyId: string }) {
   const accounts = await getAccounts(companyId);
   const accountTree = buildAccountTree(accounts);
+
+  // Ejercicio en curso: define la fecha de corte de saldos y el estado vigente.
+  const currentFiscalYear = await getCurrentFiscalYear(companyId);
+
+  // Saldos con roll-up: imputables muestran su saldo; sumatoria, la suma de hijas.
+  const rollup = await getAccountRollupBalances(companyId, currentFiscalYear?.endDate);
+  const balances: Record<string, number> = {};
+  rollup.forEach((value, accountId) => {
+    balances[accountId] = value.balance;
+  });
+
+  const fiscalYearStart = currentFiscalYear?.startDate ?? null;
+  const fiscalYearNumber = currentFiscalYear?.number ?? null;
 
   return (
     <div className="flex flex-1 flex-col gap-4">
@@ -48,7 +63,13 @@ async function AccountsListContent({ companyId }: { companyId: string }) {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <_AccountsTable accounts={accountTree} companyId={companyId} />
+          <_AccountsTable
+            accounts={accountTree}
+            companyId={companyId}
+            balances={balances}
+            fiscalYearStart={fiscalYearStart}
+            fiscalYearNumber={fiscalYearNumber}
+          />
         </CardContent>
       </Card>
     </div>

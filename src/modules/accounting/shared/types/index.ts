@@ -78,6 +78,9 @@ export interface AccountWithChildren {
   nature: AccountNature;
   description?: string | null;
   isActive: boolean;
+  isLeaf: boolean;
+  disabledFrom?: Date | null;
+  disabledFromFiscalYearId?: string | null;
   parentId?: string | null;
   children: AccountWithChildren[];
 }

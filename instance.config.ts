@@ -87,30 +87,30 @@ export interface InstanceConfig {
  */
 export const instanceConfig: InstanceConfig = {
   // Identificador único (lowercase, sin espacios)
-  id: 'nahuel-boxer',
+  id: 'contable-pms',
 
   // Branding
-  name: 'CC Contable',
-  shortName: 'CC',
-  description: 'Sistema contable - Codecontrol',
+  name: 'PMS Contable',
+  shortName: 'PMS',
+  description: 'Sistema contable - PMS',
 
-  // Puertos (cambiar si corres múltiples instancias)
+  // Puertos (deben coincidir con .env y docker-compose.yml)
   ports: {
     app: 3000,
-    database: 5533,
-    minioApi: 9002,
-    minioConsole: 9003,
+    database: 5534,
+    minioApi: 9004,
+    minioConsole: 9005,
   },
 
   // Base de datos
   database: {
-    name: 'nahuel-boxer-db',
+    name: 'contable_pms',
     user: 'postgres',
   },
 
   // Storage
   storage: {
-    bucket: 'nahuel-boxer-docs',
+    bucket: 'contable',
     region: 'us-east-1',
   },
 };

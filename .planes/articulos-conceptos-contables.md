@@ -1,7 +1,7 @@
 # Articulos - Conceptos Contables (Ticket #322)
 
 **Fecha de inicio:** 2026-06-29
-**Estado:** Implementación completada (7/7 fases)
+**Estado:** Verificado - APROBADO
 
 ---
 
@@ -518,4 +518,51 @@ _Pendiente - ejecutar `/disenar articulos-conceptos-contables`_
   - `src/modules/commercial/features/products/shared/validators.test.ts` - Creado: 7 tests unitarios para validadores con campos contables
 
 ## 5. Verificacion
-_Pendiente - ejecutar `/verificar articulos-conceptos-contables`_
+
+### 5.1 Revisión de código
+- **Resultado:** OK
+- **Observaciones:** Todos los archivos de la sección de Implementación existen y coinciden con el diseño. Verificado en detalle:
+  - **Schema (`prisma/schema.prisma`):** Los 5 FK opcionales en `Product` (`defaultExpenseAccountId`, `defaultIncomeAccountId`, `defaultCostCenterId`, `defaultWarehouseId`, `defaultSupplierId`, todos `String? @db.Uuid`) con sus 5 relaciones nombradas, más los 2 campos en `AccountingSettings` (`productCodePrefix String @default("PROD")`, `lastProductNumber Int @default(0)`). Relaciones inversas presentes en Account/CostCenter/Warehouse/Supplier.
+  - **Migración (`prisma/migrations/20260629100000_add_product_accounting_defaults/migration.sql`):** No-destructiva. 5 columnas UUID nullable con FKs `ON DELETE SET NULL ON UPDATE CASCADE`, y 2 columnas NOT NULL con DEFAULT en `accounting_settings`.
+  - **Integración contable (`.../integrations/commercial/index.ts`):** Agrupamiento de líneas por cuenta implementado tanto en ventas (`salesByAccount`, keyed por `line.product?.defaultIncomeAccountId || settings.salesAccountId`) como en compras (`purchasesByAccount`, keyed por `defaultExpenseAccountId || purchasesAccountId`). Suma subtotales por grupo, emite una línea de asiento por cuenta distinta, propaga `costCenterId` del producto y hace fallback a la cuenta global. El asiento se mantiene balanceado (contrapartida en receivables/payables + IVA).
+  - **Auto-code:** Reemplazado por secuencia atómica `UPDATE accounting_settings SET last_product_number = last_product_number + 1 ... RETURNING`, con fallback a lógica legacy `PROD-XXXX` si no hay settings.
+  - **Rename "Productos" → "Artículos":** Aplicado en UI (sidebar, listados, modales). Sin residuos user-facing de "Productos" en el módulo.
+  - **`_AccountingDefaultsSection.tsx`:** Existe, filtra cuentas de gasto por `nature === 'DEBIT'` e ingreso por `nature === 'CREDIT'`, con opción "Sin asignar".
+  - **Regla 9 (Decimal→Number):** `getProductById` convierte todos los Decimal (`costPrice`, `salePrice`, etc.) a `Number()`. Las 5 relaciones nuevas se traen con `select` acotado (id/code/name/businessName) sin campos Decimal, por lo que son serializables.
+  - **Regla 11 (checkPermission):** Presente en las 4 funciones nuevas de `catalog-actions.server.ts` (`view`) y en todas las actions modificadas (`getProductById`/view, `createProduct`/create, `updateProduct`/update).
+- **Observación menor (no bloqueante):** En `index.ts` línea 302 queda un `const subtotal` sin uso (leftover de la lógica anterior de línea única; la nueva usa `line.subtotal`). Genera 1 warning de lint. No afecta funcionalidad.
+
+### 5.2 Build / Lint
+- **Resultado:** OK (con salvedad de baseline pre-existente)
+- **Detalle:**
+  - `npm run check-types`: El proyecto NO tiene un baseline limpio de TypeScript (existen ~225 errores pre-existentes distribuidos en múltiples módulos ajenos a esta feature: `equipment/depreciation`, `warehouses/stock`, price-lists dialogs, etc.). Los únicos errores tocando archivos de esta feature son en `_ProductForm.tsx` y `_CreateProductForm.tsx`, y corresponden al patrón conocido de incompatibilidad de tipos `zodResolver` / `SubmitHandler<TFieldValues>` de React Hook Form v7 + Zod v4 — el MISMO patrón que ya afecta al resto del codebase (equipment, warehouses, price-lists). Se confirmó contra el commit padre que este tipo de fricción de tipos es pre-existente y no un defecto de la lógica de conceptos contables. El error de `_ProductImportModal.tsx` (`Promise.forEach`, `getProductImportColumns` async) y el `Cannot find module '../../../shared/types'` de `_PriceListsTable.tsx` se verificaron idénticos en el commit padre → **pre-existentes**, no introducidos por esta feature.
+  - `npm run lint`: Los archivos NUEVOS de la feature (`catalog-actions.server.ts`, `_AccountingDefaultsSection.tsx`, `validators.ts`, `validators.test.ts`, `ProductDetail.tsx`, `EditProduct.tsx`, `CreateProduct.tsx`) pasan lint SIN errores ni warnings. El resto de los problemas de lint (355 en total en el codebase) son pre-existentes. Único warning atribuible a esta feature: `subtotal` sin usar en `index.ts:302`.
+
+### 5.3 Tests
+- **Tests ejecutados:** 7 pasaron, 0 fallaron
+- **Tests nuevos creados:**
+  - `src/modules/commercial/features/products/shared/validators.test.ts` (7 tests, runner Vitest)
+- **Detalle:** Cubren: producto válido sin campos contables, campos contables con UUIDs válidos, rechazo de UUID inválido, transformación de string vacío → undefined, combinación parcial, y schema de update (actualizar/limpiar solo campos contables). `npx vitest run` completó en 558ms sin fallos.
+
+### 5.4 Verificación funcional
+- **Resultado:** OK (a nivel de código)
+- **Detalle:** Se verificó a nivel de código que: (a) el schema y la migración soportan los 5 conceptos + auto-code; (b) los server actions guardan/leen los nuevos campos con permisos y conversión de Decimals; (c) el formulario de crear/editar expone la sección "Configuración Contable y Logística" con selects filtrados por naturaleza de cuenta; (d) el detalle muestra los conceptos asignados; (e) la integración contable agrupa por cuenta y hace override por producto con fallback a la cuenta global manteniendo el asiento balanceado; (f) el auto-code usa secuencia atómica. La prueba funcional en navegador (crear/editar/facturar y observar el asiento resultante) queda para QA manual, ya que no se levantó el servidor de desarrollo. Los tests E2E de Cypress no se ejecutaron por requerir servidor levantado.
+
+### 5.5 Cumplimiento de reglas
+- **CLAUDE.md respetado:** Sí
+- **Observaciones:**
+  - Sin `console.*`, sin `:any`, sin `date-fns` en los archivos nuevos/modificados de la feature.
+  - `logger` usado correctamente en catalog-actions e integración.
+  - `checkPermission()` en todas las actions (Regla 11).
+  - Decimals convertidos a `Number()` antes de pasar a Client Components (Regla 9).
+  - Componentes client con prefijo `_` (`_AccountingDefaultsSection.tsx`).
+  - Módulo de productos NO importa de otros módulos: se crearon queries locales en `catalog-actions.server.ts` en lugar de importar de accounting/company (respeta `module-communication.md`).
+  - Documentación de desarrollador y guía de usuario actualizadas (`docs/architecture/data-model.md`, `_CommercialGuide.tsx`).
+  - Desvío menor: leftover `const subtotal` sin uso en `index.ts:302` (cosmético, no funcional).
+
+### 5.6 Resultado final
+- **Estado:** APROBADO
+- **Acciones pendientes (no bloqueantes, recomendadas):**
+  1. Eliminar el `const subtotal` sin uso en `src/modules/accounting/features/integrations/commercial/index.ts:302` para limpiar el warning de lint introducido.
+  2. QA manual en navegador: crear un artículo con cuenta de ingreso/gasto y centro de costos distintos, emitir factura de venta y de compra, y confirmar que el asiento use las cuentas del producto (agrupadas por cuenta) y quede balanceado. Verificar auto-code `PREFIX-NNNN`.
+  3. (Deuda técnica del codebase, fuera del alcance de este ticket) La fricción de tipos de React Hook Form + Zod v4 (`zodResolver` incompatible con `useForm<T>`) afecta a todo el proyecto e impide un `tsc` limpio; conviene abordarla de forma transversal en un ticket aparte.
