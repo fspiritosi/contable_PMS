@@ -299,7 +299,6 @@ export async function createJournalEntryForSalesInvoice(
       throw new Error('Factura de venta no encontrada');
     }
 
-    const subtotal = parseFloat(invoice.subtotal.toString());
     const total = parseFloat(invoice.total.toString());
     const isNC = isCreditNote(invoice.voucherType);
 
