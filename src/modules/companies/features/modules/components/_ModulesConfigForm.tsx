@@ -38,6 +38,7 @@ import {
 import { Switch } from '@/shared/components/ui/switch';
 import {
   ACTIVATABLE_MODULES,
+  HIDDEN_MODULES,
   MODULE_DEPENDENCIES,
   MODULE_DESCRIPTIONS,
   MODULE_DISPLAY_LABELS,
@@ -55,14 +56,10 @@ const ICON_MAP: Record<ActivatableModule, LucideIcon> = {
   accounting: Calculator,
 };
 
-/** Order for display */
-const MODULE_ORDER: ActivatableModule[] = [
-  'employees',
-  'equipment',
-  'documents',
-  'commercial',
-  'accounting',
-];
+/** Order for display (se ocultan los módulos de HIDDEN_MODULES en este fork) */
+const MODULE_ORDER: ActivatableModule[] = (
+  ['employees', 'equipment', 'documents', 'commercial', 'accounting'] as ActivatableModule[]
+).filter((m) => !HIDDEN_MODULES.includes(m));
 
 interface Props {
   initialActiveModules: string[];

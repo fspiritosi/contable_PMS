@@ -13,6 +13,14 @@ export const ACTIVATABLE_MODULES = {
 
 export type ActivatableModule = (typeof ACTIVATABLE_MODULES)[keyof typeof ACTIVATABLE_MODULES];
 
+/**
+ * Módulos ocultos en este despliegue (fork contable PMS): no se muestran en el
+ * sidebar ni en la pantalla de activación por empresa. Se mantienen en
+ * ACTIVATABLE_MODULES y en PERMISSION_MODULE_MAP para no romper el mapeo de
+ * permisos ni la compatibilidad con empresas existentes (activeModules).
+ */
+export const HIDDEN_MODULES: ActivatableModule[] = ['employees', 'equipment', 'documents'];
+
 /** Display labels */
 export const MODULE_DISPLAY_LABELS: Record<ActivatableModule, string> = {
   employees: 'Empleados',

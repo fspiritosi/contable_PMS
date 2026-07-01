@@ -4,12 +4,9 @@ import {
   BadgePercent,
   Building2,
   ChevronRight,
-  ClipboardList,
-  FileText,
   HelpCircle,
   LayoutDashboard,
   Package,
-  Search,
   Settings,
   Shield,
   ShoppingBag,
@@ -19,7 +16,6 @@ import {
   Truck,
   Users,
   Wallet,
-  Wrench,
   type LucideIcon,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -85,9 +81,6 @@ interface NavItemWithSub {
 // Navegación principal (con algunos subitems)
 const navMain: NavItemWithSub[] = [
   { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, module: null },
-  { title: 'Empleados', href: '/dashboard/employees', icon: Users, module: 'employees' },
-  { title: 'Equipos', href: '/dashboard/equipment', icon: Truck, module: 'equipment' },
-  { title: 'Documentos', href: '/dashboard/documents', icon: FileText, module: 'documents' },
   {
     title: 'Contabilidad',
     icon: Wallet,
@@ -319,20 +312,6 @@ const navMain: NavItemWithSub[] = [
         module: 'commercial.equivalences',
       },
     ],
-  },
-  {
-    title: 'Operaciones',
-    href: '/dashboard/operations',
-    icon: ClipboardList,
-    disabled: true,
-    module: null,
-  },
-  {
-    title: 'Mantenimiento',
-    href: '/dashboard/maintenance',
-    icon: Wrench,
-    disabled: true,
-    module: null,
   },
 ];
 
