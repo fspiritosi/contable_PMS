@@ -27,9 +27,14 @@ import {
   createCategorySchema,
   type CreateCategoryFormData,
 } from '../../shared/validators';
-import { createCategory, updateCategory, getParentCategories } from '../../list/actions.server';
-import type { ProductCategory } from '../../shared/types';
+import { createCategory, getParentCategories } from '../../list/actions.server';
+import {
+  buildCategoryTree,
+  flattenCategoryTree,
+  getDescendantIds,
+} from '../../shared/tree';
 import { useQuery } from '@tanstack/react-query';
+import { useMemo } from 'react';
 
 interface CategoryFormProps {
   defaultValues?: Partial<CreateCategoryFormData>;
@@ -82,10 +87,15 @@ export function CategoryForm({
     }
   };
 
-  // Filter out current category and its descendants from parent options
-  const availableParents = categoryId
-    ? categories.filter(cat => cat.id !== categoryId)
-    : categories;
+  // Excluir la propia categoría y sus descendientes de las opciones de padre
+  // (evita ciclos), y aplanar el árbol conservando el nivel para indentar.
+  const parentOptions = useMemo(() => {
+    const excluded = categoryId
+      ? new Set<string>([categoryId, ...getDescendantIds(categoryId, categories)])
+      : new Set<string>();
+    const available = categories.filter((cat) => !excluded.has(cat.id));
+    return flattenCategoryTree(buildCategoryTree(available));
+  }, [categories, categoryId]);
 
   return (
     <Form {...form}>
@@ -147,9 +157,12 @@ export function CategoryForm({
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
-                  {availableParents.map((category) => (
+                  {parentOptions.map(({ category, level }) => (
                     <SelectItem key={category.id} value={category.id}>
-                      {category.name}
+                      <span style={{ paddingLeft: `${level * 1}rem` }}>
+                        {level > 0 ? '↳ ' : ''}
+                        {category.name}
+                      </span>
                     </SelectItem>
                   ))}
                 </SelectContent>

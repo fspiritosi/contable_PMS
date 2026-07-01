@@ -339,6 +339,7 @@ async function getDescendantIds(categoryId: string): Promise<string[]> {
 }
 
 export async function getParentCategories(): Promise<ProductCategory[]> {
+  await checkPermission('commercial.categories', 'view', { redirect: true });
   const userId = await getCurrentUserId();
   if (!userId) {
     throw new Error('No autenticado');

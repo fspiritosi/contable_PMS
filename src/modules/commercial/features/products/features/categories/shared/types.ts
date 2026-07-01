@@ -23,4 +23,4 @@ export interface CreateCategoryInput {
   parentId?: string;
 }
 
-export interface UpdateCategoryInput extends Partial<CreateCategoryInput> {}
+export type UpdateCategoryInput = Partial<CreateCategoryInput>;
