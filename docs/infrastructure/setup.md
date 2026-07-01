@@ -72,7 +72,7 @@ Todas las variables necesarias:
 ```env
 # Base de Datos
 POSTGRES_PASSWORD=postgres
-DATABASE_URL=postgresql://postgres:postgres@localhost:5533/nahuel-boxer-db?schema=public
+DATABASE_URL=postgresql://postgres:postgres@localhost:5534/contable_pms?schema=public
 
 # Clerk (autenticacion)
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
@@ -84,20 +84,20 @@ EMAIL_FROM=onboarding@resend.dev
 
 # Storage (MinIO/R2)
 STORAGE_PROVIDER=s3              # "s3" o "local"
-S3_ENDPOINT=http://localhost:9002
+S3_ENDPOINT=http://localhost:9004
 S3_REGION=us-east-1
-S3_BUCKET=nahuel-boxer-docs
+S3_BUCKET=contable
 S3_ACCESS_KEY=minioadmin
 S3_SECRET_KEY=minioadmin123
 S3_FORCE_PATH_STYLE=true         # true para MinIO, false para R2
-S3_PUBLIC_URL=http://localhost:9002/nahuel-boxer-docs
+S3_PUBLIC_URL=http://localhost:9004/contable
 
 # Logging
 NEXT_PUBLIC_SHOW_LOGS=true       # false para suprimir logs
 
 # Docker (opcionales, usados por docker-compose)
 POSTGRES_USER=postgres
-POSTGRES_DB=nahuel-boxer-db
+POSTGRES_DB=contable_pms
 MINIO_ROOT_USER=minioadmin
 MINIO_ROOT_PASSWORD=minioadmin123
 ```

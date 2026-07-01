@@ -21,9 +21,10 @@
  *     npx tsx prisma/scripts/normalize-account-codes.ts
  *
  *   Es re-ejecutable sin efectos: en una segunda corrida no habrá cambios.
- *   Requiere DATABASE_URL en el entorno (usa el cliente Prisma del proyecto).
+ *   Carga automáticamente las variables de `.env` (DATABASE_URL) vía dotenv.
  */
 
+import 'dotenv/config';
 import { prisma } from '../../src/shared/lib/prisma';
 import {
   validateAccountCodeFormat,

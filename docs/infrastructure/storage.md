@@ -21,13 +21,13 @@ Se controla con la variable `STORAGE_PROVIDER` (default: `local`).
 
 ```env
 STORAGE_PROVIDER=s3
-S3_ENDPOINT=http://localhost:9002
+S3_ENDPOINT=http://localhost:9004
 S3_REGION=us-east-1
-S3_BUCKET=nahuel-boxer-docs
+S3_BUCKET=contable
 S3_ACCESS_KEY=minioadmin
 S3_SECRET_KEY=minioadmin123
 S3_FORCE_PATH_STYLE=true          # Obligatorio para MinIO
-S3_PUBLIC_URL=http://localhost:9002/nahuel-boxer-docs
+S3_PUBLIC_URL=http://localhost:9004/contable
 ```
 
 ### Cloudflare R2 (produccion)
