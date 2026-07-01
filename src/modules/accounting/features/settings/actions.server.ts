@@ -6,6 +6,7 @@ import { prisma } from '@/shared/lib/prisma';
 import { logger } from '@/shared/lib/logger';
 import { checkPermission } from '@/shared/lib/permissions';
 import { revalidateAccountingRoutes } from '../../shared/utils';
+import { buildImputableAccountsWhere } from '@/shared/lib/accounts/imputable-accounts';
 
 /**
  * Obtiene la configuración contable de una empresa
@@ -185,17 +186,23 @@ export async function setLockedPeriod(companyId: string, lockedUntilDate: Date |
 /**
  * Obtiene todas las cuentas activas de la empresa para los selectores
  */
-export async function getActiveAccounts(companyId: string) {
+export async function getActiveAccounts(companyId: string, includeIds?: string[]) {
   const userId = await getCurrentUserId();
   if (!userId) throw new Error('No autenticado');
   await checkPermission('accounting.settings', 'view', { redirect: true });
 
   try {
+    // Config contable: solo cuentas imputables (hojas). El formulario filtra
+    // por tipo en cada campo. Se preservan los ids ya configurados (includeIds)
+    // aunque hoy no cumplan el filtro, para no perder valores guardados.
+    const imputableWhere = buildImputableAccountsWhere({ companyId });
+    const where =
+      includeIds && includeIds.length > 0
+        ? { OR: [imputableWhere, { companyId, id: { in: includeIds } }] }
+        : imputableWhere;
+
     const accounts = await prisma.account.findMany({
-      where: {
-        companyId,
-        isActive: true,
-      },
+      where,
       select: {
         id: true,
         code: true,

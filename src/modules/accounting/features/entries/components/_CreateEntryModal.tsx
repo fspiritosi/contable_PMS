@@ -27,7 +27,7 @@ import { Textarea } from '@/shared/components/ui/textarea';
 
 import { journalEntrySchema, type CreateJournalEntryInput } from '../../../shared/types';
 import { createJournalEntry } from '../actions.server';
-import { getAccounts } from '../../accounts/actions.server';
+import { getImputableAccounts } from '../../accounts/actions.server';
 import { useState, useEffect } from 'react';
 import { formatAmount } from '../../../shared/utils';
 
@@ -76,7 +76,8 @@ export function _CreateEntryModal({ onClose }: CreateEntryModalProps) {
         const { companyId } = await response.json();
         setCompanyId(companyId);
 
-        const accounts = await getAccounts(companyId);
+        // Las líneas de asiento solo pueden imputar a cuentas imputables (hojas).
+        const accounts = await getImputableAccounts(companyId);
         setAccounts(accounts);
       } catch (error) {
         toast.error('Error al cargar los datos');

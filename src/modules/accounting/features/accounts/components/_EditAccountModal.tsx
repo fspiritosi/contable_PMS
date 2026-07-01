@@ -39,7 +39,10 @@ interface EditAccountModalProps {
 export function _EditAccountModal({ account, companyId, onClose }: EditAccountModalProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
-  const [accounts, setAccounts] = useState<Array<{ id: string; code: string; name: string }>>([]);
+  const [accounts, setAccounts] = useState<
+    Array<{ id: string; code: string; name: string; type: AccountType }>
+  >([]);
+  const isSummatory = account.children.length > 0;
 
   const form = useForm<CreateAccountInput>({
     resolver: zodResolver(accountSchema),
@@ -113,6 +116,14 @@ export function _EditAccountModal({ account, companyId, onClose }: EditAccountMo
           </DialogDescription>
         </DialogHeader>
 
+        <p className="text-xs text-muted-foreground">
+          Esta cuenta es{' '}
+          <strong>{isSummatory ? 'de sumatoria' : 'imputable'}</strong>
+          {isSummatory
+            ? ' (agrupa a sus hijas y no recibe movimientos directos).'
+            : ' (hoja: recibe movimientos).'}
+        </p>
+
         <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="code">
@@ -120,9 +131,14 @@ export function _EditAccountModal({ account, companyId, onClose }: EditAccountMo
             </Label>
             <Input
               id="code"
+              placeholder="1.1.1/00/00"
               {...form.register('code')}
               disabled={isLoading}
             />
+            <p className="text-xs text-muted-foreground">
+              Formato x.x.x/xx/xx. Los segmentos que no completes se rellenan con 0; el
+              primero no puede ser 0.
+            </p>
             {form.formState.errors.code && (
               <p className="text-sm text-destructive">
                 {form.formState.errors.code.message}
@@ -152,7 +168,11 @@ export function _EditAccountModal({ account, companyId, onClose }: EditAccountMo
                 Tipo <span className="text-destructive">*</span>
               </Label>
               <Select
-                onValueChange={(value) => form.setValue('type', value as AccountType)}
+                onValueChange={(value) => {
+                  form.setValue('type', value as AccountType);
+                  // El padre debe ser del mismo tipo: limpiar si cambia el tipo.
+                  form.setValue('parentId', undefined);
+                }}
                 value={form.watch('type')}
                 disabled={isLoading}
               >
@@ -207,19 +227,24 @@ export function _EditAccountModal({ account, companyId, onClose }: EditAccountMo
             <Select
               onValueChange={(value) => form.setValue('parentId', value)}
               value={form.watch('parentId')}
-              disabled={isLoading}
+              disabled={isLoading || !form.watch('type')}
             >
               <SelectTrigger id="parentId">
                 <SelectValue placeholder="Seleccionar cuenta padre" />
               </SelectTrigger>
               <SelectContent>
-                {accounts.map((account) => (
-                  <SelectItem key={account.id} value={account.id}>
-                    {account.code} - {account.name}
-                  </SelectItem>
-                ))}
+                {accounts
+                  .filter((acc) => acc.type === form.watch('type'))
+                  .map((acc) => (
+                    <SelectItem key={acc.id} value={acc.id}>
+                      {acc.code} - {acc.name}
+                    </SelectItem>
+                  ))}
               </SelectContent>
             </Select>
+            <p className="text-xs text-muted-foreground">
+              Solo se listan cuentas del mismo tipo.
+            </p>
           </div>
 
           <div className="space-y-2">

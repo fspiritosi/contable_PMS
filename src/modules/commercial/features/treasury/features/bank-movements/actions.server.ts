@@ -6,7 +6,8 @@ import { logger } from '@/shared/lib/logger';
 import { prisma } from '@/shared/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { Prisma } from '@/generated/prisma/client';
-import { BankMovementType } from '@/generated/prisma/enums';
+import { BankMovementType, AccountType } from '@/generated/prisma/enums';
+import { buildImputableAccountsWhere } from '@/shared/lib/accounts/imputable-accounts';
 import type { DataTableSearchParams } from '@/shared/components/common/DataTable';
 import {
   parseSearchParams,
@@ -493,17 +494,29 @@ export async function getBankMovementsTotals(
 /**
  * Obtiene las cuentas contables disponibles para movimientos bancarios
  */
-export async function getAccountsForBankMovement() {
+export async function getAccountsForBankMovement(includeIds?: string[]) {
   await checkPermission('commercial.treasury.bank-accounts', 'view', { redirect: true });
   const companyId = await getActiveCompanyId();
   if (!companyId) throw new Error('No hay empresa activa');
 
   try {
+    // Contrapartida del movimiento bancario: solo cuentas imputables (hojas)
+    // de naturaleza patrimonial (Activo/Pasivo/Patrimonio). Las cuentas de
+    // Resultado no se ofrecen acá (ticket #376, requisito 3).
+    const imputableWhere = buildImputableAccountsWhere({
+      companyId,
+      types: [AccountType.ASSET, AccountType.LIABILITY, AccountType.EQUITY],
+    });
+
+    // Preservar valores ya guardados aunque hoy no cumplan el filtro
+    // (ej. una contrapartida elegida antes de esta regla).
+    const where =
+      includeIds && includeIds.length > 0
+        ? { OR: [imputableWhere, { companyId, id: { in: includeIds } }] }
+        : imputableWhere;
+
     const accounts = await prisma.account.findMany({
-      where: {
-        companyId,
-        isActive: true,
-      },
+      where,
       select: {
         id: true,
         code: true,
