@@ -39,6 +39,41 @@ export async function validateAccountParent(companyId: string, parentId?: string
 }
 
 /**
+ * Valida que la cuenta padre exista, pertenezca a la empresa y sea del MISMO tipo
+ * que la cuenta hija. Además evita ciclos triviales (que sea su propio padre).
+ * Ticket #376: el selector de padre se limita al mismo `type`.
+ */
+export async function validateAccountParentSameType(
+  companyId: string,
+  parentId: string | undefined,
+  childType: AccountType,
+  selfAccountId?: string
+) {
+  if (!parentId) return;
+
+  if (selfAccountId && parentId === selfAccountId) {
+    throw new Error('Una cuenta no puede ser su propia cuenta padre');
+  }
+
+  const parent = await prisma.account.findUnique({
+    where: { id: parentId },
+    select: { id: true, companyId: true, type: true },
+  });
+
+  if (!parent) {
+    throw new Error('La cuenta padre no existe');
+  }
+
+  if (parent.companyId !== companyId) {
+    throw new Error('La cuenta padre no pertenece a la empresa');
+  }
+
+  if (parent.type !== childType) {
+    throw new Error('La cuenta padre debe ser del mismo tipo que la cuenta');
+  }
+}
+
+/**
  * Valida que la naturaleza de la cuenta sea correcta según su tipo
  */
 export function validateAccountNature(type: AccountType, nature: AccountNature) {
