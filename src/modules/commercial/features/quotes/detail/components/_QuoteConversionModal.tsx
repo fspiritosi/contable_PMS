@@ -121,7 +121,7 @@ export function _QuoteConversionModal({ quoteId, type, open, onOpenChange }: Pro
 
   const handleContinue = async () => {
     if (selectedLines.length === 0) {
-      toast.error('Seleccioná al menos una línea con cantidad mayor a 0');
+      toast.error('Seleccioná al menos un ítem con cantidad mayor a 0');
       return;
     }
 
@@ -221,7 +221,7 @@ export function _QuoteConversionModal({ quoteId, type, open, onOpenChange }: Pro
             {type === 'invoice' ? 'Generar Factura' : 'Generar Remito'} desde Presupuesto
           </DialogTitle>
           <DialogDescription>
-            Seleccioná las líneas y cantidades a {typeLabel}. Podés hacer entregas o facturaciones parciales.
+            Seleccioná los ítems y cantidades a {typeLabel}. Podés hacer entregas o facturaciones parciales.
           </DialogDescription>
         </DialogHeader>
 
@@ -242,13 +242,13 @@ export function _QuoteConversionModal({ quoteId, type, open, onOpenChange }: Pro
             {isLoading && (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="h-6 w-6 animate-spin" />
-                <span className="ml-2 text-sm text-muted-foreground">Cargando líneas...</span>
+                <span className="ml-2 text-sm text-muted-foreground">Cargando ítems...</span>
               </div>
             )}
 
             {error && (
               <div className="py-8 text-center text-sm text-destructive">
-                Error al cargar las líneas del presupuesto.
+                Error al cargar los ítems del presupuesto.
               </div>
             )}
 

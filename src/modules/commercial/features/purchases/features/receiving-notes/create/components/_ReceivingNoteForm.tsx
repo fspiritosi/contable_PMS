@@ -478,7 +478,7 @@ export function _ReceivingNoteForm({
         {/* ─── SECCIÓN: Líneas ─── */}
         <Card className="p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold">Líneas de Recepción</h3>
+            <h3 className="text-lg font-semibold">Ítems de Recepción</h3>
             {radioValue === 'none' && (
               <Button
                 type="button"
@@ -495,7 +495,7 @@ export function _ReceivingNoteForm({
                 }
               >
                 <Plus className="mr-2 h-4 w-4" />
-                Agregar Línea
+                Agregar Ítem
               </Button>
             )}
           </div>
@@ -504,17 +504,17 @@ export function _ReceivingNoteForm({
           {fields.length === 0 && (
             <div className="text-center py-8 text-muted-foreground">
               {radioValue === 'purchaseOrder' && !watchedPurchaseOrderId &&
-                'Selecciona una Orden de Compra para cargar las líneas automáticamente.'}
+                'Selecciona una Orden de Compra para cargar los ítems automáticamente.'}
               {radioValue === 'purchaseOrder' && watchedPurchaseOrderId && loadingPOLines &&
-                'Cargando líneas de la Orden de Compra...'}
+                'Cargando ítems de la Orden de Compra...'}
               {radioValue === 'purchaseOrder' && watchedPurchaseOrderId && !loadingPOLines &&
-                'La Orden de Compra no tiene líneas pendientes de recepción.'}
+                'La Orden de Compra no tiene ítems pendientes de recepción.'}
               {radioValue === 'purchaseInvoice' && !watchedPurchaseInvoiceId &&
-                'Selecciona una Factura de Compra para cargar las líneas automáticamente.'}
+                'Selecciona una Factura de Compra para cargar los ítems automáticamente.'}
               {radioValue === 'purchaseInvoice' && watchedPurchaseInvoiceId &&
-                'La Factura de Compra no tiene líneas con productos con control de stock.'}
+                'La Factura de Compra no tiene ítems con productos con control de stock.'}
               {radioValue === 'none' &&
-                'Haz clic en "Agregar Línea" para agregar productos manualmente.'}
+                'Haz clic en "Agregar Ítem" para agregar productos manualmente.'}
             </div>
           )}
 
@@ -522,14 +522,14 @@ export function _ReceivingNoteForm({
             {fields.map((field, index) => (
               <Card key={field.id} className="p-4 bg-muted/20">
                 <div className="flex items-start justify-between mb-3">
-                  <h4 className="font-medium text-sm">Línea {index + 1}</h4>
+                  <h4 className="font-medium text-sm">Ítem {index + 1}</h4>
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
                     onClick={() => remove(index)}
                     disabled={radioValue !== 'none'}
-                    title={radioValue !== 'none' ? 'Las líneas se cargan desde el documento de origen' : undefined}
+                    title={radioValue !== 'none' ? 'Los ítems se cargan desde el documento de origen' : undefined}
                   >
                     <Trash2 className="h-4 w-4 text-destructive" />
                   </Button>
@@ -655,7 +655,7 @@ export function _ReceivingNoteForm({
                     name={`lines.${index}.notes`}
                     render={({ field: f }) => (
                       <FormItem className="md:col-span-2">
-                        <FormLabel>Notas de la línea</FormLabel>
+                        <FormLabel>Notas del ítem</FormLabel>
                         <FormControl>
                           <Input
                             {...f}

@@ -182,7 +182,7 @@ export async function PurchaseInvoiceDetail({ invoiceId }: Props) {
           <Card>
             <CardHeader>
               <CardTitle>Detalle de la Factura</CardTitle>
-              <CardDescription>Líneas de productos/servicios</CardDescription>
+              <CardDescription>Ítems de productos/servicios</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="overflow-x-auto">

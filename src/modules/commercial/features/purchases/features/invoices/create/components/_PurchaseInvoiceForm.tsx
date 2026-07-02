@@ -466,7 +466,7 @@ export function _PurchaseInvoiceForm({
                     {loadingPOLines && (
                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
                         <Loader2 className="h-3 w-3 animate-spin" />
-                        Cargando líneas de la OC...
+                        Cargando ítems de la OC...
                       </div>
                     )}
                     <FormMessage />
@@ -596,16 +596,16 @@ export function _PurchaseInvoiceForm({
         {/* Líneas de la Factura */}
         <Card className="p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold">Líneas de la Factura</h3>
+            <h3 className="text-lg font-semibold">Ítems de la Factura</h3>
             <Button type="button" onClick={addLine} variant="outline" size="sm">
               <Plus className="mr-2 h-4 w-4" />
-              Agregar Línea
+              Agregar Ítem
             </Button>
           </div>
 
           {fields.length === 0 && (
             <div className="text-center py-8 text-muted-foreground">
-              No hay líneas agregadas. Haz clic en "Agregar Línea" para empezar.
+              No hay ítems agregados. Haz clic en "Agregar Ítem" para empezar.
             </div>
           )}
 
@@ -613,7 +613,7 @@ export function _PurchaseInvoiceForm({
             {fields.map((field, index) => (
               <Card key={field.id} className="p-4">
                 <div className="flex items-start justify-between mb-4">
-                  <h4 className="font-medium">Línea {index + 1}</h4>
+                  <h4 className="font-medium">Ítem {index + 1}</h4>
                   <Button
                     type="button"
                     variant="ghost"
