@@ -303,7 +303,7 @@ function _QuoteLineRow({
       <div className="lg:hidden space-y-3">
         <div className="flex items-start justify-between">
           <span className="text-sm font-medium text-muted-foreground">
-            Línea {index + 1}
+            Ítem {index + 1}
           </span>
           <Button type="button" variant="ghost" size="sm" onClick={onRemove}>
             <Trash2 className="h-4 w-4 text-destructive" />
@@ -667,7 +667,7 @@ export function QuoteForm({
   const onSubmit = async (data: FormInput) => {
     try {
       if (data.lines.length === 0) {
-        toast.error('Debe agregar al menos una línea al presupuesto');
+        toast.error('Debe agregar al menos un ítem al presupuesto');
         return;
       }
 
@@ -893,7 +893,7 @@ export function QuoteForm({
               onClick={handleAddLine}
             >
               <Plus className="h-4 w-4 mr-2" />
-              Agregar Línea
+              Agregar Ítem
             </Button>
           </div>
 
@@ -930,8 +930,8 @@ export function QuoteForm({
 
           {fields.length === 0 && (
             <div className="text-center py-8 text-muted-foreground">
-              No hay líneas agregadas. Hacé clic en &quot;Agregar
-              Línea&quot; para comenzar.
+              No hay ítems agregados. Hacé clic en &quot;Agregar
+              Ítem&quot; para comenzar.
             </div>
           )}
         </Card>
@@ -1066,7 +1066,7 @@ export function QuoteForm({
                   </div>
                   {totals.lineDiscounts > 0 && (
                     <div className="flex justify-between text-orange-600">
-                      <span>Descuento líneas:</span>
+                      <span>Descuento ítems:</span>
                       <span className="font-mono">
                         -{formatCurrency(totals.lineDiscounts)}
                       </span>

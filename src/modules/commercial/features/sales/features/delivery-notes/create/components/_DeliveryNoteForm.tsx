@@ -240,7 +240,7 @@ export function _DeliveryNoteForm({
         {/* ─── SECCIÓN: Líneas ─── */}
         <Card className="p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold">Líneas de Entrega</h3>
+            <h3 className="text-lg font-semibold">Ítems de Entrega</h3>
             <Button
               type="button"
               variant="outline"
@@ -255,14 +255,14 @@ export function _DeliveryNoteForm({
               }
             >
               <Plus className="mr-2 h-4 w-4" />
-              Agregar Línea
+              Agregar Ítem
             </Button>
           </div>
 
           {/* Mensaje de estado vacío */}
           {fields.length === 0 && (
             <div className="text-center py-8 text-muted-foreground">
-              Haz clic en &quot;Agregar Línea&quot; para agregar productos a entregar.
+              Haz clic en &quot;Agregar Ítem&quot; para agregar productos a entregar.
             </div>
           )}
 
@@ -270,7 +270,7 @@ export function _DeliveryNoteForm({
             {fields.map((field, index) => (
               <Card key={field.id} className="p-4 bg-muted/20">
                 <div className="flex items-start justify-between mb-3">
-                  <h4 className="font-medium text-sm">Línea {index + 1}</h4>
+                  <h4 className="font-medium text-sm">Ítem {index + 1}</h4>
                   <Button
                     type="button"
                     variant="ghost"
@@ -389,7 +389,7 @@ export function _DeliveryNoteForm({
                     name={`lines.${index}.notes`}
                     render={({ field: f }) => (
                       <FormItem className="md:col-span-2">
-                        <FormLabel>Notas de la línea (opcional)</FormLabel>
+                        <FormLabel>Notas del ítem (opcional)</FormLabel>
                         <FormControl>
                           <Input
                             {...f}

@@ -226,8 +226,8 @@ export function _QuotesTable({ data, totalRows, searchParams }: Props) {
             <AlertDialogTitle>Eliminar presupuesto</AlertDialogTitle>
             <AlertDialogDescription>
               Esta acción eliminará permanentemente el presupuesto{' '}
-              {dialogAction?.type === 'delete' ? dialogAction.quote.number : ''} y todas sus
-              líneas. Esta acción no se puede deshacer.
+              {dialogAction?.type === 'delete' ? dialogAction.quote.number : ''} y todos sus
+              ítems. Esta acción no se puede deshacer.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

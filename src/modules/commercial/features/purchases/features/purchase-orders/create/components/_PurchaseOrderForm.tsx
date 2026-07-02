@@ -280,13 +280,13 @@ export function _PurchaseOrderForm({
             <h2 className="text-lg font-semibold">Productos / Servicios</h2>
             <Button type="button" variant="outline" size="sm" onClick={handleAddLine}>
               <Plus className="mr-2 h-4 w-4" />
-              Agregar línea
+              Agregar Ítem
             </Button>
           </div>
 
           {fields.length === 0 && (
             <div className="text-center py-8 text-muted-foreground border border-dashed rounded-lg">
-              No hay líneas. Haz clic en &quot;Agregar línea&quot; para comenzar.
+              No hay ítems. Haz clic en &quot;Agregar Ítem&quot; para comenzar.
             </div>
           )}
 
@@ -294,7 +294,7 @@ export function _PurchaseOrderForm({
             {fields.map((field, index) => (
               <div key={field.id} className="border rounded-lg p-4 space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-muted-foreground">Línea {index + 1}</span>
+                  <span className="text-sm font-medium text-muted-foreground">Ítem {index + 1}</span>
                   <Button
                     type="button"
                     variant="ghost"

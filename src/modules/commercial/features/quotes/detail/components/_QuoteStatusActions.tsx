@@ -163,7 +163,7 @@ export function _QuoteStatusActions({
                   <AlertDialogTitle>Eliminar Presupuesto</AlertDialogTitle>
                   <AlertDialogDescription>
                     Esta acción no se puede deshacer. Se eliminará el
-                    presupuesto y todas sus líneas de forma permanente.
+                    presupuesto y todos sus ítems de forma permanente.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
@@ -299,7 +299,7 @@ export function _QuoteStatusActions({
       {status === 'COMPLETED' && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <CheckCircle2 className="h-4 w-4 text-blue-600" />
-          <span>Presupuesto completado. Todas las líneas fueron facturadas.</span>
+          <span>Presupuesto completado. Todos los ítems fueron facturados.</span>
         </div>
       )}
 

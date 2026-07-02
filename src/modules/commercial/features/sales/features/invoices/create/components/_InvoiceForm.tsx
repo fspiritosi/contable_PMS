@@ -272,7 +272,7 @@ function _InvoiceLineRow({
       {/* Mobile: layout apilado */}
       <div className="lg:hidden space-y-3">
         <div className="flex items-start justify-between">
-          <span className="text-sm font-medium text-muted-foreground">Línea {index + 1}</span>
+          <span className="text-sm font-medium text-muted-foreground">Ítem {index + 1}</span>
           <Button type="button" variant="ghost" size="sm" onClick={onRemove}>
             <Trash2 className="h-4 w-4 text-destructive" />
           </Button>
@@ -710,7 +710,7 @@ export function InvoiceForm({ customers, pointsOfSale, products, mode = 'create'
   const onSubmit = async (data: FormInput) => {
     try {
       if (data.lines.length === 0) {
-        toast.error('Debe agregar al menos una línea a la factura');
+        toast.error('Debe agregar al menos un ítem a la factura');
         return;
       }
 
@@ -937,7 +937,7 @@ export function InvoiceForm({ customers, pointsOfSale, products, mode = 'create'
             <h3 className="text-lg font-semibold">Detalle de Productos/Servicios</h3>
             <Button type="button" variant="outline" size="sm" onClick={handleAddLine}>
               <Plus className="h-4 w-4 mr-2" />
-              Agregar Línea
+              Agregar Ítem
             </Button>
           </div>
 
@@ -975,7 +975,7 @@ export function InvoiceForm({ customers, pointsOfSale, products, mode = 'create'
 
           {fields.length === 0 && (
             <div className="text-center py-8 text-muted-foreground">
-              No hay líneas agregadas. Hacé clic en &quot;Agregar Línea&quot; para comenzar.
+              No hay ítems agregados. Hacé clic en &quot;Agregar Ítem&quot; para comenzar.
             </div>
           )}
         </Card>
@@ -1090,7 +1090,7 @@ export function InvoiceForm({ customers, pointsOfSale, products, mode = 'create'
                   </div>
                   {totals.lineDiscounts > 0 && (
                     <div className="flex justify-between text-orange-600">
-                      <span>Descuento líneas:</span>
+                      <span>Descuento ítems:</span>
                       <span className="font-mono">-{formatCurrency(totals.lineDiscounts)}</span>
                     </div>
                   )}
