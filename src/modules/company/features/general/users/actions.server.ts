@@ -451,6 +451,86 @@ export async function cancelInvitation(invitationId: string) {
 }
 
 /**
+ * Reenvía el email de una invitación pendiente.
+ * Mantiene el mismo token (el enlace previo sigue siendo válido) y renueva
+ * la expiración a 7 días desde ahora.
+ */
+export async function resendInvitation(invitationId: string) {
+  const userId = await getCurrentUserId();
+  if (!userId) throw new Error('No autenticado');
+  await checkPermission('company.general.users', 'update', { redirect: true });
+
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  try {
+    const invitation = await prisma.companyInvitation.findFirst({
+      where: {
+        id: invitationId,
+        companyId,
+        acceptedAt: null,
+      },
+      include: { assignedRole: { select: { name: true } } },
+    });
+
+    if (!invitation) {
+      throw new Error('Invitación no encontrada o ya aceptada');
+    }
+
+    // Renovar expiración a 7 días desde ahora
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7);
+
+    await prisma.companyInvitation.update({
+      where: { id: invitationId },
+      data: { expiresAt },
+    });
+
+    // Datos para el email
+    const company = await prisma.company.findUnique({
+      where: { id: companyId },
+      select: { name: true },
+    });
+
+    const inviter = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { firstName: true, lastName: true },
+    });
+    const inviterName =
+      `${inviter?.firstName || ''} ${inviter?.lastName || ''}`.trim() ||
+      'Un administrador';
+
+    // A diferencia de la invitación inicial, acá el envío del email ES el objetivo:
+    // si falla, la acción falla para que el usuario lo sepa.
+    await sendInvitationEmail({
+      to: invitation.email,
+      inviteUrl: `${process.env.NEXT_PUBLIC_APP_URL}/invite?token=${invitation.token}`,
+      companyName: company?.name || 'La empresa',
+      roleName: invitation.assignedRole?.name || 'Miembro',
+      invitedByName: inviterName,
+      expiresAt,
+    });
+
+    await createAuditLog({
+      action: AUDIT_ACTIONS.invitation_resent,
+      targetType: 'invitation',
+      targetId: invitationId,
+      targetName: invitation.email,
+    });
+
+    logger.info('Invitación reenviada', {
+      data: { invitationId, email: invitation.email },
+    });
+    revalidatePath('/dashboard/company/general/users');
+
+    return { success: true };
+  } catch (error) {
+    logger.error('Error al reenviar invitación', { data: { error, invitationId } });
+    throw error;
+  }
+}
+
+/**
  * Actualiza el rol de un miembro
  */
 export async function updateMemberRole(input: UpdateMemberRoleInput) {

@@ -353,6 +353,7 @@ export const AUDIT_ACTIONS = {
   invitation_accepted: 'invitation_accepted',
   invitation_expired: 'invitation_expired',
   invitation_cancelled: 'invitation_cancelled',
+  invitation_resent: 'invitation_resent',
 } as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[keyof typeof AUDIT_ACTIONS];

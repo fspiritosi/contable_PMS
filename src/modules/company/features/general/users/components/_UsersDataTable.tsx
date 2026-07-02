@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, Mail, XCircle } from 'lucide-react';
+import { Plus, Mail, XCircle, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import moment from 'moment';
 
@@ -37,6 +37,7 @@ import { _EditUserRoleModal } from './_EditUserRoleModal';
 import {
   deactivateMember,
   cancelInvitation,
+  resendInvitation,
   type CompanyMemberListItem,
   type PendingInvitation,
   type AvailableRole,
@@ -69,9 +70,23 @@ export function _UsersDataTable({
   const [editingMember, setEditingMember] = useState<CompanyMemberListItem | null>(null);
   const [deactivatingMember, setDeactivatingMember] = useState<CompanyMemberListItem | null>(null);
   const [cancellingInvitation, setCancellingInvitation] = useState<PendingInvitation | null>(null);
+  const [resendingId, setResendingId] = useState<string | null>(null);
 
   const handleRefresh = () => {
     router.refresh();
+  };
+
+  const handleResendInvitation = async (invitation: PendingInvitation) => {
+    setResendingId(invitation.id);
+    try {
+      await resendInvitation(invitation.id);
+      toast.success(`Invitación reenviada a ${invitation.email}`);
+      handleRefresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Error al reenviar invitación');
+    } finally {
+      setResendingId(null);
+    }
   };
 
   const handleDeactivate = async () => {
@@ -154,9 +169,21 @@ export function _UsersDataTable({
                     <Button
                       variant="ghost"
                       size="sm"
+                      onClick={() => handleResendInvitation(invitation)}
+                      disabled={resendingId === invitation.id}
+                      title="Reenviar invitación"
+                    >
+                      <Send className="h-4 w-4" />
+                      <span className="sr-only">Reenviar invitación</span>
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onClick={() => setCancellingInvitation(invitation)}
+                      title="Cancelar invitación"
                     >
                       <XCircle className="h-4 w-4 text-destructive" />
+                      <span className="sr-only">Cancelar invitación</span>
                     </Button>
                   </div>
                 </div>
