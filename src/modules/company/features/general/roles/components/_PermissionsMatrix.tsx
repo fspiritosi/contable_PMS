@@ -87,11 +87,49 @@ export function _PermissionsMatrix({
     });
   };
 
+  // Estado de selección de un grupo/Card completo (todos sus módulos × acciones)
+  const isGroupFullySelected = (group: ModuleGroup): boolean =>
+    group.modules.length > 0 &&
+    group.modules.every((m) =>
+      availableActions.every((action) => isPermissionSelected(m.key, action))
+    );
+
+  const isGroupPartiallySelected = (group: ModuleGroup): boolean =>
+    group.modules.some((m) =>
+      availableActions.some((action) => isPermissionSelected(m.key, action))
+    );
+
+  // Seleccionar/deseleccionar todos los permisos de un grupo/Card
+  const handleSelectAllGroup = (group: ModuleGroup) => {
+    const target = !isGroupFullySelected(group);
+    group.modules.forEach((m) => {
+      availableActions.forEach((action) => {
+        if (isPermissionSelected(m.key, action) !== target) {
+          handleChange(m.key, action, target);
+        }
+      });
+    });
+  };
+
   return (
     <div className="space-y-6">
-      {moduleGroups.map((group) => (
+      {moduleGroups.map((group) => {
+        const groupAllSelected = isGroupFullySelected(group);
+        const groupSomeSelected = isGroupPartiallySelected(group);
+        return (
         <div key={group.name} className="space-y-2">
-          <h3 className="font-semibold text-sm text-muted-foreground">{group.name}</h3>
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold text-sm text-muted-foreground">{group.name}</h3>
+            <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
+              <Checkbox
+                checked={groupAllSelected ? true : groupSomeSelected ? 'indeterminate' : false}
+                onCheckedChange={() => handleSelectAllGroup(group)}
+                disabled={disabled}
+                aria-label={`Seleccionar todos los permisos de ${group.name}`}
+              />
+              Seleccionar todo
+            </label>
+          </div>
           <div className="border rounded-lg overflow-hidden">
             <Table>
               <TableHeader>
@@ -152,7 +190,8 @@ export function _PermissionsMatrix({
             </Table>
           </div>
         </div>
-      ))}
+        );
+      })}
 
       {/* Resumen de permisos */}
       <div className="flex items-center gap-2 text-sm text-muted-foreground">

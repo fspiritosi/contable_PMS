@@ -4,6 +4,7 @@ import { getCurrentUserId } from '@/shared/lib/current-user';
 import { prisma } from '@/shared/lib/prisma';
 import { logger } from '@/shared/lib/logger';
 import { revalidateCompanyRoutes } from '@/modules/companies/shared/utils';
+import { initializeCompanyRbac } from '@/shared/lib/permissions/rbac-init';
 
 import { TaxStatus } from '@/generated/prisma/enums';
 
@@ -64,12 +65,17 @@ export async function createCompany(input: CreateCompanyInput) {
         },
       });
 
-      // Crear membership como owner
+      // Inicializar RBAC (acciones globales, roles de sistema y permisos) de forma
+      // idempotente, para que la empresa nazca con roles/permisos sin depender del seed.
+      const { roleIds } = await initializeCompanyRbac(tx, company.id);
+
+      // Crear membership como owner, con el rol Propietario asignado.
       await tx.companyMember.create({
         data: {
           companyId: company.id,
           userId,
           isOwner: true,
+          roleId: roleIds.owner,
           joinedAt: new Date(),
         },
       });

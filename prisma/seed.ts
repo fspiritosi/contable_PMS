@@ -460,6 +460,7 @@ async function main() {
       { slug: 'create', name: 'Crear', description: 'Permite crear nuevos recursos' },
       { slug: 'update', name: 'Editar', description: 'Permite modificar recursos existentes' },
       { slug: 'delete', name: 'Eliminar', description: 'Permite eliminar recursos' },
+      { slug: 'approve', name: 'Aprobar', description: 'Permite aprobar recursos' },
     ];
 
     const actionIds: Record<string, string> = {};
@@ -547,7 +548,7 @@ async function main() {
       'company.document-types',
     ];
 
-    const actionSlugs = ['view', 'create', 'update', 'delete'];
+    const actionSlugs = ['view', 'create', 'update', 'delete', 'approve'];
     let permissionsCreated = 0;
 
     // Asignar todos los permisos a Owner y Developer

@@ -107,6 +107,9 @@ export function _RoleForm({ role, systemActions, permissionsConfig }: Props) {
   const handlePermissionChange = (module: string, actionId: string, checked: boolean) => {
     setSelectedPermissions((prev) => {
       if (checked) {
+        // Evitar duplicados: los botones "Todos" pueden re-marcar celdas ya seleccionadas
+        const exists = prev.some((p) => p.module === module && p.actionId === actionId);
+        if (exists) return prev;
         return [...prev, { module, actionId }];
       }
       return prev.filter((p) => !(p.module === module && p.actionId === actionId));
