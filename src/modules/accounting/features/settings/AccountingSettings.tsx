@@ -84,6 +84,7 @@ async function AccountingSettingsContent({ companyId }: { companyId: string }) {
               defaultBankAccountId: settings?.defaultBankAccountId ?? null,
               expensesAccountId: settings?.expensesAccountId ?? null,
               resultAccountId: settings?.resultAccountId ?? null,
+              partnerContributionsAccountId: settings?.partnerContributionsAccountId ?? null,
               withholdingIvaEmittedAccountId: settings?.withholdingIvaEmittedAccountId ?? null,
               withholdingGananciasEmittedAccountId: settings?.withholdingGananciasEmittedAccountId ?? null,
               withholdingIibbEmittedAccountId: settings?.withholdingIibbEmittedAccountId ?? null,

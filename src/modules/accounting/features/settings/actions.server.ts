@@ -46,6 +46,7 @@ export async function saveAccountingSettings(
     defaultBankAccountId?: string | null;
     expensesAccountId?: string | null;
     resultAccountId?: string | null;
+    partnerContributionsAccountId?: string | null;
     withholdingIvaEmittedAccountId?: string | null;
     withholdingGananciasEmittedAccountId?: string | null;
     withholdingIibbEmittedAccountId?: string | null;

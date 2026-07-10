@@ -249,6 +249,11 @@ const navMain: NavItemWithSub[] = [
             module: 'commercial.treasury.partners',
           },
           {
+            title: 'Movimientos de Fondos',
+            href: '/dashboard/commercial/treasury/fund-movements',
+            module: 'commercial.treasury.fund-movements',
+          },
+          {
             title: 'Tarjetas',
             href: '/dashboard/commercial/treasury/cards',
             module: 'commercial.treasury.cards',

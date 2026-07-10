@@ -33,6 +33,7 @@ const commercialIntegrationSchema = z.object({
   defaultBankAccountId: z.string().nullable().transform((val) => val === '__clear__' ? null : val),
   expensesAccountId: z.string().nullable().transform((val) => val === '__clear__' ? null : val),
   resultAccountId: z.string().nullable().transform((val) => val === '__clear__' ? null : val),
+  partnerContributionsAccountId: z.string().nullable().transform((val) => val === '__clear__' ? null : val),
   withholdingIvaEmittedAccountId: z.string().nullable().transform((val) => val === '__clear__' ? null : val),
   withholdingGananciasEmittedAccountId: z.string().nullable().transform((val) => val === '__clear__' ? null : val),
   withholdingIibbEmittedAccountId: z.string().nullable().transform((val) => val === '__clear__' ? null : val),
@@ -401,6 +402,32 @@ export function _CommercialIntegrationForm({
             </Select>
             <p className="text-xs text-muted-foreground">
               Cuenta de Patrimonio Neto donde se registra el resultado al cerrar el ejercicio fiscal
+            </p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="partnerContributionsAccountId">Cuenta de Aportes de Socios</Label>
+            <Select
+              value={form.watch('partnerContributionsAccountId') || undefined}
+              onValueChange={(value) => handleSelectChange('partnerContributionsAccountId', value)}
+              disabled={isLoading}
+            >
+              <SelectTrigger id="partnerContributionsAccountId">
+                <SelectValue placeholder="Seleccionar cuenta..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__clear__">Sin asignar</SelectItem>
+                {accounts
+                  .filter((acc) => acc.type === 'EQUITY')
+                  .map((account) => (
+                    <SelectItem key={account.id} value={account.id}>
+                      {formatAccountOption(account)}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Cuenta de Patrimonio Neto usada como contrapartida de los aportes y retiros de socios
+              (Movimientos de fondos)
             </p>
           </div>
         </div>
