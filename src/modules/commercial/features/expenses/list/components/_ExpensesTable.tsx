@@ -57,10 +57,10 @@ export function _ExpensesTable({ data, totalRows, searchParams, facetCounts, cat
     setIsProcessing(true);
     try {
       await confirmExpense(selectedExpense.id);
-      toast.success('Gasto confirmado correctamente');
+      toast.success('Egreso confirmado correctamente');
       router.refresh();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Error al confirmar gasto');
+      toast.error(error instanceof Error ? error.message : 'Error al confirmar egreso');
     } finally {
       setIsProcessing(false);
       setConfirmDialogOpen(false);
@@ -74,10 +74,10 @@ export function _ExpensesTable({ data, totalRows, searchParams, facetCounts, cat
     setIsProcessing(true);
     try {
       await cancelExpense(selectedExpense.id);
-      toast.success('Gasto cancelado correctamente');
+      toast.success('Egreso cancelado correctamente');
       router.refresh();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Error al cancelar gasto');
+      toast.error(error instanceof Error ? error.message : 'Error al cancelar egreso');
     } finally {
       setIsProcessing(false);
       setCancelDialogOpen(false);
@@ -91,10 +91,10 @@ export function _ExpensesTable({ data, totalRows, searchParams, facetCounts, cat
     setIsProcessing(true);
     try {
       await deleteExpense(selectedExpense.id);
-      toast.success('Gasto eliminado correctamente');
+      toast.success('Egreso eliminado correctamente');
       router.refresh();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Error al eliminar gasto');
+      toast.error(error instanceof Error ? error.message : 'Error al eliminar egreso');
     } finally {
       setIsProcessing(false);
       setDeleteDialogOpen(false);
@@ -206,9 +206,9 @@ export function _ExpensesTable({ data, totalRows, searchParams, facetCounts, cat
       <AlertDialog open={confirmDialogOpen} onOpenChange={setConfirmDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Confirmar gasto</AlertDialogTitle>
+            <AlertDialogTitle>Confirmar egreso</AlertDialogTitle>
             <AlertDialogDescription>
-              Al confirmar el gasto {selectedExpense?.fullNumber}, quedará registrado como confirmado
+              Al confirmar el egreso {selectedExpense?.fullNumber}, quedará registrado como confirmado
               y podrá ser incluido en una orden de pago. Esta acción no se puede deshacer.
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -225,10 +225,10 @@ export function _ExpensesTable({ data, totalRows, searchParams, facetCounts, cat
       <AlertDialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Cancelar gasto</AlertDialogTitle>
+            <AlertDialogTitle>Cancelar egreso</AlertDialogTitle>
             <AlertDialogDescription>
-              ¿Estás seguro de que deseas cancelar el gasto {selectedExpense?.fullNumber}?
-              Solo se pueden cancelar gastos sin pagos confirmados. Esta acción no se puede deshacer.
+              ¿Estás seguro de que deseas cancelar el egreso {selectedExpense?.fullNumber}?
+              Solo se pueden cancelar egresos sin pagos confirmados. Esta acción no se puede deshacer.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -238,7 +238,7 @@ export function _ExpensesTable({ data, totalRows, searchParams, facetCounts, cat
               disabled={isProcessing}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {isProcessing ? 'Cancelando...' : 'Cancelar Gasto'}
+              {isProcessing ? 'Cancelando...' : 'Cancelar Egreso'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -248,9 +248,9 @@ export function _ExpensesTable({ data, totalRows, searchParams, facetCounts, cat
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Eliminar gasto</AlertDialogTitle>
+            <AlertDialogTitle>Eliminar egreso</AlertDialogTitle>
             <AlertDialogDescription>
-              Esta acción eliminará permanentemente el gasto {selectedExpense?.fullNumber} y todos
+              Esta acción eliminará permanentemente el egreso {selectedExpense?.fullNumber} y todos
               sus registros asociados. Esta acción no se puede deshacer.
             </AlertDialogDescription>
           </AlertDialogHeader>

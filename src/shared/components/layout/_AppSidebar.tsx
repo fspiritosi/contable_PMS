@@ -203,7 +203,7 @@ const navMain: NavItemWithSub[] = [
             module: 'commercial',
           },
           {
-            title: 'Gastos',
+            title: 'Egresos',
             href: '/dashboard/commercial/expenses',
             module: 'commercial.expenses',
           },

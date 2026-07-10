@@ -265,7 +265,7 @@ export function _CategoryManagementModal({ trigger, onClose }: CategoryManagemen
                             <p className="text-xs text-muted-foreground mt-0.5">{category.description}</p>
                           )}
                           <p className="text-xs text-muted-foreground mt-0.5">
-                            {category._count.expenses} gasto{category._count.expenses !== 1 ? 's' : ''}
+                            {category._count.expenses} egreso{category._count.expenses !== 1 ? 's' : ''}
                           </p>
                         </div>
                         <div className="flex items-center gap-1 flex-shrink-0">

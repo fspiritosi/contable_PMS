@@ -73,8 +73,8 @@ export function _ExpenseDetailModal({ expenseId, open, onOpenChange, onSuccess }
       const data = await getExpenseById(expenseId);
       setExpense(data);
     } catch (error) {
-      logger.error('Error al cargar gasto', { data: { error } });
-      toast.error('Error al cargar el detalle del gasto');
+      logger.error('Error al cargar egreso', { data: { error } });
+      toast.error('Error al cargar el detalle del egreso');
     } finally {
       setLoading(false);
     }
@@ -94,7 +94,7 @@ export function _ExpenseDetailModal({ expenseId, open, onOpenChange, onSuccess }
     setIsProcessing(true);
     try {
       const result = await confirmExpense(expense.id);
-      toast.success('Gasto confirmado correctamente');
+      toast.success('Egreso confirmado correctamente');
 
       // Mostrar advertencia presupuestaria si existe (no bloqueante)
       if (result.budgetWarning) {
@@ -109,7 +109,7 @@ export function _ExpenseDetailModal({ expenseId, open, onOpenChange, onSuccess }
       onSuccess?.();
       await loadExpense();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Error al confirmar gasto');
+      toast.error(error instanceof Error ? error.message : 'Error al confirmar egreso');
     } finally {
       setIsProcessing(false);
     }
@@ -121,13 +121,13 @@ export function _ExpenseDetailModal({ expenseId, open, onOpenChange, onSuccess }
     setIsProcessing(true);
     try {
       await cancelExpense(expense.id);
-      toast.success('Gasto cancelado correctamente');
+      toast.success('Egreso cancelado correctamente');
       setCancelDialogOpen(false);
       router.refresh();
       onSuccess?.();
       await loadExpense();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Error al cancelar gasto');
+      toast.error(error instanceof Error ? error.message : 'Error al cancelar egreso');
     } finally {
       setIsProcessing(false);
     }
@@ -144,7 +144,7 @@ export function _ExpenseDetailModal({ expenseId, open, onOpenChange, onSuccess }
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-3xl">
           <DialogHeader>
-            <DialogTitle>Detalle de Gasto</DialogTitle>
+            <DialogTitle>Detalle de Egreso</DialogTitle>
           </DialogHeader>
 
           {loading ? (
@@ -329,7 +329,7 @@ export function _ExpenseDetailModal({ expenseId, open, onOpenChange, onSuccess }
                     disabled={isProcessing}
                   >
                     <XCircle className="mr-2 h-4 w-4" />
-                    Cancelar Gasto
+                    Cancelar Egreso
                   </Button>
                 )}
               </div>
@@ -342,9 +342,9 @@ export function _ExpenseDetailModal({ expenseId, open, onOpenChange, onSuccess }
       <AlertDialog open={confirmDialogOpen} onOpenChange={setConfirmDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Confirmar gasto</AlertDialogTitle>
+            <AlertDialogTitle>Confirmar egreso</AlertDialogTitle>
             <AlertDialogDescription>
-              Al confirmar el gasto {expense?.fullNumber}, quedará registrado como confirmado y
+              Al confirmar el egreso {expense?.fullNumber}, quedará registrado como confirmado y
               podrá ser incluido en una orden de pago. Esta acción no se puede deshacer.
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -361,9 +361,9 @@ export function _ExpenseDetailModal({ expenseId, open, onOpenChange, onSuccess }
       <AlertDialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Cancelar gasto</AlertDialogTitle>
+            <AlertDialogTitle>Cancelar egreso</AlertDialogTitle>
             <AlertDialogDescription>
-              ¿Estás seguro de que deseas cancelar el gasto {expense?.fullNumber}?
+              ¿Estás seguro de que deseas cancelar el egreso {expense?.fullNumber}?
               Esta acción no se puede deshacer.
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -374,7 +374,7 @@ export function _ExpenseDetailModal({ expenseId, open, onOpenChange, onSuccess }
               disabled={isProcessing}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {isProcessing ? 'Cancelando...' : 'Cancelar Gasto'}
+              {isProcessing ? 'Cancelando...' : 'Cancelar Egreso'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

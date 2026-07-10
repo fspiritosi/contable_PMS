@@ -146,7 +146,7 @@ export const MODULE_LABELS: Record<Module, string> = {
   'commercial.treasury.cashflow': 'Flujo de Caja',
   'commercial.treasury.partners': 'Socios',
   'commercial.treasury.cards': 'Tarjetas',
-  'commercial.expenses': 'Gastos',
+  'commercial.expenses': 'Egresos',
   'commercial.equivalences': 'Equivalencias',
 
   'company.general.users': 'Usuarios',
