@@ -35,6 +35,11 @@ import { _BulkPriceAdjustModal } from './_BulkPriceAdjustModal';
 import { _OemCompareModal } from './_OemCompareModal';
 import { _LabelPrintModal } from './_LabelPrintModal';
 import { _ProductImportModal } from './_ProductImportModal';
+import {
+  _ImputationModal,
+  type AccountOption,
+  type CostCenterOption,
+} from './_ImputationModal';
 
 interface FacetCounts {
   type: Record<string, number>;
@@ -47,9 +52,11 @@ interface ProductsTableProps {
   searchParams: DataTableSearchParams;
   permissions: ModulePermissions;
   facetCounts?: FacetCounts;
+  accounts: AccountOption[];
+  costCenters: CostCenterOption[];
 }
 
-export function _ProductsTable({ data, totalRows, searchParams, permissions, facetCounts }: ProductsTableProps) {
+export function _ProductsTable({ data, totalRows, searchParams, permissions, facetCounts, accounts, costCenters }: ProductsTableProps) {
   const router = useRouter();
   const pathname = usePathname();
   const urlSearchParams = useSearchParams();
@@ -57,6 +64,7 @@ export function _ProductsTable({ data, totalRows, searchParams, permissions, fac
   const showOemCode = isFeatureAvailable('products.triple-coding');
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [deletingProduct, setDeletingProduct] = useState<Product | null>(null);
+  const [imputationProduct, setImputationProduct] = useState<Product | null>(null);
   const [selectedRows, setSelectedRows] = useState<Product[]>([]);
   const [bulkPriceOpen, setBulkPriceOpen] = useState(false);
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
@@ -122,6 +130,7 @@ export function _ProductsTable({ data, totalRows, searchParams, permissions, fac
       getColumns({
         onEdit: setEditingProduct,
         onDelete: setDeletingProduct,
+        onImputation: setImputationProduct,
         permissions,
         showOemCode,
       }),
@@ -280,6 +289,18 @@ export function _ProductsTable({ data, totalRows, searchParams, permissions, fac
         open={bulkEditOpen}
         onOpenChange={setBulkEditOpen}
         onSuccess={handleBulkEditSuccess}
+        accounts={accounts}
+        costCenters={costCenters}
+      />
+
+      {/* Modal de imputación contable (por artículo) */}
+      <_ImputationModal
+        product={imputationProduct}
+        accounts={accounts}
+        costCenters={costCenters}
+        open={!!imputationProduct}
+        onOpenChange={(open) => !open && setImputationProduct(null)}
+        onSuccess={handleRefresh}
       />
 
       {/* Modal de ajuste masivo de precios */}
@@ -306,7 +327,7 @@ export function _ProductsTable({ data, totalRows, searchParams, permissions, fac
           <AlertDialogHeader>
             <AlertDialogTitle>¿Eliminar este artículo?</AlertDialogTitle>
             <AlertDialogDescription>
-              El artículo "{deletingProduct?.name}" será eliminado permanentemente.
+              El artículo &quot;{deletingProduct?.name}&quot; será eliminado permanentemente.
               Esta acción no se puede deshacer.
             </AlertDialogDescription>
           </AlertDialogHeader>

@@ -30,28 +30,42 @@ import {
 } from '../../../shared/types';
 import { bulkUpdateProducts } from '../actions.server';
 import { getCategories } from '../../../features/categories/actions.server';
+import type { AccountOption, CostCenterOption } from './_ImputationModal';
+
+const CLEAR_VALUE = '__none__';
 
 interface Props {
   selectedIds: string[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
+  accounts: AccountOption[];
+  costCenters: CostCenterOption[];
 }
 
-export function _BulkEditModal({ selectedIds, open, onOpenChange, onSuccess }: Props) {
+export function _BulkEditModal({ selectedIds, open, onOpenChange, onSuccess, accounts, costCenters }: Props) {
   const queryClient = useQueryClient();
+
+  const incomeAccounts = accounts.filter((a) => a.nature === 'CREDIT');
+  const expenseAccounts = accounts.filter((a) => a.nature === 'DEBIT');
 
   // Field enable toggles
   const [enableCategory, setEnableCategory] = useState(false);
   const [enableStatus, setEnableStatus] = useState(false);
   const [enableUnit, setEnableUnit] = useState(false);
   const [enableDescription, setEnableDescription] = useState(false);
+  const [enableIncomeAccount, setEnableIncomeAccount] = useState(false);
+  const [enableExpenseAccount, setEnableExpenseAccount] = useState(false);
+  const [enableCostCenter, setEnableCostCenter] = useState(false);
 
   // Field values
   const [categoryId, setCategoryId] = useState<string>('');
   const [status, setStatus] = useState<string>('');
   const [unitOfMeasure, setUnitOfMeasure] = useState<string>('');
   const [description, setDescription] = useState<string>('');
+  const [incomeAccountId, setIncomeAccountId] = useState<string>(CLEAR_VALUE);
+  const [expenseAccountId, setExpenseAccountId] = useState<string>(CLEAR_VALUE);
+  const [costCenterId, setCostCenterId] = useState<string>(CLEAR_VALUE);
 
   const { data: categories } = useQuery({
     queryKey: ['product-categories-select'],
@@ -62,10 +76,13 @@ export function _BulkEditModal({ selectedIds, open, onOpenChange, onSuccess }: P
   const mutation = useMutation({
     mutationFn: () => {
       const updates: Record<string, string | null | undefined> = {};
-      if (enableCategory) updates.categoryId = categoryId === '__none__' ? null : (categoryId || null);
+      if (enableCategory) updates.categoryId = categoryId === CLEAR_VALUE ? null : (categoryId || null);
       if (enableStatus) updates.status = status;
       if (enableUnit) updates.unitOfMeasure = unitOfMeasure;
       if (enableDescription) updates.description = description;
+      if (enableIncomeAccount) updates.defaultIncomeAccountId = incomeAccountId === CLEAR_VALUE ? null : incomeAccountId;
+      if (enableExpenseAccount) updates.defaultExpenseAccountId = expenseAccountId === CLEAR_VALUE ? null : expenseAccountId;
+      if (enableCostCenter) updates.defaultCostCenterId = costCenterId === CLEAR_VALUE ? null : costCenterId;
 
       return bulkUpdateProducts({ productIds: selectedIds, updates });
     },
@@ -87,14 +104,20 @@ export function _BulkEditModal({ selectedIds, open, onOpenChange, onSuccess }: P
     setEnableStatus(false);
     setEnableUnit(false);
     setEnableDescription(false);
+    setEnableIncomeAccount(false);
+    setEnableExpenseAccount(false);
+    setEnableCostCenter(false);
     setCategoryId('');
     setStatus('');
     setUnitOfMeasure('');
     setDescription('');
+    setIncomeAccountId(CLEAR_VALUE);
+    setExpenseAccountId(CLEAR_VALUE);
+    setCostCenterId(CLEAR_VALUE);
   };
 
   const handleSubmit = () => {
-    if (!enableCategory && !enableStatus && !enableUnit && !enableDescription) {
+    if (!hasChanges) {
       toast.error('Seleccione al menos un campo para modificar');
       return;
     }
@@ -109,7 +132,14 @@ export function _BulkEditModal({ selectedIds, open, onOpenChange, onSuccess }: P
     mutation.mutate();
   };
 
-  const hasChanges = enableCategory || enableStatus || enableUnit || enableDescription;
+  const hasChanges =
+    enableCategory ||
+    enableStatus ||
+    enableUnit ||
+    enableDescription ||
+    enableIncomeAccount ||
+    enableExpenseAccount ||
+    enableCostCenter;
 
   return (
     <Dialog open={open} onOpenChange={(val) => { if (!val) handleReset(); onOpenChange(val); }}>
@@ -239,6 +269,90 @@ export function _BulkEditModal({ selectedIds, open, onOpenChange, onSuccess }: P
                 placeholder="Nueva descripción (dejar vacío para limpiar)"
                 rows={3}
               />
+            </div>
+          </div>
+
+          {/* Cuenta de Ingresos */}
+          <div className="flex items-start gap-3">
+            <Checkbox
+              id="enable-income-account"
+              checked={enableIncomeAccount}
+              onCheckedChange={(checked) => setEnableIncomeAccount(checked === true)}
+              className="mt-2"
+            />
+            <div className="flex-1 space-y-1.5">
+              <Label htmlFor="enable-income-account" className={!enableIncomeAccount ? 'text-muted-foreground' : ''}>
+                Cuenta de ingresos (ventas):
+              </Label>
+              <Select disabled={!enableIncomeAccount} value={incomeAccountId} onValueChange={setIncomeAccountId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleccionar cuenta" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={CLEAR_VALUE}>Sin asignar</SelectItem>
+                  {incomeAccounts.map((account) => (
+                    <SelectItem key={account.id} value={account.id}>
+                      {account.code} - {account.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Cuenta de Gastos */}
+          <div className="flex items-start gap-3">
+            <Checkbox
+              id="enable-expense-account"
+              checked={enableExpenseAccount}
+              onCheckedChange={(checked) => setEnableExpenseAccount(checked === true)}
+              className="mt-2"
+            />
+            <div className="flex-1 space-y-1.5">
+              <Label htmlFor="enable-expense-account" className={!enableExpenseAccount ? 'text-muted-foreground' : ''}>
+                Cuenta de gastos (compras):
+              </Label>
+              <Select disabled={!enableExpenseAccount} value={expenseAccountId} onValueChange={setExpenseAccountId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleccionar cuenta" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={CLEAR_VALUE}>Sin asignar</SelectItem>
+                  {expenseAccounts.map((account) => (
+                    <SelectItem key={account.id} value={account.id}>
+                      {account.code} - {account.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Centro de Costos */}
+          <div className="flex items-start gap-3">
+            <Checkbox
+              id="enable-cost-center"
+              checked={enableCostCenter}
+              onCheckedChange={(checked) => setEnableCostCenter(checked === true)}
+              className="mt-2"
+            />
+            <div className="flex-1 space-y-1.5">
+              <Label htmlFor="enable-cost-center" className={!enableCostCenter ? 'text-muted-foreground' : ''}>
+                Centro de costos:
+              </Label>
+              <Select disabled={!enableCostCenter} value={costCenterId} onValueChange={setCostCenterId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleccionar centro de costos" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={CLEAR_VALUE}>Sin asignar</SelectItem>
+                  {costCenters.map((cc) => (
+                    <SelectItem key={cc.id} value={cc.id}>
+                      {cc.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
         </div>
