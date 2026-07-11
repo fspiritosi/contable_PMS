@@ -118,7 +118,10 @@ export async function getCompanyMembersPaginated(searchParams: DataTableSearchPa
 }
 
 /**
- * Obtiene las invitaciones pendientes (no aceptadas y no expiradas)
+ * Obtiene las invitaciones no aceptadas (pendientes y expiradas).
+ * Las expiradas se incluyen con `isExpired: true` para poder mostrarlas y
+ * ofrecer Reenviar/Cancelar desde la UI (evita el callejón sin salida cuando
+ * una invitación venció sin ser aceptada).
  */
 export async function getPendingInvitations() {
   await checkPermission('company.general.users', 'view', { redirect: true });
@@ -127,11 +130,11 @@ export async function getPendingInvitations() {
   if (!companyId) throw new Error('No hay empresa activa');
 
   try {
+    const now = new Date();
     const invitations = await prisma.companyInvitation.findMany({
       where: {
         companyId,
-        acceptedAt: null, // No aceptada
-        expiresAt: { gt: new Date() }, // No expirada
+        acceptedAt: null, // No aceptada (pendientes + expiradas)
       },
       select: {
         id: true,
@@ -157,11 +160,12 @@ export async function getPendingInvitations() {
       orderBy: { createdAt: 'desc' },
     });
 
-    // Mapear para compatibilidad con la UI
+    // Mapear para compatibilidad con la UI + flag de expiración
     return invitations.map((inv) => ({
       ...inv,
       role: inv.assignedRole,
       employee: inv.employee,
+      isExpired: inv.expiresAt <= now,
     }));
   } catch (error) {
     logger.error('Error al obtener invitaciones', { data: { error, companyId } });
@@ -341,14 +345,31 @@ export async function inviteUser(input: InviteUserInput) {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7); // Expira en 7 días
 
-    const invitation = await prisma.companyInvitation.create({
-      data: {
+    // Usamos upsert sobre la clave única (companyId, email): si ya existe una
+    // fila vieja (expirada o de un miembro removido) la reutilizamos en vez de
+    // chocar contra @@unique([companyId, email]) con un create (error P2002).
+    // El token se conserva para mantener el enlace estable.
+    const invitation = await prisma.companyInvitation.upsert({
+      where: {
+        companyId_email: {
+          companyId,
+          email: input.email.toLowerCase(),
+        },
+      },
+      create: {
         companyId,
         email: input.email.toLowerCase(),
         roleId: input.roleId,
         employeeId: input.employeeId || null,
         invitedBy: userId,
         expiresAt,
+      },
+      update: {
+        roleId: input.roleId,
+        employeeId: input.employeeId || null,
+        invitedBy: userId,
+        expiresAt,
+        acceptedAt: null,
       },
     });
 
@@ -381,6 +402,7 @@ export async function inviteUser(input: InviteUserInput) {
       `${inviter?.firstName || ''} ${inviter?.lastName || ''}`.trim() ||
       'Un administrador';
 
+    let emailSent = true;
     try {
       await sendInvitationEmail({
         to: input.email,
@@ -391,13 +413,16 @@ export async function inviteUser(input: InviteUserInput) {
         expiresAt,
       });
     } catch (emailError) {
-      // Si falla el email, logueamos pero no fallamos la invitación
+      // Si falla el email, logueamos pero no fallamos la invitación (ya quedó
+      // creada). Devolvemos emailSent: false para que la UI avise y ofrezca
+      // Reenviar en vez de mostrar un falso "Invitación enviada".
+      emailSent = false;
       logger.error('Error enviando email de invitación', {
         data: { emailError, email: input.email },
       });
     }
 
-    return invitation;
+    return { ...invitation, emailSent };
   } catch (error) {
     logger.error('Error al invitar usuario', { data: { error, input } });
     throw error;

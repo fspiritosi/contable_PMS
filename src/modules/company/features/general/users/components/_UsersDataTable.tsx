@@ -137,7 +137,8 @@ export function _UsersDataTable({
               Invitaciones Pendientes
             </CardTitle>
             <CardDescription>
-              Usuarios que han sido invitados pero aún no han aceptado
+              Usuarios que han sido invitados pero aún no han aceptado. Las
+              invitaciones vencidas se pueden reenviar para renovar el enlace.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -160,12 +161,17 @@ export function _UsersDataTable({
                             {invitation.employee.employeeNumber})
                           </>
                         )}
-                        {' '}• Expira: {moment(invitation.expiresAt).format('DD/MM/YYYY')}
+                        {' '}•{' '}
+                        {invitation.isExpired
+                          ? `Venció el ${moment(invitation.expiresAt).format('DD/MM/YYYY')}`
+                          : `Expira: ${moment(invitation.expiresAt).format('DD/MM/YYYY')}`}
                       </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Badge variant="outline">Pendiente</Badge>
+                    <Badge variant={invitation.isExpired ? 'destructive' : 'outline'}>
+                      {invitation.isExpired ? 'Expirada' : 'Pendiente'}
+                    </Badge>
                     <Button
                       variant="ghost"
                       size="sm"

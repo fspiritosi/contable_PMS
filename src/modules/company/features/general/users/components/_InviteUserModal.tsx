@@ -94,12 +94,18 @@ export function _InviteUserModal({
   const handleSubmit = async (data: InviteFormData) => {
     setIsSubmitting(true);
     try {
-      await inviteUser({
+      const result = await inviteUser({
         email: data.email,
         roleId: data.roleId,
         employeeId: data.employeeId || undefined,
       });
-      toast.success('Invitación enviada');
+      if (result.emailSent) {
+        toast.success('Invitación enviada');
+      } else {
+        toast.warning(
+          'Invitación creada, pero no se pudo enviar el email. Usá "Reenviar" desde la lista de invitaciones.'
+        );
+      }
       form.reset();
       onOpenChange(false);
       onSuccess();
