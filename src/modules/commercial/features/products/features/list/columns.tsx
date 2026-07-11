@@ -1,7 +1,7 @@
 'use client';
 
 import { ColumnDef } from '@tanstack/react-table';
-import { MoreHorizontal, Package, Eye, Edit, Trash2, DollarSign, AlertTriangle } from 'lucide-react';
+import { MoreHorizontal, Package, Eye, Edit, Trash2, DollarSign, AlertTriangle, Calculator } from 'lucide-react';
 import Link from 'next/link';
 
 import { Badge } from '@/shared/components/ui/badge';
@@ -27,11 +27,12 @@ import {
 interface ColumnsProps {
   onEdit: (product: Product) => void;
   onDelete: (product: Product) => void;
+  onImputation: (product: Product) => void;
   permissions: ModulePermissions;
   showOemCode?: boolean;
 }
 
-export function getColumns({ onEdit, onDelete, permissions, showOemCode = false }: ColumnsProps): ColumnDef<Product>[] {
+export function getColumns({ onEdit, onDelete, onImputation, permissions, showOemCode = false }: ColumnsProps): ColumnDef<Product>[] {
   const { canUpdate, canDelete } = permissions;
   const hasAnyAction = canUpdate || canDelete;
 
@@ -233,6 +234,41 @@ export function getColumns({ onEdit, onDelete, permissions, showOemCode = false 
       },
     },
     {
+      id: 'imputation',
+      meta: { title: 'Imputación' },
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Imputación" />,
+      enableSorting: false,
+      cell: ({ row }) => {
+        const product = row.original;
+        const income = product.defaultIncomeAccount;
+        const expense = product.defaultExpenseAccount;
+        if (!income && !expense) {
+          return (
+            <Badge variant="outline" className="border-orange-500 text-orange-600 text-xs whitespace-nowrap">
+              <AlertTriangle className="mr-1 h-3 w-3" />
+              Sin imputar
+            </Badge>
+          );
+        }
+        return (
+          <div className="flex flex-col gap-0.5 text-xs">
+            {income && (
+              <span className="whitespace-nowrap">
+                <span className="text-muted-foreground">Ing:</span>{' '}
+                <span className="font-mono">{income.code}</span>
+              </span>
+            )}
+            {expense && (
+              <span className="whitespace-nowrap">
+                <span className="text-muted-foreground">Egr:</span>{' '}
+                <span className="font-mono">{expense.code}</span>
+              </span>
+            )}
+          </div>
+        );
+      },
+    },
+    {
       accessorKey: 'status',
       meta: { title: 'Estado' },
       header: ({ column }) => <DataTableColumnHeader column={column} title="Estado" />,
@@ -275,6 +311,12 @@ export function getColumns({ onEdit, onDelete, permissions, showOemCode = false 
                     <Edit className="mr-2 h-4 w-4" />
                     Editar
                   </Link>
+                </DropdownMenuItem>
+              )}
+              {canUpdate && (
+                <DropdownMenuItem onClick={() => onImputation(product)}>
+                  <Calculator className="mr-2 h-4 w-4" />
+                  Imputación contable
                 </DropdownMenuItem>
               )}
               {canUpdate && canDelete && <DropdownMenuSeparator />}
