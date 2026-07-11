@@ -31,8 +31,8 @@ export async function ExpensesList({ searchParams = {} }: Props) {
     <PermissionGuard module="commercial.expenses" action="view" redirect>
       <div className="space-y-6">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Gastos</h1>
-          <p className="text-muted-foreground">Gestión de gastos operativos de la empresa</p>
+          <h1 className="text-3xl font-bold tracking-tight">Egresos</h1>
+          <p className="text-muted-foreground">Gestión de egresos operativos de la empresa</p>
         </div>
 
         {/* KPI Cards */}
@@ -46,7 +46,7 @@ export async function ExpensesList({ searchParams = {} }: Props) {
               <div className="text-2xl font-bold">
                 ${totalAmount.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
-              <p className="text-xs text-muted-foreground">Suma de gastos en la vista actual</p>
+              <p className="text-xs text-muted-foreground">Suma de egresos en la vista actual</p>
             </CardContent>
           </Card>
 
@@ -57,7 +57,7 @@ export async function ExpensesList({ searchParams = {} }: Props) {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{confirmedCount}</div>
-              <p className="text-xs text-muted-foreground">Gastos pendientes de pago</p>
+              <p className="text-xs text-muted-foreground">Egresos pendientes de pago</p>
             </CardContent>
           </Card>
 

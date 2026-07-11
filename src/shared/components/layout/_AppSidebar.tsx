@@ -203,7 +203,7 @@ const navMain: NavItemWithSub[] = [
             module: 'commercial',
           },
           {
-            title: 'Gastos',
+            title: 'Egresos',
             href: '/dashboard/commercial/expenses',
             module: 'commercial.expenses',
           },
@@ -247,6 +247,11 @@ const navMain: NavItemWithSub[] = [
             title: 'Socios',
             href: '/dashboard/commercial/treasury/partners',
             module: 'commercial.treasury.partners',
+          },
+          {
+            title: 'Movimientos de Fondos',
+            href: '/dashboard/commercial/treasury/fund-movements',
+            module: 'commercial.treasury.fund-movements',
           },
           {
             title: 'Tarjetas',

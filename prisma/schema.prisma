@@ -192,6 +192,7 @@ model Company {
   cards                    Card[]
   paymentOrderInstallments PaymentOrderInstallment[]
   partnerAccountMovements  PartnerAccountMovement[]
+  fundMovements            FundMovement[]
 
   // Retenciones y padrones
   withholdingRegimes WithholdingRegime[]
@@ -292,74 +293,75 @@ enum RecurringFrequency {
 
 // Plan de Cuentas
 model Account {
-  id                    String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  companyId             String             @map("company_id") @db.Uuid
-  code                  String // Código contable (ej: 1.1.1)
-  name                  String // Nombre de la cuenta
-  type                  AccountType
-  nature                AccountNature
-  description           String?
-  parentId              String?            @map("parent_id") @db.Uuid
-  parent                Account?           @relation("AccountHierarchy", fields: [parentId], references: [id])
-  children              Account[]          @relation("AccountHierarchy")
-  currency              String             @default("ARS") @db.Char(3)
-  isActive              Boolean            @default(true) @map("is_active")
-  isLeaf                Boolean            @default(true) @map("is_leaf") // = imputable (hoja). Mantenido automáticamente.
+  id                       String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId                String             @map("company_id") @db.Uuid
+  code                     String // Código contable (ej: 1.1.1)
+  name                     String // Nombre de la cuenta
+  type                     AccountType
+  nature                   AccountNature
+  description              String?
+  parentId                 String?            @map("parent_id") @db.Uuid
+  parent                   Account?           @relation("AccountHierarchy", fields: [parentId], references: [id])
+  children                 Account[]          @relation("AccountHierarchy")
+  currency                 String             @default("ARS") @db.Char(3)
+  isActive                 Boolean            @default(true) @map("is_active")
+  isLeaf                   Boolean            @default(true) @map("is_leaf") // = imputable (hoja). Mantenido automáticamente.
   // Corte de deshabilitado por ejercicio (ticket #376). isActive sigue siendo el estado global/soft-delete.
-  disabledFrom             DateTime?   @map("disabled_from") // fecha efectiva del corte (= startDate del ejercicio de corte)
-  disabledFromFiscalYearId String?     @map("disabled_from_fiscal_year_id") @db.Uuid
-  disabledFromFiscalYear   FiscalYear? @relation("AccountDisabledFrom", fields: [disabledFromFiscalYearId], references: [id], onDelete: SetNull)
-  adjustableByInflation Boolean            @default(false) @map("adjustable_by_inflation")
-  requiresAuxiliary     AuxiliaryType?     @map("requires_auxiliary")
-  createdAt             DateTime           @default(now()) @map("created_at")
-  updatedAt             DateTime           @updatedAt @map("updated_at")
-  company               Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  entries               JournalEntryLine[]
-  suppliers             Supplier[] // Relación con proveedores (para cuentas predeterminadas)
-  contractors           Contractor[] // Relación con clientes/contratistas (para cuentas predeterminadas)
-  bankAccounts          BankAccount[] // Relación con cuentas bancarias (para cuentas contables)
-  cashRegisters         CashRegister[] // Relación con cajas (para cuentas contables)
+  disabledFrom             DateTime?          @map("disabled_from") // fecha efectiva del corte (= startDate del ejercicio de corte)
+  disabledFromFiscalYearId String?            @map("disabled_from_fiscal_year_id") @db.Uuid
+  disabledFromFiscalYear   FiscalYear?        @relation("AccountDisabledFrom", fields: [disabledFromFiscalYearId], references: [id], onDelete: SetNull)
+  adjustableByInflation    Boolean            @default(false) @map("adjustable_by_inflation")
+  requiresAuxiliary        AuxiliaryType?     @map("requires_auxiliary")
+  createdAt                DateTime           @default(now()) @map("created_at")
+  updatedAt                DateTime           @updatedAt @map("updated_at")
+  company                  Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  entries                  JournalEntryLine[]
+  suppliers                Supplier[] // Relación con proveedores (para cuentas predeterminadas)
+  contractors              Contractor[] // Relación con clientes/contratistas (para cuentas predeterminadas)
+  bankAccounts             BankAccount[] // Relación con cuentas bancarias (para cuentas contables)
+  cashRegisters            CashRegister[] // Relación con cajas (para cuentas contables)
 
   // Relaciones inversas para AccountingSettings (many-to-one)
-  settingsAsSalesAccount        AccountingSettings[]   @relation("SalesAccount")
-  settingsAsPurchasesAccount    AccountingSettings[]   @relation("PurchasesAccount")
-  settingsAsReceivablesAccount  AccountingSettings[]   @relation("ReceivablesAccount")
-  settingsAsPayablesAccount     AccountingSettings[]   @relation("PayablesAccount")
-  settingsAsVatDebitAccount     AccountingSettings[]   @relation("VatDebitAccount")
-  settingsAsVatCreditAccount    AccountingSettings[]   @relation("VatCreditAccount")
-  settingsAsDefaultCashAccount  AccountingSettings[]   @relation("DefaultCashAccount")
-  settingsAsDefaultBankAccount  AccountingSettings[]   @relation("DefaultBankAccount")
-  settingsAsExpensesAccount     AccountingSettings[]   @relation("ExpensesAccount")
-  settingsAsResultAccount       AccountingSettings[]   @relation("ResultAccount")
-  settingsAsWhIvaEmitted        AccountingSettings[]   @relation("WhIvaEmittedAccount")
-  settingsAsWhGananciasEmitted  AccountingSettings[]   @relation("WhGananciasEmittedAccount")
-  settingsAsWhIibbEmitted       AccountingSettings[]   @relation("WhIibbEmittedAccount")
-  settingsAsWhSussEmitted       AccountingSettings[]   @relation("WhSussEmittedAccount")
-  settingsAsWhIvaSuffered       AccountingSettings[]   @relation("WhIvaSufferedAccount")
-  settingsAsWhGananciasSuffered AccountingSettings[]   @relation("WhGananciasSufferedAccount")
-  settingsAsWhIibbSuffered      AccountingSettings[]   @relation("WhIibbSufferedAccount")
-  settingsAsWhSussSuffered      AccountingSettings[]   @relation("WhSussSufferedAccount")
-  settingsAsFixedAsset          AccountingSettings[]   @relation("FixedAssetAccount")
-  settingsAsAccumulatedDepr     AccountingSettings[]   @relation("AccumulatedDepreciationAccount")
-  settingsAsDepreciationExpense AccountingSettings[]   @relation("DepreciationExpenseAccount")
-  settingsAsAssetDisposalGL     AccountingSettings[]   @relation("AssetDisposalGainLossAccount")
-  settingsAsPercIvaCollected    AccountingSettings[]   @relation("PercIvaCollectedAccount")
-  settingsAsPercIibbCollected   AccountingSettings[]   @relation("PercIibbCollectedAccount")
-  settingsAsPercIvaSuffered     AccountingSettings[]   @relation("PercIvaSufferedAccount")
-  settingsAsPercIibbSuffered    AccountingSettings[]   @relation("PercIibbSufferedAccount")
-  settingsAsCogs                AccountingSettings[]   @relation("CogsAccount")
-  settingsAsInventory           AccountingSettings[]   @relation("InventoryAccount")
-  settingsAsChecksReceived      AccountingSettings[]   @relation("ChecksReceivedAccount")
-  settingsAsChecksRejected      AccountingSettings[]   @relation("ChecksRejectedAccount")
-  settingsAsVatPayable          AccountingSettings[]   @relation("VatPayableAccount")
-  settingsAsVatBalance          AccountingSettings[]   @relation("VatBalanceAccount")
-  settingsAsRecpam              AccountingSettings[]   @relation("RecpamAccount")
-  vatAccountMappings            AccountingVatAccount[]
-  recurringEntryLines           RecurringEntryLine[]
-  budgets                       Budget[]
-  withholdingRegimes            WithholdingRegime[]
-  productsAsExpenseAccount      Product[]              @relation("ProductExpenseAccount")
-  productsAsIncomeAccount       Product[]              @relation("ProductIncomeAccount")
+  settingsAsSalesAccount         AccountingSettings[]   @relation("SalesAccount")
+  settingsAsPurchasesAccount     AccountingSettings[]   @relation("PurchasesAccount")
+  settingsAsReceivablesAccount   AccountingSettings[]   @relation("ReceivablesAccount")
+  settingsAsPayablesAccount      AccountingSettings[]   @relation("PayablesAccount")
+  settingsAsVatDebitAccount      AccountingSettings[]   @relation("VatDebitAccount")
+  settingsAsVatCreditAccount     AccountingSettings[]   @relation("VatCreditAccount")
+  settingsAsDefaultCashAccount   AccountingSettings[]   @relation("DefaultCashAccount")
+  settingsAsDefaultBankAccount   AccountingSettings[]   @relation("DefaultBankAccount")
+  settingsAsExpensesAccount      AccountingSettings[]   @relation("ExpensesAccount")
+  settingsAsResultAccount        AccountingSettings[]   @relation("ResultAccount")
+  settingsAsPartnerContributions AccountingSettings[]   @relation("PartnerContributionsAccount")
+  settingsAsWhIvaEmitted         AccountingSettings[]   @relation("WhIvaEmittedAccount")
+  settingsAsWhGananciasEmitted   AccountingSettings[]   @relation("WhGananciasEmittedAccount")
+  settingsAsWhIibbEmitted        AccountingSettings[]   @relation("WhIibbEmittedAccount")
+  settingsAsWhSussEmitted        AccountingSettings[]   @relation("WhSussEmittedAccount")
+  settingsAsWhIvaSuffered        AccountingSettings[]   @relation("WhIvaSufferedAccount")
+  settingsAsWhGananciasSuffered  AccountingSettings[]   @relation("WhGananciasSufferedAccount")
+  settingsAsWhIibbSuffered       AccountingSettings[]   @relation("WhIibbSufferedAccount")
+  settingsAsWhSussSuffered       AccountingSettings[]   @relation("WhSussSufferedAccount")
+  settingsAsFixedAsset           AccountingSettings[]   @relation("FixedAssetAccount")
+  settingsAsAccumulatedDepr      AccountingSettings[]   @relation("AccumulatedDepreciationAccount")
+  settingsAsDepreciationExpense  AccountingSettings[]   @relation("DepreciationExpenseAccount")
+  settingsAsAssetDisposalGL      AccountingSettings[]   @relation("AssetDisposalGainLossAccount")
+  settingsAsPercIvaCollected     AccountingSettings[]   @relation("PercIvaCollectedAccount")
+  settingsAsPercIibbCollected    AccountingSettings[]   @relation("PercIibbCollectedAccount")
+  settingsAsPercIvaSuffered      AccountingSettings[]   @relation("PercIvaSufferedAccount")
+  settingsAsPercIibbSuffered     AccountingSettings[]   @relation("PercIibbSufferedAccount")
+  settingsAsCogs                 AccountingSettings[]   @relation("CogsAccount")
+  settingsAsInventory            AccountingSettings[]   @relation("InventoryAccount")
+  settingsAsChecksReceived       AccountingSettings[]   @relation("ChecksReceivedAccount")
+  settingsAsChecksRejected       AccountingSettings[]   @relation("ChecksRejectedAccount")
+  settingsAsVatPayable           AccountingSettings[]   @relation("VatPayableAccount")
+  settingsAsVatBalance           AccountingSettings[]   @relation("VatBalanceAccount")
+  settingsAsRecpam               AccountingSettings[]   @relation("RecpamAccount")
+  vatAccountMappings             AccountingVatAccount[]
+  recurringEntryLines            RecurringEntryLine[]
+  budgets                        Budget[]
+  withholdingRegimes             WithholdingRegime[]
+  productsAsExpenseAccount       Product[]              @relation("ProductExpenseAccount")
+  productsAsIncomeAccount        Product[]              @relation("ProductIncomeAccount")
 
   @@unique([companyId, code])
   @@index([companyId, disabledFromFiscalYearId])
@@ -520,6 +522,9 @@ model AccountingSettings {
   // Cuenta de resultado del ejercicio (para cierre fiscal)
   resultAccountId String? @map("result_account_id") @db.Uuid // Resultado del Ejercicio (patrimonio)
 
+  // Cuenta de aportes de socios / capital (para movimientos de fondos)
+  partnerContributionsAccountId String? @map("partner_contributions_account_id") @db.Uuid // Aportes de socios (patrimonio)
+
   // Cuentas de Retenciones - Emitidas (pasivo, por pagar a AFIP)
   withholdingIvaEmittedAccountId       String? @map("withholding_iva_emitted_account_id") @db.Uuid
   withholdingGananciasEmittedAccountId String? @map("withholding_ganancias_emitted_account_id") @db.Uuid
@@ -532,17 +537,18 @@ model AccountingSettings {
   withholdingIibbSufferedAccountId      String? @map("withholding_iibb_suffered_account_id") @db.Uuid
   withholdingSussSufferedAccountId      String? @map("withholding_suss_suffered_account_id") @db.Uuid
 
-  company            Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  salesAccount       Account? @relation("SalesAccount", fields: [salesAccountId], references: [id])
-  purchasesAccount   Account? @relation("PurchasesAccount", fields: [purchasesAccountId], references: [id])
-  receivablesAccount Account? @relation("ReceivablesAccount", fields: [receivablesAccountId], references: [id])
-  payablesAccount    Account? @relation("PayablesAccount", fields: [payablesAccountId], references: [id])
-  vatDebitAccount    Account? @relation("VatDebitAccount", fields: [vatDebitAccountId], references: [id])
-  vatCreditAccount   Account? @relation("VatCreditAccount", fields: [vatCreditAccountId], references: [id])
-  defaultCashAccount Account? @relation("DefaultCashAccount", fields: [defaultCashAccountId], references: [id])
-  defaultBankAccount Account? @relation("DefaultBankAccount", fields: [defaultBankAccountId], references: [id])
-  expensesAccount    Account? @relation("ExpensesAccount", fields: [expensesAccountId], references: [id])
-  resultAccount      Account? @relation("ResultAccount", fields: [resultAccountId], references: [id])
+  company                     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  salesAccount                Account? @relation("SalesAccount", fields: [salesAccountId], references: [id])
+  purchasesAccount            Account? @relation("PurchasesAccount", fields: [purchasesAccountId], references: [id])
+  receivablesAccount          Account? @relation("ReceivablesAccount", fields: [receivablesAccountId], references: [id])
+  payablesAccount             Account? @relation("PayablesAccount", fields: [payablesAccountId], references: [id])
+  vatDebitAccount             Account? @relation("VatDebitAccount", fields: [vatDebitAccountId], references: [id])
+  vatCreditAccount            Account? @relation("VatCreditAccount", fields: [vatCreditAccountId], references: [id])
+  defaultCashAccount          Account? @relation("DefaultCashAccount", fields: [defaultCashAccountId], references: [id])
+  defaultBankAccount          Account? @relation("DefaultBankAccount", fields: [defaultBankAccountId], references: [id])
+  expensesAccount             Account? @relation("ExpensesAccount", fields: [expensesAccountId], references: [id])
+  resultAccount               Account? @relation("ResultAccount", fields: [resultAccountId], references: [id])
+  partnerContributionsAccount Account? @relation("PartnerContributionsAccount", fields: [partnerContributionsAccountId], references: [id])
 
   // Relaciones de cuentas de retenciones
   withholdingIvaEmittedAccount        Account? @relation("WhIvaEmittedAccount", fields: [withholdingIvaEmittedAccountId], references: [id])
@@ -4174,6 +4180,61 @@ enum PartnerMovementType {
   @@map("partner_movement_type")
 }
 
+enum FundMovementType {
+  PARTNER_CONTRIBUTION // Aporte de socio (banco/caja contra capital)
+  PARTNER_WITHDRAWAL // Retiro de socio (capital contra banco/caja)
+  ACCOUNT_TRANSFER // Transferencia entre cuentas (activo contra activo)
+
+  @@map("fund_movement_type")
+}
+
+enum FundMovementStatus {
+  DRAFT // Borrador: editable, sin asiento ni impacto en saldos
+  CONFIRMED // Confirmado: generó asiento y movió saldos
+  CANCELLED // Anulado
+
+  @@map("fund_movement_status")
+}
+
+/// Movimiento de fondos: aportes de socios, retiros y transferencias entre
+/// cuentas. Se crea en borrador (editable, sin efecto) y al confirmarlo genera
+/// el asiento contable y actualiza los saldos de banco/caja. Guarda snapshots
+/// de las etiquetas para mostrar el historial sin joins.
+model FundMovement {
+  id          String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId   String             @map("company_id") @db.Uuid
+  status      FundMovementStatus @default(DRAFT)
+  date        DateTime           @db.Date
+  type        FundMovementType
+  amount      Decimal            @db.Decimal(15, 2) // siempre positivo
+  description String
+
+  // Banco/caja de donde SALEN los fondos (retiro / transferencia)
+  fundOutKind  String? @map("fund_out_kind") // 'BANK' | 'CASH'
+  fundOutId    String? @map("fund_out_id") @db.Uuid
+  fundOutLabel String? @map("fund_out_label")
+  // Banco/caja a donde ENTRAN los fondos (aporte / transferencia)
+  fundInKind   String? @map("fund_in_kind") // 'BANK' | 'CASH'
+  fundInId     String? @map("fund_in_id") @db.Uuid
+  fundInLabel  String? @map("fund_in_label")
+
+  partnerId   String? @map("partner_id") @db.Uuid // socio (aporte/retiro), informativo
+  partnerName String? @map("partner_name")
+
+  journalEntryId     String?   @map("journal_entry_id") @db.Uuid // asiento generado (al confirmar)
+  journalEntryNumber Int?      @map("journal_entry_number")
+  confirmedAt        DateTime? @map("confirmed_at")
+
+  createdBy String   @map("created_by")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@map("fund_movements")
+}
+
 /// Socio de la empresa. Puede ser titular de tarjetas y tener cuenta corriente.
 model Partner {
   id        String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
@@ -4362,5 +4423,4 @@ model support_ticket_views {
   @@id([user_id, taskapp_ticket_id])
   @@index([user_id], map: "idx_support_ticket_views_user_id")
   @@index([taskapp_ticket_id], map: "idx_support_ticket_views_taskapp_ticket_id")
-
 }

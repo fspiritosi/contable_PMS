@@ -25,6 +25,7 @@ import {
   FormMessage,
 } from '@/shared/components/ui/form';
 import { Input } from '@/shared/components/ui/input';
+import { MoneyInput } from '@/shared/components/ui/money-input';
 import { Textarea } from '@/shared/components/ui/textarea';
 import {
   Select,
@@ -106,10 +107,10 @@ export function _CreateExpenseModal({ expenseId, open: controlledOpen, onOpenCha
     try {
       if (isEditMode && expenseId) {
         await updateExpense(expenseId, data);
-        toast.success('Gasto actualizado correctamente');
+        toast.success('Egreso actualizado correctamente');
       } else {
         await createExpense(data);
-        toast.success('Gasto creado correctamente');
+        toast.success('Egreso creado correctamente');
       }
 
       await queryClient.invalidateQueries({ queryKey: ['expenseCategories'] });
@@ -117,14 +118,14 @@ export function _CreateExpenseModal({ expenseId, open: controlledOpen, onOpenCha
       form.reset();
       onSuccess?.();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Error al guardar el gasto');
+      toast.error(error instanceof Error ? error.message : 'Error al guardar el egreso');
     }
   };
 
   const content = (
     <DialogContent className="max-w-2xl">
       <DialogHeader>
-        <DialogTitle>{isEditMode ? 'Editar Gasto' : 'Nuevo Gasto'}</DialogTitle>
+        <DialogTitle>{isEditMode ? 'Editar Egreso' : 'Nuevo Egreso'}</DialogTitle>
       </DialogHeader>
 
       <Form {...form}>
@@ -137,7 +138,7 @@ export function _CreateExpenseModal({ expenseId, open: controlledOpen, onOpenCha
               <FormItem>
                 <FormLabel>Descripción *</FormLabel>
                 <FormControl>
-                  <Input placeholder="Descripción del gasto" {...field} />
+                  <Input placeholder="Descripción del egreso" {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -153,12 +154,13 @@ export function _CreateExpenseModal({ expenseId, open: controlledOpen, onOpenCha
                 <FormItem>
                   <FormLabel>Monto *</FormLabel>
                   <FormControl>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      placeholder="0.00"
-                      {...field}
+                    <MoneyInput
+                      placeholder="0,00"
+                      value={field.value}
+                      onChange={field.onChange}
+                      onBlur={field.onBlur}
+                      name={field.name}
+                      ref={field.ref}
                     />
                   </FormControl>
                   <FormMessage />
@@ -308,7 +310,7 @@ export function _CreateExpenseModal({ expenseId, open: controlledOpen, onOpenCha
             <Button type="submit" disabled={form.formState.isSubmitting}>
               {form.formState.isSubmitting
                 ? isEditMode ? 'Guardando...' : 'Creando...'
-                : isEditMode ? 'Guardar Cambios' : 'Crear Gasto'}
+                : isEditMode ? 'Guardar Cambios' : 'Crear Egreso'}
             </Button>
           </div>
         </form>
@@ -329,7 +331,7 @@ export function _CreateExpenseModal({ expenseId, open: controlledOpen, onOpenCha
       <DialogTrigger asChild>
         <Button>
           <Plus className="mr-2 h-4 w-4" />
-          Nuevo Gasto
+          Nuevo Egreso
         </Button>
       </DialogTrigger>
       {content}
