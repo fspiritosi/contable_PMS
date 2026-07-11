@@ -12,7 +12,7 @@ import { getColumns } from '../columns';
 import { _CreateFundMovementModal } from './_CreateFundMovementModal';
 import type {
   FundMovementListItem,
-  FundMovementAccountOption,
+  FundOption,
   FundMovementPartnerOption,
 } from '../actions.server';
 
@@ -21,7 +21,8 @@ interface Props {
   totalRows: number;
   searchParams: DataTableSearchParams;
   permissions: ModulePermissions;
-  accounts: FundMovementAccountOption[];
+  banks: FundOption[];
+  cashRegisters: FundOption[];
   partners: FundMovementPartnerOption[];
   hasContributionsAccount: boolean;
 }
@@ -31,7 +32,8 @@ export function _FundMovementsTable({
   totalRows,
   searchParams,
   permissions,
-  accounts,
+  banks,
+  cashRegisters,
   partners,
   hasContributionsAccount,
 }: Props) {
@@ -64,7 +66,8 @@ export function _FundMovementsTable({
       <_CreateFundMovementModal
         open={createOpen}
         onOpenChange={setCreateOpen}
-        accounts={accounts}
+        banks={banks}
+        cashRegisters={cashRegisters}
         partners={partners}
         hasContributionsAccount={hasContributionsAccount}
         onSuccess={handleSuccess}

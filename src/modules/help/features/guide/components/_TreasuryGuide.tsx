@@ -769,8 +769,10 @@ export function _TreasuryGuide() {
           <p className="text-muted-foreground">
             Usá esta sección para movimientos de dinero que no son facturas,
             cobros ni pagos: cuando un socio pone plata en la empresa, cuando se
-            le devuelve, o cuando movés fondos de una cuenta a otra. Cada
-            movimiento <strong>genera su asiento contable automáticamente</strong>.
+            le devuelve, o cuando movés fondos de una cuenta a otra. El origen y/o
+            destino es un <strong>banco o caja concreto</strong>: cada movimiento
+            <strong> actualiza su saldo</strong> y <strong>genera el asiento
+            contable automáticamente</strong>.
           </p>
           <p>
             <strong>Tipos de movimiento:</strong>
@@ -800,8 +802,9 @@ export function _TreasuryGuide() {
             </li>
             <li>Elegí el tipo, el monto y la fecha</li>
             <li>
-              Seleccioná la cuenta de origen y/o destino (según el tipo) y, para
-              aportes o retiros, opcionalmente el socio
+              Seleccioná el banco o caja de origen y/o destino (según el tipo) y,
+              para aportes o retiros, opcionalmente el socio. Las cajas deben
+              tener una sesión abierta para operar.
             </li>
             <li>Escribí una descripción y confirmá</li>
           </ol>

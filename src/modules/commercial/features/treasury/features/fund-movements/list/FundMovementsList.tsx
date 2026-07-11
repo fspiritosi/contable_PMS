@@ -31,7 +31,8 @@ export async function FundMovementsList({ searchParams = {} }: Props) {
           totalRows={result.total}
           searchParams={searchParams}
           permissions={permissions}
-          accounts={catalogs.accounts}
+          banks={catalogs.banks}
+          cashRegisters={catalogs.cashRegisters}
           partners={catalogs.partners}
           hasContributionsAccount={catalogs.hasContributionsAccount}
         />

@@ -30,7 +30,9 @@ import { Button } from '@/shared/components/ui/button';
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from '@/shared/components/ui/select';
@@ -43,14 +45,15 @@ import {
 } from '../../shared/validators';
 import {
   createFundMovement,
-  type FundMovementAccountOption,
+  type FundOption,
   type FundMovementPartnerOption,
 } from '../actions.server';
 
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  accounts: FundMovementAccountOption[];
+  banks: FundOption[];
+  cashRegisters: FundOption[];
   partners: FundMovementPartnerOption[];
   hasContributionsAccount: boolean;
   onSuccess: () => void;
@@ -61,7 +64,8 @@ const NONE = '__none__';
 export function _CreateFundMovementModal({
   open,
   onOpenChange,
-  accounts,
+  banks,
+  cashRegisters,
   partners,
   hasContributionsAccount,
   onSuccess,
@@ -75,8 +79,8 @@ export function _CreateFundMovementModal({
       date: moment().format('YYYY-MM-DD'),
       amount: '',
       description: '',
-      sourceAccountId: '',
-      destinationAccountId: '',
+      sourceFund: '',
+      destinationFund: '',
       partnerId: '',
     },
   });
@@ -86,6 +90,7 @@ export function _CreateFundMovementModal({
   const isWithdrawal = type === 'PARTNER_WITHDRAWAL';
   const isTransfer = type === 'ACCOUNT_TRANSFER';
   const isPartnerMovement = isContribution || isWithdrawal;
+  const noFundAccounts = banks.length === 0 && cashRegisters.length === 0;
 
   const handleSubmit = async (data: FundMovementFormInput) => {
     setIsSubmitting(true);
@@ -97,8 +102,8 @@ export function _CreateFundMovementModal({
         date: moment().format('YYYY-MM-DD'),
         amount: '',
         description: '',
-        sourceAccountId: '',
-        destinationAccountId: '',
+        sourceFund: '',
+        destinationFund: '',
         partnerId: '',
       });
       onOpenChange(false);
@@ -110,14 +115,39 @@ export function _CreateFundMovementModal({
     }
   };
 
+  const renderFundOptions = () => (
+    <>
+      {banks.length > 0 && (
+        <SelectGroup>
+          <SelectLabel>Bancos</SelectLabel>
+          {banks.map((b) => (
+            <SelectItem key={`BANK:${b.id}`} value={`BANK:${b.id}`}>
+              {b.label}
+            </SelectItem>
+          ))}
+        </SelectGroup>
+      )}
+      {cashRegisters.length > 0 && (
+        <SelectGroup>
+          <SelectLabel>Cajas</SelectLabel>
+          {cashRegisters.map((c) => (
+            <SelectItem key={`CASH:${c.id}`} value={`CASH:${c.id}`}>
+              {c.label}
+            </SelectItem>
+          ))}
+        </SelectGroup>
+      )}
+    </>
+  );
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[560px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Nuevo Movimiento de Fondos</DialogTitle>
           <DialogDescription>
-            Aportes de socios, retiros y transferencias entre cuentas. Genera el asiento contable
-            automáticamente.
+            Aportes de socios, retiros y transferencias entre cuentas. Actualiza el saldo del
+            banco/caja y genera el asiento contable automáticamente.
           </DialogDescription>
         </DialogHeader>
 
@@ -147,6 +177,16 @@ export function _CreateFundMovementModal({
                 </FormItem>
               )}
             />
+
+            {noFundAccounts && (
+              <div className="flex items-start gap-2 rounded-md border border-orange-500/50 bg-orange-500/10 p-3 text-sm text-orange-600">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>
+                  No hay cuentas bancarias ni cajas con sesión abierta disponibles. Creá una cuenta
+                  bancaria o abrí una caja antes de registrar movimientos de fondos.
+                </span>
+              </div>
+            )}
 
             {isPartnerMovement && !hasContributionsAccount && (
               <div className="flex items-start gap-2 rounded-md border border-orange-500/50 bg-orange-500/10 p-3 text-sm text-orange-600">
@@ -194,29 +234,23 @@ export function _CreateFundMovementModal({
               />
             </div>
 
-            {/* Cuenta destino: aporte / transferencia */}
+            {/* Banco/caja destino: aporte / transferencia */}
             {(isContribution || isTransfer) && (
               <FormField
                 control={form.control}
-                name="destinationAccountId"
+                name="destinationFund"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>
-                      {isContribution ? 'Cuenta donde ingresan los fondos *' : 'Cuenta destino *'}
+                      {isContribution ? 'Banco/caja donde ingresan los fondos *' : 'Banco/caja destino *'}
                     </FormLabel>
                     <Select onValueChange={field.onChange} value={field.value || undefined}>
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder="Seleccionar cuenta" />
+                          <SelectValue placeholder="Seleccionar banco o caja" />
                         </SelectTrigger>
                       </FormControl>
-                      <SelectContent>
-                        {accounts.map((acc) => (
-                          <SelectItem key={acc.id} value={acc.id}>
-                            {acc.code} - {acc.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
+                      <SelectContent>{renderFundOptions()}</SelectContent>
                     </Select>
                     <FormMessage />
                   </FormItem>
@@ -224,29 +258,23 @@ export function _CreateFundMovementModal({
               />
             )}
 
-            {/* Cuenta origen: retiro / transferencia */}
+            {/* Banco/caja origen: retiro / transferencia */}
             {(isWithdrawal || isTransfer) && (
               <FormField
                 control={form.control}
-                name="sourceAccountId"
+                name="sourceFund"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>
-                      {isWithdrawal ? 'Cuenta de donde salen los fondos *' : 'Cuenta origen *'}
+                      {isWithdrawal ? 'Banco/caja de donde salen los fondos *' : 'Banco/caja origen *'}
                     </FormLabel>
                     <Select onValueChange={field.onChange} value={field.value || undefined}>
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder="Seleccionar cuenta" />
+                          <SelectValue placeholder="Seleccionar banco o caja" />
                         </SelectTrigger>
                       </FormControl>
-                      <SelectContent>
-                        {accounts.map((acc) => (
-                          <SelectItem key={acc.id} value={acc.id}>
-                            {acc.code} - {acc.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
+                      <SelectContent>{renderFundOptions()}</SelectContent>
                     </Select>
                     <FormMessage />
                   </FormItem>

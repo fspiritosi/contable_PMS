@@ -83,7 +83,31 @@ Aprovecha infraestructura existente:
 - Fase 2: migración aplicada; asiento balanceado por tipo; reflejo en cuenta
   corriente del socio; prueba en vivo del alta.
 
+## Mejora (feedback): origen/destino = banco/caja con impacto en saldo
+
+El origen/destino de fondos deja de ser una cuenta contable suelta y pasa a ser
+un **banco (`BankAccount`) o caja (`CashRegister`) concreto**. Al registrar el
+movimiento, además del asiento, se **actualiza el saldo** de la entidad,
+reutilizando la mecánica existente:
+
+- Banco: `BankMovement` (`DEPOSIT`/`WITHDRAWAL` para aporte/retiro, `TRANSFER_IN`/
+  `TRANSFER_OUT` para transferencia) + `BankAccount.balance`.
+- Caja: `CashMovement` (`INCOME`/`EXPENSE`) + `CashRegisterSession.expectedBalance`
+  (requiere sesión `OPEN`).
+
+La cuenta contable del asiento se deriva de la entidad
+(`bankAccount.accountId ?? settings.defaultBankAccountId`,
+`cashRegister.accountId ?? settings.defaultCashAccountId`). Todo dentro de un
+único `$transaction` (movimiento + saldo + asiento + `FundMovement`).
+
+El `sourceFund`/`destinationFund` del formulario se codifica como `"BANK:<id>"` /
+`"CASH:<id>"`. Sin cambios de schema (se reutilizan los campos existentes de
+`FundMovement`, guardando el id del banco/caja y el label descriptivo).
+
 ## Estado
 
-- **Fase 1: implementada** (rama `feat/tsk-413-movimientos-fondos`).
-- **Fase 2: diseñada, pendiente de implementación** (feature grande con migración).
+- **Fase 1: implementada.**
+- **Fase 2: implementada** (incluida la mejora de banco/caja con impacto en saldo),
+  rama `feat/tsk-413-movimientos-fondos`. Verificado contra la DB local: aporte a
+  banco sube el saldo, retiro lo baja, transferencia banco→caja mueve ambos
+  saldos; los asientos quedan balanceados en todos los casos.
