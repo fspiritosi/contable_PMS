@@ -4188,27 +4188,46 @@ enum FundMovementType {
   @@map("fund_movement_type")
 }
 
+enum FundMovementStatus {
+  DRAFT // Borrador: editable, sin asiento ni impacto en saldos
+  CONFIRMED // Confirmado: generó asiento y movió saldos
+  CANCELLED // Anulado
+
+  @@map("fund_movement_status")
+}
+
 /// Movimiento de fondos: aportes de socios, retiros y transferencias entre
-/// cuentas. Genera un asiento contable automático (activo contra activo/capital).
-/// Guarda snapshots de las etiquetas para mostrar el historial sin joins.
+/// cuentas. Se crea en borrador (editable, sin efecto) y al confirmarlo genera
+/// el asiento contable y actualiza los saldos de banco/caja. Guarda snapshots
+/// de las etiquetas para mostrar el historial sin joins.
 model FundMovement {
-  id                      String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  companyId               String           @map("company_id") @db.Uuid
-  date                    DateTime         @db.Date
-  type                    FundMovementType
-  amount                  Decimal          @db.Decimal(15, 2) // siempre positivo
-  description             String
-  sourceAccountId         String?          @map("source_account_id") @db.Uuid // de dónde salen los fondos
-  sourceAccountLabel      String?          @map("source_account_label")
-  destinationAccountId    String?          @map("destination_account_id") @db.Uuid // a dónde entran los fondos
-  destinationAccountLabel String?          @map("destination_account_label")
-  partnerId               String?          @map("partner_id") @db.Uuid // socio (aporte/retiro), informativo
-  partnerName             String?          @map("partner_name")
-  journalEntryId          String?          @map("journal_entry_id") @db.Uuid // asiento generado
-  journalEntryNumber      Int?             @map("journal_entry_number")
-  createdBy               String           @map("created_by")
-  createdAt               DateTime         @default(now()) @map("created_at")
-  updatedAt               DateTime         @updatedAt @map("updated_at")
+  id          String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId   String             @map("company_id") @db.Uuid
+  status      FundMovementStatus @default(DRAFT)
+  date        DateTime           @db.Date
+  type        FundMovementType
+  amount      Decimal            @db.Decimal(15, 2) // siempre positivo
+  description String
+
+  // Banco/caja de donde SALEN los fondos (retiro / transferencia)
+  fundOutKind  String? @map("fund_out_kind") // 'BANK' | 'CASH'
+  fundOutId    String? @map("fund_out_id") @db.Uuid
+  fundOutLabel String? @map("fund_out_label")
+  // Banco/caja a donde ENTRAN los fondos (aporte / transferencia)
+  fundInKind   String? @map("fund_in_kind") // 'BANK' | 'CASH'
+  fundInId     String? @map("fund_in_id") @db.Uuid
+  fundInLabel  String? @map("fund_in_label")
+
+  partnerId   String? @map("partner_id") @db.Uuid // socio (aporte/retiro), informativo
+  partnerName String? @map("partner_name")
+
+  journalEntryId     String?   @map("journal_entry_id") @db.Uuid // asiento generado (al confirmar)
+  journalEntryNumber Int?      @map("journal_entry_number")
+  confirmedAt        DateTime? @map("confirmed_at")
+
+  createdBy String   @map("created_by")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 

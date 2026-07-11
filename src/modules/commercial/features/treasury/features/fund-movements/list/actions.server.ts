@@ -59,6 +59,17 @@ export async function getFundMovements(searchParams: DataTableSearchParams) {
   }
 }
 
+/** Un movimiento por id (para edición). */
+export async function getFundMovementById(id: string) {
+  await checkPermission('commercial.treasury.fund-movements', 'view', { redirect: true });
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  const movement = await prisma.fundMovement.findFirst({ where: { id, companyId } });
+  if (!movement) return null;
+  return { ...movement, amount: Number(movement.amount) };
+}
+
 /** Catálogos para el formulario: bancos, cajas con sesión abierta, socios y estado de config. */
 export async function getFundMovementCatalogs() {
   await checkPermission('commercial.treasury.fund-movements', 'view', { redirect: true });
@@ -96,7 +107,7 @@ export async function getFundMovementCatalogs() {
 }
 
 // ============================================================================
-// MUTATIONS
+// HELPERS
 // ============================================================================
 
 interface FundSettings {
@@ -104,16 +115,31 @@ interface FundSettings {
   defaultCashAccountId: string | null;
 }
 
-interface ResolvedFundSide {
-  accountId: string; // cuenta contable para el asiento
-  label: string; // snapshot para el historial
-  entityId: string; // id del banco/caja
+/** Valida un banco/caja y devuelve su etiqueta, sin tocar saldos (para DRAFT). */
+async function resolveFundRefLabel(
+  ref: { kind: FundSourceKind; id: string },
+  companyId: string
+): Promise<{ kind: FundSourceKind; id: string; label: string }> {
+  if (ref.kind === 'BANK') {
+    const bank = await prisma.bankAccount.findFirst({
+      where: { id: ref.id, companyId, status: 'ACTIVE' },
+      select: { bankName: true, accountNumber: true },
+    });
+    if (!bank) throw new Error('La cuenta bancaria seleccionada no es válida');
+    return { kind: 'BANK', id: ref.id, label: `${bank.bankName} - ${bank.accountNumber}` };
+  }
+  const cash = await prisma.cashRegister.findFirst({
+    where: { id: ref.id, companyId, status: 'ACTIVE' },
+    select: { name: true },
+  });
+  if (!cash) throw new Error('La caja seleccionada no es válida');
+  return { kind: 'CASH', id: ref.id, label: `Caja ${cash.name}` };
 }
 
 /**
  * Aplica un lado del movimiento sobre un banco o caja: registra el movimiento,
  * actualiza el saldo y resuelve la cuenta contable. `direction` 'IN' = entran
- * fondos (ingreso), 'OUT' = salen (egreso).
+ * fondos, 'OUT' = salen.
  */
 async function applyFundSide(
   tx: PrismaTransactionClient,
@@ -128,13 +154,13 @@ async function applyFundSide(
     isTransfer: boolean;
     settings: FundSettings;
   }
-): Promise<ResolvedFundSide> {
+): Promise<{ accountId: string }> {
   const { companyId, userId, amount, date, description, isTransfer, settings } = ctx;
 
   if (ref.kind === 'BANK') {
     const bank = await tx.bankAccount.findFirst({
       where: { id: ref.id, companyId, status: 'ACTIVE' },
-      select: { id: true, balance: true, accountId: true, bankName: true, accountNumber: true },
+      select: { id: true, balance: true, accountId: true, bankName: true },
     });
     if (!bank) throw new Error('La cuenta bancaria seleccionada no es válida');
 
@@ -159,7 +185,7 @@ async function applyFundSide(
     });
     await tx.bankAccount.update({ where: { id: bank.id }, data: { balance: newBalance } });
 
-    return { accountId, label: `${bank.bankName} - ${bank.accountNumber}`, entityId: bank.id };
+    return { accountId };
   }
 
   // CAJA
@@ -203,13 +229,10 @@ async function applyFundSide(
     data: { expectedBalance: newExpected },
   });
 
-  return { accountId, label: `Caja ${cash.name}`, entityId: cash.id };
+  return { accountId };
 }
 
-/**
- * Genera el asiento contable de un movimiento de fondos (2 líneas, balanceado)
- * dentro de la transacción dada, y devuelve el asiento creado.
- */
+/** Genera el asiento (2 líneas balanceadas) dentro de la transacción. */
 async function createJournalEntryForFundMovement(
   input: {
     companyId: string;
@@ -229,7 +252,7 @@ async function createJournalEntryForFundMovement(
   });
   if (!settings) {
     throw new Error(
-      'No hay configuración contable. Configurá las cuentas por defecto en Ajustes contables antes de registrar movimientos de fondos.'
+      'No hay configuración contable. Configurá las cuentas por defecto en Ajustes contables antes de confirmar movimientos de fondos.'
     );
   }
 
@@ -251,16 +274,26 @@ async function createJournalEntryForFundMovement(
     select: { id: true, number: true },
   });
 
-  await tx.accountingSettings.update({
-    where: { companyId },
-    data: { lastEntryNumber: nextNumber },
-  });
-
+  await tx.accountingSettings.update({ where: { companyId }, data: { lastEntryNumber: nextNumber } });
   return entry;
 }
 
-/** Crea un movimiento de fondos: actualiza saldos de banco/caja y genera el asiento. */
-export async function createFundMovement(input: FundMovementFormInput) {
+/** Datos del movimiento resueltos desde el form, para crear/editar en borrador. */
+function buildDraftData(data: FundMovementFormInput) {
+  const sourceRef = data.sourceFund ? parseFundRef(data.sourceFund) : null;
+  const destRef = data.destinationFund ? parseFundRef(data.destinationFund) : null;
+  return { sourceRef, destRef };
+}
+
+// ============================================================================
+// MUTATIONS
+// ============================================================================
+
+/**
+ * Crea un movimiento de fondos en BORRADOR (sin asiento ni impacto en saldos).
+ * Si `confirm` es true, lo confirma en la misma operación.
+ */
+export async function createFundMovement(input: FundMovementFormInput, confirm = false) {
   await checkPermission('commercial.treasury.fund-movements', 'create', { redirect: true });
   const userId = await getCurrentUserId();
   if (!userId) throw new Error('No autenticado');
@@ -268,41 +301,13 @@ export async function createFundMovement(input: FundMovementFormInput) {
   if (!companyId) throw new Error('No hay empresa activa');
 
   const data = fundMovementSchema.parse(input);
-  const amountNum = parseFloat(data.amount);
-  const amount = new Prisma.Decimal(amountNum);
-  const date = moment(data.date, 'YYYY-MM-DD').toDate();
-  const isTransfer = data.type === 'ACCOUNT_TRANSFER';
-
-  const sourceRef = data.sourceFund ? parseFundRef(data.sourceFund) : null;
-  const destRef = data.destinationFund ? parseFundRef(data.destinationFund) : null;
+  const { sourceRef, destRef } = buildDraftData(data);
 
   try {
-    const settings = await prisma.accountingSettings.findUnique({
-      where: { companyId },
-      select: {
-        partnerContributionsAccountId: true,
-        defaultBankAccountId: true,
-        defaultCashAccountId: true,
-        partnerContributionsAccount: { select: { code: true, name: true } },
-      },
-    });
+    // fundOut = origen (retiro/transferencia); fundIn = destino (aporte/transferencia)
+    const fundOut = sourceRef ? await resolveFundRefLabel(sourceRef, companyId) : null;
+    const fundIn = destRef ? await resolveFundRefLabel(destRef, companyId) : null;
 
-    // Capital: requerido para aporte/retiro
-    let capitalAccountId: string | null = null;
-    let capitalLabel: string | null = null;
-    if (data.type === 'PARTNER_CONTRIBUTION' || data.type === 'PARTNER_WITHDRAWAL') {
-      capitalAccountId = settings?.partnerContributionsAccountId ?? null;
-      if (!capitalAccountId) {
-        throw new Error(
-          'Configurá la "Cuenta de aportes de socios" en Ajustes contables antes de registrar aportes o retiros.'
-        );
-      }
-      capitalLabel = settings?.partnerContributionsAccount
-        ? `${settings.partnerContributionsAccount.code} - ${settings.partnerContributionsAccount.name}`
-        : 'Aportes de socios';
-    }
-
-    // Snapshot del socio (informativo)
     let partnerName: string | null = null;
     if (data.partnerId) {
       const partner = await prisma.partner.findFirst({
@@ -312,80 +317,36 @@ export async function createFundMovement(input: FundMovementFormInput) {
       partnerName = partner?.name ?? null;
     }
 
-    const fundSettings: FundSettings = {
-      defaultBankAccountId: settings?.defaultBankAccountId ?? null,
-      defaultCashAccountId: settings?.defaultCashAccountId ?? null,
-    };
-
-    const result = await prisma.$transaction(async (tx) => {
-      const sideCtx = { companyId, userId, amount, date, description: data.description, isTransfer, settings: fundSettings };
-
-      let debitAccountId: string;
-      let creditAccountId: string;
-      let sourceAccountId: string | null = null;
-      let sourceAccountLabel: string | null = null;
-      let destinationAccountId: string | null = null;
-      let destinationAccountLabel: string | null = null;
-
-      if (data.type === 'PARTNER_CONTRIBUTION') {
-        // Entra a banco/caja destino; contrapartida = capital
-        const dest = await applyFundSide(tx, destRef!, 'IN', sideCtx);
-        debitAccountId = dest.accountId;
-        creditAccountId = capitalAccountId!;
-        destinationAccountId = dest.entityId;
-        destinationAccountLabel = dest.label;
-        sourceAccountLabel = capitalLabel;
-      } else if (data.type === 'PARTNER_WITHDRAWAL') {
-        // Sale de banco/caja origen; contrapartida = capital
-        const src = await applyFundSide(tx, sourceRef!, 'OUT', sideCtx);
-        debitAccountId = capitalAccountId!;
-        creditAccountId = src.accountId;
-        sourceAccountId = src.entityId;
-        sourceAccountLabel = src.label;
-        destinationAccountLabel = capitalLabel;
-      } else {
-        // ACCOUNT_TRANSFER: sale del origen, entra al destino
-        const src = await applyFundSide(tx, sourceRef!, 'OUT', sideCtx);
-        const dest = await applyFundSide(tx, destRef!, 'IN', sideCtx);
-        debitAccountId = dest.accountId;
-        creditAccountId = src.accountId;
-        sourceAccountId = src.entityId;
-        sourceAccountLabel = src.label;
-        destinationAccountId = dest.entityId;
-        destinationAccountLabel = dest.label;
-      }
-
-      const entry = await createJournalEntryForFundMovement(
-        { companyId, date, description: data.description, amount: amountNum, debitAccountId, creditAccountId },
-        tx
-      );
-
-      return tx.fundMovement.create({
-        data: {
-          companyId,
-          date,
-          type: data.type,
-          amount,
-          description: data.description,
-          sourceAccountId,
-          sourceAccountLabel,
-          destinationAccountId,
-          destinationAccountLabel,
-          partnerId: data.partnerId || null,
-          partnerName,
-          journalEntryId: entry.id,
-          journalEntryNumber: entry.number,
-          createdBy: userId,
-        },
-      });
+    const created = await prisma.fundMovement.create({
+      data: {
+        companyId,
+        status: 'DRAFT',
+        date: moment(data.date, 'YYYY-MM-DD').toDate(),
+        type: data.type,
+        amount: new Prisma.Decimal(parseFloat(data.amount)),
+        description: data.description,
+        fundOutKind: fundOut?.kind ?? null,
+        fundOutId: fundOut?.id ?? null,
+        fundOutLabel: fundOut?.label ?? null,
+        fundInKind: fundIn?.kind ?? null,
+        fundInId: fundIn?.id ?? null,
+        fundInLabel: fundIn?.label ?? null,
+        partnerId: data.partnerId || null,
+        partnerName,
+        createdBy: userId,
+      },
+      select: { id: true },
     });
 
-    logger.info('Movimiento de fondos creado', { data: { id: result.id, type: data.type, companyId } });
-    revalidatePath('/dashboard/commercial/treasury/fund-movements');
-    revalidatePath('/dashboard/commercial/treasury/bank-accounts');
-    revalidatePath('/dashboard/commercial/treasury/cash-registers');
+    logger.info('Movimiento de fondos creado (borrador)', { data: { id: created.id, companyId } });
 
-    return { success: true, id: result.id };
+    if (confirm) {
+      await confirmFundMovement(created.id);
+    } else {
+      revalidatePath('/dashboard/commercial/treasury/fund-movements');
+    }
+
+    return { success: true, id: created.id };
   } catch (error) {
     logger.error('Error al crear movimiento de fondos', { data: { error, input } });
     if (error instanceof Error) throw error;
@@ -393,7 +354,209 @@ export async function createFundMovement(input: FundMovementFormInput) {
   }
 }
 
+/** Actualiza un movimiento en BORRADOR (no permitido si ya está confirmado). */
+export async function updateFundMovement(id: string, input: FundMovementFormInput) {
+  await checkPermission('commercial.treasury.fund-movements', 'update', { redirect: true });
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  const existing = await prisma.fundMovement.findFirst({ where: { id, companyId }, select: { status: true } });
+  if (!existing) throw new Error('Movimiento no encontrado');
+  if (existing.status !== 'DRAFT') throw new Error('Solo se pueden editar movimientos en borrador');
+
+  const data = fundMovementSchema.parse(input);
+  const { sourceRef, destRef } = buildDraftData(data);
+
+  try {
+    const fundOut = sourceRef ? await resolveFundRefLabel(sourceRef, companyId) : null;
+    const fundIn = destRef ? await resolveFundRefLabel(destRef, companyId) : null;
+
+    let partnerName: string | null = null;
+    if (data.partnerId) {
+      const partner = await prisma.partner.findFirst({
+        where: { id: data.partnerId, companyId },
+        select: { name: true },
+      });
+      partnerName = partner?.name ?? null;
+    }
+
+    await prisma.fundMovement.update({
+      where: { id },
+      data: {
+        date: moment(data.date, 'YYYY-MM-DD').toDate(),
+        type: data.type,
+        amount: new Prisma.Decimal(parseFloat(data.amount)),
+        description: data.description,
+        fundOutKind: fundOut?.kind ?? null,
+        fundOutId: fundOut?.id ?? null,
+        fundOutLabel: fundOut?.label ?? null,
+        fundInKind: fundIn?.kind ?? null,
+        fundInId: fundIn?.id ?? null,
+        fundInLabel: fundIn?.label ?? null,
+        partnerId: data.partnerId || null,
+        partnerName,
+      },
+    });
+
+    revalidatePath('/dashboard/commercial/treasury/fund-movements');
+    return { success: true, id };
+  } catch (error) {
+    logger.error('Error al actualizar movimiento de fondos', { data: { error, id, input } });
+    if (error instanceof Error) throw error;
+    throw new Error('Error al actualizar movimiento de fondos');
+  }
+}
+
+/**
+ * Confirma un movimiento en borrador: actualiza saldos de banco/caja y genera
+ * el asiento contable, de forma atómica. Lo deja CONFIRMED.
+ */
+export async function confirmFundMovement(id: string) {
+  await checkPermission('commercial.treasury.fund-movements', 'update', { redirect: true });
+  const userId = await getCurrentUserId();
+  if (!userId) throw new Error('No autenticado');
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  const movement = await prisma.fundMovement.findFirst({ where: { id, companyId } });
+  if (!movement) throw new Error('Movimiento no encontrado');
+  if (movement.status !== 'DRAFT') throw new Error('El movimiento ya fue confirmado o anulado');
+
+  const settings = await prisma.accountingSettings.findUnique({
+    where: { companyId },
+    select: {
+      partnerContributionsAccountId: true,
+      defaultBankAccountId: true,
+      defaultCashAccountId: true,
+    },
+  });
+
+  const isTransfer = movement.type === 'ACCOUNT_TRANSFER';
+  let capitalAccountId: string | null = null;
+  if (movement.type === 'PARTNER_CONTRIBUTION' || movement.type === 'PARTNER_WITHDRAWAL') {
+    capitalAccountId = settings?.partnerContributionsAccountId ?? null;
+    if (!capitalAccountId) {
+      throw new Error(
+        'Configurá la "Cuenta de aportes de socios" en Ajustes contables antes de confirmar aportes o retiros.'
+      );
+    }
+  }
+
+  const fundSettings: FundSettings = {
+    defaultBankAccountId: settings?.defaultBankAccountId ?? null,
+    defaultCashAccountId: settings?.defaultCashAccountId ?? null,
+  };
+  const amount = new Prisma.Decimal(Number(movement.amount));
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      const sideCtx = {
+        companyId,
+        userId,
+        amount,
+        date: movement.date,
+        description: movement.description,
+        isTransfer,
+        settings: fundSettings,
+      };
+
+      let debitAccountId: string;
+      let creditAccountId: string;
+
+      if (movement.type === 'PARTNER_CONTRIBUTION') {
+        if (!movement.fundInKind || !movement.fundInId) throw new Error('Falta el banco/caja destino');
+        const dest = await applyFundSide(
+          tx,
+          { kind: movement.fundInKind as FundSourceKind, id: movement.fundInId },
+          'IN',
+          sideCtx
+        );
+        debitAccountId = dest.accountId;
+        creditAccountId = capitalAccountId!;
+      } else if (movement.type === 'PARTNER_WITHDRAWAL') {
+        if (!movement.fundOutKind || !movement.fundOutId) throw new Error('Falta el banco/caja origen');
+        const src = await applyFundSide(
+          tx,
+          { kind: movement.fundOutKind as FundSourceKind, id: movement.fundOutId },
+          'OUT',
+          sideCtx
+        );
+        debitAccountId = capitalAccountId!;
+        creditAccountId = src.accountId;
+      } else {
+        if (!movement.fundOutKind || !movement.fundOutId) throw new Error('Falta el banco/caja origen');
+        if (!movement.fundInKind || !movement.fundInId) throw new Error('Falta el banco/caja destino');
+        const src = await applyFundSide(
+          tx,
+          { kind: movement.fundOutKind as FundSourceKind, id: movement.fundOutId },
+          'OUT',
+          sideCtx
+        );
+        const dest = await applyFundSide(
+          tx,
+          { kind: movement.fundInKind as FundSourceKind, id: movement.fundInId },
+          'IN',
+          sideCtx
+        );
+        debitAccountId = dest.accountId;
+        creditAccountId = src.accountId;
+      }
+
+      const entry = await createJournalEntryForFundMovement(
+        {
+          companyId,
+          date: movement.date,
+          description: movement.description,
+          amount: Number(movement.amount),
+          debitAccountId,
+          creditAccountId,
+        },
+        tx
+      );
+
+      await tx.fundMovement.update({
+        where: { id },
+        data: {
+          status: 'CONFIRMED',
+          journalEntryId: entry.id,
+          journalEntryNumber: entry.number,
+          confirmedAt: new Date(),
+        },
+      });
+    });
+
+    logger.info('Movimiento de fondos confirmado', { data: { id, companyId } });
+    revalidatePath('/dashboard/commercial/treasury/fund-movements');
+    revalidatePath('/dashboard/commercial/treasury/bank-accounts');
+    revalidatePath('/dashboard/commercial/treasury/cash-registers');
+    return { success: true };
+  } catch (error) {
+    logger.error('Error al confirmar movimiento de fondos', { data: { error, id } });
+    if (error instanceof Error) throw error;
+    throw new Error('Error al confirmar movimiento de fondos');
+  }
+}
+
+/** Elimina un movimiento en BORRADOR (los confirmados no se pueden borrar acá). */
+export async function deleteFundMovement(id: string) {
+  await checkPermission('commercial.treasury.fund-movements', 'delete', { redirect: true });
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  const existing = await prisma.fundMovement.findFirst({ where: { id, companyId }, select: { status: true } });
+  if (!existing) throw new Error('Movimiento no encontrado');
+  if (existing.status !== 'DRAFT') {
+    throw new Error('Solo se pueden eliminar movimientos en borrador');
+  }
+
+  await prisma.fundMovement.delete({ where: { id } });
+  logger.info('Movimiento de fondos eliminado (borrador)', { data: { id, companyId } });
+  revalidatePath('/dashboard/commercial/treasury/fund-movements');
+  return { success: true };
+}
+
 export type FundMovementListItem = Awaited<ReturnType<typeof getFundMovements>>['data'][number];
+export type FundMovementRecord = NonNullable<Awaited<ReturnType<typeof getFundMovementById>>>;
 export type FundOption = { id: string; label: string };
 export type FundMovementPartnerOption = Awaited<
   ReturnType<typeof getFundMovementCatalogs>

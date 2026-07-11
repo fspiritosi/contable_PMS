@@ -104,10 +104,29 @@ El `sourceFund`/`destinationFund` del formulario se codifica como `"BANK:<id>"` 
 `"CASH:<id>"`. Sin cambios de schema (se reutilizan los campos existentes de
 `FundMovement`, guardando el id del banco/caja y el label descriptivo).
 
+## Mejora (feedback): flujo borrador → confirmar
+
+Todo movimiento se crea en **borrador** (`FundMovementStatus.DRAFT`): editable y
+sin efecto (no genera asiento ni toca saldos). Al **confirmar** se hace efectivo
+de forma atómica (asiento + saldos) y pasa a `CONFIRMED`; el confirmado ya no se
+edita/elimina.
+
+- Modelo: `status FundMovementStatus @default(DRAFT)`, `confirmedAt`, y las
+  referencias de banco/caja se guardan como `fundOutKind/fundOutId/fundOutLabel`
+  (de dónde salen) y `fundInKind/fundInId/fundInLabel` (a dónde entran), para
+  poder confirmar el borrador más tarde. Migración.
+- Server actions: `createFundMovement(input, confirm)` (crea DRAFT, opcionalmente
+  confirma), `updateFundMovement` (solo DRAFT), `confirmFundMovement` (aplica
+  saldos + asiento), `deleteFundMovement` (solo DRAFT).
+- UI: el modal ofrece **Guardar | Guardar y Confirmar | Cancelar** y sirve para
+  alta y edición. El listado muestra columna **Estado** y acciones
+  Confirmar/Editar/Eliminar sobre los borradores.
+
 ## Estado
 
 - **Fase 1: implementada.**
-- **Fase 2: implementada** (incluida la mejora de banco/caja con impacto en saldo),
-  rama `feat/tsk-413-movimientos-fondos`. Verificado contra la DB local: aporte a
-  banco sube el saldo, retiro lo baja, transferencia banco→caja mueve ambos
-  saldos; los asientos quedan balanceados en todos los casos.
+- **Fase 2: implementada** (banco/caja con impacto en saldo + flujo
+  borrador→confirmar), rama `feat/tsk-413-movimientos-fondos`. Verificado contra
+  la DB local: el borrador no toca saldos ni genera asiento; al confirmar sube el
+  saldo del banco/caja y genera el asiento balanceado; el confirmado queda
+  bloqueado para edición.

@@ -806,7 +806,24 @@ export function _TreasuryGuide() {
               para aportes o retiros, opcionalmente el socio. Las cajas deben
               tener una sesión abierta para operar.
             </li>
-            <li>Escribí una descripción y confirmá</li>
+            <li>
+              Escribí una descripción y elegí:
+              <ul className="list-disc pl-6 mt-1 space-y-1">
+                <li>
+                  <strong>Guardar</strong>: lo deja en <strong>borrador</strong>
+                  (editable, todavía no impacta nada).
+                </li>
+                <li>
+                  <strong>Guardar y Confirmar</strong>: lo hace efectivo (mueve el
+                  saldo y genera el asiento).
+                </li>
+              </ul>
+            </li>
+            <li>
+              Desde el listado podés <strong>Editar</strong>, <strong>Confirmar</strong>
+              o <strong>Eliminar</strong> un borrador. Una vez confirmado, el
+              movimiento ya no se edita.
+            </li>
           </ol>
           <Alert>
             <Info className="h-4 w-4" />
