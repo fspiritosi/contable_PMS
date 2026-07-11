@@ -11,6 +11,21 @@ interface GetCashRegistersParams {
 }
 
 /**
+ * Cuentas contables de activo disponibles para asociar a una caja.
+ */
+export async function getAvailableAccountsForCashRegister() {
+  await checkPermission('commercial.treasury.cash-registers', 'view', { redirect: true });
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  return prisma.account.findMany({
+    where: { companyId, isActive: true, type: 'ASSET' },
+    select: { id: true, code: true, name: true },
+    orderBy: { code: 'asc' },
+  });
+}
+
+/**
  * Obtiene la lista de cajas de la empresa activa
  */
 export async function getCashRegisters(
@@ -36,6 +51,7 @@ export async function getCashRegisters(
         location: true,
         status: true,
         isDefault: true,
+        accountId: true,
         createdAt: true,
         updatedAt: true,
         sessions: {
@@ -93,6 +109,7 @@ export async function getCashRegister(id: string) {
         location: true,
         status: true,
         isDefault: true,
+        accountId: true,
         createdAt: true,
         updatedAt: true,
         sessions: {
