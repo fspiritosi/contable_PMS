@@ -87,6 +87,9 @@ export async function getProducts(params: GetProductsParams = {}) {
         include: {
           category: { select: { id: true, name: true } },
           warehouseStocks: { select: { quantity: true } },
+          defaultIncomeAccount: { select: { id: true, code: true, name: true } },
+          defaultExpenseAccount: { select: { id: true, code: true, name: true } },
+          defaultCostCenter: { select: { id: true, name: true } },
         },
         orderBy: [{ status: 'asc' }, { name: 'asc' }],
         skip: lowStockFilter ? undefined : (page - 1) * pageSize,
@@ -892,6 +895,9 @@ interface BulkUpdateProductsInput {
     status?: string;
     unitOfMeasure?: string;
     description?: string;
+    defaultIncomeAccountId?: string | null;
+    defaultExpenseAccountId?: string | null;
+    defaultCostCenterId?: string | null;
   };
 }
 
@@ -911,6 +917,12 @@ export async function bulkUpdateProducts(input: BulkUpdateProductsInput) {
   if (input.updates.status) data.status = input.updates.status;
   if (input.updates.unitOfMeasure) data.unitOfMeasure = input.updates.unitOfMeasure;
   if (input.updates.description !== undefined) data.description = input.updates.description || null;
+  if (input.updates.defaultIncomeAccountId !== undefined)
+    data.defaultIncomeAccountId = input.updates.defaultIncomeAccountId || null;
+  if (input.updates.defaultExpenseAccountId !== undefined)
+    data.defaultExpenseAccountId = input.updates.defaultExpenseAccountId || null;
+  if (input.updates.defaultCostCenterId !== undefined)
+    data.defaultCostCenterId = input.updates.defaultCostCenterId || null;
 
   if (Object.keys(data).length === 0) throw new Error('No hay cambios para aplicar');
 
@@ -922,6 +934,53 @@ export async function bulkUpdateProducts(input: BulkUpdateProductsInput) {
   logger.info('Bulk product update', { data: { count: result.count, fields: Object.keys(data) } });
   revalidatePath('/dashboard/commercial/products');
   return { success: true, count: result.count };
+}
+
+// ============================================================================
+// IMPUTACIÓN CONTABLE POR ARTÍCULO (desde el listado)
+// ============================================================================
+
+export interface ProductImputationInput {
+  defaultIncomeAccountId?: string | null;
+  defaultExpenseAccountId?: string | null;
+  defaultCostCenterId?: string | null;
+}
+
+/**
+ * Actualiza únicamente la imputación contable de un artículo (cuenta de
+ * ingreso, cuenta de egreso y centro de costo), sin tocar precios ni otros
+ * campos. Pensada para asignar la imputación rápidamente desde el listado.
+ */
+export async function updateProductImputation(
+  id: string,
+  imputation: ProductImputationInput
+) {
+  await checkPermission('commercial.products', 'update', { redirect: true });
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  const existing = await prisma.product.findFirst({
+    where: { id, companyId },
+    select: { id: true },
+  });
+  if (!existing) throw new Error('Artículo no encontrado');
+
+  await prisma.product.update({
+    where: { id },
+    data: {
+      defaultIncomeAccountId: imputation.defaultIncomeAccountId || null,
+      defaultExpenseAccountId: imputation.defaultExpenseAccountId || null,
+      defaultCostCenterId: imputation.defaultCostCenterId || null,
+    },
+  });
+
+  logger.info('Imputación contable de artículo actualizada', {
+    data: { productId: id, companyId },
+  });
+
+  revalidatePath('/dashboard/commercial/products');
+  revalidatePath(`/dashboard/commercial/products/${id}`);
+  return { success: true };
 }
 
 /**
