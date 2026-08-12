@@ -32,6 +32,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/shared/components/ui/select';
+import { AccountCombobox } from '@/shared/components/common/AccountCombobox';
 
 import { createBankAccount, updateBankAccount } from '../../actions.server';
 import { getAvailableAccounts } from '../actions.server';
@@ -273,24 +274,14 @@ export function _BankAccountFormModal({ open, onOpenChange, bankAccount, onSucce
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Cuenta contable asociada</FormLabel>
-                  <Select
-                    onValueChange={(v) => field.onChange(v === '__none__' ? null : v)}
-                    value={field.value || '__none__'}
-                  >
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Sin asignar" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="__none__">Sin asignar</SelectItem>
-                      {accounts.map((account) => (
-                        <SelectItem key={account.id} value={account.id}>
-                          {account.code} - {account.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <FormControl>
+                    <AccountCombobox
+                      accounts={accounts}
+                      value={field.value}
+                      onChange={field.onChange}
+                      placeholder="Sin asignar"
+                    />
+                  </FormControl>
                   <FormDescription>
                     Cuenta de activo usada en los asientos de esta cuenta. Si no se asigna, se usa la
                     cuenta de banco por defecto de Ajustes contables.

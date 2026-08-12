@@ -22,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/shared/components/ui/select';
+import { AccountCombobox } from '@/shared/components/common/AccountCombobox';
 import type { Product } from '../../../shared/types';
 import { updateProductImputation } from '../actions.server';
 
@@ -110,36 +111,22 @@ export function _ImputationModal({
         <div className="space-y-4 py-2">
           <div className="space-y-1.5">
             <Label>Cuenta de Ingresos (ventas)</Label>
-            <Select value={incomeAccountId} onValueChange={setIncomeAccountId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Sin asignar" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={CLEAR_VALUE}>Sin asignar</SelectItem>
-                {incomeAccounts.map((account) => (
-                  <SelectItem key={account.id} value={account.id}>
-                    {account.code} - {account.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <AccountCombobox
+              accounts={incomeAccounts}
+              value={incomeAccountId === CLEAR_VALUE ? null : incomeAccountId}
+              onChange={(accountId) => setIncomeAccountId(accountId ?? CLEAR_VALUE)}
+              placeholder="Sin asignar"
+            />
           </div>
 
           <div className="space-y-1.5">
             <Label>Cuenta de Gastos (compras)</Label>
-            <Select value={expenseAccountId} onValueChange={setExpenseAccountId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Sin asignar" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={CLEAR_VALUE}>Sin asignar</SelectItem>
-                {expenseAccounts.map((account) => (
-                  <SelectItem key={account.id} value={account.id}>
-                    {account.code} - {account.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <AccountCombobox
+              accounts={expenseAccounts}
+              value={expenseAccountId === CLEAR_VALUE ? null : expenseAccountId}
+              onChange={(accountId) => setExpenseAccountId(accountId ?? CLEAR_VALUE)}
+              placeholder="Sin asignar"
+            />
           </div>
 
           <div className="space-y-1.5">

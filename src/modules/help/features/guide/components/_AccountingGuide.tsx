@@ -226,7 +226,21 @@ export function _AccountingGuide() {
                   Retenciones (IVA, Ganancias, IIBB, SUSS - emitidas y
                   sufridas)
                 </li>
+                <li>Resultado del Ejercicio y Aportes de Socios</li>
+                <li>Activos Fijos (bienes de uso, depreciación y bajas)</li>
               </ul>
+            </li>
+            <li>
+              Para elegir cada cuenta, escribí en el buscador el{' '}
+              <strong>código o el nombre</strong> (por ejemplo &quot;1.1.1&quot; o
+              &quot;banco&quot;) y seleccioná la que corresponda. No hace falta
+              conocer de memoria el árbol de cuentas ni recorrer la lista entera.
+            </li>
+            <li>
+              Cada campo es opcional: elegí <strong>Sin asignar</strong> para
+              dejarlo vacío. Al terminar, presioná{' '}
+              <strong>Guardar Configuración</strong>; si algún dato quedó mal, el
+              sistema te avisa qué campo revisar.
             </li>
             <li>
               Una vez configurado, cada factura, recibo u orden de pago

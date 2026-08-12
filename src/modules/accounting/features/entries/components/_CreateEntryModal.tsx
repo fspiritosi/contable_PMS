@@ -16,14 +16,8 @@ import {
 import { Button } from '@/shared/components/ui/button';
 import { Input } from '@/shared/components/ui/input';
 import { Label } from '@/shared/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/shared/components/ui/select';
 import { Textarea } from '@/shared/components/ui/textarea';
+import { AccountCombobox } from '@/shared/components/common/AccountCombobox';
 
 import { journalEntrySchema, type CreateJournalEntryInput } from '../../../shared/types';
 import { createJournalEntry } from '../actions.server';
@@ -198,24 +192,18 @@ export function _CreateEntryModal({ onClose }: CreateEntryModalProps) {
                   {fields.map((field, index) => (
                     <tr key={field.id} className="border-b last:border-0">
                       <td className="py-2 pl-4">
-                        <Select
+                        <AccountCombobox
+                          accounts={accounts}
                           value={form.watch(`lines.${index}.accountId`)}
-                          onValueChange={(value) =>
-                            form.setValue(`lines.${index}.accountId`, value)
+                          onChange={(accountId) =>
+                            form.setValue(`lines.${index}.accountId`, accountId ?? '', {
+                              shouldValidate: true,
+                            })
                           }
+                          placeholder="Seleccionar cuenta"
+                          clearLabel={null}
                           disabled={isLoading}
-                        >
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Seleccionar cuenta" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {accounts.map((account) => (
-                              <SelectItem key={account.id} value={account.id}>
-                                {account.code} - {account.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        />
                         {form.formState.errors.lines?.[index]?.accountId && (
                           <p className="mt-1 text-sm text-destructive">
                             {form.formState.errors.lines[index]?.accountId?.message}

@@ -17,6 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/shared/components/ui/select';
+import { AccountCombobox } from '@/shared/components/common/AccountCombobox';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
@@ -205,22 +206,19 @@ export function _CreateRecurringEntryDialog({
                   {fields.map((field, index) => (
                     <tr key={field.id} className="border-b">
                       <td className="py-1 pl-3">
-                        <Select
-                          value={form.watch(`lines.${index}.accountId`) || undefined}
-                          onValueChange={(v) => form.setValue(`lines.${index}.accountId`, v)}
+                        <AccountCombobox
+                          accounts={accounts}
+                          value={form.watch(`lines.${index}.accountId`)}
+                          onChange={(accountId) =>
+                            form.setValue(`lines.${index}.accountId`, accountId ?? '', {
+                              shouldValidate: true,
+                            })
+                          }
+                          placeholder="Seleccionar..."
+                          clearLabel={null}
                           disabled={isLoading}
-                        >
-                          <SelectTrigger className="h-8 text-xs">
-                            <SelectValue placeholder="Seleccionar..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {accounts.map((acc) => (
-                              <SelectItem key={acc.id} value={acc.id}>
-                                {acc.code} - {acc.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                          className="h-8 text-xs"
+                        />
                       </td>
                       <td className="py-1">
                         <Input
