@@ -93,6 +93,10 @@ async function AccountingSettingsContent({ companyId }: { companyId: string }) {
               withholdingGananciasSufferedAccountId: settings?.withholdingGananciasSufferedAccountId ?? null,
               withholdingIibbSufferedAccountId: settings?.withholdingIibbSufferedAccountId ?? null,
               withholdingSussSufferedAccountId: settings?.withholdingSussSufferedAccountId ?? null,
+              fixedAssetAccountId: settings?.fixedAssetAccountId ?? null,
+              accumulatedDepreciationAccountId: settings?.accumulatedDepreciationAccountId ?? null,
+              depreciationExpenseAccountId: settings?.depreciationExpenseAccountId ?? null,
+              assetDisposalGainLossAccountId: settings?.assetDisposalGainLossAccountId ?? null,
             }}
           />
         </CardContent>

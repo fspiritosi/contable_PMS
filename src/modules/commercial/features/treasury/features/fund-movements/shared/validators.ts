@@ -1,4 +1,24 @@
+import moment from 'moment';
 import { z } from 'zod';
+
+/**
+ * Convierte la fecha del formulario ("YYYY-MM-DD") a Date.
+ *
+ * Se ancla al mediodía UTC, igual que el resto del sistema (ver
+ * `commercial/features/expenses/actions.server.ts`). Interpretarla en hora local
+ * hacía que, con el servidor en UTC y el usuario en UTC-3, la fecha se guardara
+ * un día antes de la elegida (TSK-483).
+ *
+ * Al leerla hay que usar `moment.utc(...)`, nunca `moment(...)`.
+ */
+export function parseFundMovementDate(date: string): Date {
+  return moment.utc(date, 'YYYY-MM-DD').startOf('day').add(12, 'hours').toDate();
+}
+
+/** Formatea una fecha guardada por `parseFundMovementDate` para mostrarla. */
+export function formatFundMovementDate(date: Date | string, format = 'DD/MM/YYYY'): string {
+  return moment.utc(date).format(format);
+}
 
 /** Tipos de movimiento de fondos (coinciden con el enum Prisma FundMovementType). */
 export const FUND_MOVEMENT_TYPES = [

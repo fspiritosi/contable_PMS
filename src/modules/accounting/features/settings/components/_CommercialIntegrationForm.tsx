@@ -1,12 +1,12 @@
 'use client';
 
-import { useForm } from 'react-hook-form';
+import { useForm, type FieldErrors } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
-import { z } from 'zod';
 
+import { logger } from '@/shared/lib/logger';
 import { Button } from '@/shared/components/ui/button';
 import { Label } from '@/shared/components/ui/label';
 import {
@@ -17,39 +17,17 @@ import {
   SelectValue,
 } from '@/shared/components/ui/select';
 
+import {
+  commercialIntegrationSchema,
+  type CommercialIntegrationInput,
+  type CommercialIntegrationValues,
+} from '../validators';
 import { saveAccountingSettings, getAccountingSettings } from '../actions.server';
 import { useState } from 'react';
 import { usePermissions } from '@/shared/hooks/usePermissions';
 
-// Esquema de validación con transformación de "__clear__" a null
-const commercialIntegrationSchema = z.object({
-  salesAccountId: z.string().nullable().transform((val) => val === '__clear__' ? null : val),
-  purchasesAccountId: z.string().nullable().transform((val) => val === '__clear__' ? null : val),
-  receivablesAccountId: z.string().nullable().transform((val) => val === '__clear__' ? null : val),
-  payablesAccountId: z.string().nullable().transform((val) => val === '__clear__' ? null : val),
-  vatDebitAccountId: z.string().nullable().transform((val) => val === '__clear__' ? null : val),
-  vatCreditAccountId: z.string().nullable().transform((val) => val === '__clear__' ? null : val),
-  defaultCashAccountId: z.string().nullable().transform((val) => val === '__clear__' ? null : val),
-  defaultBankAccountId: z.string().nullable().transform((val) => val === '__clear__' ? null : val),
-  expensesAccountId: z.string().nullable().transform((val) => val === '__clear__' ? null : val),
-  resultAccountId: z.string().nullable().transform((val) => val === '__clear__' ? null : val),
-  partnerContributionsAccountId: z.string().nullable().transform((val) => val === '__clear__' ? null : val),
-  withholdingIvaEmittedAccountId: z.string().nullable().transform((val) => val === '__clear__' ? null : val),
-  withholdingGananciasEmittedAccountId: z.string().nullable().transform((val) => val === '__clear__' ? null : val),
-  withholdingIibbEmittedAccountId: z.string().nullable().transform((val) => val === '__clear__' ? null : val),
-  withholdingSussEmittedAccountId: z.string().nullable().transform((val) => val === '__clear__' ? null : val),
-  withholdingIvaSufferedAccountId: z.string().nullable().transform((val) => val === '__clear__' ? null : val),
-  withholdingGananciasSufferedAccountId: z.string().nullable().transform((val) => val === '__clear__' ? null : val),
-  withholdingIibbSufferedAccountId: z.string().nullable().transform((val) => val === '__clear__' ? null : val),
-  withholdingSussSufferedAccountId: z.string().nullable().transform((val) => val === '__clear__' ? null : val),
-  // Cuentas de Activos Fijos
-  fixedAssetAccountId: z.string().nullable().transform((val) => val === '__clear__' ? null : val),
-  accumulatedDepreciationAccountId: z.string().nullable().transform((val) => val === '__clear__' ? null : val),
-  depreciationExpenseAccountId: z.string().nullable().transform((val) => val === '__clear__' ? null : val),
-  assetDisposalGainLossAccountId: z.string().nullable().transform((val) => val === '__clear__' ? null : val),
-});
-
-type FormValues = z.infer<typeof commercialIntegrationSchema>;
+type FormInput = CommercialIntegrationInput;
+type FormValues = CommercialIntegrationValues;
 
 interface CommercialIntegrationFormProps {
   companyId: string;
@@ -60,6 +38,11 @@ interface CommercialIntegrationFormProps {
     type: string;
     nature: string;
   }>;
+  /**
+   * Tipado con la forma de salida a propósito: obliga a que quien renderice el
+   * formulario pase TODOS los campos. Es la garantía en tiempo de compilación
+   * que faltaba cuando se agregaron las cuentas de activos fijos (TSK-492).
+   */
   defaultValues: FormValues;
 }
 
@@ -72,7 +55,7 @@ export function _CommercialIntegrationForm({
   const { hasPermission } = usePermissions();
   const [isLoading, setIsLoading] = useState(false);
 
-  const form = useForm<FormValues>({
+  const form = useForm<FormInput, unknown, FormValues>({
     resolver: zodResolver(commercialIntegrationSchema),
     defaultValues,
   });
@@ -107,17 +90,34 @@ export function _CommercialIntegrationForm({
     }
   };
 
+  /**
+   * El formulario usa Label plano en vez de FormField/FormMessage, así que un
+   * error de validación no se vería en pantalla. Sin esto, "Guardar" quedaba
+   * sin efecto y sin explicación (TSK-492).
+   */
+  const handleInvalid = (errors: FieldErrors<FormInput>) => {
+    const campos = Object.keys(errors);
+    logger.error('Validación fallida en configuración de integración comercial', {
+      data: { campos, errors },
+    });
+    toast.error(
+      campos.length > 0
+        ? `No se pudo guardar: revisá los campos ${campos.join(', ')}`
+        : 'No se pudo guardar: hay campos inválidos'
+    );
+  };
+
   const formatAccountOption = (account: (typeof accounts)[0]) => {
     return `${account.code} - ${account.name}`;
   };
 
   // Helper para manejar el cambio de valor en los selects
-  const handleSelectChange = (field: keyof FormValues, value: string) => {
+  const handleSelectChange = (field: keyof FormInput, value: string) => {
     form.setValue(field, value === '__clear__' ? null : value);
   };
 
   return (
-    <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
+    <form onSubmit={form.handleSubmit(handleSubmit, handleInvalid)} className="space-y-6">
       {/* Ventas y Compras */}
       <div className="space-y-4">
         <h3 className="text-sm font-medium text-muted-foreground">Cuentas de Resultado</h3>
