@@ -35,7 +35,7 @@ import {
 
 import { createBankAccount, updateBankAccount } from '../../actions.server';
 import { getAvailableAccounts } from '../actions.server';
-import { bankAccountSchema, BANK_ACCOUNT_TYPE_LABELS } from '../../../../shared/validators';
+import { bankAccountSchema, BANK_ACCOUNT_TYPE_LABELS, type BankAccountFormData } from '../../../../shared/validators';
 import type { BankAccountWithBalance } from '../../../../shared/types';
 
 interface Props {
@@ -86,7 +86,7 @@ export function _BankAccountFormModal({ open, onOpenChange, bankAccount, onSucce
           alias: bankAccount.alias,
           currency: bankAccount.currency,
           balance: bankAccount.balance.toString(),
-          accountId: null, // Se cargará desde el query si existe
+          accountId: (bankAccount.accountId as string | null) ?? null,
         });
       } else {
         form.reset({
@@ -103,7 +103,7 @@ export function _BankAccountFormModal({ open, onOpenChange, bankAccount, onSucce
     }
   }, [open, bankAccount, form]);
 
-  const onSubmit = async (data: any) => {
+  const onSubmit = async (data: BankAccountFormData) => {
     try {
       if (isEditing) {
         await updateBankAccount(bankAccount.id, data);
@@ -266,6 +266,39 @@ export function _BankAccountFormModal({ open, onOpenChange, bankAccount, onSucce
                 )}
               />
             )}
+
+            <FormField
+              control={form.control}
+              name="accountId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Cuenta contable asociada</FormLabel>
+                  <Select
+                    onValueChange={(v) => field.onChange(v === '__none__' ? null : v)}
+                    value={field.value || '__none__'}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Sin asignar" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="__none__">Sin asignar</SelectItem>
+                      {accounts.map((account) => (
+                        <SelectItem key={account.id} value={account.id}>
+                          {account.code} - {account.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormDescription>
+                    Cuenta de activo usada en los asientos de esta cuenta. Si no se asigna, se usa la
+                    cuenta de banco por defecto de Ajustes contables.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

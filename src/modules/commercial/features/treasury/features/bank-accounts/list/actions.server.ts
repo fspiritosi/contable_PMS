@@ -114,6 +114,7 @@ export async function getBankAccountsPaginated(searchParams: DataTableSearchPara
           currency: true,
           balance: true,
           status: true,
+          accountId: true,
           createdAt: true,
           updatedAt: true,
           _count: {

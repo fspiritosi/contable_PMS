@@ -291,7 +291,7 @@ export function _TreasuryGuide() {
               <p className="text-sm text-muted-foreground mt-1">
                 Al confirmar el recibo, los cheques y e-cheq se registran
                 automáticamente en <strong>Tesorería → Cheques</strong> en estado
-                "En cartera", con sus fechas reales. Podés corregir sus datos
+                &quot;En cartera&quot;, con sus fechas reales. Podés corregir sus datos
                 desde allí mientras sigan en cartera.
               </p>
             </li>
@@ -355,7 +355,7 @@ export function _TreasuryGuide() {
                   <strong>De terceros</strong>: se <strong>endosa</strong> un cheque
                   recibido que tengas <strong>en cartera</strong>. Elegís el cheque
                   de la lista y el monto se completa solo; al confirmar, ese cheque
-                  pasa a estado "Endosado" a nombre del proveedor
+                  pasa a estado &quot;Endosado&quot; a nombre del proveedor
                 </li>
               </ul>
             </li>
@@ -753,6 +753,89 @@ export function _TreasuryGuide() {
           </ul>
         </AlertDescription>
       </Alert>
+
+      {/* Movimientos de Fondos */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <ArrowRightLeft className="h-5 w-5" />
+            Movimientos de Fondos
+          </CardTitle>
+          <CardDescription>
+            Aportes de socios, retiros y transferencias entre cuentas
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-muted-foreground">
+            Usá esta sección para movimientos de dinero que no son facturas,
+            cobros ni pagos: cuando un socio pone plata en la empresa, cuando se
+            le devuelve, o cuando movés fondos de una cuenta a otra. El origen y/o
+            destino es un <strong>banco o caja concreto</strong>: cada movimiento
+            <strong> actualiza su saldo</strong> y <strong>genera el asiento
+            contable automáticamente</strong>.
+          </p>
+          <p>
+            <strong>Tipos de movimiento:</strong>
+          </p>
+          <ul className="list-disc pl-6 space-y-1 text-muted-foreground">
+            <li>
+              <strong>Aporte de socio</strong>: ingresa dinero a una cuenta de
+              banco o caja. Contablemente aumenta el activo y el capital (contra
+              la cuenta de aportes configurada).
+            </li>
+            <li>
+              <strong>Retiro de socio</strong>: sale dinero de una cuenta hacia
+              un socio. Disminuye el capital y el activo.
+            </li>
+            <li>
+              <strong>Transferencia entre cuentas</strong>: mueve fondos de una
+              cuenta a otra (por ejemplo, del banco a la caja).
+            </li>
+          </ul>
+          <p>
+            <strong>Cómo registrar uno:</strong>
+          </p>
+          <ol className="list-decimal pl-6 space-y-1 text-muted-foreground">
+            <li>
+              Ve a <strong>Tesorería → Movimientos de Fondos</strong> y hacé clic
+              en <strong>Nuevo Movimiento</strong>
+            </li>
+            <li>Elegí el tipo, el monto y la fecha</li>
+            <li>
+              Seleccioná el banco o caja de origen y/o destino (según el tipo) y,
+              para aportes o retiros, opcionalmente el socio. Las cajas deben
+              tener una sesión abierta para operar.
+            </li>
+            <li>
+              Escribí una descripción y elegí:
+              <ul className="list-disc pl-6 mt-1 space-y-1">
+                <li>
+                  <strong>Guardar</strong>: lo deja en <strong>borrador</strong>
+                  (editable, todavía no impacta nada).
+                </li>
+                <li>
+                  <strong>Guardar y Confirmar</strong>: lo hace efectivo (mueve el
+                  saldo y genera el asiento).
+                </li>
+              </ul>
+            </li>
+            <li>
+              Desde el listado podés <strong>Editar</strong>, <strong>Confirmar</strong>
+              o <strong>Eliminar</strong> un borrador. Una vez confirmado, el
+              movimiento ya no se edita.
+            </li>
+          </ol>
+          <Alert>
+            <Info className="h-4 w-4" />
+            <AlertDescription>
+              Para registrar aportes o retiros primero configurá la{' '}
+              <strong>Cuenta de aportes de socios</strong> en{' '}
+              <strong>Ajustes contables</strong> (es una cuenta de Patrimonio
+              Neto).
+            </AlertDescription>
+          </Alert>
+        </CardContent>
+      </Card>
     </div>
   );
 }

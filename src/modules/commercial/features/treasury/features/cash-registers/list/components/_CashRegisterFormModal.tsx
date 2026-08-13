@@ -3,6 +3,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
+import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
 import { Button } from '@/shared/components/ui/button';
@@ -25,9 +26,16 @@ import {
   FormMessage,
 } from '@/shared/components/ui/form';
 import { Input } from '@/shared/components/ui/input';
-import { Textarea } from '@/shared/components/ui/textarea';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/shared/components/ui/select';
 
 import { createCashRegister, updateCashRegister } from '../../actions.server';
+import { getAvailableAccountsForCashRegister } from '../actions.server';
 import { cashRegisterSchema, type CashRegisterFormData } from '../../../../shared/validators';
 import type { CashRegisterWithActiveSession } from '../../../../shared/types';
 
@@ -41,6 +49,12 @@ interface Props {
 export function _CashRegisterFormModal({ open, onOpenChange, cashRegister, onSuccess }: Props) {
   const isEditing = !!cashRegister;
 
+  const { data: accounts = [] } = useQuery({
+    queryKey: ['available-accounts-cash-register'],
+    queryFn: getAvailableAccountsForCashRegister,
+    enabled: open,
+  });
+
   const form = useForm({
     resolver: zodResolver(cashRegisterSchema),
     defaultValues: {
@@ -48,6 +62,7 @@ export function _CashRegisterFormModal({ open, onOpenChange, cashRegister, onSuc
       name: '',
       location: null,
       isDefault: false,
+      accountId: null,
     },
   });
 
@@ -60,6 +75,7 @@ export function _CashRegisterFormModal({ open, onOpenChange, cashRegister, onSuc
           name: cashRegister.name,
           location: cashRegister.location || '',
           isDefault: cashRegister.isDefault,
+          accountId: (cashRegister.accountId as string | null) ?? null,
         });
       } else {
         form.reset({
@@ -67,6 +83,7 @@ export function _CashRegisterFormModal({ open, onOpenChange, cashRegister, onSuc
           name: '',
           location: null,
           isDefault: false,
+          accountId: null,
         });
       }
     }
@@ -151,6 +168,39 @@ export function _CashRegisterFormModal({ open, onOpenChange, cashRegister, onSuc
                     />
                   </FormControl>
                   <FormDescription>Ubicación física de la caja</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="accountId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Cuenta contable asociada</FormLabel>
+                  <Select
+                    onValueChange={(v) => field.onChange(v === '__none__' ? null : v)}
+                    value={field.value || '__none__'}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Sin asignar" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="__none__">Sin asignar</SelectItem>
+                      {accounts.map((account) => (
+                        <SelectItem key={account.id} value={account.id}>
+                          {account.code} - {account.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormDescription>
+                    Cuenta de activo usada en los asientos de esta caja. Si no se asigna, se usa la
+                    cuenta de caja por defecto de Ajustes contables.
+                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}

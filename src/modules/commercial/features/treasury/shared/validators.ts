@@ -17,6 +17,7 @@ export const cashRegisterSchema = z.object({
     .max(100, 'El nombre no puede exceder 100 caracteres'),
   location: z.string().max(200, 'La ubicación no puede exceder 200 caracteres').optional().nullable(),
   isDefault: z.boolean().default(false),
+  accountId: z.string().uuid('Cuenta contable inválida').optional().nullable(),
 });
 
 // Schema para abrir sesión
