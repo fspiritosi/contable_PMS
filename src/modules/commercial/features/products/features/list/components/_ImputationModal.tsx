@@ -65,7 +65,7 @@ export function _ImputationModal({
   const [expenseAccountId, setExpenseAccountId] = useState<string>(CLEAR_VALUE);
   const [costCenterId, setCostCenterId] = useState<string>(CLEAR_VALUE);
 
-  // Sincronizar con el artículo cada vez que se abre el modal
+  // Sincronizar con el ítem cada vez que se abre el modal
   useEffect(() => {
     if (open && product) {
       setIncomeAccountId(product.defaultIncomeAccountId ?? CLEAR_VALUE);
@@ -76,7 +76,7 @@ export function _ImputationModal({
 
   const mutation = useMutation({
     mutationFn: () => {
-      if (!product) throw new Error('Sin artículo');
+      if (!product) throw new Error('Sin ítem');
       return updateProductImputation(product.id, {
         defaultIncomeAccountId: incomeAccountId === CLEAR_VALUE ? null : incomeAccountId,
         defaultExpenseAccountId: expenseAccountId === CLEAR_VALUE ? null : expenseAccountId,
@@ -104,7 +104,7 @@ export function _ImputationModal({
           <DialogDescription>
             {product
               ? `Cuentas para los asientos de "${product.name}"`
-              : 'Cuentas contables del artículo'}
+              : 'Cuentas contables del ítem'}
           </DialogDescription>
         </DialogHeader>
 

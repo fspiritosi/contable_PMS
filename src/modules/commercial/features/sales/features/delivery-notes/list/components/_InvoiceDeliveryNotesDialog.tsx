@@ -184,7 +184,7 @@ export function _InvoiceDeliveryNotesDialog() {
                           Fecha de entrega
                         </th>
                         <th className="px-3 py-2 text-left font-medium text-muted-foreground hidden sm:table-cell">
-                          Artículos
+                          Ítems
                         </th>
                       </tr>
                     </thead>
@@ -215,7 +215,7 @@ export function _InvoiceDeliveryNotesDialog() {
                           </td>
                           <td className="px-3 py-2 text-muted-foreground hidden sm:table-cell">
                             {note.lines.length}{' '}
-                            {note.lines.length === 1 ? 'artículo' : 'artículos'}
+                            {note.lines.length === 1 ? 'ítem' : 'ítems'}
                           </td>
                         </tr>
                       ))}

@@ -153,7 +153,7 @@ export function _LabelPrintModal({ selectedIds, open, onOpenChange }: LabelPrint
       <html>
       <head>
         <meta charset="utf-8">
-        <title>Etiquetas de Artículos</title>
+        <title>Etiquetas de Ítems</title>
         <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.12.3/dist/JsBarcode.all.min.js"><\/script>
         <style>
           * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -255,7 +255,7 @@ export function _LabelPrintModal({ selectedIds, open, onOpenChange }: LabelPrint
           </DialogTitle>
           <DialogDescription>
             Configura e imprime etiquetas con codigo de barras para {selectedIds.length}{' '}
-            {selectedIds.length === 1 ? 'artículo' : 'artículos'}.
+            {selectedIds.length === 1 ? 'ítem' : 'ítems'}.
           </DialogDescription>
         </DialogHeader>
 
@@ -282,7 +282,7 @@ export function _LabelPrintModal({ selectedIds, open, onOpenChange }: LabelPrint
             </div>
 
             <div className="space-y-2">
-              <Label>Copias por artículo</Label>
+              <Label>Copias por ítem</Label>
               <Input
                 type="number"
                 min={1}
@@ -367,7 +367,7 @@ export function _LabelPrintModal({ selectedIds, open, onOpenChange }: LabelPrint
                   )}
                 </div>
               ) : (
-                <div className="text-sm text-muted-foreground">Sin artículos seleccionados</div>
+                <div className="text-sm text-muted-foreground">Sin ítems seleccionados</div>
               )}
             </div>
             <p className="mt-1 text-xs text-muted-foreground">

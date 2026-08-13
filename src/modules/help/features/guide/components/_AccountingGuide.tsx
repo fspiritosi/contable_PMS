@@ -95,7 +95,7 @@ export function _AccountingGuide() {
               reciben los movimientos de los asientos y muestran su{' '}
               <strong>saldo</strong>. Son las únicas que aparecen en los
               selectores de imputación (asientos, movimientos bancarios,
-              configuración contable, artículos)
+              configuración contable, ítems)
             </li>
             <li>
               Las <strong>de sumatoria</strong> son las que tienen hijas: no

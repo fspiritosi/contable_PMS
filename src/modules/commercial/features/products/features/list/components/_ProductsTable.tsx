@@ -115,10 +115,10 @@ export function _ProductsTable({ data, totalRows, searchParams, permissions, fac
     if (!deletingProduct) return;
     try {
       await deleteProduct(deletingProduct.id);
-      toast.success('Artículo eliminado correctamente');
+      toast.success('Ítem eliminado correctamente');
       handleRefresh();
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Error al eliminar artículo';
+      const message = error instanceof Error ? error.message : 'Error al eliminar ítem';
       toast.error(message);
     } finally {
       setDeletingProduct(null);
@@ -141,7 +141,7 @@ export function _ProductsTable({ data, totalRows, searchParams, permissions, fac
     () => [
       {
         columnId: 'name',
-        title: 'Artículo',
+        title: 'Ítem',
         type: 'text' as const,
         placeholder: 'Buscar por nombre...',
       },
@@ -261,7 +261,7 @@ export function _ProductsTable({ data, totalRows, searchParams, permissions, fac
             {permissions.canCreate && (
               <Button onClick={() => router.push('/dashboard/commercial/products/new')}>
                 <Plus className="h-4 w-4 mr-2" />
-                Nuevo Artículo
+                Nuevo Ítem
               </Button>
             )}
           </>
@@ -293,7 +293,7 @@ export function _ProductsTable({ data, totalRows, searchParams, permissions, fac
         costCenters={costCenters}
       />
 
-      {/* Modal de imputación contable (por artículo) */}
+      {/* Modal de imputación contable (por ítem) */}
       <_ImputationModal
         product={imputationProduct}
         accounts={accounts}
@@ -325,9 +325,9 @@ export function _ProductsTable({ data, totalRows, searchParams, permissions, fac
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>¿Eliminar este artículo?</AlertDialogTitle>
+            <AlertDialogTitle>¿Eliminar este ítem?</AlertDialogTitle>
             <AlertDialogDescription>
-              El artículo &quot;{deletingProduct?.name}&quot; será eliminado permanentemente.
+              El ítem &quot;{deletingProduct?.name}&quot; será eliminado permanentemente.
               Esta acción no se puede deshacer.
             </AlertDialogDescription>
           </AlertDialogHeader>

@@ -147,8 +147,8 @@ export async function getProducts(params: GetProductsParams = {}) {
       },
     };
   } catch (error) {
-    logger.error('Error al obtener artículos', { data: { error } });
-    throw new Error('Error al obtener artículos');
+    logger.error('Error al obtener ítems', { data: { error } });
+    throw new Error('Error al obtener ítems');
   }
 }
 
@@ -224,8 +224,8 @@ export async function getProductById(id: string): Promise<Product | null> {
       currentStock,
     } as unknown as Product;
   } catch (error) {
-    logger.error('Error al obtener artículo', { data: { error, id } });
-    throw new Error('Error al obtener artículo');
+    logger.error('Error al obtener ítem', { data: { error, id } });
+    throw new Error('Error al obtener ítem');
   }
 }
 
@@ -324,7 +324,7 @@ export async function createProduct(data: CreateProductFormData): Promise<Produc
       },
     });
 
-    logger.info('Artículo creado', {
+    logger.info('Ítem creado', {
       data: { productId: product.id, code: product.code, companyId },
     });
 
@@ -341,11 +341,11 @@ export async function createProduct(data: CreateProductFormData): Promise<Produc
       maxStock: product.maxStock ? Number(product.maxStock) : null,
     } as unknown as Product;
   } catch (error) {
-    logger.error('Error al crear artículo', { data: { error, data } });
+    logger.error('Error al crear ítem', { data: { error, data } });
     if (error instanceof Error) {
       throw error;
     }
-    throw new Error('Error al crear artículo');
+    throw new Error('Error al crear ítem');
   }
 }
 
@@ -371,7 +371,7 @@ export async function updateProduct(
     });
 
     if (!existing) {
-      throw new Error('Artículo no encontrado');
+      throw new Error('Ítem no encontrado');
     }
 
     // Recalcular precio de venta si cambiaron costo o margen
@@ -424,7 +424,7 @@ export async function updateProduct(
       },
     });
 
-    logger.info('Artículo actualizado', {
+    logger.info('Ítem actualizado', {
       data: { productId: id, companyId, userId },
     });
 
@@ -442,11 +442,11 @@ export async function updateProduct(
       maxStock: product.maxStock ? Number(product.maxStock) : null,
     } as unknown as Product;
   } catch (error) {
-    logger.error('Error al actualizar artículo', { data: { error, id, data } });
+    logger.error('Error al actualizar ítem', { data: { error, id, data } });
     if (error instanceof Error) {
       throw error;
     }
-    throw new Error('Error al actualizar artículo');
+    throw new Error('Error al actualizar ítem');
   }
 }
 
@@ -467,7 +467,7 @@ export async function deleteProduct(id: string): Promise<void> {
     });
 
     if (!product) {
-      throw new Error('Artículo no encontrado');
+      throw new Error('Ítem no encontrado');
     }
 
     // Soft delete
@@ -476,14 +476,14 @@ export async function deleteProduct(id: string): Promise<void> {
       data: { status: 'INACTIVE' },
     });
 
-    logger.info('Artículo eliminado', {
+    logger.info('Ítem eliminado', {
       data: { productId: id, companyId, userId },
     });
 
     revalidatePath('/dashboard/commercial/products');
   } catch (error) {
-    logger.error('Error al eliminar artículo', { data: { error, id } });
-    throw new Error('Error al eliminar artículo');
+    logger.error('Error al eliminar ítem', { data: { error, id } });
+    throw new Error('Error al eliminar ítem');
   }
 }
 
@@ -563,8 +563,8 @@ export async function getProductsBelowMinStock(): Promise<LowStockProduct[]> {
 
     return lowStockProducts;
   } catch (error) {
-    logger.error('Error al obtener artículos bajo stock mínimo', { data: { error } });
-    throw new Error('Error al obtener artículos bajo stock mínimo');
+    logger.error('Error al obtener ítems bajo stock mínimo', { data: { error } });
+    throw new Error('Error al obtener ítems bajo stock mínimo');
   }
 }
 
@@ -947,7 +947,7 @@ export interface ProductImputationInput {
 }
 
 /**
- * Actualiza únicamente la imputación contable de un artículo (cuenta de
+ * Actualiza únicamente la imputación contable de un ítem (cuenta de
  * ingreso, cuenta de egreso y centro de costo), sin tocar precios ni otros
  * campos. Pensada para asignar la imputación rápidamente desde el listado.
  */
@@ -963,7 +963,7 @@ export async function updateProductImputation(
     where: { id, companyId },
     select: { id: true },
   });
-  if (!existing) throw new Error('Artículo no encontrado');
+  if (!existing) throw new Error('Ítem no encontrado');
 
   await prisma.product.update({
     where: { id },
@@ -974,7 +974,7 @@ export async function updateProductImputation(
     },
   });
 
-  logger.info('Imputación contable de artículo actualizada', {
+  logger.info('Imputación contable de ítem actualizada', {
     data: { productId: id, companyId },
   });
 

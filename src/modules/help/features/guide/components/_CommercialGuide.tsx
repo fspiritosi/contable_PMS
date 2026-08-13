@@ -140,7 +140,7 @@ export function _CommercialGuide() {
           <p className="text-muted-foreground">
             En el formulario de creación o edición del producto, encontrarás una
             sección adicional con campos opcionales que permiten personalizar el
-            comportamiento contable y logístico de cada artículo:
+            comportamiento contable y logístico de cada ítem:
           </p>
           <ul className="list-disc pl-6 space-y-1 text-muted-foreground">
             <li>

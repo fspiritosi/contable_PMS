@@ -22,9 +22,9 @@ export async function CreateProduct() {
     <PermissionGuard module="commercial.products" action="create" redirect>
     <div className="flex flex-1 flex-col gap-4">
       <div>
-        <h1 className="text-2xl font-bold">Nuevo Artículo</h1>
+        <h1 className="text-2xl font-bold">Nuevo Ítem</h1>
         <p className="text-sm text-muted-foreground">
-          Crea un nuevo artículo o servicio
+          Crea un nuevo ítem o servicio
         </p>
       </div>
 

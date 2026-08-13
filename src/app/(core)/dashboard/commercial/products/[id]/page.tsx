@@ -1,8 +1,8 @@
 import { ProductDetail } from '@/modules/commercial/features/products/features/detail';
 
 export const metadata = {
-  title: 'Detalle de Artículo | Commercial',
-  description: 'Ver detalle de artículo',
+  title: 'Detalle de Ítem | Commercial',
+  description: 'Ver detalle de ítem',
 };
 
 interface ProductDetailPageProps {

@@ -88,7 +88,7 @@ export function _EquivalenceDetailModal({
             <div className="grid grid-cols-3 gap-4">
               <div className="rounded-lg border p-3 text-center">
                 <p className="text-2xl font-bold">{group.products.length}</p>
-                <p className="text-xs text-muted-foreground">Artículos</p>
+                <p className="text-xs text-muted-foreground">Ítems</p>
               </div>
               <div className="rounded-lg border p-3 text-center">
                 <p className="text-2xl font-bold">{group.totalStock}</p>
@@ -107,7 +107,7 @@ export function _EquivalenceDetailModal({
                 <TabsList>
                   <TabsTrigger value="products">
                     <Package className="h-4 w-4 mr-1" />
-                    Artículos
+                    Ítems
                   </TabsTrigger>
                   <TabsTrigger value="prices">
                     <Scale className="h-4 w-4 mr-1" />
@@ -164,9 +164,9 @@ function ProductsTable({
     return (
       <div className="flex flex-col items-center gap-2 py-8 text-muted-foreground">
         <Package className="h-8 w-8" />
-        <p className="text-sm">No hay artículos en este grupo</p>
+        <p className="text-sm">No hay ítems en este grupo</p>
         <p className="text-xs">
-          Asigná artículos desde la edición de cada artículo
+          Asigná ítems desde la edición de cada ítem
         </p>
       </div>
     );
@@ -178,7 +178,7 @@ function ProductsTable({
         <TableHeader>
           <TableRow>
             <TableHead>Código</TableHead>
-            <TableHead>Artículo</TableHead>
+            <TableHead>Ítem</TableHead>
             <TableHead>Marca</TableHead>
             <TableHead className="text-right">Precio Venta</TableHead>
             <TableHead className="text-right">Stock</TableHead>

@@ -34,9 +34,9 @@ export async function ProductsList({ searchParams = {} }: Props) {
     <PermissionGuard module="commercial.products" action="view" redirect>
       <div className="space-y-6">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Artículos</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Ítems</h1>
           <p className="text-muted-foreground">
-            Gestión de artículos y servicios
+            Gestión de ítems y servicios
           </p>
         </div>
 

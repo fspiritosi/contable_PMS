@@ -66,12 +66,12 @@ export function _EditProductForm({
     setIsSubmitting(true);
     try {
       await updateProduct(product.id, data);
-      toast.success('Artículo actualizado correctamente');
+      toast.success('Ítem actualizado correctamente');
       router.push('/dashboard/commercial/products');
       router.refresh();
     } catch (error) {
-      logger.error('Error al actualizar artículo', { data: { error } });
-      toast.error(error instanceof Error ? error.message : 'Error al actualizar artículo');
+      logger.error('Error al actualizar ítem', { data: { error } });
+      toast.error(error instanceof Error ? error.message : 'Error al actualizar ítem');
     } finally {
       setIsSubmitting(false);
     }

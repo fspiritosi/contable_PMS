@@ -57,12 +57,12 @@ export function _CreateProductForm({
     setIsSubmitting(true);
     try {
       await createProduct(data);
-      toast.success('Artículo creado correctamente');
+      toast.success('Ítem creado correctamente');
       router.push('/dashboard/commercial/products');
       router.refresh();
     } catch (error) {
-      logger.error('Error al crear artículo', { data: { error } });
-      toast.error(error instanceof Error ? error.message : 'Error al crear artículo');
+      logger.error('Error al crear ítem', { data: { error } });
+      toast.error(error instanceof Error ? error.message : 'Error al crear ítem');
     } finally {
       setIsSubmitting(false);
     }
@@ -72,7 +72,7 @@ export function _CreateProductForm({
     <_ProductForm
       onSubmit={handleSubmit}
       isSubmitting={isSubmitting}
-      submitLabel="Crear Artículo"
+      submitLabel="Crear Ítem"
       categories={categories}
       accounts={accounts}
       costCenters={costCenters}

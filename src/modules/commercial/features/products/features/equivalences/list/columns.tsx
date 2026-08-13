@@ -86,13 +86,13 @@ export function getEquivalenceColumns({
     },
     {
       accessorKey: 'productCount',
-      meta: { title: 'Artículos' },
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Artículos" />,
+      meta: { title: 'Ítems' },
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Ítems" />,
       cell: ({ row }) => {
         const count = row.original.productCount;
         return (
           <Badge variant={count > 0 ? 'default' : 'secondary'}>
-            {count} {count === 1 ? 'artículo' : 'artículos'}
+            {count} {count === 1 ? 'ítem' : 'ítems'}
           </Badge>
         );
       },
