@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 // Schema para línea de factura
 export const invoiceLineSchema = z.object({
-  productId: z.string().uuid('Producto inválido'),
+  productId: z.string().uuid('Ítem inválido'),
   description: z.string().min(1, 'La descripción es requerida'),
   quantity: z
     .string()

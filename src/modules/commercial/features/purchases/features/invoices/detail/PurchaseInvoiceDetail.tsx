@@ -102,7 +102,7 @@ export async function PurchaseInvoiceDetail({ invoiceId }: Props) {
           <PackageSearch className="h-4 w-4 text-yellow-600" />
           <AlertDescription className="flex items-center justify-between">
             <span className="text-yellow-800 dark:text-yellow-200">
-              Esta factura tiene productos pendientes de recepción. Cree un remito para registrar el ingreso al almacén.
+              Esta factura tiene ítems pendientes de recepción. Cree un remito para registrar el ingreso al almacén.
             </span>
             <Button variant="outline" size="sm" asChild className="ml-4 shrink-0">
               <Link
@@ -120,7 +120,7 @@ export async function PurchaseInvoiceDetail({ invoiceId }: Props) {
           <PackageMinus className="h-4 w-4 text-orange-500" />
           <AlertDescription className="flex items-center justify-between">
             <span className="text-orange-800 dark:text-orange-200">
-              Recepción parcial. Aún quedan productos pendientes de recibir.
+              Recepción parcial. Aún quedan ítems pendientes de recibir.
             </span>
             <Button variant="outline" size="sm" asChild className="ml-4 shrink-0">
               <Link
@@ -138,7 +138,7 @@ export async function PurchaseInvoiceDetail({ invoiceId }: Props) {
           <PackageCheck className="h-4 w-4 text-green-600" />
           <AlertDescription>
             <span className="text-green-800 dark:text-green-200">
-              Recepción completa. Todos los productos fueron recibidos en el almacén.
+              Recepción completa. Todos los ítems fueron recibidos en el almacén.
             </span>
           </AlertDescription>
         </Alert>
@@ -182,7 +182,7 @@ export async function PurchaseInvoiceDetail({ invoiceId }: Props) {
           <Card>
             <CardHeader>
               <CardTitle>Detalle de la Factura</CardTitle>
-              <CardDescription>Ítems de productos/servicios</CardDescription>
+              <CardDescription>Ítems y servicios facturados</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="overflow-x-auto">

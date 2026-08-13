@@ -297,7 +297,7 @@ export async function getSuppliersForSelect() {
 }
 
 /**
- * Obtiene productos activos para select
+ * Obtiene ítems activos para select
  */
 export async function getProductsForSelect() {
   const userId = await getCurrentUserId();
@@ -335,10 +335,10 @@ export async function getProductsForSelect() {
       supplierIds: p.productSuppliers.map((ps) => ps.supplierId),
     }));
   } catch (error) {
-    logger.error('Error al obtener productos', {
+    logger.error('Error al obtener ítems', {
       data: { error, companyId },
     });
-    throw new Error('Error al obtener productos');
+    throw new Error('Error al obtener ítems');
   }
 }
 

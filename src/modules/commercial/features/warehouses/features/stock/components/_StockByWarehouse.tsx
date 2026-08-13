@@ -71,9 +71,9 @@ export function StockByWarehouse({
     () => [
       {
         columnId: 'product_name',
-        title: 'Producto',
+        title: 'Ítem',
         type: 'text' as const,
-        placeholder: 'Buscar por producto...',
+        placeholder: 'Buscar por ítem...',
       },
       {
         columnId: 'product_code',
@@ -113,7 +113,7 @@ export function StockByWarehouse({
         {selectedWarehouse && (
           <div className="flex items-center gap-2">
             <Badge variant="outline">
-              {stocks.length} producto{stocks.length !== 1 ? 's' : ''}
+              {stocks.length} ítem{stocks.length !== 1 ? 's' : ''}
             </Badge>
           </div>
         )}
@@ -136,7 +136,7 @@ export function StockByWarehouse({
             <Package className="h-12 w-12 text-muted-foreground mb-4" />
             <p className="text-lg font-medium">No hay stock en este almacén</p>
             <p className="text-sm text-muted-foreground">
-              El almacén está vacío o no tiene productos registrados
+              El almacén está vacío o no tiene ítems registrados
             </p>
           </div>
         )

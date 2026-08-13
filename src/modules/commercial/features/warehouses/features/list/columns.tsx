@@ -111,8 +111,8 @@ export function getColumns({ onEdit, onDelete, onToggleActive, permissions }: Co
     },
     {
       id: 'stockCount',
-      meta: { title: 'Productos' },
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Productos" />,
+      meta: { title: 'Ítems' },
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Ítems" />,
       cell: ({ row }) => {
         const count = row.original._count?.stocks || 0;
         return (

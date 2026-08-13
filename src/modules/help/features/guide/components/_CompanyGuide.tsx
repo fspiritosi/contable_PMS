@@ -160,7 +160,7 @@ export function _CompanyGuide() {
               de equipos, tipos de documento
             </li>
             <li>
-              <strong>Comercial</strong>: Clientes, Proveedores, Productos,
+              <strong>Comercial</strong>: Clientes, Proveedores, Ítems,
               Categorías, Puntos de venta, Facturas de venta, Facturas de
               compra, Gastos, Reportes
             </li>

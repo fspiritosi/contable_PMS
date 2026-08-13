@@ -98,7 +98,7 @@ export function _SupplierProductsTab({ supplierId, initialProducts }: Props) {
         supplierPrice: supplierPrice ? parseFloat(supplierPrice) : undefined,
       }),
     onSuccess: () => {
-      toast.success('Producto asociado al proveedor');
+      toast.success('Ítem asociado al proveedor');
       queryClient.invalidateQueries({ queryKey: ['supplier-products', supplierId] });
       setAddOpen(false);
       setSelectedProductId('');
@@ -107,14 +107,14 @@ export function _SupplierProductsTab({ supplierId, initialProducts }: Props) {
       router.refresh();
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : 'Error al asociar producto');
+      toast.error(error instanceof Error ? error.message : 'Error al asociar ítem');
     },
   });
 
   const removeMutation = useMutation({
     mutationFn: (id: string) => removeProductFromSupplier(id),
     onSuccess: () => {
-      toast.success('Producto desvinculado del proveedor');
+      toast.success('Ítem desvinculado del proveedor');
       queryClient.invalidateQueries({ queryKey: ['supplier-products', supplierId] });
       setDeleteTarget(null);
       router.refresh();
@@ -129,7 +129,7 @@ export function _SupplierProductsTab({ supplierId, initialProducts }: Props) {
       <CardHeader className="flex flex-row items-center justify-between">
         <div className="flex items-center gap-2">
           <Package className="h-5 w-5" />
-          <CardTitle>Productos del Proveedor</CardTitle>
+          <CardTitle>Ítems del Proveedor</CardTitle>
           <Badge variant="secondary">{products.length}</Badge>
         </div>
         {canEdit && (
@@ -137,23 +137,23 @@ export function _SupplierProductsTab({ supplierId, initialProducts }: Props) {
             <DialogTrigger asChild>
               <Button size="sm">
                 <Plus className="mr-1 h-4 w-4" />
-                Asociar Producto
+                Asociar Ítem
               </Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Asociar Producto al Proveedor</DialogTitle>
+                <DialogTitle>Asociar Ítem al Proveedor</DialogTitle>
                 <DialogDescription>
-                  Seleccioná un producto y opcionalmente ingresá el código y precio del proveedor
+                  Seleccioná un ítem y opcionalmente ingresá el código y precio del proveedor
                 </DialogDescription>
               </DialogHeader>
 
               <div className="space-y-4 py-2">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Producto *</label>
+                  <label className="text-sm font-medium">Ítem *</label>
                   <Select value={selectedProductId} onValueChange={setSelectedProductId}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar producto" />
+                      <SelectValue placeholder="Seleccionar ítem" />
                     </SelectTrigger>
                     <SelectContent position="popper" className="max-h-[200px]">
                       {availableProducts.map((p) => (
@@ -207,14 +207,14 @@ export function _SupplierProductsTab({ supplierId, initialProducts }: Props) {
       <CardContent>
         {products.length === 0 ? (
           <p className="text-center text-muted-foreground py-8">
-            No hay productos asociados a este proveedor
+            No hay ítems asociados a este proveedor
           </p>
         ) : (
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Código</TableHead>
-                <TableHead>Producto</TableHead>
+                <TableHead>Ítem</TableHead>
                 <TableHead>Cód. Proveedor</TableHead>
                 <TableHead className="text-right">Precio Proveedor</TableHead>
                 <TableHead className="text-right">Precio Costo</TableHead>
@@ -257,7 +257,7 @@ export function _SupplierProductsTab({ supplierId, initialProducts }: Props) {
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Desvincular producto</AlertDialogTitle>
+            <AlertDialogTitle>Desvincular ítem</AlertDialogTitle>
             <AlertDialogDescription>
               ¿Desvincular &quot;{deleteTarget?.name}&quot; de este proveedor?
             </AlertDialogDescription>

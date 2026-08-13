@@ -27,8 +27,8 @@ export function getColumns({ onAdjust, onTransfer, canAdjust = true, canTransfer
     },
     {
       accessorKey: 'product.name',
-      meta: { title: 'Producto' },
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Producto" />,
+      meta: { title: 'Ítem' },
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Ítem" />,
       cell: ({ row }) => (
         <span className="font-medium">{row.original.product?.name || '-'}</span>
       ),

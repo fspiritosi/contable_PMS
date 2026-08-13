@@ -292,7 +292,7 @@ export function _DashboardGrid({
                   {kpis.criticalStockCount}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  producto{kpis.criticalStockCount !== 1 ? 's' : ''} bajo mínimo
+                  ítem{kpis.criticalStockCount !== 1 ? 's' : ''} bajo mínimo
                 </p>
               </CardContent>
             </Card>

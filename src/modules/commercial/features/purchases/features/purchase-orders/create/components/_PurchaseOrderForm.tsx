@@ -274,10 +274,10 @@ export function _PurchaseOrderForm({
 
         <Separator />
 
-        {/* Líneas de Productos */}
+        {/* Líneas de Ítems */}
         <div>
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold">Productos / Servicios</h2>
+            <h2 className="text-lg font-semibold">Ítems / Servicios</h2>
             <Button type="button" variant="outline" size="sm" onClick={handleAddLine}>
               <Plus className="mr-2 h-4 w-4" />
               Agregar Ítem
@@ -312,7 +312,7 @@ export function _PurchaseOrderForm({
                     name={`lines.${index}.productId`}
                     render={({ field: productField }) => (
                       <FormItem>
-                        <FormLabel>Producto (opcional)</FormLabel>
+                        <FormLabel>Ítem (opcional)</FormLabel>
                         <Select
                           onValueChange={(value) => {
                             productField.onChange(value);
@@ -322,7 +322,7 @@ export function _PurchaseOrderForm({
                         >
                           <FormControl>
                             <SelectTrigger>
-                              <SelectValue placeholder="Sin producto" />
+                              <SelectValue placeholder="Sin ítem" />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent position="popper" className="max-h-[250px]">

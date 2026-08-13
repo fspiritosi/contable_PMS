@@ -52,7 +52,7 @@ export function _BulkAddItemsDialog({ priceListId, existingProductIds }: Props) 
   });
   const allProducts = productsResult?.data || [];
 
-  // Filtrar productos que no están ya en la lista
+  // Filtrar ítems que no están ya en la lista
   const existingSet = useMemo(() => new Set(existingProductIds), [existingProductIds]);
   const availableProducts = useMemo(
     () => allProducts.filter((p) => !existingSet.has(p.id)),

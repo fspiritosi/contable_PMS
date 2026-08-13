@@ -84,7 +84,7 @@ export const createPriceListSchema = z.object({
 export const updatePriceListSchema = createPriceListSchema.partial();
 
 export const createPriceListItemSchema = z.object({
-  productId: z.string().uuid('Debe seleccionar un producto'),
+  productId: z.string().uuid('Debe seleccionar un ítem'),
   price: z.coerce.number().min(0, 'El precio debe ser mayor o igual a 0'),
 });
 

@@ -178,7 +178,7 @@ export async function getProductsForDelivery() {
       orderBy: { name: 'asc' },
     });
   } catch (error) {
-    logger.error('Error al obtener productos', { data: { error } });
+    logger.error('Error al obtener ítems', { data: { error } });
     return [];
   }
 }
@@ -209,7 +209,7 @@ export async function createDeliveryNote(input: DeliveryNoteFormInput) {
       const nextNumber = (lastNote?.number ?? 0) + 1;
       const fullNumber = `RE-${String(nextNumber).padStart(5, '0')}`;
 
-      // Verificar stock disponible antes de crear (solo productos con trackStock)
+      // Verificar stock disponible antes de crear (solo ítems con trackStock)
       const productIds = input.lines.map((l) => l.productId);
       const productsInfo = await tx.product.findMany({
         where: { id: { in: productIds } },
@@ -263,7 +263,7 @@ export async function createDeliveryNote(input: DeliveryNoteFormInput) {
         select: { id: true, fullNumber: true },
       });
 
-      // Descontar stock (solo productos con trackStock)
+      // Descontar stock (solo ítems con trackStock)
       for (const line of input.lines) {
         const product = productMap.get(line.productId);
         if (!product?.trackStock) continue;

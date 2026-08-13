@@ -15,7 +15,7 @@ import {
 import type { ProductCategory } from '../../shared/types';
 
 /**
- * Obtiene todas las categorías de productos
+ * Obtiene todas las categorías de ítems
  */
 export async function getCategories(): Promise<ProductCategory[]> {
   await checkPermission('commercial.categories', 'view', { redirect: true });
@@ -250,10 +250,10 @@ export async function deleteCategory(id: string): Promise<void> {
       throw new Error('Categoría no encontrada');
     }
 
-    // Validar que no tenga productos asociados
+    // Validar que no tenga ítems asociados
     if (category._count.products > 0) {
       throw new Error(
-        `No se puede eliminar la categoría porque tiene ${category._count.products} producto(s) asociado(s)`
+        `No se puede eliminar la categoría porque tiene ${category._count.products} ítem(s) asociado(s)`
       );
     }
 

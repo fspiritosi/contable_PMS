@@ -206,7 +206,7 @@ export async function getSalesByProduct(startDate: Date, endDate: Date) {
       },
     });
 
-    // Agrupar por producto
+    // Agrupar por ítem
     const productMap = new Map<
       string,
       {
@@ -256,10 +256,10 @@ export async function getSalesByProduct(startDate: Date, endDate: Date) {
 
     return { salesByProduct, totals };
   } catch (error) {
-    logger.error('Error al obtener ventas por producto', {
+    logger.error('Error al obtener ventas por ítem', {
       data: { companyId, error },
     });
-    throw new Error('Error al obtener ventas por producto');
+    throw new Error('Error al obtener ventas por ítem');
   }
 }
 

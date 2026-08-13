@@ -38,7 +38,7 @@ export function _CriticalStockList({ products, defaultOpen }: CriticalStockListP
         {products.length === 0 ? (
           <div className="flex h-[200px] flex-col items-center justify-center gap-2 text-muted-foreground">
             <Package className="h-8 w-8" />
-            <p className="text-sm">No hay productos con stock crítico</p>
+            <p className="text-sm">No hay ítems con stock crítico</p>
           </div>
         ) : (
           <div className="space-y-2">

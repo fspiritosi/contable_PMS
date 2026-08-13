@@ -19,7 +19,7 @@ type ReportType = 'period' | 'customer' | 'product' | 'vat';
 const REPORT_TYPES = {
   period: 'Ventas por Período',
   customer: 'Ventas por Cliente',
-  product: 'Ventas por Producto',
+  product: 'Ventas por Ítem',
   vat: 'Libro IVA Ventas',
 };
 

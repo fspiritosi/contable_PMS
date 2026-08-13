@@ -160,7 +160,7 @@ export async function requestCAE(invoiceId: string): Promise<RequestCAEResult> {
       : DOC_TIPO_MAP.SIN_IDENTIFICAR;
     const docNro = invoice.customer.taxId ?? '0';
 
-    // Concepto: 1=Productos, 2=Servicios, 3=Ambos
+    // Concepto: 1=Ítems, 2=Servicios, 3=Ambos
     const concepto = 1;
 
     // Comprobantes asociados (para NC/ND)

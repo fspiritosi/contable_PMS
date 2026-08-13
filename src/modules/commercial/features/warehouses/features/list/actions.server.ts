@@ -448,13 +448,13 @@ export async function getProductStock(productId: string): Promise<WarehouseStock
   }
 
   try {
-    // Verificar que el producto pertenece a la empresa
+    // Verificar que el ítem pertenece a la empresa
     const product = await prisma.product.findFirst({
       where: { id: productId, companyId },
     });
 
     if (!product) {
-      throw new Error('Producto no encontrado');
+      throw new Error('Ítem no encontrado');
     }
 
     const stocks = await prisma.warehouseStock.findMany({
@@ -500,8 +500,8 @@ export async function getProductStock(productId: string): Promise<WarehouseStock
       } : undefined,
     })) as WarehouseStock[];
   } catch (error) {
-    logger.error('Error al obtener stock del producto', { data: { error } });
-    throw new Error('Error al obtener stock del producto');
+    logger.error('Error al obtener stock del ítem', { data: { error } });
+    throw new Error('Error al obtener stock del ítem');
   }
 }
 
@@ -715,7 +715,7 @@ export async function getStockMovementsPaginated(
 
     const dateFiltersWhere = buildDateRangeFiltersWhere(parsed.filters, ['date']);
 
-    // Filtro de texto para producto (relación)
+    // Filtro de texto para ítem (relación)
     const productFilter = parsed.filters['product_name']?.[0];
     const productWhere = productFilter
       ? { product: { name: { contains: productFilter, mode: 'insensitive' as const } } }
@@ -807,7 +807,7 @@ export async function createStockMovement(data: CreateStockMovementFormData): Pr
   const validatedData = createStockMovementSchema.parse(data);
 
   try {
-    // Verificar que el almacén y producto pertenecen a la empresa
+    // Verificar que el almacén y ítem pertenecen a la empresa
     const [warehouse, product] = await Promise.all([
       prisma.warehouse.findFirst({
         where: { id: validatedData.warehouseId, companyId },
@@ -822,7 +822,7 @@ export async function createStockMovement(data: CreateStockMovementFormData): Pr
     }
 
     if (!product) {
-      throw new Error('Producto no encontrado');
+      throw new Error('Ítem no encontrado');
     }
 
     // Crear el movimiento
@@ -907,7 +907,7 @@ export async function adjustStock(data: SetStockQuantityFormData): Promise<void>
     }
 
     if (!product) {
-      throw new Error('Producto no encontrado');
+      throw new Error('Ítem no encontrado');
     }
 
     // Obtener stock actual
@@ -1013,7 +1013,7 @@ export async function transferStock(data: DirectStockTransferFormData): Promise<
     }
 
     if (!product) {
-      throw new Error('Producto no encontrado');
+      throw new Error('Ítem no encontrado');
     }
 
     // Verificar stock disponible en origen

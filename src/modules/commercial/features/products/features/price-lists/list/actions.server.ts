@@ -403,7 +403,7 @@ export async function createPriceListItem(
       throw new Error('Lista de precios no encontrada');
     }
 
-    // Verificar que el producto existe y pertenece a la empresa
+    // Verificar que el ítem existe y pertenece a la empresa
     const product = await prisma.product.findFirst({
       where: { id: validatedData.productId, companyId },
     });
@@ -412,7 +412,7 @@ export async function createPriceListItem(
       throw new Error('Ítem no encontrado');
     }
 
-    // Verificar que el producto no esté ya en la lista
+    // Verificar que el ítem no esté ya en la lista
     const existingItem = await prisma.priceListItem.findFirst({
       where: {
         priceListId,
@@ -648,7 +648,7 @@ export async function bulkAddPriceListItems(
     });
     if (!priceList) throw new Error('Lista de precios no encontrada');
 
-    // Obtener productos con sus precios y IVA
+    // Obtener ítems con sus precios y IVA
     const products = await prisma.product.findMany({
       where: { id: { in: data.productIds }, companyId, status: 'ACTIVE' },
       select: { id: true, salePrice: true, vatRate: true },
@@ -661,7 +661,7 @@ export async function bulkAddPriceListItems(
     });
     const existingProductIds = new Set(existingItems.map((i) => i.productId));
 
-    // Filtrar productos que no están ya en la lista
+    // Filtrar ítems que no están ya en la lista
     const newProducts = products.filter((p) => !existingProductIds.has(p.id));
 
     if (newProducts.length === 0) {

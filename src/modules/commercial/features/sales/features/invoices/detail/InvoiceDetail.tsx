@@ -159,7 +159,7 @@ export async function InvoiceDetail({ id }: InvoiceDetailProps) {
 
       {/* Líneas de Factura */}
       <Card className="p-6">
-        <h3 className="text-lg font-semibold mb-4">Detalle de Productos/Servicios</h3>
+        <h3 className="text-lg font-semibold mb-4">Detalle de Ítems/Servicios</h3>
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="border-b">

@@ -24,7 +24,7 @@ export async function DeliveryNotesList({ searchParams }: Props) {
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Remitos de Entrega</h1>
             <p className="text-muted-foreground">
-              Gestiona la entrega de materiales y productos a clientes
+              Gestiona la entrega de materiales y ítems a clientes
             </p>
           </div>
           <div className="flex items-center gap-2">

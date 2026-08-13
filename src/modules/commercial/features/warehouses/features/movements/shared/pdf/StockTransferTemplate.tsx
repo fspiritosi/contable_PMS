@@ -80,12 +80,12 @@ export function StockTransferTemplate({ data }: Props) {
           </View>
         </View>
 
-        {/* Tabla de productos */}
-        <Text style={styles.sectionTitle}>Detalle de Productos</Text>
+        {/* Tabla de ítems */}
+        <Text style={styles.sectionTitle}>Detalle de Ítems</Text>
         <View style={styles.table}>
           <View style={styles.tableHeader}>
             <Text style={styles.colCode}>Código</Text>
-            <Text style={styles.colDesc}>Producto</Text>
+            <Text style={styles.colDesc}>Ítem</Text>
             <Text style={styles.colUnit}>Unidad</Text>
             <Text style={styles.colQty}>Cantidad</Text>
           </View>

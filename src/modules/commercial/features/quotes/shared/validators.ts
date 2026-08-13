@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 // Client-side line schema
 export const quoteLineSchema = z.object({
-  productId: z.string().uuid('Producto inválido'),
+  productId: z.string().uuid('Ítem inválido'),
   description: z.string().min(1, 'La descripción es requerida'),
   quantity: z
     .string()

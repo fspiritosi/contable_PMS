@@ -37,7 +37,7 @@ export function _CommercialGuide() {
       <div>
         <h2 className="text-2xl font-semibold">Comercial</h2>
         <p className="text-muted-foreground">
-          CRM, productos, facturación de ventas y compras
+          CRM, ítems, facturación de ventas y compras
         </p>
       </div>
 
@@ -96,24 +96,24 @@ export function _CommercialGuide() {
         </CardContent>
       </Card>
 
-      {/* Productos */}
+      {/* Ítems */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Package className="h-5 w-5" />
-            Productos
+            Ítems
           </CardTitle>
           <CardDescription>
-            Catálogo de productos y servicios
+            Catálogo de ítems y servicios
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <ol className="list-decimal pl-6 space-y-2 text-muted-foreground">
             <li>
-              Ve a <strong>Comercial → Productos</strong>
+              Ve a <strong>Comercial → Ítems</strong>
             </li>
             <li>
-              Haz clic en <strong>Nuevo Producto</strong>
+              Haz clic en <strong>Nuevo Ítem</strong>
             </li>
             <li>
               Completa:
@@ -130,7 +130,7 @@ export function _CommercialGuide() {
             </li>
           </ol>
           <p className="text-sm text-muted-foreground">
-            Si activas el control de stock, el producto se gestiona desde{' '}
+            Si activas el control de stock, el ítem se gestiona desde{' '}
             <strong>Almacenes</strong>.
           </p>
 
@@ -138,32 +138,32 @@ export function _CommercialGuide() {
             <strong>Configuración Contable y Logística (opcional):</strong>
           </p>
           <p className="text-muted-foreground">
-            En el formulario de creación o edición del producto, encontrarás una
+            En el formulario de creación o edición del ítem, encontrarás una
             sección adicional con campos opcionales que permiten personalizar el
             comportamiento contable y logístico de cada ítem:
           </p>
           <ul className="list-disc pl-6 space-y-1 text-muted-foreground">
             <li>
               <strong>Cuenta de Gastos</strong>: cuenta contable que se usará al
-              registrar compras de este producto, en lugar de la cuenta de
+              registrar compras de este ítem, en lugar de la cuenta de
               compras general
             </li>
             <li>
               <strong>Cuenta de Ingresos</strong>: cuenta contable que se usará
-              al registrar ventas de este producto, en lugar de la cuenta de
+              al registrar ventas de este ítem, en lugar de la cuenta de
               ventas general
             </li>
             <li>
               <strong>Centro de Costos</strong>: centro de costos que se asignará
-              automáticamente en los asientos contables del producto
+              automáticamente en los asientos contables del ítem
             </li>
             <li>
               <strong>Almacén Predeterminado</strong>: almacén sugerido para
-              operaciones con este producto
+              operaciones con este ítem
             </li>
             <li>
               <strong>Proveedor Predeterminado</strong>: proveedor habitual de
-              este producto
+              este ítem
             </li>
           </ul>
           <p className="text-sm text-muted-foreground mt-2">
@@ -175,12 +175,12 @@ export function _CommercialGuide() {
           </p>
 
           <p className="mt-3">
-            <strong>Categorías de Productos:</strong>
+            <strong>Categorías de Ítems:</strong>
           </p>
           <ul className="list-disc pl-6 space-y-1 text-muted-foreground">
             <li>
               Desde <strong>Comercial → Categorías</strong> puedes organizar los
-              productos en una estructura de árbol jerárquico
+              ítems en una estructura de árbol jerárquico
             </li>
             <li>
               Cada categoría puede tener <strong>subcategorías</strong>{' '}
@@ -193,7 +193,7 @@ export function _CommercialGuide() {
               evita seleccionar una categoría que genere un ciclo
             </li>
             <li>
-              Al crear o editar un producto, selecciona la categoría
+              Al crear o editar un ítem, selecciona la categoría
               correspondiente
             </li>
           </ul>
@@ -214,7 +214,7 @@ export function _CommercialGuide() {
         <CardContent className="space-y-3">
           <p>
             Las listas de precios permiten definir precios especiales por
-            producto, que se aplican automáticamente al facturar según el
+            ítem, que se aplican automáticamente al facturar según el
             cliente.
           </p>
           <p>
@@ -235,7 +235,7 @@ export function _CommercialGuide() {
               Marca como <strong>lista por defecto</strong> si corresponde
             </li>
             <li>
-              En el <strong>detalle</strong> de la lista, agrega productos con
+              En el <strong>detalle</strong> de la lista, agrega ítems con
               su precio especial
             </li>
           </ol>
@@ -245,7 +245,7 @@ export function _CommercialGuide() {
           </p>
           <ul className="list-disc pl-6 space-y-1 text-muted-foreground">
             <li>
-              <strong>Producto</strong>: selecciona del catálogo
+              <strong>Ítem</strong>: selecciona del catálogo
             </li>
             <li>
               <strong>Precio sin IVA</strong>: el precio especial para esta
@@ -253,7 +253,7 @@ export function _CommercialGuide() {
             </li>
             <li>
               <strong>Precio con IVA</strong>: se calcula automáticamente según
-              la alícuota del producto
+              la alícuota del ítem
             </li>
           </ul>
 
@@ -296,7 +296,7 @@ export function _CommercialGuide() {
             </li>
             <li>Indica la <strong>fecha de emisión</strong> y opcionalmente el <strong>vencimiento</strong></li>
             <li>
-              Agrega <strong>líneas de productos</strong>: producto, cantidad,
+              Agrega <strong>líneas de ítems</strong>: ítem, cantidad,
               precio unitario, alícuota IVA
             </li>
             <li>
@@ -462,7 +462,7 @@ export function _CommercialGuide() {
               <strong>fecha de entrega esperada</strong>
             </li>
             <li>
-              Agrega <strong>líneas de productos</strong>: descripción,
+              Agrega <strong>líneas de ítems</strong>: descripción,
               cantidad, costo unitario, alícuota IVA
             </li>
             <li>
@@ -540,7 +540,7 @@ export function _CommercialGuide() {
         </CardHeader>
         <CardContent className="space-y-3">
           <p>
-            Los remitos registran la recepción física de productos en un
+            Los remitos registran la recepción física de ítems en un
             almacén. Pueden crearse desde una orden de compra o de forma
             independiente.
           </p>
@@ -571,7 +571,7 @@ export function _CommercialGuide() {
               Indica la <strong>fecha de recepción</strong>
             </li>
             <li>
-              Agrega las <strong>líneas</strong>: producto, cantidad recibida,
+              Agrega las <strong>líneas</strong>: ítem, cantidad recibida,
               notas
             </li>
             <li>
@@ -624,7 +624,7 @@ export function _CommercialGuide() {
         </CardHeader>
         <CardContent className="space-y-3">
           <p>
-            Los remitos de entrega registran la salida de productos de un
+            Los remitos de entrega registran la salida de ítems de un
             almacén hacia un cliente. Al crear el remito, se descuenta el
             stock automáticamente.
           </p>
@@ -649,7 +649,7 @@ export function _CommercialGuide() {
               Indica la <strong>fecha de entrega</strong>
             </li>
             <li>
-              Agrega las <strong>líneas</strong>: busca el producto, indica cantidad y notas
+              Agrega las <strong>líneas</strong>: busca el ítem, indica cantidad y notas
             </li>
             <li>
               Haz clic en <strong>Crear Remito</strong> (se descuenta stock inmediatamente)
@@ -672,7 +672,7 @@ export function _CommercialGuide() {
           <ul className="list-disc pl-6 space-y-1 text-muted-foreground mt-2">
             <li>
               <strong>Pendiente de Entrega</strong>: se puede editar (ej: si el
-              cliente rechaza un producto). Al editar se recalcula el stock
+              cliente rechaza un ítem). Al editar se recalcula el stock
             </li>
             <li>
               <strong>Aceptado</strong>: el cliente aceptó la mercadería. Listo
@@ -755,7 +755,7 @@ export function _CommercialGuide() {
           </p>
           <ul className="list-disc pl-6 space-y-1 text-muted-foreground">
             <li>
-              <strong>Stock</strong>: productos almacenados con cantidad total,
+              <strong>Stock</strong>: ítems almacenados con cantidad total,
               reservada y disponible
             </li>
             <li>
@@ -765,7 +765,7 @@ export function _CommercialGuide() {
           </ul>
 
           <p className="text-sm text-muted-foreground mt-3">
-            Solo los productos con la opción &quot;Controla stock&quot; activada
+            Solo los ítems con la opción &quot;Controla stock&quot; activada
             aparecen en los almacenes.
           </p>
         </CardContent>
@@ -789,11 +789,11 @@ export function _CommercialGuide() {
           </p>
           <ul className="list-disc pl-6 space-y-1 text-muted-foreground">
             <li>
-              <strong>Por Producto</strong>: stock total de un producto en todos
+              <strong>Por Ítem</strong>: stock total de un ítem en todos
               los almacenes
             </li>
             <li>
-              <strong>Por Almacén</strong>: stock de todos los productos en un
+              <strong>Por Almacén</strong>: stock de todos los ítems en un
               almacén específico
             </li>
           </ul>
@@ -819,7 +819,7 @@ export function _CommercialGuide() {
               entre almacenes
             </li>
             <li>
-              <strong>Devolución</strong>: productos devueltos
+              <strong>Devolución</strong>: ítems devueltos
             </li>
             <li>
               <strong>Pérdida/Merma</strong>: registrar pérdidas de inventario
@@ -1105,7 +1105,7 @@ export function _CommercialGuide() {
         <CardContent className="space-y-3">
           <p>
             Las cotizaciones están <strong>próximamente disponibles</strong>.
-            Permitirán crear propuestas comerciales con líneas de productos,
+            Permitirán crear propuestas comerciales con líneas de ítems,
             enviarlas a clientes o leads, y convertirlas en facturas al ser
             aceptadas.
           </p>

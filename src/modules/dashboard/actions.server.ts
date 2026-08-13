@@ -112,7 +112,7 @@ export async function getDashboardKPIs(period?: string) {
         select: { amount: true },
       }),
 
-      // Productos con stock crítico (siempre actual)
+      // Ítems con stock crítico (siempre actual)
       prisma.product.findMany({
         where: {
           companyId,
@@ -461,8 +461,8 @@ export async function getCriticalStockProducts() {
 
     return criticalProducts;
   } catch (error) {
-    logger.error('Error al obtener productos con stock crítico', { data: { error, companyId } });
-    throw new Error('Error al obtener productos con stock crítico');
+    logger.error('Error al obtener ítems con stock crítico', { data: { error, companyId } });
+    throw new Error('Error al obtener ítems con stock crítico');
   }
 }
 
@@ -772,8 +772,8 @@ export async function getTopSellingProducts(limit = 10) {
       .sort((a, b) => b.totalQty - a.totalQty)
       .slice(0, limit);
   } catch (error) {
-    logger.error('Error al obtener productos más vendidos', { data: { error, companyId } });
-    throw new Error('Error al obtener productos más vendidos');
+    logger.error('Error al obtener ítems más vendidos', { data: { error, companyId } });
+    throw new Error('Error al obtener ítems más vendidos');
   }
 }
 

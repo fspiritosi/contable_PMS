@@ -57,7 +57,7 @@ export async function getActivePointsOfSale() {
   return pointsOfSale;
 }
 
-// Obtener productos activos para el selector
+// Obtener ítems activos para el selector
 export async function getActiveProducts() {
   const authUserId = await getCurrentUserId();
   if (!authUserId) throw new Error('No autenticado');

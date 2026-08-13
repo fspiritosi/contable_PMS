@@ -97,7 +97,7 @@ function _InvoiceLineRow({
       <div className="hidden lg:block space-y-1.5">
         {/* Fila principal: datos numéricos alineados con headers */}
         <div className="grid grid-cols-[minmax(240px,2fr)_90px_110px_100px_90px_110px_110px_110px_36px] gap-3 items-center">
-          {/* Producto select */}
+          {/* Ítem select */}
           <FormField
             control={form.control}
             name={`lines.${index}.productId`}
@@ -110,7 +110,7 @@ function _InvoiceLineRow({
                 value={field.value}
               >
                 <SelectTrigger className="h-9 text-sm">
-                  <SelectValue placeholder="Seleccionar producto" />
+                  <SelectValue placeholder="Seleccionar ítem" />
                 </SelectTrigger>
                 <SelectContent>
                   {products.map((product) => (
@@ -255,7 +255,7 @@ function _InvoiceLineRow({
               <FormControl>
                 <Input
                   {...field}
-                  placeholder="Descripción del producto o servicio"
+                  placeholder="Descripción del ítem o servicio"
                   className="h-7 text-xs text-muted-foreground border-dashed"
                 />
               </FormControl>
@@ -283,7 +283,7 @@ function _InvoiceLineRow({
           name={`lines.${index}.productId`}
           render={({ field }) => (
             <FormItem>
-              <FormLabel className="text-xs">Producto</FormLabel>
+              <FormLabel className="text-xs">Ítem</FormLabel>
               <Select
                 onValueChange={(value) => {
                   field.onChange(value);
@@ -293,7 +293,7 @@ function _InvoiceLineRow({
               >
                 <FormControl>
                   <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar producto" />
+                    <SelectValue placeholder="Seleccionar ítem" />
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
@@ -315,7 +315,7 @@ function _InvoiceLineRow({
             <FormItem>
               <FormLabel className="text-xs">Descripción</FormLabel>
               <FormControl>
-                <Input {...field} placeholder="Descripción del producto o servicio" />
+                <Input {...field} placeholder="Descripción del ítem o servicio" />
               </FormControl>
             </FormItem>
           )}
@@ -931,10 +931,10 @@ export function InvoiceForm({ customers, pointsOfSale, products, mode = 'create'
           </div>
         </Card>
 
-        {/* Detalle de Productos/Servicios */}
+        {/* Detalle de Ítems/Servicios */}
         <Card className="p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold">Detalle de Productos/Servicios</h3>
+            <h3 className="text-lg font-semibold">Detalle de Ítems/Servicios</h3>
             <Button type="button" variant="outline" size="sm" onClick={handleAddLine}>
               <Plus className="h-4 w-4 mr-2" />
               Agregar Ítem
@@ -945,7 +945,7 @@ export function InvoiceForm({ customers, pointsOfSale, products, mode = 'create'
             <div className="overflow-x-auto">
               {/* Header de tabla */}
               <div className="hidden lg:grid lg:grid-cols-[minmax(240px,2fr)_90px_110px_100px_90px_110px_110px_110px_36px] gap-3 px-2 pb-2 border-b text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                <span>Producto / Descripción</span>
+                <span>Ítem / Descripción</span>
                 <span className="text-right">Cant.</span>
                 <span className="text-right">P. Unit.</span>
                 <span className="text-right">Dto.</span>

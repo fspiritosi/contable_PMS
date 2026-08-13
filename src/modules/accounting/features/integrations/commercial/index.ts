@@ -321,7 +321,7 @@ export async function createJournalEntryForSalesInvoice(
       },
     ];
 
-    // Agrupar subtotales de líneas por cuenta contable (override por producto o global)
+    // Agrupar subtotales de líneas por cuenta contable (override por ítem o global)
     const salesByAccount = new Map<string, { total: number; costCenterId?: string }>();
     for (const line of invoice.lines) {
       const lineSubtotal = parseFloat(line.subtotal.toString());
@@ -459,7 +459,7 @@ export async function createJournalEntryForPurchaseInvoice(
 
     const docLabel = isNC ? 'Nota de crédito de compra' : 'Factura de compra';
 
-    // Agrupar subtotales de líneas por cuenta contable (override por producto o global)
+    // Agrupar subtotales de líneas por cuenta contable (override por ítem o global)
     const purchasesByAccount = new Map<string, { total: number; costCenterId?: string }>();
     for (const line of invoice.lines) {
       const lineSubtotal = parseFloat(line.subtotal.toString());

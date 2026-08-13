@@ -3,13 +3,13 @@ import { createProductSchema, updateProductSchema } from './validators';
 
 describe('createProductSchema', () => {
   const baseProduct = {
-    name: 'Producto de prueba',
+    name: 'Ítem de prueba',
     type: 'PRODUCT' as const,
     costPrice: 100,
     salePrice: 150,
   };
 
-  it('valida un producto basico sin campos contables', () => {
+  it('valida un ítem basico sin campos contables', () => {
     const result = createProductSchema.safeParse(baseProduct);
     expect(result.success).toBe(true);
     if (result.success) {

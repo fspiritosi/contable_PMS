@@ -127,7 +127,7 @@ export const MODULE_LABELS: Record<Module, string> = {
   'commercial.quotes': 'Presupuestos',
   'commercial.suppliers': 'Proveedores',
   'commercial.categories': 'Categorías',
-  'commercial.products': 'Productos',
+  'commercial.products': 'Ítems',
   'commercial.price-lists': 'Listas de Precios',
   'commercial.warehouses': 'Almacenes',
   'commercial.stock': 'Control de Stock',

@@ -61,7 +61,7 @@ export function StockByProduct() {
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Buscar producto por nombre o código..."
+              placeholder="Buscar ítem por nombre o código..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-10"
@@ -78,7 +78,7 @@ export function StockByProduct() {
           </div>
           <Select value={selectedProductId} onValueChange={setSelectedProductId}>
             <SelectTrigger>
-              <SelectValue placeholder="Selecciona un producto" />
+              <SelectValue placeholder="Selecciona un ítem" />
             </SelectTrigger>
             <SelectContent>
               {filteredProducts.slice(0, 20).map((product) => (
@@ -201,7 +201,7 @@ export function StockByProduct() {
               <Package className="h-12 w-12 text-muted-foreground mb-4" />
               <p className="text-lg font-medium">Sin stock en almacenes</p>
               <p className="text-sm text-muted-foreground">
-                Este producto no tiene stock registrado en ningún almacén
+                Este ítem no tiene stock registrado en ningún almacén
               </p>
             </div>
           )}
@@ -209,9 +209,9 @@ export function StockByProduct() {
       ) : (
         <div className="flex flex-col items-center justify-center py-12 text-center border rounded-md">
           <Search className="h-12 w-12 text-muted-foreground mb-4" />
-          <p className="text-lg font-medium">Busca un producto</p>
+          <p className="text-lg font-medium">Busca un ítem</p>
           <p className="text-sm text-muted-foreground">
-            Usa el buscador para encontrar un producto y ver su distribución de stock
+            Usa el buscador para encontrar un ítem y ver su distribución de stock
           </p>
         </div>
       )}

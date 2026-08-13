@@ -81,7 +81,7 @@ export function AdjustStockDialog({
         <DialogHeader>
           <DialogTitle>Ajustar Stock</DialogTitle>
           <DialogDescription>
-            Modifica la cantidad de stock para este producto
+            Modifica la cantidad de stock para este ítem
           </DialogDescription>
         </DialogHeader>
 
@@ -90,7 +90,7 @@ export function AdjustStockDialog({
             {/* Product Info */}
             <div className="rounded-lg border p-4 space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Producto</span>
+                <span className="text-sm font-medium">Ítem</span>
                 <span className="font-mono text-sm text-muted-foreground">
                   {stock.product?.code}
                 </span>

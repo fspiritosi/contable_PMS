@@ -215,7 +215,7 @@ export function _GettingStarted() {
           <p>Dependiendo de tu actividad, configura los módulos relevantes:</p>
           <ul className="list-disc pl-6 space-y-1 text-muted-foreground">
             <li>
-              <strong>Comercial</strong>: carga clientes, proveedores, productos,
+              <strong>Comercial</strong>: carga clientes, proveedores, ítems,
               puntos de venta, almacenes y configura el CRM
             </li>
             <li>
@@ -350,7 +350,7 @@ export function _GettingStarted() {
               <strong>Documentos</strong>: definir tipos y asignar a empleados/equipos
             </li>
             <li>
-              <strong>Comercial</strong>: clientes, proveedores, productos y
+              <strong>Comercial</strong>: clientes, proveedores, ítems y
               puntos de venta
             </li>
             <li>

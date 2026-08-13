@@ -117,7 +117,7 @@ export function _ReceivingNoteForm({
   });
 
   // ============================================
-  // REACT QUERY: OCs, FCs, Productos
+  // REACT QUERY: OCs, FCs, Ítems
   // ============================================
 
   const { data: purchaseOrders = [], isFetching: loadingPOs } = useQuery({
@@ -512,9 +512,9 @@ export function _ReceivingNoteForm({
               {radioValue === 'purchaseInvoice' && !watchedPurchaseInvoiceId &&
                 'Selecciona una Factura de Compra para cargar los ítems automáticamente.'}
               {radioValue === 'purchaseInvoice' && watchedPurchaseInvoiceId &&
-                'La Factura de Compra no tiene ítems con productos con control de stock.'}
+                'La Factura de Compra no tiene ítems con control de stock.'}
               {radioValue === 'none' &&
-                'Haz clic en "Agregar Ítem" para agregar productos manualmente.'}
+                'Haz clic en "Agregar Ítem" para agregar ítems manualmente.'}
             </div>
           )}
 
@@ -537,14 +537,14 @@ export function _ReceivingNoteForm({
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
 
-                  {/* Producto — Editable solo en modo suelto */}
+                  {/* Ítem — Editable solo en modo suelto */}
                   {radioValue === 'none' ? (
                     <FormField
                       control={form.control}
                       name={`lines.${index}.productId`}
                       render={({ field: f }) => (
                         <FormItem>
-                          <FormLabel>Producto *</FormLabel>
+                          <FormLabel>Ítem *</FormLabel>
                           <Select
                             onValueChange={(value) => {
                               f.onChange(value);
@@ -559,7 +559,7 @@ export function _ReceivingNoteForm({
                             <FormControl>
                               <SelectTrigger>
                                 <SelectValue
-                                  placeholder={loadingProducts ? 'Cargando productos...' : 'Selecciona un producto'}
+                                  placeholder={loadingProducts ? 'Cargando ítems...' : 'Selecciona un ítem'}
                                 />
                               </SelectTrigger>
                             </FormControl>
@@ -577,7 +577,7 @@ export function _ReceivingNoteForm({
                     />
                   ) : (
                     <div className="flex flex-col gap-1">
-                      <Label className="text-sm font-medium">Producto</Label>
+                      <Label className="text-sm font-medium">Ítem</Label>
                       <div className="h-10 flex items-center px-3 rounded-md border bg-muted text-sm text-muted-foreground truncate">
                         {(() => {
                           const line = form.getValues(`lines.${index}`);
@@ -585,9 +585,9 @@ export function _ReceivingNoteForm({
                             const poLine = poLines.find((pl) => pl.id === line.purchaseOrderLineId);
                             return poLine
                               ? `${poLine.product.code} — ${poLine.product.name}`
-                              : line.description || 'Producto';
+                              : line.description || 'Ítem';
                           }
-                          return line.description || 'Producto';
+                          return line.description || 'Ítem';
                         })()}
                       </div>
                     </div>

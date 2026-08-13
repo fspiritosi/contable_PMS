@@ -26,9 +26,9 @@ export function _MovementsTable({ data, totalRows, searchParams, facetCounts }: 
     () => [
       {
         columnId: 'product_name',
-        title: 'Producto',
+        title: 'Ítem',
         type: 'text' as const,
-        placeholder: 'Buscar por producto...',
+        placeholder: 'Buscar por ítem...',
       },
       {
         columnId: 'warehouse_name',

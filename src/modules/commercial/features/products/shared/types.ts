@@ -77,12 +77,12 @@ export interface Product extends Record<string, unknown> {
 }
 
 /**
- * Estado del nivel de stock de un producto
+ * Estado del nivel de stock de un ítem
  */
 export type StockLevel = 'ok' | 'warning' | 'critical' | 'out';
 
 /**
- * Determina el nivel de stock de un producto
+ * Determina el nivel de stock de un ítem
  * - out: stock = 0 y trackStock activo
  * - critical: stock < minStock
  * - warning: stock entre minStock y minStock * 1.5
@@ -143,7 +143,7 @@ export interface UpdateProductInput extends Partial<CreateProductInput> {
 // ============================================
 
 export const PRODUCT_TYPE_LABELS: Record<ProductType, string> = {
-  PRODUCT: 'Producto',
+  PRODUCT: 'Ítem',
   SERVICE: 'Servicio',
   COMBO: 'Combo',
 };

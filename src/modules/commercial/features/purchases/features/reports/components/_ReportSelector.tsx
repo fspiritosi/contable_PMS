@@ -19,7 +19,7 @@ type ReportType = 'period' | 'supplier' | 'product' | 'vat';
 const REPORT_TYPES = {
   period: 'Compras por Período',
   supplier: 'Compras por Proveedor',
-  product: 'Compras por Producto',
+  product: 'Compras por Ítem',
   vat: 'Libro IVA Compras',
 };
 

@@ -290,7 +290,7 @@ export async function deleteCategory(id: string): Promise<void> {
 
     if (category._count.products > 0) {
       throw new Error(
-        `No se puede eliminar la categoría porque tiene ${category._count.products} producto(s) asignado(s)`
+        `No se puede eliminar la categoría porque tiene ${category._count.products} ítem(s) asignado(s)`
       );
     }
 

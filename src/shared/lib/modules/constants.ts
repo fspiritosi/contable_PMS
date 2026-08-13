@@ -35,7 +35,7 @@ export const MODULE_DESCRIPTIONS: Record<ActivatableModule, string> = {
   employees: 'Gestión de empleados, legajos, documentación laboral',
   equipment: 'Gestión de equipos, vehículos, mantenimiento',
   documents: 'Gestión documental, tipos de documentos, vencimientos',
-  commercial: 'Ventas, compras, productos, stock, tesorería, cotizaciones',
+  commercial: 'Ventas, compras, ítems, stock, tesorería, cotizaciones',
   accounting: 'Plan de cuentas, asientos contables, informes, presupuestos',
 };
 

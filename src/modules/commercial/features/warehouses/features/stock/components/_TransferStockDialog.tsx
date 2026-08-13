@@ -92,7 +92,7 @@ export function TransferStockDialog({
         <DialogHeader>
           <DialogTitle>Transferir Stock</DialogTitle>
           <DialogDescription>
-            Transfiere stock de este producto a otro almacén
+            Transfiere stock de este ítem a otro almacén
           </DialogDescription>
         </DialogHeader>
 
@@ -101,7 +101,7 @@ export function TransferStockDialog({
             {/* Product Info */}
             <div className="rounded-lg border p-4 space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Producto</span>
+                <span className="text-sm font-medium">Ítem</span>
                 <span className="font-mono text-sm text-muted-foreground">
                   {stock.product?.code}
                 </span>
