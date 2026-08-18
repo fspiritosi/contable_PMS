@@ -262,7 +262,7 @@ export function _DeliveryNoteForm({
           {/* Mensaje de estado vacío */}
           {fields.length === 0 && (
             <div className="text-center py-8 text-muted-foreground">
-              Haz clic en &quot;Agregar Ítem&quot; para agregar productos a entregar.
+              Haz clic en &quot;Agregar Ítem&quot; para agregar ítems a entregar.
             </div>
           )}
 
@@ -283,7 +283,7 @@ export function _DeliveryNoteForm({
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
 
-                  {/* Producto */}
+                  {/* Ítem */}
                   <FormField
                     control={form.control}
                     name={`lines.${index}.productId`}
@@ -291,7 +291,7 @@ export function _DeliveryNoteForm({
                       const selectedProduct = products.find((p) => p.id === f.value);
                       return (
                       <FormItem className="flex flex-col">
-                        <FormLabel>Producto *</FormLabel>
+                        <FormLabel>Ítem *</FormLabel>
                         <Popover>
                           <PopoverTrigger asChild>
                             <FormControl>
@@ -306,7 +306,7 @@ export function _DeliveryNoteForm({
                               >
                                 {selectedProduct
                                     ? `${selectedProduct.code} — ${selectedProduct.name}`
-                                    : 'Buscar producto...'}
+                                    : 'Buscar ítem...'}
                                 <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                               </Button>
                             </FormControl>
@@ -315,7 +315,7 @@ export function _DeliveryNoteForm({
                             <Command>
                               <CommandInput placeholder="Buscar por código o nombre..." />
                               <CommandList>
-                                <CommandEmpty>No se encontraron productos.</CommandEmpty>
+                                <CommandEmpty>No se encontraron ítems.</CommandEmpty>
                                 <CommandGroup>
                                   {products.map((product) => (
                                     <CommandItem

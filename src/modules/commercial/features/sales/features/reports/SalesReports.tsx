@@ -58,7 +58,7 @@ export function SalesReports() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Reportes de Ventas</h1>
         <p className="text-muted-foreground">
-          Analiza tus ventas por período, cliente, producto o genera el libro IVA
+          Analiza tus ventas por período, cliente, ítem o genera el libro IVA
         </p>
       </div>
 

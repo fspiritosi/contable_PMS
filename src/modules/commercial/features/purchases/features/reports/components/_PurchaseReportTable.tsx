@@ -53,7 +53,7 @@ interface PurchasesBySupplierData {
   };
 }
 
-// Tipo de datos por producto
+// Tipo de datos por ítem
 interface PurchasesByProductData {
   purchasesByProduct: Array<{
     productId: string | null;
@@ -307,7 +307,7 @@ export function _PurchaseReportTable({ reportType, data, startDate, endDate }: P
           const productData = data as PurchasesByProductData;
           columns = [
             { key: 'productCode', title: 'Código' },
-            { key: 'productName', title: 'Producto' },
+            { key: 'productName', title: 'Ítem' },
             { key: 'quantity', title: 'Cantidad', formatter: (val) => Number(val) },
             { key: 'unitOfMeasure', title: 'UM' },
             { key: 'subtotal', title: 'Subtotal', formatter: (val) => Number(val) },
@@ -316,9 +316,9 @@ export function _PurchaseReportTable({ reportType, data, startDate, endDate }: P
           ];
           rows = productData.purchasesByProduct || [];
           options = {
-            filename: 'compras-por-producto',
-            title: 'Compras por Producto',
-            sheetName: 'Por Producto',
+            filename: 'compras-por-ítem',
+            title: 'Compras por Ítem',
+            sheetName: 'Por Ítem',
           };
           break;
         }
@@ -530,7 +530,7 @@ export function _PurchaseReportTable({ reportType, data, startDate, endDate }: P
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Compras por Producto</CardTitle>
+          <CardTitle>Compras por Ítem</CardTitle>
           <CardDescription>
             {startDate && endDate && (
               <>
@@ -550,7 +550,7 @@ export function _PurchaseReportTable({ reportType, data, startDate, endDate }: P
                 <thead className="border-b">
                   <tr className="text-left">
                     <SortableHeader label="Código" sortKey="productCode" {...headerProps} />
-                    <SortableHeader label="Producto" sortKey="productName" {...headerProps} />
+                    <SortableHeader label="Ítem" sortKey="productName" {...headerProps} />
                     <SortableHeader label="Cantidad" sortKey="quantity" align="right" {...headerProps} />
                     <th className="pb-3">UM</th>
                     <SortableHeader label="Subtotal" sortKey="subtotal" align="right" {...headerProps} />
@@ -576,7 +576,7 @@ export function _PurchaseReportTable({ reportType, data, startDate, endDate }: P
                 <tfoot className="border-t-2 font-semibold">
                   <tr>
                     <td className="pt-3" colSpan={4}>
-                      TOTALES ({data.totals?.productCount || 0} productos)
+                      TOTALES ({data.totals?.productCount || 0} ítems)
                     </td>
                     <td className="pt-3 text-right font-mono">{formatCurrency(data.totals?.subtotal || 0)}</td>
                     <td className="pt-3 text-right font-mono">

@@ -53,7 +53,7 @@ export async function ProductDetail({ productId }: ProductDetailProps) {
             <Alert variant="destructive">
               <AlertTriangle className="h-4 w-4" />
               <AlertDescription>
-                <strong>Sin stock.</strong> Este artículo no tiene unidades disponibles.
+                <strong>Sin stock.</strong> Este ítem no tiene unidades disponibles.
                 Stock mínimo configurado: {product.minStock || 0}.
               </AlertDescription>
             </Alert>
@@ -215,7 +215,7 @@ export async function ProductDetail({ productId }: ProductDetailProps) {
         <Card>
           <CardHeader>
             <CardTitle>Configuración Contable</CardTitle>
-            <CardDescription>Cuentas y valores predeterminados para este artículo</CardDescription>
+            <CardDescription>Cuentas y valores predeterminados para este ítem</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div>

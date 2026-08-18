@@ -61,7 +61,7 @@ export async function WarehouseDetail({ warehouseId }: WarehouseDetailProps) {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Productos</CardTitle>
+            <CardTitle className="text-sm font-medium">Ítems</CardTitle>
             <Package className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -174,7 +174,7 @@ export async function WarehouseDetail({ warehouseId }: WarehouseDetailProps) {
         <CardHeader>
           <CardTitle>Stock del Almacén</CardTitle>
           <CardDescription>
-            Productos disponibles en este almacén con sus cantidades
+            Ítems disponibles en este almacén con sus cantidades
           </CardDescription>
         </CardHeader>
         <CardContent>

@@ -92,8 +92,8 @@ export function getColumns(): ColumnDef<StockMovement>[] {
     },
     {
       accessorKey: 'product.name',
-      meta: { title: 'Producto' },
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Producto" />,
+      meta: { title: 'Ítem' },
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Ítem" />,
       cell: ({ row }) => (
         <div>
           <div className="font-medium">{row.original.product?.name || '-'}</div>

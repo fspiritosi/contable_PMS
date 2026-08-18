@@ -192,7 +192,7 @@ export function _EquivalencesTable({
             <AlertDialogTitle>¿Eliminar este grupo?</AlertDialogTitle>
             <AlertDialogDescription>
               El grupo &quot;{deletingGroup?.name}&quot; será eliminado. Los
-              artículos vinculados serán desvinculados pero no eliminados.
+              ítems vinculados serán desvinculados pero no eliminados.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

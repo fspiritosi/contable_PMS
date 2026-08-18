@@ -154,7 +154,7 @@ export async function QuoteDetail({ id }: QuoteDetailProps) {
         {/* Lines table */}
         <Card className="p-6">
           <h3 className="text-lg font-semibold mb-4">
-            Detalle de Productos/Servicios
+            Detalle de Ítems/Servicios
           </h3>
           <div className="overflow-x-auto">
             <table className="w-full">

@@ -132,7 +132,7 @@ export function MovementsSummary({ movements }: MovementsSummaryProps) {
       {/* Top Products */}
       <Card className="md:col-span-2">
         <CardHeader>
-          <CardTitle>Productos Más Movidos</CardTitle>
+          <CardTitle>Ítems Más Movidos</CardTitle>
           <CardDescription>Por cantidad de transacciones</CardDescription>
         </CardHeader>
         <CardContent>

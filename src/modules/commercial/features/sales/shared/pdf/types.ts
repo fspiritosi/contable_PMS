@@ -48,7 +48,7 @@ export interface InvoicePDFData {
     email?: string;
   };
 
-  // Líneas de productos
+  // Líneas de ítems
   lines: Array<{
     code: string;
     description: string;

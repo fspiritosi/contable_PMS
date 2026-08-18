@@ -1,6 +1,5 @@
 'use server';
 
-import moment from 'moment';
 import { revalidatePath } from 'next/cache';
 
 import { getCurrentUserId } from '@/shared/lib/current-user';
@@ -13,6 +12,7 @@ import type { DataTableSearchParams } from '@/shared/components/common/DataTable
 import { parseSearchParams, stateToPrismaParams } from '@/shared/components/common/DataTable/helpers';
 import {
   fundMovementSchema,
+  parseFundMovementDate,
   parseFundRef,
   type FundMovementFormInput,
   type FundSourceKind,
@@ -23,6 +23,40 @@ type PrismaTransactionClient = Omit<
   typeof prisma,
   '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'
 >;
+
+/**
+ * Resultado de una mutación. Los errores esperables viajan como dato, no como
+ * excepción: en producción Next.js redacta el mensaje de cualquier Error lanzado
+ * desde un Server Action y el usuario terminaba viendo "An error occurred in the
+ * Server Components render... a digest property is included" (TSK-481).
+ */
+export type FundMovementActionResult =
+  | { success: true; id?: string }
+  | { success: false; error: string };
+
+/**
+ * Condición esperable y explicable al usuario (falta configuración, caja sin
+ * sesión abierta, movimiento ya confirmado). Se distingue de un fallo real para
+ * poder devolver su mensaje tal cual.
+ */
+class BusinessError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'BusinessError';
+  }
+}
+
+/** Traduce una excepción al resultado que consume el cliente. */
+function toActionResult(error: unknown, contexto: string): FundMovementActionResult {
+  if (error instanceof BusinessError) {
+    return { success: false, error: error.message };
+  }
+  logger.error(contexto, { data: { error } });
+  return {
+    success: false,
+    error: 'Ocurrió un error inesperado. Volvé a intentar o avisá al equipo si persiste.',
+  };
+}
 
 // ============================================================================
 // QUERIES
@@ -125,14 +159,14 @@ async function resolveFundRefLabel(
       where: { id: ref.id, companyId, status: 'ACTIVE' },
       select: { bankName: true, accountNumber: true },
     });
-    if (!bank) throw new Error('La cuenta bancaria seleccionada no es válida');
+    if (!bank) throw new BusinessError('La cuenta bancaria seleccionada no es válida');
     return { kind: 'BANK', id: ref.id, label: `${bank.bankName} - ${bank.accountNumber}` };
   }
   const cash = await prisma.cashRegister.findFirst({
     where: { id: ref.id, companyId, status: 'ACTIVE' },
     select: { name: true },
   });
-  if (!cash) throw new Error('La caja seleccionada no es válida');
+  if (!cash) throw new BusinessError('La caja seleccionada no es válida');
   return { kind: 'CASH', id: ref.id, label: `Caja ${cash.name}` };
 }
 
@@ -162,11 +196,11 @@ async function applyFundSide(
       where: { id: ref.id, companyId, status: 'ACTIVE' },
       select: { id: true, balance: true, accountId: true, bankName: true },
     });
-    if (!bank) throw new Error('La cuenta bancaria seleccionada no es válida');
+    if (!bank) throw new BusinessError('La cuenta bancaria seleccionada no es válida');
 
     const accountId = bank.accountId ?? settings.defaultBankAccountId;
     if (!accountId) {
-      throw new Error(
+      throw new BusinessError(
         `La cuenta bancaria "${bank.bankName}" no tiene cuenta contable asociada. Configurala en la cuenta bancaria o definí una cuenta de banco por defecto en Ajustes contables.`
       );
     }
@@ -198,13 +232,13 @@ async function applyFundSide(
       sessions: { where: { status: 'OPEN' }, select: { id: true, expectedBalance: true }, take: 1 },
     },
   });
-  if (!cash) throw new Error('La caja seleccionada no es válida');
+  if (!cash) throw new BusinessError('La caja seleccionada no es válida');
   const session = cash.sessions[0];
-  if (!session) throw new Error(`La caja "${cash.name}" no tiene una sesión abierta`);
+  if (!session) throw new BusinessError(`La caja "${cash.name}" no tiene una sesión abierta`);
 
   const accountId = cash.accountId ?? settings.defaultCashAccountId;
   if (!accountId) {
-    throw new Error(
+    throw new BusinessError(
       `La caja "${cash.name}" no tiene cuenta contable asociada. Configurala en la caja o definí una cuenta de caja por defecto en Ajustes contables.`
     );
   }
@@ -251,7 +285,7 @@ async function createJournalEntryForFundMovement(
     select: { lastEntryNumber: true },
   });
   if (!settings) {
-    throw new Error(
+    throw new BusinessError(
       'No hay configuración contable. Configurá las cuentas por defecto en Ajustes contables antes de confirmar movimientos de fondos.'
     );
   }
@@ -293,17 +327,21 @@ function buildDraftData(data: FundMovementFormInput) {
  * Crea un movimiento de fondos en BORRADOR (sin asiento ni impacto en saldos).
  * Si `confirm` es true, lo confirma en la misma operación.
  */
-export async function createFundMovement(input: FundMovementFormInput, confirm = false) {
+export async function createFundMovement(
+  input: FundMovementFormInput,
+  confirm = false
+): Promise<FundMovementActionResult> {
   await checkPermission('commercial.treasury.fund-movements', 'create', { redirect: true });
-  const userId = await getCurrentUserId();
-  if (!userId) throw new Error('No autenticado');
-  const companyId = await getActiveCompanyId();
-  if (!companyId) throw new Error('No hay empresa activa');
-
-  const data = fundMovementSchema.parse(input);
-  const { sourceRef, destRef } = buildDraftData(data);
 
   try {
+    const userId = await getCurrentUserId();
+    if (!userId) throw new BusinessError('No autenticado');
+    const companyId = await getActiveCompanyId();
+    if (!companyId) throw new BusinessError('No hay empresa activa');
+
+    const data = fundMovementSchema.parse(input);
+    const { sourceRef, destRef } = buildDraftData(data);
+
     // fundOut = origen (retiro/transferencia); fundIn = destino (aporte/transferencia)
     const fundOut = sourceRef ? await resolveFundRefLabel(sourceRef, companyId) : null;
     const fundIn = destRef ? await resolveFundRefLabel(destRef, companyId) : null;
@@ -321,7 +359,7 @@ export async function createFundMovement(input: FundMovementFormInput, confirm =
       data: {
         companyId,
         status: 'DRAFT',
-        date: moment(data.date, 'YYYY-MM-DD').toDate(),
+        date: parseFundMovementDate(data.date),
         type: data.type,
         amount: new Prisma.Decimal(parseFloat(data.amount)),
         description: data.description,
@@ -341,33 +379,43 @@ export async function createFundMovement(input: FundMovementFormInput, confirm =
     logger.info('Movimiento de fondos creado (borrador)', { data: { id: created.id, companyId } });
 
     if (confirm) {
-      await confirmFundMovement(created.id);
+      // El borrador ya quedó creado: si la confirmación falla, se informa el
+      // motivo y el movimiento sigue disponible para corregir y reconfirmar.
+      const confirmed = await confirmFundMovement(created.id);
+      if (!confirmed.success) return confirmed;
     } else {
       revalidatePath('/dashboard/commercial/treasury/fund-movements');
     }
 
     return { success: true, id: created.id };
   } catch (error) {
-    logger.error('Error al crear movimiento de fondos', { data: { error, input } });
-    if (error instanceof Error) throw error;
-    throw new Error('Error al crear movimiento de fondos');
+    return toActionResult(error, 'Error al crear movimiento de fondos');
   }
 }
 
 /** Actualiza un movimiento en BORRADOR (no permitido si ya está confirmado). */
-export async function updateFundMovement(id: string, input: FundMovementFormInput) {
+export async function updateFundMovement(
+  id: string,
+  input: FundMovementFormInput
+): Promise<FundMovementActionResult> {
   await checkPermission('commercial.treasury.fund-movements', 'update', { redirect: true });
-  const companyId = await getActiveCompanyId();
-  if (!companyId) throw new Error('No hay empresa activa');
-
-  const existing = await prisma.fundMovement.findFirst({ where: { id, companyId }, select: { status: true } });
-  if (!existing) throw new Error('Movimiento no encontrado');
-  if (existing.status !== 'DRAFT') throw new Error('Solo se pueden editar movimientos en borrador');
-
-  const data = fundMovementSchema.parse(input);
-  const { sourceRef, destRef } = buildDraftData(data);
 
   try {
+    const companyId = await getActiveCompanyId();
+    if (!companyId) throw new BusinessError('No hay empresa activa');
+
+    const existing = await prisma.fundMovement.findFirst({
+      where: { id, companyId },
+      select: { status: true },
+    });
+    if (!existing) throw new BusinessError('Movimiento no encontrado');
+    if (existing.status !== 'DRAFT') {
+      throw new BusinessError('Solo se pueden editar movimientos en borrador');
+    }
+
+    const data = fundMovementSchema.parse(input);
+    const { sourceRef, destRef } = buildDraftData(data);
+
     const fundOut = sourceRef ? await resolveFundRefLabel(sourceRef, companyId) : null;
     const fundIn = destRef ? await resolveFundRefLabel(destRef, companyId) : null;
 
@@ -383,7 +431,7 @@ export async function updateFundMovement(id: string, input: FundMovementFormInpu
     await prisma.fundMovement.update({
       where: { id },
       data: {
-        date: moment(data.date, 'YYYY-MM-DD').toDate(),
+        date: parseFundMovementDate(data.date),
         type: data.type,
         amount: new Prisma.Decimal(parseFloat(data.amount)),
         description: data.description,
@@ -401,9 +449,7 @@ export async function updateFundMovement(id: string, input: FundMovementFormInpu
     revalidatePath('/dashboard/commercial/treasury/fund-movements');
     return { success: true, id };
   } catch (error) {
-    logger.error('Error al actualizar movimiento de fondos', { data: { error, id, input } });
-    if (error instanceof Error) throw error;
-    throw new Error('Error al actualizar movimiento de fondos');
+    return toActionResult(error, 'Error al actualizar movimiento de fondos');
   }
 }
 
@@ -411,44 +457,47 @@ export async function updateFundMovement(id: string, input: FundMovementFormInpu
  * Confirma un movimiento en borrador: actualiza saldos de banco/caja y genera
  * el asiento contable, de forma atómica. Lo deja CONFIRMED.
  */
-export async function confirmFundMovement(id: string) {
+export async function confirmFundMovement(id: string): Promise<FundMovementActionResult> {
   await checkPermission('commercial.treasury.fund-movements', 'update', { redirect: true });
-  const userId = await getCurrentUserId();
-  if (!userId) throw new Error('No autenticado');
-  const companyId = await getActiveCompanyId();
-  if (!companyId) throw new Error('No hay empresa activa');
-
-  const movement = await prisma.fundMovement.findFirst({ where: { id, companyId } });
-  if (!movement) throw new Error('Movimiento no encontrado');
-  if (movement.status !== 'DRAFT') throw new Error('El movimiento ya fue confirmado o anulado');
-
-  const settings = await prisma.accountingSettings.findUnique({
-    where: { companyId },
-    select: {
-      partnerContributionsAccountId: true,
-      defaultBankAccountId: true,
-      defaultCashAccountId: true,
-    },
-  });
-
-  const isTransfer = movement.type === 'ACCOUNT_TRANSFER';
-  let capitalAccountId: string | null = null;
-  if (movement.type === 'PARTNER_CONTRIBUTION' || movement.type === 'PARTNER_WITHDRAWAL') {
-    capitalAccountId = settings?.partnerContributionsAccountId ?? null;
-    if (!capitalAccountId) {
-      throw new Error(
-        'Configurá la "Cuenta de aportes de socios" en Ajustes contables antes de confirmar aportes o retiros.'
-      );
-    }
-  }
-
-  const fundSettings: FundSettings = {
-    defaultBankAccountId: settings?.defaultBankAccountId ?? null,
-    defaultCashAccountId: settings?.defaultCashAccountId ?? null,
-  };
-  const amount = new Prisma.Decimal(Number(movement.amount));
 
   try {
+    const userId = await getCurrentUserId();
+    if (!userId) throw new BusinessError('No autenticado');
+    const companyId = await getActiveCompanyId();
+    if (!companyId) throw new BusinessError('No hay empresa activa');
+
+    const movement = await prisma.fundMovement.findFirst({ where: { id, companyId } });
+    if (!movement) throw new BusinessError('Movimiento no encontrado');
+    if (movement.status !== 'DRAFT') {
+      throw new BusinessError('El movimiento ya fue confirmado o anulado');
+    }
+
+    const settings = await prisma.accountingSettings.findUnique({
+      where: { companyId },
+      select: {
+        partnerContributionsAccountId: true,
+        defaultBankAccountId: true,
+        defaultCashAccountId: true,
+      },
+    });
+
+    const isTransfer = movement.type === 'ACCOUNT_TRANSFER';
+    let capitalAccountId: string | null = null;
+    if (movement.type === 'PARTNER_CONTRIBUTION' || movement.type === 'PARTNER_WITHDRAWAL') {
+      capitalAccountId = settings?.partnerContributionsAccountId ?? null;
+      if (!capitalAccountId) {
+        throw new BusinessError(
+          'Configurá la "Cuenta de aportes de socios" en Ajustes contables antes de confirmar aportes o retiros.'
+        );
+      }
+    }
+
+    const fundSettings: FundSettings = {
+      defaultBankAccountId: settings?.defaultBankAccountId ?? null,
+      defaultCashAccountId: settings?.defaultCashAccountId ?? null,
+    };
+    const amount = new Prisma.Decimal(Number(movement.amount));
+
     await prisma.$transaction(async (tx) => {
       const sideCtx = {
         companyId,
@@ -464,7 +513,7 @@ export async function confirmFundMovement(id: string) {
       let creditAccountId: string;
 
       if (movement.type === 'PARTNER_CONTRIBUTION') {
-        if (!movement.fundInKind || !movement.fundInId) throw new Error('Falta el banco/caja destino');
+        if (!movement.fundInKind || !movement.fundInId) throw new BusinessError('Falta el banco/caja destino');
         const dest = await applyFundSide(
           tx,
           { kind: movement.fundInKind as FundSourceKind, id: movement.fundInId },
@@ -474,7 +523,7 @@ export async function confirmFundMovement(id: string) {
         debitAccountId = dest.accountId;
         creditAccountId = capitalAccountId!;
       } else if (movement.type === 'PARTNER_WITHDRAWAL') {
-        if (!movement.fundOutKind || !movement.fundOutId) throw new Error('Falta el banco/caja origen');
+        if (!movement.fundOutKind || !movement.fundOutId) throw new BusinessError('Falta el banco/caja origen');
         const src = await applyFundSide(
           tx,
           { kind: movement.fundOutKind as FundSourceKind, id: movement.fundOutId },
@@ -484,8 +533,8 @@ export async function confirmFundMovement(id: string) {
         debitAccountId = capitalAccountId!;
         creditAccountId = src.accountId;
       } else {
-        if (!movement.fundOutKind || !movement.fundOutId) throw new Error('Falta el banco/caja origen');
-        if (!movement.fundInKind || !movement.fundInId) throw new Error('Falta el banco/caja destino');
+        if (!movement.fundOutKind || !movement.fundOutId) throw new BusinessError('Falta el banco/caja origen');
+        if (!movement.fundInKind || !movement.fundInId) throw new BusinessError('Falta el banco/caja destino');
         const src = await applyFundSide(
           tx,
           { kind: movement.fundOutKind as FundSourceKind, id: movement.fundOutId },
@@ -529,30 +578,36 @@ export async function confirmFundMovement(id: string) {
     revalidatePath('/dashboard/commercial/treasury/fund-movements');
     revalidatePath('/dashboard/commercial/treasury/bank-accounts');
     revalidatePath('/dashboard/commercial/treasury/cash-registers');
-    return { success: true };
+    return { success: true, id };
   } catch (error) {
-    logger.error('Error al confirmar movimiento de fondos', { data: { error, id } });
-    if (error instanceof Error) throw error;
-    throw new Error('Error al confirmar movimiento de fondos');
+    return toActionResult(error, 'Error al confirmar movimiento de fondos');
   }
 }
 
 /** Elimina un movimiento en BORRADOR (los confirmados no se pueden borrar acá). */
-export async function deleteFundMovement(id: string) {
+export async function deleteFundMovement(id: string): Promise<FundMovementActionResult> {
   await checkPermission('commercial.treasury.fund-movements', 'delete', { redirect: true });
-  const companyId = await getActiveCompanyId();
-  if (!companyId) throw new Error('No hay empresa activa');
 
-  const existing = await prisma.fundMovement.findFirst({ where: { id, companyId }, select: { status: true } });
-  if (!existing) throw new Error('Movimiento no encontrado');
-  if (existing.status !== 'DRAFT') {
-    throw new Error('Solo se pueden eliminar movimientos en borrador');
+  try {
+    const companyId = await getActiveCompanyId();
+    if (!companyId) throw new BusinessError('No hay empresa activa');
+
+    const existing = await prisma.fundMovement.findFirst({
+      where: { id, companyId },
+      select: { status: true },
+    });
+    if (!existing) throw new BusinessError('Movimiento no encontrado');
+    if (existing.status !== 'DRAFT') {
+      throw new BusinessError('Solo se pueden eliminar movimientos en borrador');
+    }
+
+    await prisma.fundMovement.delete({ where: { id } });
+    logger.info('Movimiento de fondos eliminado (borrador)', { data: { id, companyId } });
+    revalidatePath('/dashboard/commercial/treasury/fund-movements');
+    return { success: true, id };
+  } catch (error) {
+    return toActionResult(error, 'Error al eliminar movimiento de fondos');
   }
-
-  await prisma.fundMovement.delete({ where: { id } });
-  logger.info('Movimiento de fondos eliminado (borrador)', { data: { id, companyId } });
-  revalidatePath('/dashboard/commercial/treasury/fund-movements');
-  return { success: true };
 }
 
 export type FundMovementListItem = Awaited<ReturnType<typeof getFundMovements>>['data'][number];

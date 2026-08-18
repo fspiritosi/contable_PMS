@@ -33,7 +33,7 @@ export async function EditProduct({ productId }: EditProductProps) {
     <PermissionGuard module="commercial.products" action="update" redirect>
       <div className="flex flex-1 flex-col gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Editar Artículo</h1>
+          <h1 className="text-2xl font-bold">Editar Ítem</h1>
           <p className="text-sm text-muted-foreground">
             Modifica la información de: {product.name}
           </p>

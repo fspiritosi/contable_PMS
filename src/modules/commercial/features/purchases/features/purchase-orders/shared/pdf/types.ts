@@ -41,7 +41,7 @@ export interface PurchaseOrderPDFData {
     email?: string;
   };
 
-  // Líneas de productos
+  // Líneas de ítems
   lines: Array<{
     description: string;
     productCode?: string;

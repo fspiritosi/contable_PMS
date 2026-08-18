@@ -27,7 +27,7 @@ export async function SupplierDetail({ supplierId }: SupplierDetailProps) {
       <Tabs defaultValue="general" className="w-full">
         <TabsList className="grid w-full max-w-lg grid-cols-3">
           <TabsTrigger value="general">Información General</TabsTrigger>
-          <TabsTrigger value="products">Productos</TabsTrigger>
+          <TabsTrigger value="products">Ítems</TabsTrigger>
           <TabsTrigger value="account">Cuenta Corriente</TabsTrigger>
         </TabsList>
 

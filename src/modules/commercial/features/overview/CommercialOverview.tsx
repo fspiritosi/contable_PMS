@@ -15,8 +15,8 @@ export async function CommercialOverview() {
       bgColor: 'bg-blue-50',
     },
     {
-      title: 'Productos',
-      description: 'Catálogo de productos y servicios',
+      title: 'Ítems',
+      description: 'Catálogo de ítems y servicios',
       icon: Package,
       href: '/dashboard/commercial/products',
       color: 'text-green-600',
@@ -24,7 +24,7 @@ export async function CommercialOverview() {
     },
     {
       title: 'Categorías',
-      description: 'Organización de productos por categorías',
+      description: 'Organización de ítems por categorías',
       icon: FolderTree,
       href: '/dashboard/commercial/categories',
       color: 'text-purple-600',
@@ -70,7 +70,7 @@ export async function CommercialOverview() {
       <div>
         <h1 className="text-3xl font-bold">Módulo Comercial</h1>
         <p className="text-muted-foreground">
-          Gestión de proveedores, productos y catálogos
+          Gestión de proveedores, ítems y catálogos
         </p>
       </div>
 
@@ -117,7 +117,7 @@ export async function CommercialOverview() {
               <Link href="/dashboard/commercial/products/new">
                 <Button variant="outline" className="w-full justify-start">
                   <Package className="mr-2 h-4 w-4" />
-                  Nuevo Producto
+                  Nuevo Ítem
                 </Button>
               </Link>
               <Link href="/dashboard/commercial/warehouses/new">
@@ -136,7 +136,7 @@ export async function CommercialOverview() {
             <CardContent className="text-sm text-muted-foreground">
               <p>
                 El módulo comercial te permite gestionar toda la información de tus
-                proveedores, productos y servicios.
+                proveedores, ítems y servicios.
               </p>
               <p className="mt-2">
                 Organiza tu catálogo con categorías y mantén actualizada la información

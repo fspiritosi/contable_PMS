@@ -269,7 +269,7 @@ export function _QuoteConversionModal({ quoteId, type, open, onOpenChange }: Pro
                   <table className="w-full text-sm">
                     <thead className="bg-muted/50">
                       <tr className="text-left">
-                        <th className="px-3 py-2">Producto</th>
+                        <th className="px-3 py-2">Ítem</th>
                         <th className="px-3 py-2 text-right">Cotizado</th>
                         <th className="px-3 py-2 text-right">
                           {type === 'invoice' ? 'Facturado' : 'Entregado'}

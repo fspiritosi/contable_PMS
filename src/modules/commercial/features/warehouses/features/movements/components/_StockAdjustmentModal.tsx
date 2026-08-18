@@ -127,7 +127,7 @@ export function _StockAdjustmentModal({ open, onOpenChange, warehouses, products
                   name="productId"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Producto *</FormLabel>
+                      <FormLabel>Ítem *</FormLabel>
                       <Select
                         onValueChange={field.onChange}
                         value={field.value}
@@ -138,8 +138,8 @@ export function _StockAdjustmentModal({ open, onOpenChange, warehouses, products
                             <SelectValue
                               placeholder={
                                 products.length === 0
-                                  ? 'No hay productos con control de stock'
-                                  : 'Seleccionar producto'
+                                  ? 'No hay ítems con control de stock'
+                                  : 'Seleccionar ítem'
                               }
                             />
                           </SelectTrigger>
@@ -147,7 +147,7 @@ export function _StockAdjustmentModal({ open, onOpenChange, warehouses, products
                         <SelectContent>
                           {products.length === 0 ? (
                             <div className="p-2 text-sm text-muted-foreground text-center">
-                              No hay productos con control de stock habilitado
+                              No hay ítems con control de stock habilitado
                             </div>
                           ) : (
                             products.map((p) => (
@@ -160,7 +160,7 @@ export function _StockAdjustmentModal({ open, onOpenChange, warehouses, products
                       </Select>
                       {products.length === 0 && (
                         <FormDescription className="text-xs">
-                          Crea productos y habilita el control de stock en la configuración
+                          Crea ítems y habilita el control de stock en la configuración
                         </FormDescription>
                       )}
                       <FormMessage />

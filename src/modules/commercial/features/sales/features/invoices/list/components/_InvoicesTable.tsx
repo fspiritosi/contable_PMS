@@ -178,7 +178,7 @@ export function _InvoicesTable({ data, totalRows, searchParams, facetCounts }: P
             <AlertDialogDescription>
               Esta acción confirmará la factura{' '}
               <strong>{selectedInvoice?.fullNumber}</strong> y descontará el stock de los
-              productos. Esta acción no se puede deshacer.
+              ítems. Esta acción no se puede deshacer.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

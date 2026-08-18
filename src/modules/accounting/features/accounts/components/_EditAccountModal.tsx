@@ -24,6 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/shared/components/ui/select';
+import { AccountCombobox } from '@/shared/components/common/AccountCombobox';
 import { Textarea } from '@/shared/components/ui/textarea';
 
 import { accountSchema, type CreateAccountInput, type AccountWithChildren } from '../../../shared/types';
@@ -224,24 +225,17 @@ export function _EditAccountModal({ account, companyId, onClose }: EditAccountMo
 
           <div className="space-y-2">
             <Label htmlFor="parentId">Cuenta Padre</Label>
-            <Select
-              onValueChange={(value) => form.setValue('parentId', value)}
+            <AccountCombobox
+              id="parentId"
+              accounts={accounts.filter((acc) => acc.type === form.watch('type'))}
               value={form.watch('parentId')}
+              onChange={(accountId) =>
+                form.setValue('parentId', accountId ?? '', { shouldValidate: true })
+              }
+              placeholder="Seleccionar cuenta padre"
+              clearLabel={null}
               disabled={isLoading || !form.watch('type')}
-            >
-              <SelectTrigger id="parentId">
-                <SelectValue placeholder="Seleccionar cuenta padre" />
-              </SelectTrigger>
-              <SelectContent>
-                {accounts
-                  .filter((acc) => acc.type === form.watch('type'))
-                  .map((acc) => (
-                    <SelectItem key={acc.id} value={acc.id}>
-                      {acc.code} - {acc.name}
-                    </SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
+            />
             <p className="text-xs text-muted-foreground">
               Solo se listan cuentas del mismo tipo.
             </p>

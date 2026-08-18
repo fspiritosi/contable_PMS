@@ -22,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/shared/components/ui/select';
+import { AccountCombobox } from '@/shared/components/common/AccountCombobox';
 import type { Product } from '../../../shared/types';
 import { updateProductImputation } from '../actions.server';
 
@@ -64,7 +65,7 @@ export function _ImputationModal({
   const [expenseAccountId, setExpenseAccountId] = useState<string>(CLEAR_VALUE);
   const [costCenterId, setCostCenterId] = useState<string>(CLEAR_VALUE);
 
-  // Sincronizar con el artículo cada vez que se abre el modal
+  // Sincronizar con el ítem cada vez que se abre el modal
   useEffect(() => {
     if (open && product) {
       setIncomeAccountId(product.defaultIncomeAccountId ?? CLEAR_VALUE);
@@ -75,7 +76,7 @@ export function _ImputationModal({
 
   const mutation = useMutation({
     mutationFn: () => {
-      if (!product) throw new Error('Sin artículo');
+      if (!product) throw new Error('Sin ítem');
       return updateProductImputation(product.id, {
         defaultIncomeAccountId: incomeAccountId === CLEAR_VALUE ? null : incomeAccountId,
         defaultExpenseAccountId: expenseAccountId === CLEAR_VALUE ? null : expenseAccountId,
@@ -103,43 +104,29 @@ export function _ImputationModal({
           <DialogDescription>
             {product
               ? `Cuentas para los asientos de "${product.name}"`
-              : 'Cuentas contables del artículo'}
+              : 'Cuentas contables del ítem'}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
           <div className="space-y-1.5">
             <Label>Cuenta de Ingresos (ventas)</Label>
-            <Select value={incomeAccountId} onValueChange={setIncomeAccountId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Sin asignar" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={CLEAR_VALUE}>Sin asignar</SelectItem>
-                {incomeAccounts.map((account) => (
-                  <SelectItem key={account.id} value={account.id}>
-                    {account.code} - {account.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <AccountCombobox
+              accounts={incomeAccounts}
+              value={incomeAccountId === CLEAR_VALUE ? null : incomeAccountId}
+              onChange={(accountId) => setIncomeAccountId(accountId ?? CLEAR_VALUE)}
+              placeholder="Sin asignar"
+            />
           </div>
 
           <div className="space-y-1.5">
             <Label>Cuenta de Gastos (compras)</Label>
-            <Select value={expenseAccountId} onValueChange={setExpenseAccountId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Sin asignar" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={CLEAR_VALUE}>Sin asignar</SelectItem>
-                {expenseAccounts.map((account) => (
-                  <SelectItem key={account.id} value={account.id}>
-                    {account.code} - {account.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <AccountCombobox
+              accounts={expenseAccounts}
+              value={expenseAccountId === CLEAR_VALUE ? null : expenseAccountId}
+              onChange={(accountId) => setExpenseAccountId(accountId ?? CLEAR_VALUE)}
+              placeholder="Sin asignar"
+            />
           </div>
 
           <div className="space-y-1.5">

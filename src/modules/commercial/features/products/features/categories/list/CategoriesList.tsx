@@ -15,7 +15,7 @@ export async function CategoriesList() {
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Categorías</h1>
             <p className="text-muted-foreground">
-              Organiza tus artículos por categorías y subcategorías
+              Organiza tus ítems por categorías y subcategorías
             </p>
           </div>
           <Button asChild>

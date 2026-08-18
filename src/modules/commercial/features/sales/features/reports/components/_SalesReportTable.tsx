@@ -51,7 +51,7 @@ interface SalesByCustomerData {
   };
 }
 
-// Tipo de datos por producto
+// Tipo de datos por ítem
 interface SalesByProductData {
   salesByProduct: Array<{
     productId: string;
@@ -429,7 +429,7 @@ export function _SalesReportTable({ reportType, data, startDate, endDate }: Prop
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Ventas por Producto</CardTitle>
+          <CardTitle>Ventas por Ítem</CardTitle>
           <CardDescription>
             {startDate && endDate && (
               <>
@@ -449,7 +449,7 @@ export function _SalesReportTable({ reportType, data, startDate, endDate }: Prop
                 <thead className="border-b">
                   <tr className="text-left">
                     <SortableHeader label="Código" sortKey="productCode" {...headerProps} />
-                    <SortableHeader label="Producto" sortKey="productName" {...headerProps} />
+                    <SortableHeader label="Ítem" sortKey="productName" {...headerProps} />
                     <SortableHeader label="Cantidad" sortKey="quantity" align="right" {...headerProps} />
                     <th className="pb-3">UM</th>
                     <SortableHeader label="Subtotal" sortKey="subtotal" align="right" {...headerProps} />
@@ -475,7 +475,7 @@ export function _SalesReportTable({ reportType, data, startDate, endDate }: Prop
                 <tfoot className="border-t-2 font-semibold">
                   <tr>
                     <td className="pt-3" colSpan={4}>
-                      TOTALES ({data.totals?.productCount || 0} productos)
+                      TOTALES ({data.totals?.productCount || 0} ítems)
                     </td>
                     <td className="pt-3 text-right font-mono">{formatCurrency(data.totals?.subtotal || 0)}</td>
                     <td className="pt-3 text-right font-mono">

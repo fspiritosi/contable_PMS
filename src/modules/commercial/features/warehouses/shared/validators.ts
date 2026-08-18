@@ -27,7 +27,7 @@ export type UpdateWarehouseFormData = z.infer<typeof updateWarehouseSchema>;
 
 export const createStockMovementSchema = z.object({
   warehouseId: z.string().uuid('Debe seleccionar un almacén'),
-  productId: z.string().uuid('Debe seleccionar un producto'),
+  productId: z.string().uuid('Debe seleccionar un ítem'),
   type: z.nativeEnum(StockMovementType),
   quantity: z.coerce.number().positive('La cantidad debe ser mayor a 0'),
   referenceType: z.string().max(50).optional(),
@@ -45,7 +45,7 @@ export type CreateStockMovementFormData = z.infer<typeof createStockMovementSche
 
 export const setStockQuantitySchema = z.object({
   warehouseId: z.string().uuid('Debe seleccionar un almacén'),
-  productId: z.string().uuid('Debe seleccionar un producto'),
+  productId: z.string().uuid('Debe seleccionar un ítem'),
   newQuantity: z.coerce.number().min(0, 'La cantidad debe ser mayor o igual a 0'),
   notes: z.string().max(500).optional(),
 });
@@ -60,7 +60,7 @@ export type SetStockQuantityFormData = z.infer<typeof setStockQuantitySchema>;
 export const directStockTransferSchema = z.object({
   fromWarehouseId: z.string().uuid('Debe seleccionar almacén origen'),
   toWarehouseId: z.string().uuid('Debe seleccionar almacén destino'),
-  productId: z.string().uuid('Debe seleccionar un producto'),
+  productId: z.string().uuid('Debe seleccionar un ítem'),
   quantity: z.coerce.number().positive('La cantidad debe ser mayor a 0'),
   notes: z.string().max(500).optional(),
 }).refine(
@@ -80,7 +80,7 @@ export type DirectStockTransferFormData = z.infer<typeof directStockTransferSche
 
 export const stockAdjustmentSchema = z.object({
   warehouseId: z.string().uuid('Almacén inválido'),
-  productId: z.string().uuid('Producto inválido'),
+  productId: z.string().uuid('Ítem inválido'),
   quantity: z
     .string()
     .min(1, 'La cantidad es requerida')
@@ -97,11 +97,11 @@ export type StockAdjustmentFormData = z.infer<typeof stockAdjustmentSchema>;
 
 // ============================================
 // Formal Stock Transfer (vista de movimientos)
-// Transferencia multi-producto con fecha y almacenes
+// Transferencia multi-ítem con fecha y almacenes
 // ============================================
 
 export const stockTransferLineSchema = z.object({
-  productId: z.string().uuid('Producto inválido'),
+  productId: z.string().uuid('Ítem inválido'),
   quantity: z
     .string()
     .min(1, 'La cantidad es requerida')
@@ -114,7 +114,7 @@ export const stockTransferSchema = z.object({
   destinationWarehouseId: z.string().uuid('Almacén de destino inválido'),
   date: z.date({ message: 'La fecha es requerida' }),
   notes: z.string().optional(),
-  lines: z.array(stockTransferLineSchema).min(1, 'Debe agregar al menos un producto'),
+  lines: z.array(stockTransferLineSchema).min(1, 'Debe agregar al menos un ítem'),
 }).refine((data) => data.sourceWarehouseId !== data.destinationWarehouseId, {
   message: 'El almacén de origen y destino deben ser diferentes',
   path: ['destinationWarehouseId'],

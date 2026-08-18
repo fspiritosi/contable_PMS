@@ -24,6 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/shared/components/ui/select';
+import { AccountCombobox } from '@/shared/components/common/AccountCombobox';
 import { Textarea } from '@/shared/components/ui/textarea';
 
 import { accountSchema, type CreateAccountInput } from '../../../shared/types';
@@ -210,30 +211,19 @@ export function _CreateAccountModal({ companyId, onClose }: CreateAccountModalPr
 
           <div className="space-y-2">
             <Label htmlFor="parentId">Cuenta Padre</Label>
-            <Select
-              onValueChange={(value) => form.setValue('parentId', value)}
+            <AccountCombobox
+              id="parentId"
+              accounts={accounts.filter((account) => account.type === form.watch('type'))}
               value={form.watch('parentId')}
+              onChange={(accountId) =>
+                form.setValue('parentId', accountId ?? '', { shouldValidate: true })
+              }
+              placeholder={
+                form.watch('type') ? 'Seleccionar cuenta padre' : 'Elegí primero el tipo'
+              }
+              clearLabel={null}
               disabled={isLoading || !form.watch('type')}
-            >
-              <SelectTrigger id="parentId">
-                <SelectValue
-                  placeholder={
-                    form.watch('type')
-                      ? 'Seleccionar cuenta padre'
-                      : 'Elegí primero el tipo'
-                  }
-                />
-              </SelectTrigger>
-              <SelectContent>
-                {accounts
-                  .filter((account) => account.type === form.watch('type'))
-                  .map((account) => (
-                    <SelectItem key={account.id} value={account.id}>
-                      {account.code} - {account.name}
-                    </SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
+            />
             <p className="text-xs text-muted-foreground">
               Solo se listan cuentas del mismo tipo. Sin padre, la cuenta es imputable
               (recibe movimientos); al asignarle una hija, el padre pasa a ser de

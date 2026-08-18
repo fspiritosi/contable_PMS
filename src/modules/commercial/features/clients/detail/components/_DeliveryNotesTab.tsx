@@ -47,7 +47,7 @@ export function _DeliveryNotesTab({ deliveryNotes }: Props) {
                 <th className="px-3 pb-3">Número</th>
                 <th className="px-3 pb-3">Fecha</th>
                 <th className="px-3 pb-3">Almacén</th>
-                <th className="px-3 pb-3 text-right">Artículos</th>
+                <th className="px-3 pb-3 text-right">Ítems</th>
                 <th className="px-3 pb-3">Estado</th>
                 <th className="px-3 pb-3">Factura</th>
                 <th className="px-3 pb-3 w-10"></th>

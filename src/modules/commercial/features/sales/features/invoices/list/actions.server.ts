@@ -813,7 +813,7 @@ export async function confirmInvoice(id: string) {
             const quantityToHandle = line.quantity;
 
             if (isNC) {
-              // NC de venta: restaurar stock (devuelve productos)
+              // NC de venta: restaurar stock (devuelve ítems)
               await tx.warehouseStock.upsert({
                 where: {
                   warehouseId_productId: {

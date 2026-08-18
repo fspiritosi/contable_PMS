@@ -134,11 +134,11 @@ export async function getPurchaseInvoicesPaginated(searchParams: DataTableSearch
       let receptionStatus: 'pending' | 'partial' | 'complete' | null = null;
 
       if (isConfirmed && isRegularInvoice) {
-        // Solo líneas con productos que controlan stock
+        // Solo líneas con ítems que controlan stock
         const stockLines = invoice.lines.filter((l) => l.product?.trackStock && l.productId);
 
         if (stockLines.length > 0) {
-          // Sumar cantidades recibidas por producto desde remitos confirmados
+          // Sumar cantidades recibidas por ítem desde remitos confirmados
           const receivedByProduct = new Map<string, number>();
           for (const rn of invoice.receivingNotes) {
             for (const rnLine of rn.lines) {
@@ -511,7 +511,7 @@ export async function getSuppliersForSelect() {
 }
 
 /**
- * Obtiene productos para select (solo activos)
+ * Obtiene ítems para select (solo activos)
  */
 export async function getProductsForSelect() {
   const userId = await getCurrentUserId();
@@ -555,10 +555,10 @@ export async function getProductsForSelect() {
       })),
     }));
   } catch (error) {
-    logger.error('Error al obtener productos', {
+    logger.error('Error al obtener ítems', {
       data: { error, companyId },
     });
-    throw new Error('Error al obtener productos');
+    throw new Error('Error al obtener ítems');
   }
 }
 

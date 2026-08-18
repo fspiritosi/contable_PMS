@@ -38,6 +38,7 @@ import {
 } from '@/shared/components/ui/select';
 import {
   fundMovementSchema,
+  formatFundMovementDate,
   FUND_MOVEMENT_TYPE_LABELS,
   FUND_MOVEMENT_TYPES,
   type FundMovementFormInput,
@@ -47,6 +48,7 @@ import {
   createFundMovement,
   updateFundMovement,
   confirmFundMovement,
+  type FundMovementActionResult,
   type FundOption,
   type FundMovementPartnerOption,
   type FundMovementListItem,
@@ -100,7 +102,8 @@ export function _CreateFundMovementModal({
     if (open && movement) {
       form.reset({
         type: movement.type as FundMovementTypeValue,
-        date: moment(movement.date).format('YYYY-MM-DD'),
+        // UTC: la fecha se guarda anclada a mediodía UTC, leerla en local la corría un día (TSK-483)
+        date: formatFundMovementDate(movement.date, 'YYYY-MM-DD'),
         amount: String(movement.amount),
         description: movement.description,
         sourceFund: fundRefFrom(movement.fundOutKind, movement.fundOutId),
@@ -130,18 +133,29 @@ export function _CreateFundMovementModal({
   const persist = async (data: FundMovementFormInput, confirm: boolean) => {
     setIsSubmitting(true);
     try {
+      let result: FundMovementActionResult;
+
       if (isEdit && movement) {
-        await updateFundMovement(movement.id, data);
-        if (confirm) await confirmFundMovement(movement.id);
-        toast.success(confirm ? 'Movimiento confirmado' : 'Borrador actualizado');
+        result = await updateFundMovement(movement.id, data);
+        if (result.success && confirm) {
+          result = await confirmFundMovement(movement.id);
+        }
       } else {
-        await createFundMovement(data, confirm);
-        toast.success(confirm ? 'Movimiento confirmado' : 'Borrador guardado');
+        result = await createFundMovement(data, confirm);
       }
+
+      // Los errores esperables llegan como dato con su mensaje real: en producción
+      // una excepción del server action se ve como un digest ilegible (TSK-481).
+      if (!result.success) {
+        toast.error(result.error);
+        return;
+      }
+
+      toast.success(
+        confirm ? 'Movimiento confirmado' : isEdit ? 'Borrador actualizado' : 'Borrador guardado'
+      );
       onOpenChange(false);
       onSuccess();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Error al guardar el movimiento');
     } finally {
       setIsSubmitting(false);
     }

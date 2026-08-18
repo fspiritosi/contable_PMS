@@ -1,7 +1,6 @@
 'use client';
 
 import { ColumnDef } from '@tanstack/react-table';
-import moment from 'moment';
 import { MoreHorizontal, Pencil, CheckCircle2, Trash2 } from 'lucide-react';
 
 import { Badge } from '@/shared/components/ui/badge';
@@ -17,7 +16,11 @@ import {
 import { DataTableColumnHeader } from '@/shared/components/common/DataTable';
 import type { ModulePermissions } from '@/shared/lib/permissions';
 import { formatCurrency } from '@/shared/utils/formatters';
-import { FUND_MOVEMENT_TYPE_LABELS, type FundMovementTypeValue } from '../shared/validators';
+import {
+  FUND_MOVEMENT_TYPE_LABELS,
+  formatFundMovementDate,
+  type FundMovementTypeValue,
+} from '../shared/validators';
 import type { FundMovementListItem } from './actions.server';
 
 const TYPE_BADGE_VARIANT: Record<FundMovementTypeValue, 'default' | 'secondary' | 'outline'> = {
@@ -46,7 +49,7 @@ export function getColumns({ onEdit, onConfirm, onDelete, permissions }: Columns
       meta: { title: 'Fecha' },
       header: ({ column }) => <DataTableColumnHeader column={column} title="Fecha" />,
       cell: ({ row }) => (
-        <span className="whitespace-nowrap">{moment(row.original.date).format('DD/MM/YYYY')}</span>
+        <span className="whitespace-nowrap">{formatFundMovementDate(row.original.date)}</span>
       ),
     },
     {

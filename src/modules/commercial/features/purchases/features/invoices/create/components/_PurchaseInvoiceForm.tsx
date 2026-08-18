@@ -146,7 +146,7 @@ export function _PurchaseInvoiceForm({
   const watchedSupplierId = form.watch('supplierId');
   const showOriginalInvoice = watchedVoucherType && (isCreditNote(watchedVoucherType) || isDebitNote(watchedVoucherType));
 
-  // Ordenar productos: primero los del proveedor seleccionado
+  // Ordenar ítems: primero los del proveedor seleccionado
   const sortedProducts = useMemo(() => {
     if (!watchedSupplierId) return products;
     const supplierProducts = products.filter((p) => p.supplierIds?.includes(watchedSupplierId));
@@ -302,7 +302,7 @@ export function _PurchaseInvoiceForm({
     form.setValue(`lines.${index}.unitCost`, product.costPrice.toString());
     form.setValue(`lines.${index}.vatRate`, isTypeC ? '0' : product.vatRate.toString());
 
-    // Sugerir asociar si el producto no está vinculado al proveedor
+    // Sugerir asociar si el ítem no está vinculado al proveedor
     if (watchedSupplierId && !product.supplierIds?.includes(watchedSupplierId)) {
       const supplierId = watchedSupplierId;
       toast(`"${product.name}" no está asociado a este proveedor`, {
@@ -311,7 +311,7 @@ export function _PurchaseInvoiceForm({
           onClick: async () => {
             try {
               await addProductToSupplier(supplierId, { productId });
-              toast.success('Producto asociado al proveedor');
+              toast.success('Ítem asociado al proveedor');
             } catch {
               // No bloquea el flujo
             }
@@ -625,13 +625,13 @@ export function _PurchaseInvoiceForm({
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {/* Producto (opcional) */}
+                  {/* Ítem (opcional) */}
                   <FormField
                     control={form.control}
                     name={`lines.${index}.productId`}
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Producto</FormLabel>
+                        <FormLabel>Ítem</FormLabel>
                         <Select
                           onValueChange={(value) => {
                             field.onChange(value);

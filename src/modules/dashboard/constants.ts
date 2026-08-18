@@ -33,7 +33,7 @@ export const DASHBOARD_WIDGETS: WidgetDefinition[] = [
   { id: 'widget-payment-methods', label: 'Medios de Pago', category: 'Comercial' },
   { id: 'widget-client-debts', label: 'Top 10 Deudas de Clientes', category: 'Comercial' },
   { id: 'widget-supplier-debts', label: 'Top 10 Deudas de Proveedores', category: 'Comercial' },
-  { id: 'widget-top-products', label: 'Productos Mas Vendidos', category: 'Comercial' },
+  { id: 'widget-top-products', label: 'Ítems Mas Vendidos', category: 'Comercial' },
   // Operativo
   { id: 'widget-due-dates', label: 'Proximos Vencimientos', category: 'Operativo' },
   { id: 'widget-critical-stock', label: 'Stock Critico (lista)', category: 'Operativo' },

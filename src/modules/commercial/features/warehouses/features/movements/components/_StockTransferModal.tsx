@@ -91,7 +91,7 @@ export function _StockTransferModal({ open, onOpenChange, warehouses, products }
     append({ productId: '', quantity: '' });
   };
 
-  // Productos ya seleccionados en otras líneas
+  // Ítems ya seleccionados en otras líneas
   const selectedProductIds = form.watch('lines')?.map((l) => l.productId).filter(Boolean) || [];
 
   return (
@@ -102,7 +102,7 @@ export function _StockTransferModal({ open, onOpenChange, warehouses, products }
             <DialogHeader>
               <DialogTitle>Transferencia de Stock</DialogTitle>
               <DialogDescription>
-                Seleccioná los almacenes y agregá los productos a transferir
+                Seleccioná los almacenes y agregá los ítems a transferir
               </DialogDescription>
             </DialogHeader>
 
@@ -180,19 +180,19 @@ export function _StockTransferModal({ open, onOpenChange, warehouses, products }
                 />
               </div>
 
-              {/* Líneas de productos */}
+              {/* Líneas de ítems */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <FormLabel>Productos *</FormLabel>
+                  <FormLabel>Ítems *</FormLabel>
                   <Button type="button" variant="outline" size="sm" onClick={handleAddLine}>
                     <Plus className="h-4 w-4 mr-1" />
-                    Agregar producto
+                    Agregar ítem
                   </Button>
                 </div>
 
                 {/* Header de la tabla */}
                 <div className="grid grid-cols-[1fr_120px_40px] gap-2 text-xs text-muted-foreground font-medium px-1">
-                  <span>Producto</span>
+                  <span>Ítem</span>
                   <span>Cantidad</span>
                   <span />
                 </div>
@@ -207,7 +207,7 @@ export function _StockTransferModal({ open, onOpenChange, warehouses, products }
                           <Select onValueChange={f.onChange} value={f.value}>
                             <FormControl>
                               <SelectTrigger className="h-9 text-sm">
-                                <SelectValue placeholder="Seleccionar producto" />
+                                <SelectValue placeholder="Seleccionar ítem" />
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent position="popper" className="z-[200] max-h-[200px]">

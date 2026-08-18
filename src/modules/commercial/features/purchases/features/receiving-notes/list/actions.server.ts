@@ -396,7 +396,7 @@ export async function getConfirmedPurchaseInvoicesForSupplier(supplierId: string
     });
 
     return invoices.map((inv) => {
-      // Sumar cantidades ya recibidas por producto
+      // Sumar cantidades ya recibidas por ítem
       const receivedByProduct = new Map<string, number>();
       for (const rn of inv.receivingNotes) {
         for (const rnLine of rn.lines) {
@@ -432,7 +432,7 @@ export async function getConfirmedPurchaseInvoicesForSupplier(supplierId: string
 }
 
 /**
- * Obtiene productos activos con trackStock para remitos sueltos
+ * Obtiene ítems activos con trackStock para remitos sueltos
  */
 export async function getProductsForSelect() {
   const companyId = await getActiveCompanyId();
@@ -451,7 +451,7 @@ export async function getProductsForSelect() {
     });
     return products;
   } catch (error) {
-    logger.error('Error al obtener productos', { data: { error } });
+    logger.error('Error al obtener ítems', { data: { error } });
     return [];
   }
 }

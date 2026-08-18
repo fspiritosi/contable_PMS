@@ -39,7 +39,7 @@ export async function getWarehousesForSelect() {
 }
 
 /**
- * Obtiene productos con control de stock para select
+ * Obtiene ítems con control de stock para select
  */
 export async function getStockProductsForSelect() {
   const companyId = await getActiveCompanyId();
@@ -50,7 +50,7 @@ export async function getStockProductsForSelect() {
       where: {
         companyId,
         status: 'ACTIVE',
-        trackStock: true, // Solo productos con control de stock
+        trackStock: true, // Solo ítems con control de stock
       },
       select: {
         id: true,
@@ -61,7 +61,7 @@ export async function getStockProductsForSelect() {
       orderBy: [{ code: 'asc' }, { name: 'asc' }],
     });
   } catch (error) {
-    logger.error('Error al obtener productos para select', { data: { error } });
+    logger.error('Error al obtener ítems para select', { data: { error } });
     return [];
   }
 }
@@ -97,7 +97,7 @@ export async function createStockAdjustment(data: unknown) {
       throw new Error('Almacén no encontrado o inactivo');
     }
 
-    // Verificar que el producto existe
+    // Verificar que el ítem existe
     const product = await prisma.product.findFirst({
       where: {
         id: validatedData.productId,
@@ -113,11 +113,11 @@ export async function createStockAdjustment(data: unknown) {
     });
 
     if (!product) {
-      throw new Error('Producto no encontrado o inactivo');
+      throw new Error('Ítem no encontrado o inactivo');
     }
 
     if (!product.trackStock) {
-      throw new Error('Este producto no tiene control de stock habilitado');
+      throw new Error('Este ítem no tiene control de stock habilitado');
     }
 
     // Para EXIT y LOSS, verificar que hay stock suficiente
@@ -261,7 +261,7 @@ export async function createStockTransfer(data: unknown) {
     if (!sourceWarehouse) throw new Error('Almacén de origen no encontrado o inactivo');
     if (!destinationWarehouse) throw new Error('Almacén de destino no encontrado o inactivo');
 
-    // Verificar todos los productos
+    // Verificar todos los ítems
     const productIds = validatedData.lines.map((l) => l.productId);
     const products = await prisma.product.findMany({
       where: { id: { in: productIds }, companyId, status: 'ACTIVE' },
@@ -271,11 +271,11 @@ export async function createStockTransfer(data: unknown) {
     const productMap = new Map(products.map((p) => [p.id, p]));
     for (const line of validatedData.lines) {
       const product = productMap.get(line.productId);
-      if (!product) throw new Error(`Producto no encontrado o inactivo`);
-      if (!product.trackStock) throw new Error(`El producto "${product.name}" no tiene control de stock habilitado`);
+      if (!product) throw new Error(`Ítem no encontrado o inactivo`);
+      if (!product.trackStock) throw new Error(`El ítem "${product.name}" no tiene control de stock habilitado`);
     }
 
-    // Verificar stock disponible para cada producto
+    // Verificar stock disponible para cada ítem
     const sourceStocks = await prisma.warehouseStock.findMany({
       where: {
         warehouseId: sourceWarehouse.id,

@@ -74,11 +74,13 @@ export function _FundMovementsTable({
     if (!confirming) return;
     setIsBusy(true);
     try {
-      await confirmFundMovement(confirming.id);
+      const result = await confirmFundMovement(confirming.id);
+      if (!result.success) {
+        toast.error(result.error);
+        return;
+      }
       toast.success('Movimiento confirmado');
       refresh();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Error al confirmar el movimiento');
     } finally {
       setIsBusy(false);
       setConfirming(null);
@@ -89,11 +91,13 @@ export function _FundMovementsTable({
     if (!deleting) return;
     setIsBusy(true);
     try {
-      await deleteFundMovement(deleting.id);
+      const result = await deleteFundMovement(deleting.id);
+      if (!result.success) {
+        toast.error(result.error);
+        return;
+      }
       toast.success('Borrador eliminado');
       refresh();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Error al eliminar el movimiento');
     } finally {
       setIsBusy(false);
       setDeleting(null);

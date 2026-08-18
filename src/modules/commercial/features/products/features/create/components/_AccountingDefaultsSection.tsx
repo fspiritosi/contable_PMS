@@ -16,6 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/shared/components/ui/select';
+import { AccountCombobox } from '@/shared/components/common/AccountCombobox';
 import {
   Card,
   CardContent,
@@ -94,24 +95,16 @@ export function _AccountingDefaultsSection({
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Cuenta de Gastos</FormLabel>
-                <Select
-                  onValueChange={(v) => handleSelectChange(field.onChange, v)}
-                  value={field.value || ''}
-                >
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Sin asignar" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    <SelectItem value={CLEAR_VALUE}>Sin asignar</SelectItem>
-                    {expenseAccounts.map((account) => (
-                      <SelectItem key={account.id} value={account.id}>
-                        {account.code} - {account.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <FormControl>
+                  <AccountCombobox
+                    accounts={expenseAccounts}
+                    value={field.value}
+                    onChange={(accountId) =>
+                      handleSelectChange(field.onChange, accountId ?? CLEAR_VALUE)
+                    }
+                    placeholder="Sin asignar"
+                  />
+                </FormControl>
                 <FormDescription>
                   Cuenta contable para registrar compras/gastos
                 </FormDescription>
@@ -126,24 +119,16 @@ export function _AccountingDefaultsSection({
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Cuenta de Ingresos</FormLabel>
-                <Select
-                  onValueChange={(v) => handleSelectChange(field.onChange, v)}
-                  value={field.value || ''}
-                >
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Sin asignar" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    <SelectItem value={CLEAR_VALUE}>Sin asignar</SelectItem>
-                    {incomeAccounts.map((account) => (
-                      <SelectItem key={account.id} value={account.id}>
-                        {account.code} - {account.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <FormControl>
+                  <AccountCombobox
+                    accounts={incomeAccounts}
+                    value={field.value}
+                    onChange={(accountId) =>
+                      handleSelectChange(field.onChange, accountId ?? CLEAR_VALUE)
+                    }
+                    placeholder="Sin asignar"
+                  />
+                </FormControl>
                 <FormDescription>
                   Cuenta contable para registrar ventas/ingresos
                 </FormDescription>

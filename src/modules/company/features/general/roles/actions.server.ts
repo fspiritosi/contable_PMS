@@ -183,7 +183,7 @@ export async function getPermissionsConfig() {
         { key: MODULES['commercial.quotes'], label: 'Presupuestos' },
         { key: MODULES['commercial.suppliers'], label: 'Proveedores' },
         { key: MODULES['commercial.categories'], label: 'Categorías' },
-        { key: MODULES['commercial.products'], label: 'Productos' },
+        { key: MODULES['commercial.products'], label: 'Ítems' },
         { key: MODULES['commercial.price-lists'], label: 'Listas de Precios' },
         { key: MODULES['commercial.points-of-sale'], label: 'Puntos de Venta' },
         { key: MODULES['commercial.invoices'], label: 'Facturas de Venta' },

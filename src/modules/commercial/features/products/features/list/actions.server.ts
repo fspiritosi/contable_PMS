@@ -23,7 +23,7 @@ interface GetProductsParams {
 }
 
 /**
- * Obtiene el listado de productos con paginación
+ * Obtiene el listado de ítems con paginación
  */
 export async function getProducts(params: GetProductsParams = {}) {
   await checkPermission('commercial.products', 'view', { redirect: true });
@@ -78,7 +78,7 @@ export async function getProducts(params: GetProductsParams = {}) {
       ...categoryWhere,
     };
 
-    // Filtro especial: solo productos bajo stock mínimo
+    // Filtro especial: solo ítems bajo stock mínimo
     const lowStockFilter = filters['stockLevel']?.[0];
 
     const [products, total] = await Promise.all([
@@ -147,13 +147,13 @@ export async function getProducts(params: GetProductsParams = {}) {
       },
     };
   } catch (error) {
-    logger.error('Error al obtener artículos', { data: { error } });
-    throw new Error('Error al obtener artículos');
+    logger.error('Error al obtener ítems', { data: { error } });
+    throw new Error('Error al obtener ítems');
   }
 }
 
 /**
- * Obtiene los conteos de facetas para los filtros de productos
+ * Obtiene los conteos de facetas para los filtros de ítems
  */
 export async function getProductFacetCounts() {
   await checkPermission('commercial.products', 'view', { redirect: true });
@@ -180,7 +180,7 @@ export async function getProductFacetCounts() {
 }
 
 /**
- * Obtiene un producto por ID
+ * Obtiene un ítem por ID
  */
 export async function getProductById(id: string): Promise<Product | null> {
   await checkPermission('commercial.products', 'view', { redirect: true });
@@ -224,13 +224,13 @@ export async function getProductById(id: string): Promise<Product | null> {
       currentStock,
     } as unknown as Product;
   } catch (error) {
-    logger.error('Error al obtener artículo', { data: { error, id } });
-    throw new Error('Error al obtener artículo');
+    logger.error('Error al obtener ítem', { data: { error, id } });
+    throw new Error('Error al obtener ítem');
   }
 }
 
 /**
- * Crea un nuevo producto
+ * Crea un nuevo ítem
  */
 export async function createProduct(data: CreateProductFormData): Promise<Product> {
   await checkPermission('commercial.products', 'create', { redirect: true });
@@ -324,7 +324,7 @@ export async function createProduct(data: CreateProductFormData): Promise<Produc
       },
     });
 
-    logger.info('Artículo creado', {
+    logger.info('Ítem creado', {
       data: { productId: product.id, code: product.code, companyId },
     });
 
@@ -341,16 +341,16 @@ export async function createProduct(data: CreateProductFormData): Promise<Produc
       maxStock: product.maxStock ? Number(product.maxStock) : null,
     } as unknown as Product;
   } catch (error) {
-    logger.error('Error al crear artículo', { data: { error, data } });
+    logger.error('Error al crear ítem', { data: { error, data } });
     if (error instanceof Error) {
       throw error;
     }
-    throw new Error('Error al crear artículo');
+    throw new Error('Error al crear ítem');
   }
 }
 
 /**
- * Actualiza un producto
+ * Actualiza un ítem
  */
 export async function updateProduct(
   id: string,
@@ -371,7 +371,7 @@ export async function updateProduct(
     });
 
     if (!existing) {
-      throw new Error('Artículo no encontrado');
+      throw new Error('Ítem no encontrado');
     }
 
     // Recalcular precio de venta si cambiaron costo o margen
@@ -424,7 +424,7 @@ export async function updateProduct(
       },
     });
 
-    logger.info('Artículo actualizado', {
+    logger.info('Ítem actualizado', {
       data: { productId: id, companyId, userId },
     });
 
@@ -442,16 +442,16 @@ export async function updateProduct(
       maxStock: product.maxStock ? Number(product.maxStock) : null,
     } as unknown as Product;
   } catch (error) {
-    logger.error('Error al actualizar artículo', { data: { error, id, data } });
+    logger.error('Error al actualizar ítem', { data: { error, id, data } });
     if (error instanceof Error) {
       throw error;
     }
-    throw new Error('Error al actualizar artículo');
+    throw new Error('Error al actualizar ítem');
   }
 }
 
 /**
- * Elimina un producto (soft delete cambiando a INACTIVE)
+ * Elimina un ítem (soft delete cambiando a INACTIVE)
  */
 export async function deleteProduct(id: string): Promise<void> {
   await checkPermission('commercial.products', 'delete', { redirect: true });
@@ -467,7 +467,7 @@ export async function deleteProduct(id: string): Promise<void> {
     });
 
     if (!product) {
-      throw new Error('Artículo no encontrado');
+      throw new Error('Ítem no encontrado');
     }
 
     // Soft delete
@@ -476,14 +476,14 @@ export async function deleteProduct(id: string): Promise<void> {
       data: { status: 'INACTIVE' },
     });
 
-    logger.info('Artículo eliminado', {
+    logger.info('Ítem eliminado', {
       data: { productId: id, companyId, userId },
     });
 
     revalidatePath('/dashboard/commercial/products');
   } catch (error) {
-    logger.error('Error al eliminar artículo', { data: { error, id } });
-    throw new Error('Error al eliminar artículo');
+    logger.error('Error al eliminar ítem', { data: { error, id } });
+    throw new Error('Error al eliminar ítem');
   }
 }
 
@@ -505,7 +505,7 @@ export interface LowStockProduct {
 }
 
 /**
- * Obtiene productos cuyo stock actual está por debajo del mínimo configurado.
+ * Obtiene ítems cuyo stock actual está por debajo del mínimo configurado.
  * Ordenado por déficit descendente (más críticos primero).
  */
 export async function getProductsBelowMinStock(): Promise<LowStockProduct[]> {
@@ -563,8 +563,8 @@ export async function getProductsBelowMinStock(): Promise<LowStockProduct[]> {
 
     return lowStockProducts;
   } catch (error) {
-    logger.error('Error al obtener artículos bajo stock mínimo', { data: { error } });
-    throw new Error('Error al obtener artículos bajo stock mínimo');
+    logger.error('Error al obtener ítems bajo stock mínimo', { data: { error } });
+    throw new Error('Error al obtener ítems bajo stock mínimo');
   }
 }
 
@@ -600,7 +600,7 @@ function applyPriceAdjustment(current: number, adjustmentType: BulkPriceAdjustme
 }
 
 /**
- * Vista previa del ajuste masivo de precios (hasta 5 productos)
+ * Vista previa del ajuste masivo de precios (hasta 5 ítems)
  */
 export async function previewBulkPriceUpdate(input: BulkPriceAdjustmentInput) {
   await checkPermission('commercial.products', 'view', { redirect: true });
@@ -633,7 +633,7 @@ export async function previewBulkPriceUpdate(input: BulkPriceAdjustmentInput) {
 }
 
 /**
- * Aplica ajuste masivo de precios a los productos seleccionados
+ * Aplica ajuste masivo de precios a los ítems seleccionados
  */
 export async function bulkUpdatePrices(input: BulkPriceAdjustmentInput) {
   await checkPermission('commercial.products', 'update', { redirect: true });
@@ -641,19 +641,19 @@ export async function bulkUpdatePrices(input: BulkPriceAdjustmentInput) {
   if (!companyId) throw new Error('No hay empresa activa');
 
   // Validaciones
-  if (!input.productIds.length) throw new Error('Seleccione al menos un producto');
+  if (!input.productIds.length) throw new Error('Seleccione al menos un ítem');
   if (input.value <= 0) throw new Error('El valor debe ser mayor a 0');
   if (!input.applyToSalePrice && !input.applyCostPrice) {
     throw new Error('Seleccione al menos un precio a ajustar');
   }
 
-  // Cargar productos
+  // Cargar ítems
   const products = await prisma.product.findMany({
     where: { id: { in: input.productIds }, companyId },
     select: { id: true, salePrice: true, costPrice: true, profitMargin: true, vatRate: true, salePriceWithTax: true },
   });
 
-  if (products.length === 0) throw new Error('No se encontraron productos');
+  if (products.length === 0) throw new Error('No se encontraron ítems');
 
   // Calcular nuevos precios
   const updates = products.map((product) => {
@@ -745,7 +745,7 @@ export interface ProductImportResult {
 }
 
 /**
- * Procesa la importación masiva de productos desde un Excel
+ * Procesa la importación masiva de ítems desde un Excel
  * - Valida cada fila (código y nombre requeridos)
  * - Resuelve categorías por nombre (crea si no existe)
  * - Upsert por código: actualiza si existe, crea si no
@@ -876,7 +876,7 @@ export async function processProductImport(
     }
   });
 
-  logger.info('Importación masiva de productos', {
+  logger.info('Importación masiva de ítems', {
     data: { imported, updated, errorsCount: errors.length, companyId },
   });
 
@@ -902,14 +902,14 @@ interface BulkUpdateProductsInput {
 }
 
 /**
- * Actualiza masivamente campos de productos seleccionados
+ * Actualiza masivamente campos de ítems seleccionados
  */
 export async function bulkUpdateProducts(input: BulkUpdateProductsInput) {
   await checkPermission('commercial.products', 'update', { redirect: true });
   const companyId = await getActiveCompanyId();
   if (!companyId) throw new Error('No hay empresa activa');
 
-  if (!input.productIds.length) throw new Error('Seleccione al menos un producto');
+  if (!input.productIds.length) throw new Error('Seleccione al menos un ítem');
 
   // Build update data (only include non-undefined fields)
   const data: Record<string, unknown> = {};
@@ -947,7 +947,7 @@ export interface ProductImputationInput {
 }
 
 /**
- * Actualiza únicamente la imputación contable de un artículo (cuenta de
+ * Actualiza únicamente la imputación contable de un ítem (cuenta de
  * ingreso, cuenta de egreso y centro de costo), sin tocar precios ni otros
  * campos. Pensada para asignar la imputación rápidamente desde el listado.
  */
@@ -963,7 +963,7 @@ export async function updateProductImputation(
     where: { id, companyId },
     select: { id: true },
   });
-  if (!existing) throw new Error('Artículo no encontrado');
+  if (!existing) throw new Error('Ítem no encontrado');
 
   await prisma.product.update({
     where: { id },
@@ -974,7 +974,7 @@ export async function updateProductImputation(
     },
   });
 
-  logger.info('Imputación contable de artículo actualizada', {
+  logger.info('Imputación contable de ítem actualizada', {
     data: { productId: id, companyId },
   });
 
@@ -984,21 +984,21 @@ export async function updateProductImputation(
 }
 
 /**
- * Retorna la definición de columnas para la plantilla de importación de productos
+ * Retorna la definición de columnas para la plantilla de importación de ítems
  */
 // ============================================================================
 // LABEL PRINTING
 // ============================================================================
 
 /**
- * Obtiene productos para impresión de etiquetas con código de barras
+ * Obtiene ítems para impresión de etiquetas con código de barras
  */
 export async function getProductsForLabels(productIds: string[]) {
   await checkPermission('commercial.products', 'view', { redirect: true });
   const companyId = await getActiveCompanyId();
   if (!companyId) throw new Error('No hay empresa activa');
 
-  if (!productIds.length) throw new Error('Seleccione al menos un producto');
+  if (!productIds.length) throw new Error('Seleccione al menos un ítem');
 
   const products = await prisma.product.findMany({
     where: { id: { in: productIds }, companyId },

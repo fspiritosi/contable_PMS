@@ -1,8 +1,8 @@
 import { EditProduct } from '@/modules/commercial/features/products/features/edit';
 
 export const metadata = {
-  title: 'Editar Artículo | Commercial',
-  description: 'Editar información de artículo',
+  title: 'Editar Ítem | Commercial',
+  description: 'Editar información de ítem',
 };
 
 interface EditProductPageProps {

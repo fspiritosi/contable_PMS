@@ -110,7 +110,7 @@ export async function getEquivalencesPaginated(params: GetEquivalencesParams = {
 }
 
 /**
- * Obtiene un grupo de equivalencia por ID con todos sus productos
+ * Obtiene un grupo de equivalencia por ID con todos sus ítems
  */
 export async function getEquivalenceById(id: string) {
   await checkPermission('commercial.equivalences', 'view', { redirect: true });
@@ -306,7 +306,7 @@ export async function updateEquivalence(id: string, input: UpdateEquivalenceInpu
 }
 
 /**
- * Elimina un grupo de equivalencia (desvincula productos, no los elimina)
+ * Elimina un grupo de equivalencia (desvincula ítems, no los elimina)
  */
 export async function deleteEquivalence(id: string) {
   await checkPermission('commercial.equivalences', 'delete', { redirect: true });
@@ -320,7 +320,7 @@ export async function deleteEquivalence(id: string) {
     });
     if (!existing) throw new Error('Grupo no encontrado');
 
-    // Desvincular productos del grupo antes de eliminar
+    // Desvincular ítems del grupo antes de eliminar
     if (existing._count.products > 0) {
       await prisma.product.updateMany({
         where: { productGroupId: id },
@@ -363,8 +363,8 @@ export type SupplierPriceComparison = {
 };
 
 /**
- * Construye datos de comparación de precios para una lista de productos.
- * Busca la última línea de factura de compra (CONFIRMED) para cada producto.
+ * Construye datos de comparación de precios para una lista de ítems.
+ * Busca la última línea de factura de compra (CONFIRMED) para cada ítem.
  */
 async function buildPriceComparison(
   productIds: string[],

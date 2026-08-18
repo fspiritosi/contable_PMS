@@ -69,7 +69,7 @@ export function PurchaseReports({ suppliers = [] }: Props) {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Reportes de Compras</h1>
         <p className="text-muted-foreground">
-          Analiza tus compras por período, proveedor, producto o genera el libro IVA
+          Analiza tus compras por período, proveedor, ítem o genera el libro IVA
         </p>
       </div>
 

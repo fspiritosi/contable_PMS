@@ -28,7 +28,7 @@ export async function StockControl() {
       <Tabs defaultValue="by-warehouse" className="space-y-4">
         <TabsList>
           <TabsTrigger value="by-warehouse">Por Almacén</TabsTrigger>
-          <TabsTrigger value="by-product">Por Producto</TabsTrigger>
+          <TabsTrigger value="by-product">Por Ítem</TabsTrigger>
         </TabsList>
 
         <TabsContent value="by-warehouse" className="space-y-4">
@@ -52,9 +52,9 @@ export async function StockControl() {
         <TabsContent value="by-product" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Stock por Producto</CardTitle>
+              <CardTitle>Stock por Ítem</CardTitle>
               <CardDescription>
-                Visualiza la distribución de stock de cada producto en todos los almacenes
+                Visualiza la distribución de stock de cada ítem en todos los almacenes
               </CardDescription>
             </CardHeader>
             <CardContent>

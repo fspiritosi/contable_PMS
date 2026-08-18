@@ -257,7 +257,7 @@ export async function deletePriceList(id: string): Promise<void> {
 
     // No permitir eliminar si tiene items
     if (existing._count.items > 0) {
-      throw new Error('No se puede eliminar una lista de precios con artículos asignados');
+      throw new Error('No se puede eliminar una lista de precios con ítems asignados');
     }
 
     await prisma.priceList.delete({
@@ -403,16 +403,16 @@ export async function createPriceListItem(
       throw new Error('Lista de precios no encontrada');
     }
 
-    // Verificar que el producto existe y pertenece a la empresa
+    // Verificar que el ítem existe y pertenece a la empresa
     const product = await prisma.product.findFirst({
       where: { id: validatedData.productId, companyId },
     });
 
     if (!product) {
-      throw new Error('Artículo no encontrado');
+      throw new Error('Ítem no encontrado');
     }
 
-    // Verificar que el producto no esté ya en la lista
+    // Verificar que el ítem no esté ya en la lista
     const existingItem = await prisma.priceListItem.findFirst({
       where: {
         priceListId,
@@ -421,7 +421,7 @@ export async function createPriceListItem(
     });
 
     if (existingItem) {
-      throw new Error('El artículo ya está en esta lista de precios');
+      throw new Error('El ítem ya está en esta lista de precios');
     }
 
     // Calcular precio con IVA
@@ -648,7 +648,7 @@ export async function bulkAddPriceListItems(
     });
     if (!priceList) throw new Error('Lista de precios no encontrada');
 
-    // Obtener productos con sus precios y IVA
+    // Obtener ítems con sus precios y IVA
     const products = await prisma.product.findMany({
       where: { id: { in: data.productIds }, companyId, status: 'ACTIVE' },
       select: { id: true, salePrice: true, vatRate: true },
@@ -661,7 +661,7 @@ export async function bulkAddPriceListItems(
     });
     const existingProductIds = new Set(existingItems.map((i) => i.productId));
 
-    // Filtrar productos que no están ya en la lista
+    // Filtrar ítems que no están ya en la lista
     const newProducts = products.filter((p) => !existingProductIds.has(p.id));
 
     if (newProducts.length === 0) {
@@ -698,7 +698,7 @@ export async function bulkAddPriceListItems(
     });
 
     revalidatePath(`/dashboard/commercial/price-lists/${priceListId}`);
-    logger.info('Carga masiva de artículos en lista de precios', {
+    logger.info('Carga masiva de ítems en lista de precios', {
       data: { priceListId, added: newProducts.length, skipped: existingProductIds.size },
     });
 
@@ -706,6 +706,6 @@ export async function bulkAddPriceListItems(
   } catch (error) {
     logger.error('Error en carga masiva de lista de precios', { data: { error } });
     if (error instanceof Error) throw error;
-    throw new Error('Error al agregar artículos masivamente');
+    throw new Error('Error al agregar ítems masivamente');
   }
 }

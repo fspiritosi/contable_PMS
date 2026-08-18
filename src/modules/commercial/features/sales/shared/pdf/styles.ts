@@ -98,7 +98,7 @@ export const styles = StyleSheet.create({
     borderRadius: 3,
   },
 
-  // Tabla de productos
+  // Tabla de ítems
   table: {
     marginTop: 10,
     marginBottom: 10,

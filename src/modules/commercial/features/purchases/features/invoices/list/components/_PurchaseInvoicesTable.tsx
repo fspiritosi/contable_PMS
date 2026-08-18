@@ -239,7 +239,7 @@ export function _PurchaseInvoicesTable({ data, totalRows, searchParams, facetCou
               Recepción de mercadería
             </DialogTitle>
             <DialogDescription>
-              Esta factura tiene productos que controlan stock. ¿Desea crear un remito
+              Esta factura tiene ítems que controlan stock. ¿Desea crear un remito
               de recepción para registrar el ingreso de la mercadería al almacén?
             </DialogDescription>
           </DialogHeader>

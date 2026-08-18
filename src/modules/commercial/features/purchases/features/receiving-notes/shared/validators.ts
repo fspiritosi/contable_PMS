@@ -25,7 +25,7 @@ export const RECEIVING_NOTE_STATUS_VARIANTS: Record<
 // ============================================
 
 export const receivingNoteLineSchema = z.object({
-  productId: z.string().uuid('Selecciona un producto'),
+  productId: z.string().uuid('Selecciona un ítem'),
   description: z.string().min(1, 'La descripción es requerida'),
   quantity: z
     .string()

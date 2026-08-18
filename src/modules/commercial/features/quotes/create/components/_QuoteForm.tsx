@@ -96,7 +96,7 @@ function _QuoteLineRow({
       <div className="hidden lg:block space-y-1.5">
         {/* Fila principal */}
         <div className="grid grid-cols-[minmax(240px,2fr)_90px_110px_100px_90px_110px_110px_110px_36px] gap-3 items-center">
-          {/* Producto */}
+          {/* Ítem */}
           <FormField
             control={form.control}
             name={`lines.${index}.productId`}
@@ -109,7 +109,7 @@ function _QuoteLineRow({
                 value={field.value}
               >
                 <SelectTrigger className="h-9 text-sm">
-                  <SelectValue placeholder="Seleccionar producto" />
+                  <SelectValue placeholder="Seleccionar ítem" />
                 </SelectTrigger>
                 <SelectContent>
                   {products.map((product) => (
@@ -285,7 +285,7 @@ function _QuoteLineRow({
               <FormControl>
                 <Input
                   {...field}
-                  placeholder="Descripción del producto o servicio"
+                  placeholder="Descripción del ítem o servicio"
                   className="h-7 text-xs text-muted-foreground border-dashed"
                 />
               </FormControl>
@@ -315,7 +315,7 @@ function _QuoteLineRow({
           name={`lines.${index}.productId`}
           render={({ field }) => (
             <FormItem>
-              <FormLabel className="text-xs">Producto</FormLabel>
+              <FormLabel className="text-xs">Ítem</FormLabel>
               <Select
                 onValueChange={(value) => {
                   field.onChange(value);
@@ -325,7 +325,7 @@ function _QuoteLineRow({
               >
                 <FormControl>
                   <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar producto" />
+                    <SelectValue placeholder="Seleccionar ítem" />
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
@@ -349,7 +349,7 @@ function _QuoteLineRow({
               <FormControl>
                 <Input
                   {...field}
-                  placeholder="Descripción del producto o servicio"
+                  placeholder="Descripción del ítem o servicio"
                 />
               </FormControl>
             </FormItem>
@@ -880,11 +880,11 @@ export function QuoteForm({
           </div>
         </Card>
 
-        {/* Detalle de Productos/Servicios */}
+        {/* Detalle de Ítems/Servicios */}
         <Card className="p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold">
-              Detalle de Productos/Servicios
+              Detalle de Ítems/Servicios
             </h3>
             <Button
               type="button"
@@ -901,7 +901,7 @@ export function QuoteForm({
             <div className="overflow-x-auto">
               {/* Header de tabla */}
               <div className="hidden lg:grid lg:grid-cols-[minmax(240px,2fr)_90px_110px_100px_90px_110px_110px_110px_36px] gap-3 px-2 pb-2 border-b text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                <span>Producto / Descripción</span>
+                <span>Ítem / Descripción</span>
                 <span className="text-right">Cant.</span>
                 <span className="text-right">P. Unit.</span>
                 <span className="text-right">Dto.</span>

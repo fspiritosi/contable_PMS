@@ -41,7 +41,7 @@ export interface QuotePDFData {
     type: 'customer' | 'lead';
   };
 
-  // Líneas de productos
+  // Líneas de ítems
   lines: Array<{
     description: string;
     quantity: number;

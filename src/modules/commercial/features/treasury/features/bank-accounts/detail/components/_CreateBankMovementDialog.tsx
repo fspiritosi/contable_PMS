@@ -32,6 +32,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/shared/components/ui/select';
+import { AccountCombobox } from '@/shared/components/common/AccountCombobox';
 import { Textarea } from '@/shared/components/ui/textarea';
 
 import { createBankMovement, getAccountsForBankMovement } from '../../../bank-movements/actions.server';
@@ -182,20 +183,15 @@ export function _CreateBankMovementDialog({ open, onOpenChange, bankAccountId, o
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Cuenta Contable (Contrapartida) *</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Seleccionar cuenta contable" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {accounts.map((account) => (
-                        <SelectItem key={account.id} value={account.id}>
-                          {account.code} - {account.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <FormControl>
+                    <AccountCombobox
+                      accounts={accounts}
+                      value={field.value}
+                      onChange={(accountId) => field.onChange(accountId ?? '')}
+                      placeholder="Seleccionar cuenta contable"
+                      clearLabel={null}
+                    />
+                  </FormControl>
                   <FormDescription>
                     Cuenta contable a la que se imputa el movimiento
                   </FormDescription>

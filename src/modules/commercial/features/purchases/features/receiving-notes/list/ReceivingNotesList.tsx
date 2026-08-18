@@ -23,7 +23,7 @@ export async function ReceivingNotesList({ searchParams }: Props) {
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Remitos de Recepción</h1>
             <p className="text-muted-foreground">
-              Gestiona la recepción de materiales y productos
+              Gestiona la recepción de materiales y ítems
             </p>
           </div>
           <Button asChild>

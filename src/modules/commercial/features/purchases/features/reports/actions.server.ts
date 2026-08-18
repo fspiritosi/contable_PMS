@@ -207,7 +207,7 @@ export async function getPurchasesByProduct(startDate: Date, endDate: Date, supp
       },
     });
 
-    // Agrupar por producto (o descripción si no tiene producto)
+    // Agrupar por ítem (o descripción si no tiene ítem)
     const productMap = new Map<
       string,
       {
@@ -257,10 +257,10 @@ export async function getPurchasesByProduct(startDate: Date, endDate: Date, supp
 
     return { purchasesByProduct, totals };
   } catch (error) {
-    logger.error('Error al obtener compras por producto', {
+    logger.error('Error al obtener compras por ítem', {
       data: { companyId, error },
     });
-    throw new Error('Error al obtener compras por producto');
+    throw new Error('Error al obtener compras por ítem');
   }
 }
 

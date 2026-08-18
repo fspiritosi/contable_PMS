@@ -87,10 +87,10 @@ export function MovementFilters() {
 
         {/* Product Filter */}
         <div className="space-y-2">
-          <Label>Producto</Label>
+          <Label>Ítem</Label>
           <Select value={productId} onValueChange={setProductId}>
             <SelectTrigger>
-              <SelectValue placeholder="Todos los productos" />
+              <SelectValue placeholder="Todos los ítems" />
             </SelectTrigger>
             <SelectContent>
               {products.slice(0, 50).map((product) => (

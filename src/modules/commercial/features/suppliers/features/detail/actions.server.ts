@@ -296,7 +296,7 @@ export async function addProductToSupplier(
   const existing = await prisma.productSupplier.findUnique({
     where: { productId_supplierId: { productId: data.productId, supplierId } },
   });
-  if (existing) throw new Error('El producto ya está asociado a este proveedor');
+  if (existing) throw new Error('El ítem ya está asociado a este proveedor');
 
   await prisma.productSupplier.create({
     data: {

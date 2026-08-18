@@ -61,8 +61,8 @@ export function getColumns({ onEdit, onDelete, onImputation, permissions, showOe
     },
     {
       accessorKey: 'name',
-      meta: { title: 'Artículo' },
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Artículo" />,
+      meta: { title: 'Ítem' },
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Ítem" />,
       cell: ({ row }) => {
         const product = row.original;
         return (

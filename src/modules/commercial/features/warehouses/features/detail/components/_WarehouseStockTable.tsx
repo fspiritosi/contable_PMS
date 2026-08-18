@@ -19,7 +19,7 @@ export function WarehouseStockTable({ stocks }: WarehouseStockTableProps) {
   if (stocks.length === 0) {
     return (
       <div className="text-center py-8 text-muted-foreground">
-        No hay productos en stock en este almacén
+        No hay ítems en stock en este almacén
       </div>
     );
   }
@@ -30,7 +30,7 @@ export function WarehouseStockTable({ stocks }: WarehouseStockTableProps) {
         <TableHeader>
           <TableRow>
             <TableHead>Código</TableHead>
-            <TableHead>Producto</TableHead>
+            <TableHead>Ítem</TableHead>
             <TableHead>Unidad</TableHead>
             <TableHead className="text-right">Cantidad</TableHead>
             <TableHead className="text-right">Reservado</TableHead>

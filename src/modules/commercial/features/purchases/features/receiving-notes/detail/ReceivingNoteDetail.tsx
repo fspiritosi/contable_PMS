@@ -142,14 +142,14 @@ export async function ReceivingNoteDetail({ noteId }: Props) {
           {/* Líneas */}
           <Card>
             <CardHeader>
-              <CardTitle>Productos Recibidos</CardTitle>
+              <CardTitle>Ítems Recibidos</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b">
-                      <th className="text-left py-2 pr-4">Producto</th>
+                      <th className="text-left py-2 pr-4">Ítem</th>
                       <th className="text-left py-2 px-4">Descripción</th>
                       <th className="text-right py-2 px-4">Cantidad</th>
                       <th className="text-left py-2 pl-4">Observaciones</th>

@@ -55,7 +55,7 @@ export async function StockMovements({ searchParams = {} }: StockMovementsProps)
         <CardHeader>
           <CardTitle>Filtros</CardTitle>
           <CardDescription>
-            Filtra los movimientos por almacén, producto, tipo y fechas
+            Filtra los movimientos por almacén, ítem, tipo y fechas
           </CardDescription>
         </CardHeader>
         <CardContent>

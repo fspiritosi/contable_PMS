@@ -86,7 +86,7 @@ export function _ProductForm({
   onSubmit,
   defaultValues,
   isSubmitting = false,
-  submitLabel = 'Crear Artículo',
+  submitLabel = 'Crear Ítem',
   categories,
   showStatus = false,
   equivalences = [],
@@ -161,7 +161,7 @@ export function _ProductForm({
         <Card>
           <CardHeader>
             <CardTitle>Información Básica</CardTitle>
-            <CardDescription>Datos principales del artículo o servicio</CardDescription>
+            <CardDescription>Datos principales del ítem o servicio</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -172,7 +172,7 @@ export function _ProductForm({
                   <FormItem>
                     <FormLabel>Nombre *</FormLabel>
                     <FormControl>
-                      <Input placeholder="Nombre del artículo" {...field} />
+                      <Input placeholder="Nombre del ítem" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -238,7 +238,7 @@ export function _ProductForm({
                   <FormLabel>Descripción</FormLabel>
                   <FormControl>
                     <Textarea
-                      placeholder="Descripción detallada del artículo"
+                      placeholder="Descripción detallada del ítem"
                       className="resize-none"
                       {...field}
                     />
@@ -432,7 +432,7 @@ export function _ProductForm({
                   <div className="space-y-1 leading-none">
                     <FormLabel>Controlar Stock</FormLabel>
                     <FormDescription>
-                      Activar para llevar control de inventario de este artículo
+                      Activar para llevar control de inventario de este ítem
                     </FormDescription>
                   </div>
                 </FormItem>
@@ -542,7 +542,7 @@ export function _ProductForm({
                   <FormItem>
                     <FormLabel>Marca</FormLabel>
                     <FormControl>
-                      <Input placeholder="Marca del artículo" {...field} />
+                      <Input placeholder="Marca del ítem" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -556,7 +556,7 @@ export function _ProductForm({
                   <FormItem>
                     <FormLabel>Modelo</FormLabel>
                     <FormControl>
-                      <Input placeholder="Modelo del artículo" {...field} />
+                      <Input placeholder="Modelo del ítem" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -624,7 +624,7 @@ export function _ProductForm({
                       </SelectContent>
                     </Select>
                     <FormDescription>
-                      Agrupar con artículos equivalentes de otras marcas
+                      Agrupar con ítems equivalentes de otras marcas
                     </FormDescription>
                     <FormMessage />
                   </FormItem>

@@ -17,7 +17,7 @@ export function _MovementActions({ warehouses, products }: Props) {
   const [transferModalOpen, setTransferModalOpen] = useState(false);
   const { hasPermission } = usePermissions();
 
-  // Filtrar solo productos con control de stock
+  // Filtrar solo ítems con control de stock
   const stockProducts = products.filter((p) => p.trackStock);
 
   return (

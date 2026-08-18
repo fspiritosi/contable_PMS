@@ -120,7 +120,7 @@ export async function PurchaseOrderDetail({ orderId }: Props) {
           {/* Líneas */}
           <Card>
             <CardHeader>
-              <CardTitle>Productos / Servicios</CardTitle>
+              <CardTitle>Ítems / Servicios</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="overflow-x-auto">

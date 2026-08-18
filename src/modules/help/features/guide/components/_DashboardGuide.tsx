@@ -57,7 +57,7 @@ export function _DashboardGuide() {
               confirmadas
             </li>
             <li>
-              <strong>Stock crítico</strong>: productos con stock bajo mínimo
+              <strong>Stock crítico</strong>: ítems con stock bajo mínimo
             </li>
             <li>
               <strong>Saldo bancario</strong>: suma de todas las cuentas activas
@@ -167,7 +167,7 @@ export function _DashboardGuide() {
               vencimiento pasada sin cobrar
             </li>
             <li>
-              <strong>Stock bajo</strong>: productos cuyo stock está por debajo
+              <strong>Stock bajo</strong>: ítems cuyo stock está por debajo
               del mínimo configurado
             </li>
           </ul>
