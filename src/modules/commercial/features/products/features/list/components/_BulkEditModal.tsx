@@ -31,6 +31,7 @@ import {
 import { bulkUpdateProducts } from '../actions.server';
 import { getCategories } from '../../../features/categories/actions.server';
 import type { AccountOption, CostCenterOption } from './_ImputationModal';
+import { filterExpenseAccounts, filterIncomeAccounts } from '../../../shared/account-filters';
 
 const CLEAR_VALUE = '__none__';
 
@@ -46,8 +47,8 @@ interface Props {
 export function _BulkEditModal({ selectedIds, open, onOpenChange, onSuccess, accounts, costCenters }: Props) {
   const queryClient = useQueryClient();
 
-  const incomeAccounts = accounts.filter((a) => a.nature === 'CREDIT');
-  const expenseAccounts = accounts.filter((a) => a.nature === 'DEBIT');
+  const incomeAccounts = filterIncomeAccounts(accounts);
+  const expenseAccounts = filterExpenseAccounts(accounts);
 
   // Field enable toggles
   const [enableCategory, setEnableCategory] = useState(false);
@@ -300,7 +301,7 @@ export function _BulkEditModal({ selectedIds, open, onOpenChange, onSuccess, acc
             </div>
           </div>
 
-          {/* Cuenta de Gastos */}
+          {/* Cuenta de Egresos */}
           <div className="flex items-start gap-3">
             <Checkbox
               id="enable-expense-account"
@@ -310,7 +311,7 @@ export function _BulkEditModal({ selectedIds, open, onOpenChange, onSuccess, acc
             />
             <div className="flex-1 space-y-1.5">
               <Label htmlFor="enable-expense-account" className={!enableExpenseAccount ? 'text-muted-foreground' : ''}>
-                Cuenta de gastos (compras):
+                Cuenta de egresos (compras):
               </Label>
               <Select disabled={!enableExpenseAccount} value={expenseAccountId} onValueChange={setExpenseAccountId}>
                 <SelectTrigger>

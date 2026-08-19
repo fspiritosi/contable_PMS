@@ -23,6 +23,7 @@ import {
   SelectValue,
 } from '@/shared/components/ui/select';
 import { AccountCombobox } from '@/shared/components/common/AccountCombobox';
+import { filterExpenseAccounts, filterIncomeAccounts } from '../../../shared/account-filters';
 import type { Product } from '../../../shared/types';
 import { updateProductImputation } from '../actions.server';
 
@@ -58,8 +59,8 @@ export function _ImputationModal({
   onOpenChange,
   onSuccess,
 }: Props) {
-  const incomeAccounts = accounts.filter((a) => a.nature === 'CREDIT');
-  const expenseAccounts = accounts.filter((a) => a.nature === 'DEBIT');
+  const incomeAccounts = filterIncomeAccounts(accounts);
+  const expenseAccounts = filterExpenseAccounts(accounts);
 
   const [incomeAccountId, setIncomeAccountId] = useState<string>(CLEAR_VALUE);
   const [expenseAccountId, setExpenseAccountId] = useState<string>(CLEAR_VALUE);
@@ -120,7 +121,7 @@ export function _ImputationModal({
           </div>
 
           <div className="space-y-1.5">
-            <Label>Cuenta de Gastos (compras)</Label>
+            <Label>Cuenta de Egresos (compras)</Label>
             <AccountCombobox
               accounts={expenseAccounts}
               value={expenseAccountId === CLEAR_VALUE ? null : expenseAccountId}

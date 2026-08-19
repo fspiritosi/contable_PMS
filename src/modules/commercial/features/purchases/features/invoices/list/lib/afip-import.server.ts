@@ -9,6 +9,7 @@ import { revalidatePath } from 'next/cache';
 import ExcelJS from 'exceljs';
 import moment from 'moment';
 import type { VoucherType, SupplierTaxCondition, InvoiceLineType } from '@/generated/prisma/enums';
+import { padPointOfSale, padVoucherNumber } from '@/modules/commercial/shared/voucher-number';
 
 // Mapeo de códigos AFIP a VoucherType del sistema
 const AFIP_VOUCHER_MAP: Record<number, VoucherType> = {
@@ -216,8 +217,8 @@ export async function importPurchaseInvoicesFromAFIP(
         return;
       }
 
-      const pointOfSale = pointOfSaleRaw.padStart(4, '0');
-      const number = numberRaw.padStart(8, '0');
+      const pointOfSale = padPointOfSale(pointOfSaleRaw);
+      const number = padVoucherNumber(numberRaw);
 
       rows.push({
         rowNumber,

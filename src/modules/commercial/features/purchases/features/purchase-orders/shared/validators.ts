@@ -73,7 +73,7 @@ export const purchaseOrderLineSchema = z.object({
   productId: z.string().uuid().optional().or(z.literal('')),
   description: z.string().min(1, 'La descripción es requerida'),
   quantity: z.string().regex(/^\d+(\.\d{1,3})?$/, 'Cantidad inválida'),
-  unitCost: z.string().regex(/^\d+(\.\d{1,2})?$/, 'Costo unitario inválido'),
+  unitCost: z.string().regex(/^\d+(\.\d{1,2})?$/, 'Valor unitario inválido'),
   vatRate: z.string().regex(/^\d+(\.\d{1,2})?$/, 'Alícuota de IVA inválida'),
 });
 

@@ -129,7 +129,7 @@ export async function PurchaseOrderDetail({ orderId }: Props) {
                     <tr className="border-b">
                       <th className="text-left py-2 pr-4">Descripción</th>
                       <th className="text-right py-2 px-4">Cantidad</th>
-                      <th className="text-right py-2 px-4">Costo Unit.</th>
+                      <th className="text-right py-2 px-4">Valor Unit.</th>
                       <th className="text-right py-2 px-4">IVA %</th>
                       <th className="text-right py-2 px-4">Subtotal</th>
                       <th className="text-right py-2 pl-4">Total</th>
