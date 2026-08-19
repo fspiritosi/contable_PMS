@@ -38,6 +38,7 @@ import {
 import type { SupplierSelectItem, ProductSelectItem } from '../../list/actions.server';
 import { formatCurrency } from '@/shared/utils/formatters';
 import moment from 'moment';
+import { MoneyInput } from '@/shared/components/ui/money-input';
 
 function _LineTotals({
   form,
@@ -376,9 +377,9 @@ export function _PurchaseOrderForm({
                     name={`lines.${index}.unitCost`}
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Costo Unitario</FormLabel>
+                        <FormLabel>Valor Unitario</FormLabel>
                         <FormControl>
-                          <Input placeholder="0.00" {...field} />
+                          <MoneyInput placeholder="0,00" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>

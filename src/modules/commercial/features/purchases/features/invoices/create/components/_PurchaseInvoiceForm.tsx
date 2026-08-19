@@ -22,6 +22,7 @@ import {
 } from '@/shared/components/ui/select';
 import { Input } from '@/shared/components/ui/input';
 import { padPointOfSale, padVoucherNumber } from '@/modules/commercial/shared/voucher-number';
+import { MoneyInput } from '@/shared/components/ui/money-input';
 import { Textarea } from '@/shared/components/ui/textarea';
 import { Plus, Trash2, Loader2 } from 'lucide-react';
 import {
@@ -707,20 +708,17 @@ export function _PurchaseInvoiceForm({
                     )}
                   />
 
-                  {/* Costo Unitario */}
+                  {/* Valor Unitario */}
                   <FormField
                     control={form.control}
                     name={`lines.${index}.unitCost`}
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Costo Unitario *</FormLabel>
+                        <FormLabel>Valor Unitario *</FormLabel>
                         <FormControl>
-                          <Input
+                          <MoneyInput
                             {...field}
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            placeholder="0.00"
+                            placeholder="0,00"
                           />
                         </FormControl>
                         <FormMessage />

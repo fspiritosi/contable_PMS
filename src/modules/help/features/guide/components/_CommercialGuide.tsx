@@ -463,7 +463,7 @@ export function _CommercialGuide() {
             </li>
             <li>
               Agrega <strong>líneas de ítems</strong>: descripción,
-              cantidad, costo unitario, alícuota IVA
+              cantidad, valor unitario, alícuota IVA
             </li>
             <li>
               Opcionalmente, configura <strong>cuotas de pago</strong>{' '}
