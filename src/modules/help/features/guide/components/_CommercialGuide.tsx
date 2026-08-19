@@ -144,14 +144,16 @@ export function _CommercialGuide() {
           </p>
           <ul className="list-disc pl-6 space-y-1 text-muted-foreground">
             <li>
-              <strong>Cuenta de Gastos</strong>: cuenta contable que se usará al
+              <strong>Cuenta de Egresos</strong>: cuenta contable que se usará al
               registrar compras de este ítem, en lugar de la cuenta de
-              compras general
+              compras general. Ofrece cuentas de gastos y de activo, porque un
+              ítem que es un activo también se compra
             </li>
             <li>
               <strong>Cuenta de Ingresos</strong>: cuenta contable que se usará
               al registrar ventas de este ítem, en lugar de la cuenta de
-              ventas general
+              ventas general. Ofrece cuentas de ventas y de activo, porque un
+              activo también se puede vender
             </li>
             <li>
               <strong>Centro de Costos</strong>: centro de costos que se asignará
@@ -364,9 +366,36 @@ export function _CommercialGuide() {
             <li>Se puede indicar el <strong>número de comprobante</strong> del proveedor</li>
             <li>Al confirmar, genera asiento contable automático</li>
           </ul>
+          <p className="font-medium mt-3">Al cargar la factura</p>
+          <ul className="list-disc pl-6 space-y-1 text-muted-foreground">
+            <li>
+              El <strong>punto de venta</strong> y el <strong>número</strong> se
+              completan solos con los ceros que faltan: si escribís 1 y 123, al
+              salir del campo quedan 0001 y 00000123
+            </li>
+            <li>
+              Los importes se muestran con separador de miles y coma decimal
+              (4.000.000,50), así no hay que contar dígitos
+            </li>
+            <li>
+              Cada línea puede tener su propio <strong>centro de costo</strong>.
+              El campo aparece solo si el ítem se imputa a una cuenta de
+              resultado: comprar un activo no consume presupuesto de ningún
+              centro. Si no elegís ninguno, se usa el predeterminado del ítem
+            </li>
+          </ul>
+          <p className="font-medium mt-3">Confirmar varias a la vez</p>
+          <p className="text-muted-foreground">
+            En el listado podés seleccionar varias facturas y usar
+            <strong> Confirmar</strong>. El contador muestra solo las que están
+            en borrador; si alguna no se puede confirmar, las demás siguen
+            adelante y al final se listan las que quedaron pendientes con el
+            motivo.
+          </p>
           <p className="text-sm text-muted-foreground mt-2">
             Los pagos se registran desde <strong>Tesorería → Órdenes de
-            Pago</strong>.
+            Pago</strong>. Solo se ofrecen las facturas que todavía tienen saldo:
+            las ya pagadas o compensadas con una nota de crédito no aparecen.
           </p>
         </CardContent>
       </Card>
@@ -463,7 +492,7 @@ export function _CommercialGuide() {
             </li>
             <li>
               Agrega <strong>líneas de ítems</strong>: descripción,
-              cantidad, costo unitario, alícuota IVA
+              cantidad, valor unitario, alícuota IVA
             </li>
             <li>
               Opcionalmente, configura <strong>cuotas de pago</strong>{' '}

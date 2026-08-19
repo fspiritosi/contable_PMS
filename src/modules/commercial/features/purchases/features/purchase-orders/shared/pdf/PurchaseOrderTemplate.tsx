@@ -151,7 +151,7 @@ export function PurchaseOrderTemplate({ data }: PurchaseOrderTemplateProps) {
             <View style={styles.tableHeader}>
               <Text style={styles.colDesc}>Descripción</Text>
               <Text style={styles.colQty}>Cant.</Text>
-              <Text style={styles.colUnit}>Costo Unit.</Text>
+              <Text style={styles.colUnit}>Valor Unit.</Text>
               <Text style={styles.colVat}>IVA %</Text>
               <Text style={styles.colSubtotal}>Subtotal</Text>
               <Text style={styles.colTotal}>Total</Text>

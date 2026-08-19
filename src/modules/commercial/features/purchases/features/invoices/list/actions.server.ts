@@ -21,6 +21,7 @@ import { checkPermission } from '@/shared/lib/permissions';
 import { createJournalEntryForPurchaseInvoice } from '@/modules/accounting/features/integrations/commercial';
 import { isCreditNote, isDebitNote } from '@/modules/commercial/shared/voucher-utils';
 import { applyPurchaseCreditNote } from '@/modules/commercial/shared/credit-note-compensation';
+import { selectConfirmableInvoices, type BulkConfirmFailure } from '../shared/bulk-confirm';
 
 // ============================================
 // QUERIES
@@ -513,6 +514,22 @@ export async function getSuppliersForSelect() {
 /**
  * Obtiene ítems para select (solo activos)
  */
+/**
+ * Centros de costo activos, para imputar lineas de factura (TSK-583).
+ */
+export async function getCostCentersForSelect() {
+  await checkPermission('commercial.purchases', 'view', { redirect: true });
+
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  return prisma.costCenter.findMany({
+    where: { companyId, isActive: true },
+    select: { id: true, name: true },
+    orderBy: { name: 'asc' },
+  });
+}
+
 export async function getProductsForSelect() {
   const userId = await getCurrentUserId();
   if (!userId) throw new Error('No autenticado');
@@ -536,6 +553,9 @@ export async function getProductsForSelect() {
         costPrice: true,
         vatRate: true,
         trackStock: true,
+        defaultCostCenterId: true,
+        // El tipo de la cuenta decide si la linea admite centro de costo (TSK-583).
+        defaultExpenseAccount: { select: { type: true } },
         productSuppliers: {
           select: { supplierId: true, supplierCode: true, supplierPrice: true },
         },
@@ -547,6 +567,7 @@ export async function getProductsForSelect() {
       ...p,
       costPrice: Number(p.costPrice),
       vatRate: Number(p.vatRate),
+      defaultExpenseAccountType: p.defaultExpenseAccount?.type ?? null,
       supplierIds: p.productSuppliers.map((ps) => ps.supplierId),
       productSuppliers: p.productSuppliers.map((ps) => ({
         supplierId: ps.supplierId,
@@ -825,6 +846,7 @@ export async function createPurchaseInvoice(input: PurchaseInvoiceFormInput) {
         subtotal: lineSubtotal,
         total: lineTotal,
         purchaseOrderLineId: line.purchaseOrderLineId || null,
+        costCenterId: line.costCenterId || null,
       };
     });
 
@@ -967,6 +989,7 @@ export async function updatePurchaseInvoice(id: string, input: PurchaseInvoiceFo
         subtotal: lineSubtotal,
         total: lineTotal,
         purchaseOrderLineId: line.purchaseOrderLineId || null,
+        costCenterId: line.costCenterId || null,
       };
     });
 
@@ -1276,6 +1299,64 @@ export async function confirmPurchaseInvoice(id: string) {
 }
 
 /**
+ * Confirma varias facturas de compra en un solo paso (TSK-583).
+ *
+ * Va de a una y en serie, no en paralelo: cada confirmacion abre su propia
+ * transaccion y las notas de credito ademas mueven stock, asi que lanzarlas
+ * juntas invitaria a bloqueos entre si.
+ *
+ * El lote es best-effort. Una factura que falla no cancela las demas: se
+ * registra el motivo y se sigue, para que un solo comprobante mal cargado no
+ * obligue a rehacer todo el trabajo.
+ */
+export async function bulkConfirmPurchaseInvoices(ids: string[]) {
+  await checkPermission('commercial.purchases', 'approve', { redirect: true });
+
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  const invoices = await prisma.purchaseInvoice.findMany({
+    where: { id: { in: ids }, companyId },
+    select: { id: true, fullNumber: true, status: true },
+  });
+
+  const confirmables = selectConfirmableInvoices(invoices);
+  const failures: BulkConfirmFailure[] = [];
+  let confirmedCount = 0;
+
+  for (const invoice of confirmables) {
+    try {
+      await confirmPurchaseInvoice(invoice.id);
+      confirmedCount += 1;
+    } catch (error) {
+      failures.push({
+        fullNumber: invoice.fullNumber,
+        message: error instanceof Error ? error.message : 'Error desconocido',
+      });
+    }
+  }
+
+  logger.info('Confirmacion masiva de facturas de compra', {
+    data: {
+      companyId,
+      solicitadas: ids.length,
+      confirmables: confirmables.length,
+      confirmadas: confirmedCount,
+      fallidas: failures.length,
+    },
+  });
+
+  revalidatePath('/dashboard/commercial/purchases');
+
+  return {
+    confirmedCount,
+    failures,
+    /** Seleccionadas que no estaban en borrador y por eso ni se intentaron. */
+    skippedCount: invoices.length - confirmables.length,
+  };
+}
+
+/**
  * Cancela una factura de compra.
  * Solo revierte stock si es una NC (nota de crédito) que había decrementado stock.
  * Las FC normales no generan stock, por lo que no hay nada que revertir.
@@ -1491,3 +1572,4 @@ export type PurchaseInvoiceListItem = Awaited<
 export type PurchaseInvoiceDetail = Awaited<ReturnType<typeof getPurchaseInvoiceById>>;
 export type SupplierSelectItem = Awaited<ReturnType<typeof getSuppliersForSelect>>[number];
 export type ProductSelectItem = Awaited<ReturnType<typeof getProductsForSelect>>[number];
+export type CostCenterSelectItem = Awaited<ReturnType<typeof getCostCentersForSelect>>[number];

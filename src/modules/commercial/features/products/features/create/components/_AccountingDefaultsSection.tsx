@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from '@/shared/components/ui/select';
 import { AccountCombobox } from '@/shared/components/common/AccountCombobox';
+import { filterExpenseAccounts, filterIncomeAccounts } from '../../../shared/account-filters';
 import {
   Card,
   CardContent,
@@ -69,8 +70,8 @@ export function _AccountingDefaultsSection({
   warehouses,
   suppliers,
 }: AccountingDefaultsSectionProps) {
-  const expenseAccounts = accounts.filter((a) => a.nature === 'DEBIT');
-  const incomeAccounts = accounts.filter((a) => a.nature === 'CREDIT');
+  const expenseAccounts = filterExpenseAccounts(accounts);
+  const incomeAccounts = filterIncomeAccounts(accounts);
 
   const handleSelectChange = (
     onChange: (value: string) => void,
@@ -94,7 +95,7 @@ export function _AccountingDefaultsSection({
             name="defaultExpenseAccountId"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Cuenta de Gastos</FormLabel>
+                <FormLabel>Cuenta de Egresos</FormLabel>
                 <FormControl>
                   <AccountCombobox
                     accounts={expenseAccounts}
@@ -106,7 +107,7 @@ export function _AccountingDefaultsSection({
                   />
                 </FormControl>
                 <FormDescription>
-                  Cuenta contable para registrar compras/gastos
+                  Cuenta contable para registrar la compra del ítem
                 </FormDescription>
                 <FormMessage />
               </FormItem>
@@ -130,7 +131,7 @@ export function _AccountingDefaultsSection({
                   />
                 </FormControl>
                 <FormDescription>
-                  Cuenta contable para registrar ventas/ingresos
+                  Cuenta contable para registrar la venta del ítem
                 </FormDescription>
                 <FormMessage />
               </FormItem>

@@ -191,7 +191,7 @@ export async function PurchaseInvoiceDetail({ invoiceId }: Props) {
                     <tr className="text-left">
                       <th className="pb-3">Descripción</th>
                       <th className="pb-3 text-right">Cantidad</th>
-                      <th className="pb-3 text-right">Costo Unit.</th>
+                      <th className="pb-3 text-right">Valor Unit.</th>
                       <th className="pb-3 text-right">IVA %</th>
                       <th className="pb-3 text-right">Subtotal</th>
                       <th className="pb-3 text-right">Total</th>

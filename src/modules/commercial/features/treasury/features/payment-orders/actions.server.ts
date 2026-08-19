@@ -15,6 +15,7 @@ import { partnerRepaymentSchema } from '../../shared/validators';
 import type { PendingPurchaseInvoice, PaymentOrderListItem, PaymentOrderWithDetails } from '../../shared/types';
 import { createJournalEntryForPaymentOrder } from '@/modules/accounting/features/integrations/commercial';
 import { checkPermission } from '@/shared/lib/permissions';
+import { calculatePendingAmount, hasPendingBalance } from './shared/pending-invoices';
 
 /**
  * Obtiene las facturas pendientes de pago de un proveedor
@@ -66,37 +67,36 @@ export async function getPendingPurchaseInvoices(supplierId: string): Promise<Pe
       orderBy: { issueDate: 'asc' },
     });
 
-    return invoices.map((invoice) => {
-      const paymentsPaid = invoice.paymentOrderItems.reduce((sum, item) => sum + Number(item.amount), 0);
-      const cnAppliedExplicit = invoice.creditNoteApplicationsReceived.reduce((sum, app) => sum + Number(app.amount), 0);
-      // Fallback: NC vinculadas por originalInvoiceId sin registro explícito
-      const explicitCNIds = new Set(
-        invoice.creditNoteApplicationsReceived.map((app) => app.creditNoteId)
-      );
-      const cnLinkedRaw = invoice.creditDebitNotes
-        .filter(
-          (doc) =>
-            isCreditNote(doc.voucherType) &&
-            doc.status !== 'DRAFT' &&
-            doc.status !== 'CANCELLED' &&
-            !explicitCNIds.has(doc.id)
-        )
-        .reduce((sum, doc) => sum + Number(doc.total), 0);
-      const maxFallbackCN = Math.max(0, Number(invoice.total) - paymentsPaid - cnAppliedExplicit);
-      const cnLinked = Math.min(cnLinkedRaw, maxFallbackCN);
-      const cnApplied = cnAppliedExplicit + cnLinked;
-      const total = Number(invoice.total);
-      const paidAmount = paymentsPaid + cnApplied;
-      return {
-        id: invoice.id,
-        fullNumber: invoice.fullNumber,
-        issueDate: invoice.issueDate,
-        total,
-        paidAmount,
-        pendingAmount: total - paidAmount,
-        status: invoice.status,
-      };
-    });
+    return invoices
+      .map((invoice) => {
+        const { paidAmount, pendingAmount } = calculatePendingAmount({
+          total: Number(invoice.total),
+          payments: invoice.paymentOrderItems.map((item) => Number(item.amount)),
+          creditNoteApplications: invoice.creditNoteApplicationsReceived.map((app) => ({
+            amount: Number(app.amount),
+            creditNoteId: app.creditNoteId,
+          })),
+          linkedCreditDebitNotes: invoice.creditDebitNotes.map((doc) => ({
+            id: doc.id,
+            total: Number(doc.total),
+            isCreditNote: isCreditNote(doc.voucherType),
+            status: doc.status,
+          })),
+        });
+
+        return {
+          id: invoice.id,
+          fullNumber: invoice.fullNumber,
+          issueDate: invoice.issueDate,
+          total: Number(invoice.total),
+          paidAmount,
+          pendingAmount,
+          status: invoice.status,
+        };
+      })
+      // Pagarlas o compensarlas con una nota de crédito no cambia su estado:
+      // el saldo es lo único que distingue las que siguen abiertas (TSK-584).
+      .filter((invoice) => hasPendingBalance(invoice.pendingAmount));
   } catch (error) {
     logger.error('Error al obtener facturas pendientes de pago', { data: { error, supplierId } });
     throw new Error('Error al obtener facturas pendientes de pago');

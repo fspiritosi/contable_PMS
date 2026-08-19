@@ -140,7 +140,7 @@ export function PurchaseInvoiceTemplate({ data }: PurchaseInvoiceTemplateProps) 
             <Text style={styles.col2}>Descripción</Text>
             <Text style={styles.col3}>Cant.</Text>
             <Text style={styles.col4}>UM</Text>
-            <Text style={styles.col5}>Costo Unit.</Text>
+            <Text style={styles.col5}>Valor Unit.</Text>
             {isTypeA && <Text style={styles.col6}>IVA %</Text>}
             <Text style={styles.col7}>Subtotal</Text>
             <Text style={styles.col8}>Total</Text>

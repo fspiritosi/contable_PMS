@@ -25,12 +25,22 @@ import {
   DialogTitle,
 } from '@/shared/components/ui/dialog';
 import { Button } from '@/shared/components/ui/button';
-import { PackageCheck } from 'lucide-react';
+import { CheckCircle2, Loader2, PackageCheck } from 'lucide-react';
 import moment from 'moment';
 import type { PurchaseInvoiceListItem } from '../actions.server';
-import { confirmPurchaseInvoice, cancelPurchaseInvoice, getAllPurchaseInvoicesForExport } from '../actions.server';
+import {
+  confirmPurchaseInvoice,
+  cancelPurchaseInvoice,
+  bulkConfirmPurchaseInvoices,
+  getAllPurchaseInvoicesForExport,
+} from '../actions.server';
 import { getColumns } from '../columns';
 import { PURCHASE_INVOICE_STATUS_LABELS, VOUCHER_TYPE_LABELS } from '../../shared/validators';
+import {
+  buildBulkConfirmMessage,
+  selectConfirmableInvoices,
+  type BulkConfirmFailure,
+} from '../../shared/bulk-confirm';
 
 interface FacetCounts {
   status: Record<string, number>;
@@ -60,6 +70,44 @@ export function _PurchaseInvoicesTable({ data, totalRows, searchParams, facetCou
   const [loading, setLoading] = useState<string | null>(null);
   const [alertAction, setAlertAction] = useState<AlertAction | null>(null);
   const [receivingNotePrompt, setReceivingNotePrompt] = useState<ReceivingNotePrompt | null>(null);
+  const [selectedRows, setSelectedRows] = useState<PurchaseInvoiceListItem[]>([]);
+  const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
+  const [bulkRunning, setBulkRunning] = useState(false);
+  const [bulkFailures, setBulkFailures] = useState<BulkConfirmFailure[] | null>(null);
+
+  // De lo seleccionado, solo los borradores llegan a intentarse.
+  const confirmableSelected = useMemo(
+    () => selectConfirmableInvoices(selectedRows),
+    [selectedRows]
+  );
+
+  const handleBulkConfirm = async () => {
+    setBulkConfirmOpen(false);
+    setBulkRunning(true);
+
+    try {
+      const result = await bulkConfirmPurchaseInvoices(
+        confirmableSelected.map((invoice) => invoice.id)
+      );
+
+      const message = buildBulkConfirmMessage(result.confirmedCount, result.failures);
+      if (result.failures.length > 0) {
+        toast.warning(message);
+        setBulkFailures(result.failures);
+      } else {
+        toast.success(message);
+      }
+
+      setSelectedRows([]);
+      router.refresh();
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : 'Error al confirmar las facturas'
+      );
+    } finally {
+      setBulkRunning(false);
+    }
+  };
 
   const handleConfirm = async () => {
     if (!alertAction || alertAction.type !== 'confirm') return;
@@ -209,7 +257,75 @@ export function _PurchaseInvoicesTable({ data, totalRows, searchParams, facetCou
         tableId="commercial-purchase-invoices"
         showFilterToggle
         exportConfig={exportConfig}
+        enableRowSelection
+        showRowSelection
+        onRowSelectionChange={setSelectedRows}
+        toolbarActions={
+          canApprove && confirmableSelected.length > 0 ? (
+            <Button
+              variant="outline"
+              onClick={() => setBulkConfirmOpen(true)}
+              disabled={bulkRunning}
+            >
+              {bulkRunning ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <CheckCircle2 className="mr-2 h-4 w-4" />
+              )}
+              Confirmar ({confirmableSelected.length})
+            </Button>
+          ) : undefined
+        }
       />
+
+      <AlertDialog open={bulkConfirmOpen} onOpenChange={setBulkConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Confirmar {confirmableSelected.length}{' '}
+              {confirmableSelected.length === 1 ? 'factura' : 'facturas'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Se generará el asiento contable de cada una. Si alguna no se puede
+              confirmar, las demás siguen adelante y al final se informa cuáles
+              quedaron pendientes.
+              {selectedRows.length > confirmableSelected.length && (
+                <>
+                  {' '}
+                  De las {selectedRows.length} seleccionadas, solo{' '}
+                  {confirmableSelected.length} están en borrador; el resto se omite.
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Volver</AlertDialogCancel>
+            <AlertDialogAction onClick={handleBulkConfirm}>Confirmar</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <Dialog open={!!bulkFailures} onOpenChange={(open) => !open && setBulkFailures(null)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Facturas que no se pudieron confirmar</DialogTitle>
+            <DialogDescription>
+              El resto del lote se confirmó. Estas quedaron en borrador:
+            </DialogDescription>
+          </DialogHeader>
+          <ul className="max-h-72 space-y-2 overflow-y-auto text-sm">
+            {bulkFailures?.map((failure) => (
+              <li key={failure.fullNumber} className="rounded-md border p-3">
+                <span className="font-mono font-medium">{failure.fullNumber}</span>
+                <p className="text-muted-foreground">{failure.message}</p>
+              </li>
+            ))}
+          </ul>
+          <DialogFooter>
+            <Button onClick={() => setBulkFailures(null)}>Entendido</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={!!alertAction} onOpenChange={(open) => !open && setAlertAction(null)}>
         <AlertDialogContent>
