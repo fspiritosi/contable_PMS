@@ -1019,6 +1019,7 @@ model CostCenter {
   vehicles          Vehicle[]
   journalEntryLines JournalEntryLine[]
   defaultProducts   Product[]          @relation("ProductCostCenter")
+  purchaseInvoiceLines PurchaseInvoiceLine[] @relation("PurchaseInvoiceLineCostCenter")
 
   @@unique([companyId, name])
   @@map("cost_centers")
@@ -2936,9 +2937,15 @@ model PurchaseInvoiceLine {
   // Vinculación con línea de OC (opcional)
   purchaseOrderLineId String? @map("purchase_order_line_id") @db.Uuid
 
+  // Centro de costo de esta línea. Pisa el predeterminado del ítem, que es
+  // global y no sirve cuando una misma compra se reparte entre varios centros
+  // (TSK-583). Solo aplica a líneas imputadas a cuentas de resultado.
+  costCenterId String? @map("cost_center_id") @db.Uuid
+
   invoice           PurchaseInvoice    @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   product           Product?           @relation(fields: [productId], references: [id])
   purchaseOrderLine PurchaseOrderLine? @relation(fields: [purchaseOrderLineId], references: [id])
+  costCenter        CostCenter?        @relation("PurchaseInvoiceLineCostCenter", fields: [costCenterId], references: [id])
 
   @@map("purchase_invoice_lines")
 }

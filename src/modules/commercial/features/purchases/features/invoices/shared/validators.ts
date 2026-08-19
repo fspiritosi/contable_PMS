@@ -37,6 +37,8 @@ export const purchaseInvoiceLineSchema = z.object({
   unitCost: z.string().regex(/^\d+(\.\d{1,2})?$/, 'Valor unitario inválido'),
   vatRate: z.string().regex(/^\d+(\.\d{1,2})?$/, 'Alícuota de IVA inválida'),
   purchaseOrderLineId: z.string().uuid().optional().or(z.literal('')),
+  // Solo se completa en lineas imputadas a cuentas de resultado (TSK-583).
+  costCenterId: z.string().uuid().optional().or(z.literal('')),
 });
 
 // Schema para crear/editar factura de compra

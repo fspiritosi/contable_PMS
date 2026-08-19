@@ -514,6 +514,22 @@ export async function getSuppliersForSelect() {
 /**
  * Obtiene ítems para select (solo activos)
  */
+/**
+ * Centros de costo activos, para imputar lineas de factura (TSK-583).
+ */
+export async function getCostCentersForSelect() {
+  await checkPermission('commercial.purchases', 'view', { redirect: true });
+
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  return prisma.costCenter.findMany({
+    where: { companyId, isActive: true },
+    select: { id: true, name: true },
+    orderBy: { name: 'asc' },
+  });
+}
+
 export async function getProductsForSelect() {
   const userId = await getCurrentUserId();
   if (!userId) throw new Error('No autenticado');
@@ -537,6 +553,9 @@ export async function getProductsForSelect() {
         costPrice: true,
         vatRate: true,
         trackStock: true,
+        defaultCostCenterId: true,
+        // El tipo de la cuenta decide si la linea admite centro de costo (TSK-583).
+        defaultExpenseAccount: { select: { type: true } },
         productSuppliers: {
           select: { supplierId: true, supplierCode: true, supplierPrice: true },
         },
@@ -548,6 +567,7 @@ export async function getProductsForSelect() {
       ...p,
       costPrice: Number(p.costPrice),
       vatRate: Number(p.vatRate),
+      defaultExpenseAccountType: p.defaultExpenseAccount?.type ?? null,
       supplierIds: p.productSuppliers.map((ps) => ps.supplierId),
       productSuppliers: p.productSuppliers.map((ps) => ({
         supplierId: ps.supplierId,
@@ -826,6 +846,7 @@ export async function createPurchaseInvoice(input: PurchaseInvoiceFormInput) {
         subtotal: lineSubtotal,
         total: lineTotal,
         purchaseOrderLineId: line.purchaseOrderLineId || null,
+        costCenterId: line.costCenterId || null,
       };
     });
 
@@ -968,6 +989,7 @@ export async function updatePurchaseInvoice(id: string, input: PurchaseInvoiceFo
         subtotal: lineSubtotal,
         total: lineTotal,
         purchaseOrderLineId: line.purchaseOrderLineId || null,
+        costCenterId: line.costCenterId || null,
       };
     });
 
@@ -1550,3 +1572,4 @@ export type PurchaseInvoiceListItem = Awaited<
 export type PurchaseInvoiceDetail = Awaited<ReturnType<typeof getPurchaseInvoiceById>>;
 export type SupplierSelectItem = Awaited<ReturnType<typeof getSuppliersForSelect>>[number];
 export type ProductSelectItem = Awaited<ReturnType<typeof getProductsForSelect>>[number];
+export type CostCenterSelectItem = Awaited<ReturnType<typeof getCostCentersForSelect>>[number];

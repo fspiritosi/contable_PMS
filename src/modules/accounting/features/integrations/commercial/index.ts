@@ -435,7 +435,7 @@ export async function createJournalEntryForPurchaseInvoice(
         supplier: { select: { businessName: true } },
         lines: {
           select: {
-            lineType: true, vatRate: true, vatAmount: true, subtotal: true,
+            lineType: true, vatRate: true, vatAmount: true, subtotal: true, costCenterId: true,
             product: { select: { defaultExpenseAccountId: true, defaultCostCenterId: true } },
           },
         },
@@ -459,22 +459,30 @@ export async function createJournalEntryForPurchaseInvoice(
 
     const docLabel = isNC ? 'Nota de crédito de compra' : 'Factura de compra';
 
-    // Agrupar subtotales de líneas por cuenta contable (override por ítem o global)
-    const purchasesByAccount = new Map<string, { total: number; costCenterId?: string }>();
+    // Agrupar subtotales de líneas por cuenta contable y centro de costo.
+    //
+    // El centro de costo de la línea pisa el predeterminado del ítem (TSK-583).
+    // La clave incluye el centro para que una misma cuenta repartida entre
+    // varios centros genere una línea de asiento por cada uno: agrupando solo
+    // por cuenta, el reparto se perdía y sobrevivía un único centro.
+    const purchasesByAccount = new Map<
+      string,
+      { accountId: string; costCenterId?: string; total: number }
+    >();
     for (const line of invoice.lines) {
       const lineSubtotal = parseFloat(line.subtotal.toString());
       if (lineSubtotal <= 0) continue;
       const accountId = line.product?.defaultExpenseAccountId || settings.purchasesAccountId;
-      const existing = purchasesByAccount.get(accountId) || { total: 0 };
+      const costCenterId =
+        line.costCenterId ?? line.product?.defaultCostCenterId ?? undefined;
+      const key = `${accountId}::${costCenterId ?? ''}`;
+      const existing = purchasesByAccount.get(key) || { accountId, costCenterId, total: 0 };
       existing.total += lineSubtotal;
-      if (line.product?.defaultCostCenterId && !existing.costCenterId) {
-        existing.costCenterId = line.product.defaultCostCenterId;
-      }
-      purchasesByAccount.set(accountId, existing);
+      purchasesByAccount.set(key, existing);
     }
 
     const lines: JournalEntryLineInput[] = [];
-    for (const [accountId, { total: accountTotal, costCenterId }] of purchasesByAccount) {
+    for (const { accountId, costCenterId, total: accountTotal } of purchasesByAccount.values()) {
       lines.push({
         accountId,
         debit: isNC ? 0 : accountTotal,

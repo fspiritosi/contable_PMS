@@ -23,6 +23,7 @@ import {
 import { Input } from '@/shared/components/ui/input';
 import { padPointOfSale, padVoucherNumber } from '@/modules/commercial/shared/voucher-number';
 import { MoneyInput } from '@/shared/components/ui/money-input';
+import { allowsCostCenter } from '../../shared/cost-center';
 import { Textarea } from '@/shared/components/ui/textarea';
 import { Plus, Trash2, Loader2 } from 'lucide-react';
 import {
@@ -44,7 +45,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Card } from '@/shared/components/ui/card';
 import { Separator } from '@/shared/components/ui/separator';
-import type { SupplierSelectItem, ProductSelectItem } from '../../list/actions.server';
+import type {
+  SupplierSelectItem,
+  ProductSelectItem,
+  CostCenterSelectItem,
+} from '../../list/actions.server';
 
 const formatCurrency = (value: number) =>
   `$${value.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -69,9 +74,70 @@ function _PurchaseLineTotals({ form, index }: { form: ReturnType<typeof useForm<
   );
 }
 
+/** Valor centinela: Select de shadcn no acepta "" como valor de opcion. */
+const NO_COST_CENTER = '__SIN_CENTRO__';
+
+/**
+ * Centro de costo de una linea (TSK-583).
+ *
+ * Solo aparece si el item se imputa a una cuenta de resultado: repartir por
+ * centro de costo no tiene sentido en una compra de activo. Al no elegir
+ * ninguno, el asiento cae en el centro predeterminado del item.
+ */
+function _LineCostCenterField({
+  form,
+  index,
+  products,
+  costCenters,
+}: {
+  form: ReturnType<typeof useForm<PurchaseInvoiceFormInput>>;
+  index: number;
+  products: ProductSelectItem[];
+  costCenters: CostCenterSelectItem[];
+}) {
+  const productId = useWatch({ control: form.control, name: `lines.${index}.productId` });
+  const product = products.find((p) => p.id === productId);
+
+  if (!allowsCostCenter(product?.defaultExpenseAccountType)) return null;
+
+  return (
+    <FormField
+      control={form.control}
+      name={`lines.${index}.costCenterId`}
+      render={({ field }) => (
+        <FormItem>
+          <FormLabel>Centro de Costo</FormLabel>
+          <Select
+            onValueChange={(value) =>
+              field.onChange(value === NO_COST_CENTER ? '' : value)
+            }
+            value={field.value || NO_COST_CENTER}
+          >
+            <FormControl>
+              <SelectTrigger>
+                <SelectValue placeholder="Predeterminado del ítem" />
+              </SelectTrigger>
+            </FormControl>
+            <SelectContent position="popper" className="max-h-[250px]">
+              <SelectItem value={NO_COST_CENTER}>Predeterminado del ítem</SelectItem>
+              {costCenters.map((costCenter) => (
+                <SelectItem key={costCenter.id} value={costCenter.id}>
+                  {costCenter.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <FormMessage />
+        </FormItem>
+      )}
+    />
+  );
+}
+
 interface PurchaseInvoiceFormProps {
   suppliers: SupplierSelectItem[];
   products: ProductSelectItem[];
+  costCenters: CostCenterSelectItem[];
   mode?: 'create' | 'edit';
   invoiceId?: string;
   defaultValues?: Partial<PurchaseInvoiceFormInput>;
@@ -80,6 +146,7 @@ interface PurchaseInvoiceFormProps {
 export function _PurchaseInvoiceForm({
   suppliers,
   products,
+  costCenters,
   mode = 'create',
   invoiceId,
   defaultValues: initialValues,
@@ -749,6 +816,13 @@ export function _PurchaseInvoiceForm({
                         <FormMessage />
                       </FormItem>
                     )}
+                  />
+
+                  <_LineCostCenterField
+                    form={form}
+                    index={index}
+                    products={products}
+                    costCenters={costCenters}
                   />
                 </div>
 
