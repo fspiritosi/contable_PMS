@@ -226,7 +226,7 @@ Cuando se confirma una factura (venta o compra), la integracion contable agrupa 
 | Modelo | Descripcion | Campos clave |
 |--------|-------------|--------------|
 | `PurchaseInvoice` | Factura de compra | voucherType, number, status, supplierId |
-| `PurchaseInvoiceLine` | Linea de compra | productId, quantity, unitPrice |
+| `PurchaseInvoiceLine` | Linea de compra | productId, quantity, unitCost, costCenterId |
 | `PurchaseCreditNoteApplication` | Aplicacion de NC | creditNoteId, invoiceId, amount |
 
 **Enums:**
