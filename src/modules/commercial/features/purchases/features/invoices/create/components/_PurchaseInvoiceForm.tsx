@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from '@/shared/components/ui/select';
 import { Input } from '@/shared/components/ui/input';
+import { padPointOfSale, padVoucherNumber } from '@/modules/commercial/shared/voucher-number';
 import { Textarea } from '@/shared/components/ui/textarea';
 import { Plus, Trash2, Loader2 } from 'lucide-react';
 import {
@@ -488,6 +489,12 @@ export function _PurchaseInvoiceForm({
                       placeholder="0001"
                       maxLength={4}
                       className="font-mono"
+                      // Completa los ceros al salir del campo para no tener que
+                      // contarlos al tipear (TSK-581).
+                      onBlur={(event) => {
+                        field.onChange(padPointOfSale(event.target.value));
+                        field.onBlur();
+                      }}
                     />
                   </FormControl>
                   <FormMessage />
@@ -508,6 +515,10 @@ export function _PurchaseInvoiceForm({
                       placeholder="00000123"
                       maxLength={8}
                       className="font-mono"
+                      onBlur={(event) => {
+                        field.onChange(padVoucherNumber(event.target.value));
+                        field.onBlur();
+                      }}
                     />
                   </FormControl>
                   <FormMessage />
