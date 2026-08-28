@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
 import { Loader2, Plus } from 'lucide-react';
@@ -9,6 +9,7 @@ import { Loader2, Plus } from 'lucide-react';
 import { Button } from '@/shared/components/ui/button';
 import { Input } from '@/shared/components/ui/input';
 import { Label } from '@/shared/components/ui/label';
+import { MoneyInput } from '@/shared/components/ui/money-input';
 import {
   Dialog,
   DialogContent,
@@ -268,12 +269,19 @@ export function _CreateInvoiceDialog(props: Props) {
           {/* Total */}
           <div className="space-y-2">
             <Label>Total</Label>
-            <Input
-              type="number"
-              step="0.01"
-              min="0.01"
-              placeholder="0.00"
-              {...form.register('total' as never, { valueAsNumber: true })}
+            <Controller
+              control={form.control}
+              name={'total' as never}
+              render={({ field }) => (
+                <MoneyInput
+                  placeholder="0,00"
+                  value={(field.value as string | number | null | undefined) ?? ''}
+                  onChange={(raw) => field.onChange(raw === '' ? undefined : Number(raw))}
+                  onBlur={field.onBlur}
+                  name={field.name}
+                  ref={field.ref}
+                />
+              )}
             />
             {form.formState.errors['total' as never] && (
               <p className="text-sm text-destructive">

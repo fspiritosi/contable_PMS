@@ -10,6 +10,8 @@ import {
 import { Button } from '@/shared/components/ui/button';
 import { Input } from '@/shared/components/ui/input';
 import { Label } from '@/shared/components/ui/label';
+import { MoneyInput } from '@/shared/components/ui/money-input';
+import { formatCurrency } from '@/shared/utils/formatters';
 import {
   Select,
   SelectContent,
@@ -18,7 +20,7 @@ import {
   SelectValue,
 } from '@/shared/components/ui/select';
 import { AccountCombobox } from '@/shared/components/common/AccountCombobox';
-import { useForm, useFieldArray } from 'react-hook-form';
+import { Controller, useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
@@ -229,23 +231,37 @@ export function _CreateRecurringEntryDialog({
                         />
                       </td>
                       <td className="py-1 px-1">
-                        <Input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          {...form.register(`lines.${index}.debit`, { valueAsNumber: true })}
-                          className="h-8 text-xs text-right"
-                          disabled={isLoading}
+                        <Controller
+                          control={form.control}
+                          name={`lines.${index}.debit`}
+                          render={({ field }) => (
+                            <MoneyInput
+                              className="h-8 text-xs text-right"
+                              disabled={isLoading}
+                              value={field.value ?? ''}
+                              onChange={(raw) => field.onChange(raw === '' ? undefined : Number(raw))}
+                              onBlur={field.onBlur}
+                              name={field.name}
+                              ref={field.ref}
+                            />
+                          )}
                         />
                       </td>
                       <td className="py-1 px-1">
-                        <Input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          {...form.register(`lines.${index}.credit`, { valueAsNumber: true })}
-                          className="h-8 text-xs text-right"
-                          disabled={isLoading}
+                        <Controller
+                          control={form.control}
+                          name={`lines.${index}.credit`}
+                          render={({ field }) => (
+                            <MoneyInput
+                              className="h-8 text-xs text-right"
+                              disabled={isLoading}
+                              value={field.value ?? ''}
+                              onChange={(raw) => field.onChange(raw === '' ? undefined : Number(raw))}
+                              onBlur={field.onBlur}
+                              name={field.name}
+                              ref={field.ref}
+                            />
+                          )}
                         />
                       </td>
                       <td className="py-1 pr-3">
@@ -267,10 +283,10 @@ export function _CreateRecurringEntryDialog({
                   <tr className="bg-muted/30 font-medium">
                     <td colSpan={2} className="py-2 pl-3 text-sm">Total</td>
                     <td className="py-2 px-1 text-right text-sm font-mono">
-                      {totalDebit.toFixed(2)}
+                      {formatCurrency(totalDebit)}
                     </td>
                     <td className="py-2 px-1 text-right text-sm font-mono">
-                      {totalCredit.toFixed(2)}
+                      {formatCurrency(totalCredit)}
                     </td>
                     <td></td>
                   </tr>
@@ -280,7 +296,7 @@ export function _CreateRecurringEntryDialog({
 
             {!isBalanced && totalDebit + totalCredit > 0 && (
               <p className="text-xs text-destructive">
-                El asiento no está balanceado. Diferencia: {Math.abs(totalDebit - totalCredit).toFixed(2)}
+                El asiento no está balanceado. Diferencia: {formatCurrency(Math.abs(totalDebit - totalCredit))}
               </p>
             )}
 

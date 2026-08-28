@@ -7,6 +7,7 @@ import moment from 'moment';
 import { Button } from '@/shared/components/ui/button';
 import { Input } from '@/shared/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card';
+import { MoneyInput } from '@/shared/components/ui/money-input';
 import {
   Alert,
   AlertDescription,
@@ -286,18 +287,10 @@ export function _AccountBalancesForm({
                               <span className="text-xs text-muted-foreground sm:hidden">
                                 Debe:
                               </span>
-                              <Input
-                                type="number"
-                                step="0.01"
-                                min="0"
-                                placeholder="0.00"
+                              <MoneyInput
+                                placeholder="0,00"
                                 value={balance?.debit || ''}
-                                onChange={(e) =>
-                                  handleDebitChange(
-                                    account.id,
-                                    e.target.value
-                                  )
-                                }
+                                onChange={(raw) => handleDebitChange(account.id, raw)}
                                 className="h-8 text-right text-sm"
                               />
                             </div>
@@ -305,18 +298,10 @@ export function _AccountBalancesForm({
                               <span className="text-xs text-muted-foreground sm:hidden">
                                 Haber:
                               </span>
-                              <Input
-                                type="number"
-                                step="0.01"
-                                min="0"
-                                placeholder="0.00"
+                              <MoneyInput
+                                placeholder="0,00"
                                 value={balance?.credit || ''}
-                                onChange={(e) =>
-                                  handleCreditChange(
-                                    account.id,
-                                    e.target.value
-                                  )
-                                }
+                                onChange={(raw) => handleCreditChange(account.id, raw)}
                                 className="h-8 text-right text-sm"
                               />
                             </div>

@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import { useForm } from 'react-hook-form';
+import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -11,6 +11,7 @@ import { Button } from '@/shared/components/ui/button';
 import { Input } from '@/shared/components/ui/input';
 import { Label } from '@/shared/components/ui/label';
 import { Textarea } from '@/shared/components/ui/textarea';
+import { MoneyInput } from '@/shared/components/ui/money-input';
 import {
   Dialog,
   DialogContent,
@@ -134,14 +135,19 @@ export function _BudgetRevisionModal({
                     {formatAmount(currentAmounts[index])}
                   </span>
                   <div className="flex justify-end">
-                    <Input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      className="w-[140px] text-right"
-                      {...form.register(`newAmounts.${index}`, {
-                        valueAsNumber: true,
-                      })}
+                    <Controller
+                      control={form.control}
+                      name={`newAmounts.${index}`}
+                      render={({ field }) => (
+                        <MoneyInput
+                          className="w-[140px] text-right"
+                          value={field.value ?? ''}
+                          onChange={(raw) => field.onChange(raw === '' ? undefined : Number(raw))}
+                          onBlur={field.onBlur}
+                          name={field.name}
+                          ref={field.ref}
+                        />
+                      )}
                     />
                   </div>
                 </div>
