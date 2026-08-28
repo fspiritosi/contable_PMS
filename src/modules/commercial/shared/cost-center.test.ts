@@ -3,11 +3,14 @@ import { describe, expect, it } from 'vitest';
 import {
   RESULT_ACCOUNT_TYPES,
   allowsCostCenter,
+  buildMissingCostCenterMessage,
+  findLinesMissingCostCenter,
   prorateAmount,
   replicateAllocations,
   totalPercentage,
   validateAllocations,
   type CostCenterAllocation,
+  type CostCenterLineCheck,
 } from './cost-center';
 
 describe('qué líneas admiten centro de costo', () => {
@@ -199,5 +202,52 @@ describe('replicateAllocations: independencia entre líneas al "Aplicar a todas"
 
   it('un reparto vacío da una copia vacía', () => {
     expect(replicateAllocations([])).toEqual([]);
+  });
+});
+
+const LINEAS: CostCenterLineCheck[] = [
+  { description: 'Combustible', accountType: 'EXPENSE', allocations: [] },
+  {
+    description: 'Peajes',
+    accountType: 'EXPENSE',
+    allocations: [{ costCenterId: LOGISTICA, percentage: 100 }],
+  },
+  { description: 'Camioneta', accountType: 'ASSET', allocations: [] },
+  { description: 'Gasto suelto', accountType: null, allocations: [] },
+];
+
+describe('líneas que quedan sin imputar con la obligatoriedad activa', () => {
+  it('marca la línea de resultado sin reparto', () => {
+    expect(findLinesMissingCostCenter(LINEAS).map((l) => l.description)).toEqual([
+      'Combustible',
+    ]);
+  });
+
+  it('no marca la que ya tiene reparto completo', () => {
+    const conReparto = LINEAS.filter((l) => l.description === 'Peajes');
+    expect(findLinesMissingCostCenter(conReparto)).toEqual([]);
+  });
+
+  it('no exige nada a una compra de activo', () => {
+    const activo = LINEAS.filter((l) => l.description === 'Camioneta');
+    expect(findLinesMissingCostCenter(activo)).toEqual([]);
+  });
+
+  it('no exige nada a una línea sin cuenta conocida', () => {
+    const suelta = LINEAS.filter((l) => l.description === 'Gasto suelto');
+    expect(findLinesMissingCostCenter(suelta)).toEqual([]);
+  });
+
+  it('arma un mensaje que nombra las líneas incompletas', () => {
+    const mensaje = buildMissingCostCenterMessage(findLinesMissingCostCenter(LINEAS));
+    expect(mensaje).toBe('Falta el centro de costo en 1 línea: Combustible');
+  });
+
+  it('usa el plural con varias líneas', () => {
+    const mensaje = buildMissingCostCenterMessage([
+      { description: 'Combustible', accountType: 'EXPENSE', allocations: [] },
+      { description: 'Peajes', accountType: 'EXPENSE', allocations: [] },
+    ]);
+    expect(mensaje).toBe('Falta el centro de costo en 2 líneas: Combustible, Peajes');
   });
 });

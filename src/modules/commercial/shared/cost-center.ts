@@ -109,3 +109,38 @@ export function replicateAllocations(
 ): CostCenterAllocation[] {
   return allocations.map((a) => ({ ...a }));
 }
+
+/** Una línea de factura, vista desde la regla de obligatoriedad. */
+export interface CostCenterLineCheck {
+  description: string;
+  accountType?: string | null;
+  allocations: CostCenterAllocation[];
+}
+
+/**
+ * Líneas que exigirían reparto y no lo tienen completo.
+ *
+ * Solo se mira lo imputado a cuentas de resultado: una compra de activo no
+ * consume presupuesto de ningún centro, y una línea sin cuenta conocida no tiene
+ * criterio para exigir nada.
+ *
+ * Ojo con el reparto vacío: `validateAllocations([])` devuelve `null` porque el
+ * vacío es válido cuando la obligatoriedad está apagada. Acá, en cambio, el
+ * vacío es justamente lo que falta, así que se chequea aparte.
+ */
+export function findLinesMissingCostCenter<T extends CostCenterLineCheck>(lines: T[]): T[] {
+  return lines.filter((line) => {
+    if (!allowsCostCenter(line.accountType)) return false;
+    if (line.allocations.length === 0) return true;
+
+    return validateAllocations(line.allocations) !== null;
+  });
+}
+
+/** Aviso para el usuario, nombrando qué líneas hay que completar. */
+export function buildMissingCostCenterMessage(missing: CostCenterLineCheck[]): string {
+  const nombres = missing.map((l) => l.description).join(', ');
+  const sustantivo = missing.length === 1 ? 'línea' : 'líneas';
+
+  return `Falta el centro de costo en ${missing.length} ${sustantivo}: ${nombres}`;
+}
