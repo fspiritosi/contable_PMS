@@ -32,11 +32,13 @@ import {
   SelectValue,
 } from '@/shared/components/ui/select';
 import { Input } from '@/shared/components/ui/input';
+import { MoneyInput } from '@/shared/components/ui/money-input';
 import { createPriceListItem } from '../../list/actions.server';
 import { getProducts } from '../../../list/actions.server';
 import { createPriceListItemSchema, type CreatePriceListItemFormData } from '../../../../shared/validators';
 import { logger } from '@/shared/lib/logger';
 import type { Product } from '../../../../shared/types';
+import { formatCurrency } from '@/shared/utils/formatters';
 
 interface AddPriceListItemDialogProps {
   priceListId: string;
@@ -163,12 +165,13 @@ export function _AddPriceListItemDialog({ priceListId }: AddPriceListItemDialogP
                 <FormItem>
                   <FormLabel>Precio *</FormLabel>
                   <FormControl>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      placeholder="0.00"
-                      {...field}
+                    <MoneyInput
+                      placeholder="0,00"
+                      value={field.value}
+                      onChange={field.onChange}
+                      onBlur={field.onBlur}
+                      name={field.name}
+                      ref={field.ref}
                     />
                   </FormControl>
                   <FormDescription>Precio sin IVA</FormDescription>
@@ -180,7 +183,7 @@ export function _AddPriceListItemDialog({ priceListId }: AddPriceListItemDialogP
             {priceWithTax > 0 && (
               <div className="rounded-md bg-muted p-4">
                 <p className="text-sm font-medium">Precio con IVA:</p>
-                <p className="text-2xl font-bold">${priceWithTax.toFixed(2)}</p>
+                <p className="text-2xl font-bold">{formatCurrency(priceWithTax)}</p>
               </div>
             )}
 

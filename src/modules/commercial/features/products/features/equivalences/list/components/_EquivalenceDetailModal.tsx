@@ -26,6 +26,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/components/ui/tabs';
 import { getEquivalenceById, getSupplierPriceComparison } from '../actions.server';
 import { _PriceComparisonView } from './_PriceComparisonView';
+import { formatCurrency } from '@/shared/utils/formatters';
 
 interface EquivalenceDetailModalProps {
   groupId: string | null;
@@ -96,7 +97,7 @@ export function _EquivalenceDetailModal({
               </div>
               <div className="rounded-lg border p-3 text-center">
                 <p className="text-2xl font-bold text-green-600">
-                  {group.bestPrice != null ? `$${group.bestPrice.toFixed(2)}` : '-'}
+                  {group.bestPrice != null ? formatCurrency(group.bestPrice) : '-'}
                 </p>
                 <p className="text-xs text-muted-foreground">Mejor Precio</p>
               </div>
@@ -223,7 +224,7 @@ function ProductsTable({
                         : ''
                     }
                   >
-                    ${product.salePrice.toFixed(2)}
+                    {formatCurrency(product.salePrice)}
                     {isBestPrice && (
                       <TrendingDown className="inline ml-1 h-3 w-3" />
                     )}

@@ -8,6 +8,7 @@ import { Badge } from '@/shared/components/ui/badge';
 import { Alert, AlertDescription } from '@/shared/components/ui/alert';
 import { Pencil, AlertTriangle } from 'lucide-react';
 import { BackButton } from '@/shared/components/common/BackButton';
+import { formatCurrency } from '@/shared/utils/formatters';
 import {
   PRODUCT_TYPE_LABELS,
   PRODUCT_STATUS_LABELS,
@@ -138,12 +139,12 @@ export async function ProductDetail({ productId }: ProductDetailProps) {
           <CardContent className="space-y-4">
             <div>
               <p className="text-sm font-medium text-muted-foreground">Precio de Costo</p>
-              <p className="text-2xl font-bold">${product.costPrice.toFixed(2)}</p>
+              <p className="text-2xl font-bold">{formatCurrency(product.costPrice)}</p>
             </div>
 
             <div>
               <p className="text-sm font-medium text-muted-foreground">Precio de Venta</p>
-              <p className="text-2xl font-bold">${product.salePrice.toFixed(2)}</p>
+              <p className="text-2xl font-bold">{formatCurrency(product.salePrice)}</p>
             </div>
 
             <div>
@@ -153,7 +154,7 @@ export async function ProductDetail({ productId }: ProductDetailProps) {
 
             <div className="rounded-md bg-muted p-4">
               <p className="text-sm font-medium text-muted-foreground">Precio Final con IVA</p>
-              <p className="text-3xl font-bold">${product.salePriceWithTax.toFixed(2)}</p>
+              <p className="text-3xl font-bold">{formatCurrency(product.salePriceWithTax)}</p>
             </div>
 
             <div>

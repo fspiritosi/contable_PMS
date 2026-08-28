@@ -21,6 +21,7 @@ import {
   TooltipTrigger,
 } from '@/shared/components/ui/tooltip';
 import type { SupplierPriceComparison } from '../actions.server';
+import { formatCurrency } from '@/shared/utils/formatters';
 
 interface PriceComparisonViewProps {
   products: SupplierPriceComparison[];
@@ -137,7 +138,7 @@ export function _PriceComparisonView({
                             : ''
                       }
                     >
-                      ${product.lastPurchasePrice.toFixed(2)}
+                      {formatCurrency(product.lastPurchasePrice)}
                       {isBest && (
                         <ArrowDown className="inline ml-1 h-3 w-3 text-green-600" />
                       )}
@@ -161,7 +162,7 @@ export function _PriceComparisonView({
                   )}
                 </TableCell>
                 <TableCell className="text-right">
-                  ${product.salePrice.toFixed(2)}
+                  {formatCurrency(product.salePrice)}
                 </TableCell>
                 <TableCell className="text-right hidden sm:table-cell">
                   {product.margin !== null ? (

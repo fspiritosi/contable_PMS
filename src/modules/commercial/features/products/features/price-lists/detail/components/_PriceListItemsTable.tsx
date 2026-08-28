@@ -34,6 +34,7 @@ import { _AddPriceListItemDialog } from './_AddPriceListItemDialog';
 import { _EditPriceListItemDialog } from './_EditPriceListItemDialog';
 import { _BulkAddItemsDialog } from './_BulkAddItemsDialog';
 import { usePermissions } from '@/shared/hooks/usePermissions';
+import { formatCurrency } from '@/shared/utils/formatters';
 
 interface PriceListItemsTableProps {
   priceListId: string;
@@ -135,7 +136,7 @@ export function _PriceListItemsTable({ priceListId, items }: PriceListItemsTable
         accessorKey: 'price',
         header: 'Precio',
         meta: { title: 'Precio' },
-        cell: ({ row }) => `$${row.original.price.toFixed(2)}`,
+        cell: ({ row }) => formatCurrency(row.original.price),
       },
       {
         accessorKey: 'product.vatRate',
@@ -148,7 +149,7 @@ export function _PriceListItemsTable({ priceListId, items }: PriceListItemsTable
         header: 'Precio con IVA',
         meta: { title: 'Precio con IVA' },
         cell: ({ row }) => (
-          <span className="font-medium">${row.original.priceWithTax.toFixed(2)}</span>
+          <span className="font-medium">{formatCurrency(row.original.priceWithTax)}</span>
         ),
       },
       {

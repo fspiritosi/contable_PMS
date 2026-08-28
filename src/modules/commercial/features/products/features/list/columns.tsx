@@ -18,6 +18,7 @@ import {
 import { DataTableColumnHeader } from '@/shared/components/common/DataTable';
 import type { ModulePermissions } from '@/shared/lib/permissions';
 import type { Product } from '../../shared/types';
+import { formatCurrency } from '@/shared/utils/formatters';
 import {
   PRODUCT_TYPE_LABELS,
   PRODUCT_STATUS_LABELS,
@@ -155,9 +156,9 @@ export function getColumns({ onEdit, onDelete, onImputation, permissions, showOe
           <div className="flex items-center gap-1">
             <DollarSign className="h-3 w-3 text-muted-foreground" />
             <div className="flex flex-col">
-              <span className="font-medium">${product.salePrice.toFixed(2)}</span>
+              <span className="font-medium">{formatCurrency(product.salePrice)}</span>
               <span className="text-xs text-muted-foreground">
-                Con IVA: ${product.salePriceWithTax.toFixed(2)}
+                Con IVA: {formatCurrency(product.salePriceWithTax)}
               </span>
             </div>
           </div>
@@ -172,7 +173,7 @@ export function getColumns({ onEdit, onDelete, onImputation, permissions, showOe
         return (
           <div className="flex items-center gap-1">
             <DollarSign className="h-3 w-3 text-muted-foreground" />
-            <span className="text-sm">${row.original.costPrice.toFixed(2)}</span>
+            <span className="text-sm">{formatCurrency(row.original.costPrice)}</span>
           </div>
         );
       },

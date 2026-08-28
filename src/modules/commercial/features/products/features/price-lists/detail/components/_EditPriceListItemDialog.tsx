@@ -23,10 +23,12 @@ import {
   FormMessage,
 } from '@/shared/components/ui/form';
 import { Input } from '@/shared/components/ui/input';
+import { MoneyInput } from '@/shared/components/ui/money-input';
 import { updatePriceListItem } from '../../list/actions.server';
 import { updatePriceListItemSchema, type UpdatePriceListItemFormData } from '../../../../shared/validators';
 import { logger } from '@/shared/lib/logger';
 import type { PriceListItem } from '../../../../shared/types';
+import { formatCurrency } from '@/shared/utils/formatters';
 
 interface EditPriceListItemDialogProps {
   item: PriceListItem;
@@ -90,12 +92,13 @@ export function _EditPriceListItemDialog({ item, open, onOpenChange }: EditPrice
                 <FormItem>
                   <FormLabel>Precio *</FormLabel>
                   <FormControl>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      placeholder="0.00"
-                      {...field}
+                    <MoneyInput
+                      placeholder="0,00"
+                      value={field.value}
+                      onChange={field.onChange}
+                      onBlur={field.onBlur}
+                      name={field.name}
+                      ref={field.ref}
                     />
                   </FormControl>
                   <FormDescription>Precio sin IVA</FormDescription>
@@ -106,7 +109,7 @@ export function _EditPriceListItemDialog({ item, open, onOpenChange }: EditPrice
 
             <div className="rounded-md bg-muted p-4">
               <p className="text-sm font-medium">Precio con IVA:</p>
-              <p className="text-2xl font-bold">${priceWithTax.toFixed(2)}</p>
+              <p className="text-2xl font-bold">{formatCurrency(priceWithTax)}</p>
               <p className="text-xs text-muted-foreground mt-1">
                 IVA: {item.product?.vatRate || 0}%
               </p>
