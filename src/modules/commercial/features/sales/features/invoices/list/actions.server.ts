@@ -19,6 +19,7 @@ import { isCreditNote, isDebitNote } from '@/modules/commercial/shared/voucher-u
 import { applySalesCreditNote } from '@/modules/commercial/shared/credit-note-compensation';
 import {
   buildMissingCostCenterMessage,
+  effectiveAccountType,
   findLinesMissingCostCenter,
 } from '@/modules/commercial/shared/cost-center';
 
@@ -576,6 +577,30 @@ export async function getSalesCostCentersForSelect() {
 
 export type SalesCostCenterSelectItem = Awaited<ReturnType<typeof getSalesCostCentersForSelect>>[number];
 
+/**
+ * Tipo de la cuenta de ventas por defecto de la empresa (TSK-583, hallazgo
+ * de revisión final).
+ *
+ * El formulario decide si una línea admite/exige centro de costo mirando la
+ * cuenta del ítem — pero cuando el ítem no tiene una propia, el asiento
+ * (`createJournalEntryForSalesInvoice`) igual la imputa a esta cuenta. Sin
+ * este dato en el formulario, un ítem sin cuenta propia nunca mostraba el
+ * campo aunque el asiento lo imputara a una cuenta de resultado.
+ */
+export async function getSalesDefaultAccountType() {
+  await checkPermission('commercial.invoices', 'view', { redirect: true });
+
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  const settings = await prisma.accountingSettings.findUnique({
+    where: { companyId },
+    select: { salesAccount: { select: { type: true } } },
+  });
+
+  return settings?.salesAccount?.type ?? null;
+}
+
 // Crear una nueva factura
 export async function createInvoice(data: unknown) {
   await checkPermission('commercial.invoices', 'create', { redirect: true });
@@ -818,14 +843,24 @@ export async function confirmInvoice(id: string) {
 
     const settings = await prisma.accountingSettings.findUnique({
       where: { companyId },
-      select: { requireCostCenter: true },
+      select: {
+        requireCostCenter: true,
+        // Cuenta que usaria el asiento si el item no tiene una propia
+        // (TSK-583, hallazgo de revision final): sin esto, un item sin
+        // cuenta propia nunca exigia reparto aunque el asiento lo imputara
+        // igual a `salesAccountId`, que es de resultado.
+        salesAccount: { select: { type: true } },
+      },
     });
 
     if (settings?.requireCostCenter) {
       const missing = findLinesMissingCostCenter(
         invoice.lines.map((line) => ({
           description: line.description,
-          accountType: line.product?.defaultIncomeAccount?.type ?? null,
+          accountType: effectiveAccountType(
+            line.product?.defaultIncomeAccount?.type ?? null,
+            settings.salesAccount?.type
+          ),
           allocations: line.costCenterAllocations.map((a) => ({
             costCenterId: a.costCenterId,
             percentage: Number(a.percentage),

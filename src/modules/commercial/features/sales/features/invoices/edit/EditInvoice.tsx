@@ -1,5 +1,9 @@
 import { PermissionGuard } from '@/shared/components/common/PermissionGuard';
-import { getInvoiceById, getSalesCostCentersForSelect } from '../list/actions.server';
+import {
+  getInvoiceById,
+  getSalesCostCentersForSelect,
+  getSalesDefaultAccountType,
+} from '../list/actions.server';
 import {
   getActiveCustomers,
   getActivePointsOfSale,
@@ -13,13 +17,15 @@ interface EditInvoiceProps {
 }
 
 export async function EditInvoice({ id }: EditInvoiceProps) {
-  const [invoice, customers, pointsOfSale, products, costCenters] = await Promise.all([
-    getInvoiceById(id),
-    getActiveCustomers(),
-    getActivePointsOfSale(),
-    getActiveProducts(),
-    getSalesCostCentersForSelect(),
-  ]);
+  const [invoice, customers, pointsOfSale, products, costCenters, defaultAccountType] =
+    await Promise.all([
+      getInvoiceById(id),
+      getActiveCustomers(),
+      getActivePointsOfSale(),
+      getActiveProducts(),
+      getSalesCostCentersForSelect(),
+      getSalesDefaultAccountType(),
+    ]);
 
   // Solo se pueden editar facturas en borrador
   if (invoice.status !== 'DRAFT') {
@@ -69,6 +75,7 @@ export async function EditInvoice({ id }: EditInvoiceProps) {
           pointsOfSale={pointsOfSale}
           products={products}
           costCenters={costCenters}
+          defaultAccountType={defaultAccountType}
           mode="edit"
           invoiceId={id}
           initialData={initialData}

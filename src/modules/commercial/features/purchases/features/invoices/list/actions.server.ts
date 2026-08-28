@@ -15,7 +15,7 @@ import {
   stateToPrismaParams,
 } from '@/shared/components/common/DataTable/helpers';
 import type { Prisma } from '@/generated/prisma/client';
-import type { PurchaseInvoiceFormInput } from '../shared/validators';
+import { purchaseInvoiceFormSchema, type PurchaseInvoiceFormInput } from '../shared/validators';
 import type { VoucherType } from '@/generated/prisma/enums';
 import { checkPermission } from '@/shared/lib/permissions';
 import { createJournalEntryForPurchaseInvoice } from '@/modules/accounting/features/integrations/commercial';
@@ -24,6 +24,7 @@ import { applyPurchaseCreditNote } from '@/modules/commercial/shared/credit-note
 import { selectConfirmableInvoices, type BulkConfirmFailure } from '../shared/bulk-confirm';
 import {
   buildMissingCostCenterMessage,
+  effectiveAccountType,
   findLinesMissingCostCenter,
 } from '@/modules/commercial/shared/cost-center';
 
@@ -542,6 +543,30 @@ export async function getCostCentersForSelect() {
   });
 }
 
+/**
+ * Tipo de la cuenta de compras por defecto de la empresa (TSK-583, hallazgo
+ * de revisión final).
+ *
+ * El formulario decide si una línea admite/exige centro de costo mirando la
+ * cuenta del ítem — pero cuando el ítem no tiene una propia, el asiento
+ * (`createJournalEntryForPurchaseInvoice`) igual la imputa a esta cuenta.
+ * Sin este dato en el formulario, un ítem sin cuenta propia nunca mostraba
+ * el campo aunque el asiento lo imputara a una cuenta de resultado.
+ */
+export async function getPurchasesDefaultAccountType() {
+  await checkPermission('commercial.purchases', 'view', { redirect: true });
+
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  const settings = await prisma.accountingSettings.findUnique({
+    where: { companyId },
+    select: { purchasesAccount: { select: { type: true } } },
+  });
+
+  return settings?.purchasesAccount?.type ?? null;
+}
+
 export async function getProductsForSelect() {
   const userId = await getCurrentUserId();
   if (!userId) throw new Error('No autenticado');
@@ -823,7 +848,7 @@ export async function getPurchaseOrderLinesForInvoicing(orderId: string) {
 /**
  * Crea una nueva factura de compra en estado DRAFT
  */
-export async function createPurchaseInvoice(input: PurchaseInvoiceFormInput) {
+export async function createPurchaseInvoice(rawInput: PurchaseInvoiceFormInput) {
   await checkPermission('commercial.purchases', 'create', { redirect: true });
   const userId = await getCurrentUserId();
   if (!userId) throw new Error('No autenticado');
@@ -832,6 +857,12 @@ export async function createPurchaseInvoice(input: PurchaseInvoiceFormInput) {
   if (!companyId) throw new Error('No hay empresa activa');
 
   try {
+    // Ventas ya valida en el servidor con este mismo schema
+    // (`createInvoiceSchema.parse`); acá faltaba, y la invariante "el reparto
+    // suma 100 o está vacío" vivía solo en el navegador (TSK-583, hallazgo de
+    // revisión final).
+    const input = purchaseInvoiceFormSchema.parse(rawInput);
+
     // Calcular totales
     let subtotal = 0;
     let vatAmount = 0;
@@ -939,7 +970,7 @@ export async function createPurchaseInvoice(input: PurchaseInvoiceFormInput) {
     return { success: true, id: invoice.id };
   } catch (error) {
     logger.error('Error al crear factura de compra', {
-      data: { error, input, companyId, userId },
+      data: { error, input: rawInput, companyId, userId },
     });
     throw error;
   }
@@ -948,7 +979,7 @@ export async function createPurchaseInvoice(input: PurchaseInvoiceFormInput) {
 /**
  * Actualiza una factura de compra (solo si está en estado DRAFT)
  */
-export async function updatePurchaseInvoice(id: string, input: PurchaseInvoiceFormInput) {
+export async function updatePurchaseInvoice(id: string, rawInput: PurchaseInvoiceFormInput) {
   await checkPermission('commercial.purchases', 'update', { redirect: true });
   const userId = await getCurrentUserId();
   if (!userId) throw new Error('No autenticado');
@@ -957,6 +988,10 @@ export async function updatePurchaseInvoice(id: string, input: PurchaseInvoiceFo
   if (!companyId) throw new Error('No hay empresa activa');
 
   try {
+    // Ver nota en createPurchaseInvoice: sin esto, la invariante del reparto
+    // vivía solo en el navegador (TSK-583, hallazgo de revisión final).
+    const input = purchaseInvoiceFormSchema.parse(rawInput);
+
     // Verificar que la factura existe
     const existingInvoice = await prisma.purchaseInvoice.findUnique({
       where: { id },
@@ -1093,7 +1128,7 @@ export async function updatePurchaseInvoice(id: string, input: PurchaseInvoiceFo
     return { success: true, id: invoice.id };
   } catch (error) {
     logger.error('Error al actualizar factura de compra', {
-      data: { error, id, input, companyId, userId },
+      data: { error, id, input: rawInput, companyId, userId },
     });
     throw error;
   }
@@ -1141,14 +1176,24 @@ export async function confirmPurchaseInvoice(id: string) {
 
     const settings = await prisma.accountingSettings.findUnique({
       where: { companyId },
-      select: { requireCostCenter: true },
+      select: {
+        requireCostCenter: true,
+        // Cuenta que usaria el asiento si el item no tiene una propia
+        // (TSK-583, hallazgo de revision final): sin esto, un item sin
+        // cuenta propia nunca exigia reparto aunque el asiento lo imputara
+        // igual a `purchasesAccountId`, que es de resultado.
+        purchasesAccount: { select: { type: true } },
+      },
     });
 
     if (settings?.requireCostCenter) {
       const missing = findLinesMissingCostCenter(
         invoice.lines.map((line) => ({
           description: line.description,
-          accountType: line.product?.defaultExpenseAccount?.type ?? null,
+          accountType: effectiveAccountType(
+            line.product?.defaultExpenseAccount?.type ?? null,
+            settings.purchasesAccount?.type
+          ),
           allocations: line.costCenterAllocations.map((a) => ({
             costCenterId: a.costCenterId,
             percentage: Number(a.percentage),
