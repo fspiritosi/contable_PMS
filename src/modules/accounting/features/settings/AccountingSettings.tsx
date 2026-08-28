@@ -97,6 +97,7 @@ async function AccountingSettingsContent({ companyId }: { companyId: string }) {
               accumulatedDepreciationAccountId: settings?.accumulatedDepreciationAccountId ?? null,
               depreciationExpenseAccountId: settings?.depreciationExpenseAccountId ?? null,
               assetDisposalGainLossAccountId: settings?.assetDisposalGainLossAccountId ?? null,
+              requireCostCenter: settings?.requireCostCenter ?? false,
             }}
           />
         </CardContent>

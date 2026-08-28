@@ -40,6 +40,11 @@ export const commercialIntegrationSchema = z.object({
   accumulatedDepreciationAccountId: accountField,
   depreciationExpenseAccountId: accountField,
   assetDisposalGainLossAccountId: accountField,
+  /**
+   * Con esto activo, toda línea imputada a una cuenta de resultado necesita
+   * reparto por centro de costo para poder confirmar la factura (TSK-583).
+   */
+  requireCostCenter: z.boolean().default(false),
 });
 
 /** Lo que maneja el formulario: un campo sin default llega como undefined. */

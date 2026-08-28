@@ -11,6 +11,7 @@ import { logger } from '@/shared/lib/logger';
 import { Button } from '@/shared/components/ui/button';
 import { Label } from '@/shared/components/ui/label';
 import { AccountCombobox, type AccountOption } from '@/shared/components/common/AccountCombobox';
+import { Switch } from '@/shared/components/ui/switch';
 import { usePermissions } from '@/shared/hooks/usePermissions';
 
 import {
@@ -22,7 +23,8 @@ import { saveAccountingSettings, getAccountingSettings } from '../actions.server
 
 type FormInput = CommercialIntegrationInput;
 type FormValues = CommercialIntegrationValues;
-type FieldName = keyof FormInput;
+/** Solo los campos de cuenta contable: `requireCostCenter` es un booleano aparte. */
+type FieldName = Exclude<keyof FormInput, 'requireCostCenter'>;
 
 /** Tipos de cuenta del plan, tal como los expone Prisma. */
 type AccountType = 'ASSET' | 'LIABILITY' | 'EQUITY' | 'INCOME' | 'REVENUE' | 'EXPENSE';
@@ -264,6 +266,24 @@ export function _CommercialIntegrationForm({
 
   return (
     <form onSubmit={form.handleSubmit(handleSubmit, handleInvalid)} className="space-y-6">
+      <div className="flex items-center justify-between rounded-md border p-3">
+        <div className="space-y-1">
+          <Label htmlFor="requireCostCenter">Exigir centro de costo</Label>
+          <p className="text-xs text-muted-foreground">
+            Al confirmar una factura de compra o venta, cada línea imputada a una cuenta de
+            ingresos o egresos deberá tener su reparto por centro de costo.
+          </p>
+        </div>
+        <Switch
+          id="requireCostCenter"
+          checked={form.watch('requireCostCenter') ?? false}
+          onCheckedChange={(checked) =>
+            form.setValue('requireCostCenter', checked, { shouldDirty: true })
+          }
+          disabled={isLoading}
+        />
+      </div>
+
       {SECTIONS.map((section) => (
         <div key={section.title} className="space-y-4">
           <div className="space-y-1">

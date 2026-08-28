@@ -60,6 +60,7 @@ export async function saveAccountingSettings(
     accumulatedDepreciationAccountId?: string | null;
     depreciationExpenseAccountId?: string | null;
     assetDisposalGainLossAccountId?: string | null;
+    requireCostCenter?: boolean;
   }
 ) {
   const userId = await getCurrentUserId();
