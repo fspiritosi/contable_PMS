@@ -30,6 +30,7 @@ import {
 import { _CashRegisterFormModal } from './_CashRegisterFormModal';
 import { _OpenSessionModal } from './_OpenSessionModal';
 import { _CloseSessionModal } from './_CloseSessionModal';
+import { formatCurrency } from '@/shared/utils/formatters';
 
 interface Props {
   cashRegisters: CashRegisterWithActiveSession[];
@@ -133,7 +134,7 @@ export function _CashRegistersTable({ cashRegisters, onRefresh }: Props) {
               Sesión #{register.activeSession.sessionNumber}
             </Badge>
             <span className="text-xs text-muted-foreground">
-              Saldo: ${register.activeSession.expectedBalance.toFixed(2)}
+              Saldo: {formatCurrency(register.activeSession.expectedBalance)}
             </span>
           </div>
         );

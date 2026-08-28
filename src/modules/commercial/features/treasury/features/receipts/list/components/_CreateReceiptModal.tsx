@@ -25,7 +25,9 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Skeleton } from '@/shared/components/ui/skeleton';
 import { Badge } from '@/shared/components/ui/badge';
 import { Alert, AlertDescription } from '@/shared/components/ui/alert';
+import { MoneyInput } from '@/shared/components/ui/money-input';
 import moment from 'moment';
+import { formatCurrency } from '@/shared/utils/formatters';
 
 interface CreateReceiptModalProps {
   onSuccess: () => void;
@@ -308,7 +310,7 @@ export function CreateReceiptModal({ onSuccess }: CreateReceiptModalProps) {
                       <SelectContent>
                         {pendingInvoices.map((invoice) => (
                           <SelectItem key={invoice.id} value={invoice.id}>
-                            {invoice.fullNumber} - Pendiente: ${invoice.pendingAmount.toFixed(2)}
+                            {invoice.fullNumber} - Pendiente: {formatCurrency(invoice.pendingAmount)}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -323,7 +325,7 @@ export function CreateReceiptModal({ onSuccess }: CreateReceiptModalProps) {
                       <div className="flex-1">
                         <div className="text-sm font-medium">{invoice?.fullNumber}</div>
                         <div className="text-xs text-muted-foreground">
-                          Pendiente: ${invoice?.pendingAmount.toFixed(2)}
+                          Pendiente: {formatCurrency(invoice?.pendingAmount)}
                         </div>
                       </div>
                       <FormField
@@ -334,7 +336,14 @@ export function CreateReceiptModal({ onSuccess }: CreateReceiptModalProps) {
                             <FormLabel className="text-xs">Monto</FormLabel>
                             <div className="flex gap-1">
                               <FormControl>
-                                <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                                <MoneyInput
+                                  placeholder="0,00"
+                                  value={field.value}
+                                  onChange={field.onChange}
+                                  onBlur={field.onBlur}
+                                  name={field.name}
+                                  ref={field.ref}
+                                />
                               </FormControl>
                               <Button
                                 type="button"
@@ -444,7 +453,14 @@ export function CreateReceiptModal({ onSuccess }: CreateReceiptModalProps) {
                               <FormLabel>Monto *</FormLabel>
                               <div className="flex gap-1">
                                 <FormControl>
-                                  <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                                  <MoneyInput
+                                    placeholder="0,00"
+                                    value={field.value}
+                                    onChange={field.onChange}
+                                    onBlur={field.onBlur}
+                                    name={field.name}
+                                    ref={field.ref}
+                                  />
                                 </FormControl>
                                 <Button
                                   type="button"
@@ -751,7 +767,14 @@ export function CreateReceiptModal({ onSuccess }: CreateReceiptModalProps) {
                           <FormItem>
                             <FormLabel>Monto *</FormLabel>
                             <FormControl>
-                              <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                              <MoneyInput
+                                placeholder="0,00"
+                                value={field.value}
+                                onChange={field.onChange}
+                                onBlur={field.onBlur}
+                                name={field.name}
+                                ref={field.ref}
+                              />
                             </FormControl>
                             <FormMessage />
                           </FormItem>

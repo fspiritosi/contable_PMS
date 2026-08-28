@@ -33,6 +33,7 @@ import {
   SelectValue,
 } from '@/shared/components/ui/select';
 import { Checkbox } from '@/shared/components/ui/checkbox';
+import { MoneyInput } from '@/shared/components/ui/money-input';
 
 import {
   createProjectionSchema,
@@ -169,12 +170,13 @@ export function _CreateProjectionModal({ onSuccess }: Props) {
                   <FormItem>
                     <FormLabel>Monto</FormLabel>
                     <FormControl>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        placeholder="0.00"
-                        {...field}
+                      <MoneyInput
+                        placeholder="0,00"
+                        value={field.value}
+                        onChange={field.onChange}
+                        onBlur={field.onBlur}
+                        name={field.name}
+                        ref={field.ref}
                       />
                     </FormControl>
                     <FormMessage />
