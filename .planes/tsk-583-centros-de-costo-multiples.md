@@ -183,8 +183,12 @@ Para el 583, el ejemplo a mostrar es una factura de servicios repartida entre do
 costo, siguiendo el flujo completo: cargar, repartir, confirmar y ver el asiento resultante
 con las dos imputaciones separadas.
 
-Formato: página web publicada como Artifact, que se comparte por link y admite capturas.
-Se acumula ticket por ticket para poder presentar un lote entero de una vez.
+**Formato: PDF.** Se escribe en HTML y se renderiza con Playwright, que ya es dependencia
+del proyecto y sirve además para tomar las capturas de la app corriendo en desarrollo. Un PDF
+por ticket, acumulables para presentar un lote entero de una vez.
+
+El script de generación (`scripts/guia-presentacion/`) se crea con este ticket y queda
+reutilizable para los siguientes: recibe el HTML de la guía y produce el PDF.
 
 ## 10. Fuera de alcance
 
