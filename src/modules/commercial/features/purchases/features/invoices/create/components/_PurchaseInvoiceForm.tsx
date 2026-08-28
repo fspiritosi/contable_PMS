@@ -23,7 +23,7 @@ import {
 import { Input } from '@/shared/components/ui/input';
 import { padPointOfSale, padVoucherNumber } from '@/modules/commercial/shared/voucher-number';
 import { MoneyInput } from '@/shared/components/ui/money-input';
-import { allowsCostCenter } from '../../shared/cost-center';
+import { allowsCostCenter } from '@/modules/commercial/shared/cost-center';
 import { Textarea } from '@/shared/components/ui/textarea';
 import { Plus, Trash2, Loader2 } from 'lucide-react';
 import {
