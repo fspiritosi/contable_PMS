@@ -81,6 +81,8 @@ export async function getActiveProducts() {
       salePriceWithTax: true,
       vatRate: true,
       trackStock: true,
+      // El tipo de la cuenta decide si la línea admite centro de costo (TSK-583).
+      defaultIncomeAccount: { select: { type: true } },
     },
     orderBy: {
       name: 'asc',
@@ -92,5 +94,6 @@ export async function getActiveProducts() {
     salePrice: Number(p.salePrice),
     salePriceWithTax: Number(p.salePriceWithTax),
     vatRate: Number(p.vatRate),
+    defaultIncomeAccountType: p.defaultIncomeAccount?.type ?? null,
   }));
 }

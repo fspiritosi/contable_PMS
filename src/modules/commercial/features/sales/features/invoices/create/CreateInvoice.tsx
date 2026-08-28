@@ -5,16 +5,18 @@ import {
   getActivePointsOfSale,
   getActiveProducts,
 } from './helpers.server';
+import { getSalesCostCentersForSelect } from '../list/actions.server';
 
 interface CreateInvoiceProps {
   fromQuoteId?: string;
 }
 
 export async function CreateInvoice({ fromQuoteId }: CreateInvoiceProps) {
-  const [customers, pointsOfSale, products] = await Promise.all([
+  const [customers, pointsOfSale, products, costCenters] = await Promise.all([
     getActiveCustomers(),
     getActivePointsOfSale(),
     getActiveProducts(),
+    getSalesCostCentersForSelect(),
   ]);
 
   return (
@@ -33,6 +35,7 @@ export async function CreateInvoice({ fromQuoteId }: CreateInvoiceProps) {
           customers={customers}
           pointsOfSale={pointsOfSale}
           products={products}
+          costCenters={costCenters}
           fromQuoteId={fromQuoteId}
         />
       </div>

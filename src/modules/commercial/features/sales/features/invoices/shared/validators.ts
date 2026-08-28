@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { allocationFieldSchema } from '@/modules/commercial/shared/allocation-form';
 
 // Schema para línea de factura
 export const invoiceLineSchema = z.object({
@@ -17,6 +18,11 @@ export const invoiceLineSchema = z.object({
     .regex(/^\d+(\.\d{1,2})?$/, 'Alícuota de IVA inválida'),
   discountPercent: z.string().optional(),
   discountAmount: z.string().optional(),
+  // Reparto por centro de costo. Vacío = centro predeterminado del ítem (TSK-583).
+  // `.optional()` en lugar de `.default([])`: el `default` hace que el tipo de
+  // entrada del formulario y el de salida diverjan, y zodResolver no lo acepta
+  // sin un tercer genérico en useForm (mismo criterio que en compras).
+  costCenterAllocations: allocationFieldSchema.optional(),
 });
 
 // Schema para formulario de factura
@@ -89,6 +95,8 @@ export const createInvoiceSchema = z.object({
         discountAmount: z.string().optional()
           .transform((val) => (val ? parseFloat(val) : null))
           .pipe(z.number().nonnegative().nullable()),
+        // Reparto por centro de costo. Vacío = centro predeterminado del ítem (TSK-583).
+        costCenterAllocations: allocationFieldSchema.optional(),
       })
     )
     .min(1),

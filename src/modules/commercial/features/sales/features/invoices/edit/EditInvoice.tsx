@@ -1,5 +1,5 @@
 import { PermissionGuard } from '@/shared/components/common/PermissionGuard';
-import { getInvoiceById } from '../list/actions.server';
+import { getInvoiceById, getSalesCostCentersForSelect } from '../list/actions.server';
 import {
   getActiveCustomers,
   getActivePointsOfSale,
@@ -13,11 +13,12 @@ interface EditInvoiceProps {
 }
 
 export async function EditInvoice({ id }: EditInvoiceProps) {
-  const [invoice, customers, pointsOfSale, products] = await Promise.all([
+  const [invoice, customers, pointsOfSale, products, costCenters] = await Promise.all([
     getInvoiceById(id),
     getActiveCustomers(),
     getActivePointsOfSale(),
     getActiveProducts(),
+    getSalesCostCentersForSelect(),
   ]);
 
   // Solo se pueden editar facturas en borrador
@@ -42,6 +43,10 @@ export async function EditInvoice({ id }: EditInvoiceProps) {
       vatRate: Number(line.vatRate).toString(),
       discountPercent: line.discountPercent?.toString() ?? '',
       discountAmount: line.discountAmount?.toString() ?? '',
+      costCenterAllocations: line.costCenterAllocations.map((a) => ({
+        costCenterId: a.costCenterId,
+        percentage: Number(a.percentage),
+      })),
     })),
     globalDiscountPercent: invoice.globalDiscountPercent?.toString() ?? '',
     globalDiscountAmount: invoice.globalDiscountAmount?.toString() ?? '',
@@ -63,6 +68,7 @@ export async function EditInvoice({ id }: EditInvoiceProps) {
           customers={customers}
           pointsOfSale={pointsOfSale}
           products={products}
+          costCenters={costCenters}
           mode="edit"
           invoiceId={id}
           initialData={initialData}
