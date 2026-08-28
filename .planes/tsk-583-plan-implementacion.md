@@ -1469,45 +1469,86 @@ git commit -m "fix(accounting): el asiento de ventas ya no colapsa los centros d
 
 ---
 
-### Tarea 10: Test end-to-end
+### Tarea 10: Tests de integración contra la base
+
+**Nota sobre un cambio de plan.** Esta tarea pedía originalmente un spec de Cypress. Al llegar
+acá se comprobó que **Cypress no existe en este proyecto**: no hay carpeta `cypress/`, ni
+scripts `cy:*` en `package.json`, ni ningún `.cy.ts`. El `CLAUDE.md` lo menciona, pero es un
+remanente del proyecto base del que este es fork. Montar Cypress entero queda fuera del alcance
+de TSK-583, así que la cobertura se hace con **Vitest contra la base local**, que es lo que el
+proyecto sí tiene.
+
+Esto además cierra una brecha que señalaron las revisiones de las Tareas 6, 7 y 9: la
+verificación del asiento y de la obligatoriedad se venía haciendo con scripts de Prisma que se
+borraban al terminar, así que nada en el repo detectaría una regresión.
 
 **Archivos:**
-- Crear: `cypress/e2e/commercial/cost-center-allocation.cy.ts`
+- Crear: `src/modules/accounting/features/integrations/commercial/cost-center.integration.test.ts`
 
 **Interfaces:**
-- Consume: la feature completa (Tareas 2 a 9).
+- Consume: `createJournalEntryForPurchaseInvoice`, `createJournalEntryForSalesInvoice`
+  (`integrations/commercial/index.ts`), `confirmPurchaseInvoice`
+  (`purchases/.../list/actions.server.ts`), el cliente Prisma.
 - Produce: nada.
 
-- [ ] **Paso 1: Mirar un spec existente para copiar el andamiaje**
+- [ ] **Paso 1: Ver cómo se conecta el proyecto a la base en un test**
 
 ```bash
-ls cypress/e2e/commercial/
-head -40 cypress/e2e/commercial/$(ls cypress/e2e/commercial | head -1)
+cat prisma.config.ts
+grep -rn "PrismaPg\|new PrismaClient" src/shared/lib/prisma.ts
+docker exec contable-pms-db psql -U postgres -d contable_pms -c "SELECT 1;"
 ```
 
-Reusar los comandos de login y de selección de empresa que ya existan.
+Los tests usan la base de desarrollo. Si no hay base alcanzable, el archivo entero debe
+saltearse con `describe.skipIf(...)`, no fallar: alguien que corra `npm test` sin Docker
+levantado tiene que seguir viendo la suite en verde.
 
-- [ ] **Paso 2: Escribir el spec**
+- [ ] **Paso 2: Escribir el andamiaje de datos**
 
-Cubrir un solo recorrido, el que la usuaria va a hacer:
+Un `beforeAll` que cree, con ids fijos y prefijo reconocible (`TSK583-TEST-`): empresa o
+reutilización de la existente, dos centros de costo, un ítem imputado a cuenta de egresos, un
+ítem imputado a cuenta de ingresos, y las cuentas contables mínimas que
+`createJournalEntryFor*` necesita (`payables`, `purchases`, `receivables`, `sales`,
+`vatCredit`, `vatDebit`).
 
-1. Activar "Exigir centro de costo" en Configuración Contable.
-2. Crear una factura de compra con un ítem imputado a cuenta de egresos.
-3. Intentar confirmar sin reparto → aparece el error nombrando la línea.
-4. Repartir 60/40 entre dos centros; el pie muestra 100% en verde.
-5. Confirmar → sale bien.
-6. Abrir el asiento generado y verificar las dos imputaciones con sus centros.
+Un `afterAll` que borre **todo** lo creado, en orden inverso de dependencias. Verificá al final
+que no queda ninguna fila con el prefijo.
 
-- [ ] **Paso 3: Correr el spec**
+- [ ] **Paso 3: Escribir los tests**
 
-Run: `npm run cy:run:commercial`
-Expected: PASS.
+Cinco casos, todos contra la base real:
 
-- [ ] **Paso 4: Commit**
+1. **Compra con reparto 60/40** — una línea de $1.000 a cuenta de egresos, repartida entre dos
+   centros. El asiento tiene dos imputaciones a la cuenta de compras, de $600 y $400, cada una
+   con su centro.
+2. **El IVA no se reparte** — en ese mismo asiento, la línea de IVA no tiene centro de costo.
+3. **El asiento balancea** — suma de débitos igual a suma de créditos.
+4. **Venta con ítems de centros distintos (regresión del bug)** — dos líneas con centros
+   predeterminados distintos generan **dos** imputaciones separadas a la cuenta de ventas. Antes
+   de la Tarea 9 caían en una sola.
+5. **Obligatoriedad** — con `requireCostCenter = true`, confirmar una factura de compra con una
+   línea de egresos sin reparto falla con el mensaje que nombra la línea; con el flag en
+   `false`, la misma factura confirma. Dejá el flag como estaba al terminar.
+
+- [ ] **Paso 4: Correr los tests**
+
+Run: `npx vitest run src/modules/accounting/features/integrations/commercial/cost-center.integration.test.ts`
+Expected: PASS los cinco.
+
+- [ ] **Paso 5: Correr la suite completa y verificar que la base quedó limpia**
 
 ```bash
-git add cypress/e2e/commercial/cost-center-allocation.cy.ts
-git commit -m "test(commercial): e2e del reparto por centro de costo (TSK-583)"
+npm test
+docker exec contable-pms-db psql -U postgres -d contable_pms -c "SELECT count(*) FROM cost_centers WHERE name LIKE 'TSK583-TEST-%';"
+```
+
+Expected: la suite en verde y el conteo en 0.
+
+- [ ] **Paso 6: Commit**
+
+```bash
+git add src/modules/accounting/features/integrations/commercial/cost-center.integration.test.ts
+git commit -m "test(accounting): integracion del reparto por centro de costo (TSK-583)"
 ```
 
 ---
@@ -1627,7 +1668,7 @@ git commit -m "docs: guia de usuario y guia de presentacion del reparto por cent
 Antes de dar el ticket por entregado:
 
 - [ ] `npm test` en verde; anotar cuántos tests corren.
-- [ ] `npm run cy:run:commercial` en verde.
+- [ ] Los tests de integración de la Tarea 10 en verde con la base levantada.
 - [ ] `npx tsc --noEmit` sin errores nuevos respecto de la línea base (227 al empezar).
 - [ ] `npm run lint` sin hallazgos nuevos respecto de la línea base (339 al empezar).
 - [ ] `npm run build` con exit 0.

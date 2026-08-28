@@ -154,7 +154,13 @@ líneas imputadas a cuentas de resultado"*.
 
 Se actualizan `cost-center.test.ts` y `bulk-confirm.test.ts` en vez de duplicarlos.
 
-**Cypress** — carga de una factura repartida entre dos centros, en compras y en ventas.
+**Integración contra la base** — el asiento de compras con reparto, el IVA fuera del reparto,
+el asiento balanceado, la regresión del bug de ventas y la obligatoriedad al confirmar.
+
+> Nota (2026-08-28): esto reemplaza al plan original de tests Cypress. Al implementar se
+> comprobó que **Cypress no existe en este proyecto** — el `CLAUDE.md` lo menciona, pero es
+> un remanente del proyecto base del que este es fork. Montarlo entero excede el ticket; la
+> cobertura se hace con Vitest contra la base local, que es lo que el proyecto sí tiene.
 
 ## 9. Documentación
 
