@@ -1,6 +1,6 @@
 'use client';
 
-import { useForm } from 'react-hook-form';
+import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
@@ -20,6 +20,7 @@ import {
 } from '@/shared/components/ui/dialog';
 import { Input } from '@/shared/components/ui/input';
 import { Label } from '@/shared/components/ui/label';
+import { MoneyInput } from '@/shared/components/ui/money-input';
 import {
   Select,
   SelectContent,
@@ -117,12 +118,19 @@ export function _DepreciationConfigDialog({ vehicleId, vehiclePrice, open, onOpe
             {/* Valor de Origen */}
             <div className="space-y-2">
               <Label htmlFor="grossValue">Valor de Origen</Label>
-              <Input
-                id="grossValue"
-                type="number"
-                step="0.01"
-                min="0"
-                {...form.register('grossValue', { valueAsNumber: true })}
+              <Controller
+                control={form.control}
+                name="grossValue"
+                render={({ field }) => (
+                  <MoneyInput
+                    placeholder="0,00"
+                    value={field.value ?? ''}
+                    onChange={(raw) => field.onChange(raw === '' ? undefined : Number(raw))}
+                    onBlur={field.onBlur}
+                    name={field.name}
+                    ref={field.ref}
+                  />
+                )}
               />
               {form.formState.errors.grossValue && (
                 <p className="text-xs text-destructive">
@@ -134,12 +142,19 @@ export function _DepreciationConfigDialog({ vehicleId, vehiclePrice, open, onOpe
             {/* Valor Residual */}
             <div className="space-y-2">
               <Label htmlFor="salvageValue">Valor Residual</Label>
-              <Input
-                id="salvageValue"
-                type="number"
-                step="0.01"
-                min="0"
-                {...form.register('salvageValue', { valueAsNumber: true })}
+              <Controller
+                control={form.control}
+                name="salvageValue"
+                render={({ field }) => (
+                  <MoneyInput
+                    placeholder="0,00"
+                    value={field.value ?? ''}
+                    onChange={(raw) => field.onChange(raw === '' ? undefined : Number(raw))}
+                    onBlur={field.onBlur}
+                    name={field.name}
+                    ref={field.ref}
+                  />
+                )}
               />
               {form.formState.errors.salvageValue && (
                 <p className="text-xs text-destructive">

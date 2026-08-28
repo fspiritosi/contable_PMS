@@ -12,6 +12,7 @@ import { _DocumentAttachment } from '@/modules/commercial/shared/components/_Doc
 import { _InvoiceLinkedDocuments } from './components/_InvoiceLinkedDocuments';
 import { _LinkInvoiceToProjection } from './components/_LinkInvoiceToProjection';
 import { _InvoicePDFButton } from './components/_InvoicePDFButton';
+import { formatCurrency } from '@/shared/utils/formatters';
 
 type Invoice = Awaited<ReturnType<typeof getInvoiceById>>;
 
@@ -187,7 +188,7 @@ export async function InvoiceDetail({ id }: InvoiceDetailProps) {
                     {Number(line.quantity).toFixed(3)} {line.product.unitOfMeasure}
                   </td>
                   <td className="py-3 text-right font-mono">
-                    ${Number(line.unitPrice).toFixed(2)}
+                    {formatCurrency(Number(line.unitPrice))}
                   </td>
                   <td className="py-3 text-right font-mono">
                     {line.discountPercent
@@ -200,13 +201,13 @@ export async function InvoiceDetail({ id }: InvoiceDetailProps) {
                     {Number(line.vatRate).toFixed(2)}%
                   </td>
                   <td className="py-3 text-right font-mono">
-                    ${Number(line.subtotal).toFixed(2)}
+                    {formatCurrency(Number(line.subtotal))}
                   </td>
                   <td className="py-3 text-right font-mono">
-                    ${Number(line.vatAmount).toFixed(2)}
+                    {formatCurrency(Number(line.vatAmount))}
                   </td>
                   <td className="py-3 text-right font-mono font-semibold">
-                    ${Number(line.total).toFixed(2)}
+                    {formatCurrency(Number(line.total))}
                   </td>
                 </tr>
               ))}

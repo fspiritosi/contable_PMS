@@ -36,6 +36,7 @@ import {
 } from '@/shared/components/ui/select';
 import { Separator } from '@/shared/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/components/ui/tabs';
+import { MoneyInput } from '@/shared/components/ui/money-input';
 
 import type {
   CostType,
@@ -624,7 +625,14 @@ export function _EquipmentFormEdit({ defaultValues, vehicleId }: Props) {
                       <FormItem>
                         <FormLabel>Valor Mensual</FormLabel>
                         <FormControl>
-                          <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                          <MoneyInput
+                            placeholder="0,00"
+                            value={field.value}
+                            onChange={field.onChange}
+                            onBlur={field.onBlur}
+                            name={field.name}
+                            ref={field.ref}
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -674,7 +682,14 @@ export function _EquipmentFormEdit({ defaultValues, vehicleId }: Props) {
                     <FormItem>
                       <FormLabel>Valor del Equipo</FormLabel>
                       <FormControl>
-                        <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                        <MoneyInput
+                          placeholder="0,00"
+                          value={field.value}
+                          onChange={field.onChange}
+                          onBlur={field.onBlur}
+                          name={field.name}
+                          ref={field.ref}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

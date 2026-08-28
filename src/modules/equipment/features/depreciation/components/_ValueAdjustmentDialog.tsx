@@ -1,6 +1,6 @@
 'use client';
 
-import { useForm } from 'react-hook-form';
+import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
@@ -20,6 +20,7 @@ import {
 import { Input } from '@/shared/components/ui/input';
 import { Label } from '@/shared/components/ui/label';
 import { Textarea } from '@/shared/components/ui/textarea';
+import { MoneyInput } from '@/shared/components/ui/money-input';
 
 import { valueAdjustmentSchema, type ValueAdjustmentInput } from '../validators';
 import { createValueAdjustment } from '../actions.server';
@@ -103,12 +104,19 @@ export function _ValueAdjustmentDialog({
             {/* Nuevo valor */}
             <div className="space-y-2">
               <Label htmlFor="newValue">Nuevo Valor</Label>
-              <Input
-                id="newValue"
-                type="number"
-                step="0.01"
-                min="0"
-                {...form.register('newValue', { valueAsNumber: true })}
+              <Controller
+                control={form.control}
+                name="newValue"
+                render={({ field }) => (
+                  <MoneyInput
+                    placeholder="0,00"
+                    value={field.value ?? ''}
+                    onChange={(raw) => field.onChange(raw === '' ? undefined : Number(raw))}
+                    onBlur={field.onBlur}
+                    name={field.name}
+                    ref={field.ref}
+                  />
+                )}
               />
               {form.formState.errors.newValue && (
                 <p className="text-xs text-destructive">

@@ -22,6 +22,7 @@ import {
 } from '@/shared/components/ui/select';
 import { Textarea } from '@/shared/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card';
+import { MoneyInput } from '@/shared/components/ui/money-input';
 import { Loader2 } from 'lucide-react';
 import { SupplierTaxCondition } from '@/generated/prisma/enums';
 import { SUPPLIER_TAX_CONDITION_LABELS } from '../../../shared/types';
@@ -361,16 +362,13 @@ export function _SupplierForm({
                   <FormItem>
                     <FormLabel>Límite de Crédito</FormLabel>
                     <FormControl>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        placeholder="0.00"
-                        {...field}
-                        value={field.value || ''}
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          field.onChange(value === '' ? undefined : Number(value));
-                        }}
+                      <MoneyInput
+                        placeholder="0,00"
+                        value={field.value ?? ''}
+                        onChange={(raw) => field.onChange(raw === '' ? undefined : Number(raw))}
+                        onBlur={field.onBlur}
+                        name={field.name}
+                        ref={field.ref}
                       />
                     </FormControl>
                     <FormMessage />
