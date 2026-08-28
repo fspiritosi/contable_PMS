@@ -15,10 +15,7 @@ import {
 export const allocationFieldSchema = z
   .array(
     z.object({
-      // `.guid()` en vez de `.uuid()`: `.uuid()` exige el nibble de variante
-      // RFC4122 (8/9/a/b), que los ids de Prisma (cuid/uuid v4 relajado en
-      // tests) no siempre cumplen. `.guid()` solo valida la forma 8-4-4-4-12.
-      costCenterId: z.string().guid('Elegí un centro de costo'),
+      costCenterId: z.string().uuid('Elegí un centro de costo'),
       percentage: z.number(),
     })
   )

@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import { allocationFieldSchema } from './allocation-form';
 
-const LOGISTICA = '11111111-1111-1111-1111-111111111111';
-const MANTENIMIENTO = '22222222-2222-2222-2222-222222222222';
+const LOGISTICA = '51821449-58e5-421d-91a5-e520bd6a2c51';
+const MANTENIMIENTO = 'd843521c-aac6-4be2-a5ab-2fceefb6f3da';
 
 describe('schema del reparto en el formulario', () => {
   it('acepta el reparto vacío', () => {
