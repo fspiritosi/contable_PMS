@@ -394,11 +394,11 @@ export function _CommercialGuide() {
           <p className="font-medium mt-3">Repartir una línea entre varios centros de costo</p>
           <p className="text-muted-foreground">
             En vez de elegir un único centro de costo, cada línea tiene un
-            editor de reparto: empieza con una fila al 100% (el centro
-            predeterminado del ítem, si tiene uno cargado). Con{' '}
-            <strong>Agregar centro</strong> se suman más filas, cada una con
-            su centro y su porcentaje, y el pie de la línea muestra el
-            importe que le corresponde a cada una en pesos.
+            editor de reparto: empieza sin filas, mostrando “Sin reparto — se
+            usa el centro predeterminado del ítem”. Con{' '}
+            <strong>Agregar centro</strong> se suman filas, cada una con su
+            centro y su porcentaje, y el pie de la línea muestra el importe
+            que le corresponde a cada una en pesos.
           </p>
           <p className="text-muted-foreground">
             El acumulado se ve en <strong>verde</strong> cuando llega a

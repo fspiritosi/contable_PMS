@@ -4,6 +4,7 @@ import {
   RESULT_ACCOUNT_TYPES,
   allowsCostCenter,
   buildMissingCostCenterMessage,
+  effectiveAccountType,
   expandByCostCenter,
   findLinesMissingCostCenter,
   prorateAmount,
@@ -47,6 +48,44 @@ describe('qué líneas admiten centro de costo', () => {
 describe('compra de un activo (TSK-583)', () => {
   it('no ofrece centro de costo', () => {
     expect(allowsCostCenter('ASSET')).toBe(false);
+  });
+});
+
+/**
+ * Regresión de la revisión final de TSK-583.
+ *
+ * `accountType` solo miraba la cuenta propia del ítem. Si el ítem no tiene
+ * una cargada, el asiento no deja la línea sin imputar: cae en la cuenta por
+ * defecto de la empresa (`purchasesAccountId`/`salesAccountId`). El criterio
+ * de "¿admite/exige centro de costo?" tiene que mirar esa misma cuenta
+ * efectiva — si no, un ítem sin cuenta propia nunca exige reparto aunque el
+ * asiento lo impute igual a una cuenta de resultado (en la base real: 0 de 1
+ * productos tiene cuenta de ingresos propia cargada).
+ */
+describe('cuenta efectiva de una línea (TSK-583, revisión final)', () => {
+  it('usa la cuenta del ítem cuando la tiene', () => {
+    expect(effectiveAccountType('ASSET', 'EXPENSE')).toBe('ASSET');
+  });
+
+  it('cae en la cuenta por defecto de la empresa si el ítem no tiene una propia', () => {
+    expect(effectiveAccountType(null, 'EXPENSE')).toBe('EXPENSE');
+    expect(effectiveAccountType(undefined, 'REVENUE')).toBe('REVENUE');
+  });
+
+  it('sin cuenta propia ni por defecto, no hay criterio', () => {
+    expect(effectiveAccountType(null, null)).toBeNull();
+    expect(effectiveAccountType(undefined, undefined)).toBeNull();
+  });
+
+  it('un ítem sin cuenta propia que cae en el fallback de resultado admite centro de costo', () => {
+    // El caso real: el ítem no tiene defaultExpenseAccount/defaultIncomeAccount
+    // cargada, y la empresa configuró EXPENSE/REVENUE como cuenta por defecto.
+    expect(allowsCostCenter(effectiveAccountType(null, 'EXPENSE'))).toBe(true);
+    expect(allowsCostCenter(effectiveAccountType(undefined, 'REVENUE'))).toBe(true);
+  });
+
+  it('un ítem sin cuenta propia que cae en un fallback patrimonial no admite centro de costo', () => {
+    expect(allowsCostCenter(effectiveAccountType(null, 'ASSET'))).toBe(false);
   });
 });
 

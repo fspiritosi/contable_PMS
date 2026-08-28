@@ -1,9 +1,10 @@
 'use client';
 
-import { useForm, useFieldArray, useWatch } from 'react-hook-form';
+import { useForm, useFieldArray, useWatch, type FieldErrors } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
+import { logger } from '@/shared/lib/logger';
 import { Button } from '@/shared/components/ui/button';
 import {
   Form,
@@ -23,7 +24,11 @@ import {
 import { Input } from '@/shared/components/ui/input';
 import { padPointOfSale, padVoucherNumber } from '@/modules/commercial/shared/voucher-number';
 import { MoneyInput } from '@/shared/components/ui/money-input';
-import { allowsCostCenter, replicateAllocations } from '@/modules/commercial/shared/cost-center';
+import {
+  allowsCostCenter,
+  effectiveAccountType,
+  replicateAllocations,
+} from '@/modules/commercial/shared/cost-center';
 import { _CostCenterAllocationField } from '@/modules/commercial/shared/components/_CostCenterAllocationField';
 import { Textarea } from '@/shared/components/ui/textarea';
 import { Plus, Trash2, Loader2 } from 'lucide-react';
@@ -87,18 +92,30 @@ function _LineCostCenterField({
   index,
   products,
   costCenters,
+  defaultAccountType,
 }: {
   form: ReturnType<typeof useForm<PurchaseInvoiceFormInput>>;
   index: number;
   products: ProductSelectItem[];
   costCenters: CostCenterSelectItem[];
+  /** Cuenta de compras por defecto de la empresa (TSK-583, revisión final). */
+  defaultAccountType: string | null;
 }) {
   const productId = useWatch({ control: form.control, name: `lines.${index}.productId` });
   const product = products.find((p) => p.id === productId);
   const quantity = useWatch({ control: form.control, name: `lines.${index}.quantity` });
   const unitCost = useWatch({ control: form.control, name: `lines.${index}.unitCost` });
 
-  if (!allowsCostCenter(product?.defaultExpenseAccountType)) return null;
+  // El ítem puede no tener cuenta propia: en ese caso el asiento igual la
+  // imputa a la cuenta de compras por defecto de la empresa, así que el
+  // criterio tiene que mirar esa cuenta efectiva, no solo la del ítem
+  // (TSK-583, hallazgo de revisión final).
+  if (
+    !allowsCostCenter(
+      effectiveAccountType(product?.defaultExpenseAccountType, defaultAccountType)
+    )
+  )
+    return null;
 
   const qty = parseFloat(quantity ?? '0');
   const cost = parseFloat(unitCost ?? '0');
@@ -113,7 +130,12 @@ function _LineCostCenterField({
     lines.forEach((line, i) => {
       if (i === index) return;
       const lineProduct = products.find((p) => p.id === line.productId);
-      if (!allowsCostCenter(lineProduct?.defaultExpenseAccountType)) return;
+      if (
+        !allowsCostCenter(
+          effectiveAccountType(lineProduct?.defaultExpenseAccountType, defaultAccountType)
+        )
+      )
+        return;
 
       // Cada línea recibe su propia copia: si compartieran los mismos
       // objetos, editar el porcentaje de una filtraría el cambio a todas
@@ -141,6 +163,8 @@ interface PurchaseInvoiceFormProps {
   suppliers: SupplierSelectItem[];
   products: ProductSelectItem[];
   costCenters: CostCenterSelectItem[];
+  /** Cuenta de compras por defecto de la empresa (TSK-583, revisión final). */
+  defaultAccountType?: string | null;
   mode?: 'create' | 'edit';
   invoiceId?: string;
   defaultValues?: Partial<PurchaseInvoiceFormInput>;
@@ -150,6 +174,7 @@ export function _PurchaseInvoiceForm({
   suppliers,
   products,
   costCenters,
+  defaultAccountType = null,
   mode = 'create',
   invoiceId,
   defaultValues: initialValues,
@@ -356,6 +381,24 @@ export function _PurchaseInvoiceForm({
     }
   };
 
+  /**
+   * Sin esto, un submit inválido (ej. reparto de centro de costo incompleto)
+   * no hacía nada: sin toast, sin campo en rojo, sin explicación. Mismo
+   * patrón que `_CommercialIntegrationForm.tsx` (TSK-492), hallazgo de
+   * revisión final de TSK-583.
+   */
+  const handleInvalid = (errors: FieldErrors<PurchaseInvoiceFormInput>) => {
+    const campos = Object.keys(errors);
+    logger.error('Validación fallida en factura de compra', {
+      data: { campos, errors },
+    });
+    toast.error(
+      campos.length > 0
+        ? `No se pudo guardar: revisá los campos ${campos.join(', ')}`
+        : 'No se pudo guardar: hay campos inválidos'
+    );
+  };
+
   const addLine = () => {
     append({
       productId: undefined,
@@ -375,6 +418,11 @@ export function _PurchaseInvoiceForm({
     form.setValue(`lines.${index}.description`, product.name);
     form.setValue(`lines.${index}.unitCost`, product.costPrice.toString());
     form.setValue(`lines.${index}.vatRate`, isTypeC ? '0' : product.vatRate.toString());
+    // Cambiar de ítem invalida el reparto anterior: si el nuevo ítem no
+    // admite centro de costo, el campo se oculta pero el reparto quedaba
+    // guardado en el formulario y se confirmaba igual, aplicado a una cuenta
+    // que no lo admite (TSK-583, hallazgo de revisión final).
+    form.setValue(`lines.${index}.costCenterAllocations`, []);
 
     // Sugerir asociar si el ítem no está vinculado al proveedor
     if (watchedSupplierId && !product.supplierIds?.includes(watchedSupplierId)) {
@@ -398,7 +446,7 @@ export function _PurchaseInvoiceForm({
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} noValidate className="space-y-6">
+      <form onSubmit={form.handleSubmit(onSubmit, handleInvalid)} noValidate className="space-y-6">
         {/* Datos del Comprobante */}
         <Card className="p-6">
           <h3 className="text-lg font-semibold mb-4">Datos del Comprobante</h3>
@@ -828,6 +876,7 @@ export function _PurchaseInvoiceForm({
                     index={index}
                     products={products}
                     costCenters={costCenters}
+                    defaultAccountType={defaultAccountType}
                   />
                 </div>
 

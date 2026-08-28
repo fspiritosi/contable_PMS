@@ -26,8 +26,13 @@ type FormValues = CommercialIntegrationValues;
 /** Solo los campos de cuenta contable: `requireCostCenter` es un booleano aparte. */
 type FieldName = Exclude<keyof FormInput, 'requireCostCenter'>;
 
-/** Tipos de cuenta del plan, tal como los expone Prisma. */
-type AccountType = 'ASSET' | 'LIABILITY' | 'EQUITY' | 'INCOME' | 'REVENUE' | 'EXPENSE';
+/**
+ * Tipos de cuenta del plan, tal como los expone Prisma (`AccountType` en
+ * `schema.prisma`). No incluye `INCOME`: ese valor no existe en el enum real
+ * (es `REVENUE`); usarlo dejaba el combobox de Cuenta de Ventas vacío
+ * (TSK-583, hallazgo de revisión final).
+ */
+type AccountType = 'ASSET' | 'LIABILITY' | 'EQUITY' | 'REVENUE' | 'EXPENSE';
 
 interface FieldDef {
   name: FieldName;
@@ -55,7 +60,7 @@ const SECTIONS: SectionDef[] = [
       {
         name: 'salesAccountId',
         label: 'Cuenta de Ventas',
-        types: ['INCOME'],
+        types: ['REVENUE'],
         help: 'Se usa al confirmar facturas de venta (Haber)',
       },
       {

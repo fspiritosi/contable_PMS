@@ -21,6 +21,26 @@ export function allowsCostCenter(accountType: string | null | undefined): boolea
   return (RESULT_ACCOUNT_TYPES as readonly string[]).includes(accountType);
 }
 
+/**
+ * El tipo de cuenta que efectivamente va a imputar el asiento (TSK-583,
+ * hallazgo de revisión final).
+ *
+ * `accountType` es la cuenta propia del ítem. Cuando el ítem no tiene una
+ * cargada, el asiento no deja la línea sin imputar: cae en la cuenta por
+ * defecto de la empresa (`purchasesAccountId`/`salesAccountId`, según
+ * `createJournalEntryForPurchaseInvoice`/`createJournalEntryForSalesInvoice`).
+ * El criterio de "¿esta línea admite/exige centro de costo?" tiene que mirar
+ * esa misma cuenta efectiva, no solo la del ítem: con el criterio viejo, un
+ * ítem sin cuenta propia nunca exigía reparto aunque el asiento lo imputara
+ * igual a una cuenta de resultado.
+ */
+export function effectiveAccountType(
+  accountType: string | null | undefined,
+  defaultAccountType: string | null | undefined
+): string | null {
+  return accountType ?? defaultAccountType ?? null;
+}
+
 /** Un tramo del reparto: qué centro se lleva qué porcentaje de la línea. */
 export interface CostCenterAllocation {
   costCenterId: string;

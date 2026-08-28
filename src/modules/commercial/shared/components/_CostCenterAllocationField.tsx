@@ -1,7 +1,7 @@
 'use client';
 
 import { Plus, Trash2 } from 'lucide-react';
-import { useFieldArray, useFormContext, useWatch } from 'react-hook-form';
+import { get, useFieldArray, useFormContext, useFormState, useWatch } from 'react-hook-form';
 
 import { Button } from '@/shared/components/ui/button';
 import { Input } from '@/shared/components/ui/input';
@@ -48,9 +48,35 @@ export function _CostCenterAllocationField({
   const { fields, append, remove } = useFieldArray({ control, name });
 
   const allocations = (useWatch({ control, name }) ?? []) as CostCenterAllocation[];
-  const total = totalPercentage(allocations);
-  const amounts = prorateAmount(lineAmount, allocations);
+
+  // Un porcentaje vacío registra `NaN` (por `valueAsNumber: true`), y `NaN`
+  // se propaga a la suma y al prorrateo pintando "$ NaN" / "Total NaN%" en
+  // pantalla (TSK-583, hallazgo de revisión final). Solo se sanea para estos
+  // cálculos de pantalla: el valor real del formulario sigue siendo `NaN`,
+  // así que la validación de Zod lo sigue rechazando igual.
+  const safeAllocations = allocations.map((a) => ({
+    ...a,
+    percentage: Number.isFinite(a.percentage) ? a.percentage : 0,
+  }));
+  const total = totalPercentage(safeAllocations);
+  const amounts = prorateAmount(lineAmount, safeAllocations);
   const isComplete = total === 100;
+
+  // Errores del reparto (TSK-583, hallazgo de revisión final).
+  //
+  // `allocationFieldSchema.superRefine` adjunta el error de "no suma 100" a
+  // la raíz del array (`errors...costCenterAllocations.root`), no a un
+  // índice puntual, así que el `<FormMessage>` genérico de shadcn no lo
+  // encuentra (busca `error.message` en la raíz, no en `.root.message`).
+  // Sin leer esto a mano, el usuario hacía clic en Guardar y no pasaba
+  // nada: ni el campo en rojo, ni ningún aviso.
+  const { errors } = useFormState({ control, name });
+  const fieldErrors = get(errors, name) as
+    | (Record<number, { costCenterId?: { message?: string } }> & {
+        root?: { message?: string };
+      })
+    | undefined;
+  const rootError = fieldErrors?.root?.message;
 
   return (
     <div className="space-y-2">
@@ -73,47 +99,54 @@ export function _CostCenterAllocationField({
         </p>
       ) : (
         <>
-          {fields.map((field, index) => (
-            <div key={field.id} className="flex items-center gap-2">
-              <Select
-                value={allocations[index]?.costCenterId ?? ''}
-                onValueChange={(value) =>
-                  setValue(`${name}.${index}.costCenterId`, value, {
-                    shouldValidate: true,
-                  })
-                }
-              >
-                <SelectTrigger className="flex-1">
-                  <SelectValue placeholder="Elegí un centro de costo" />
-                </SelectTrigger>
-                <SelectContent position="popper" className="max-h-[250px]">
-                  {costCenters.map((costCenter) => (
-                    <SelectItem key={costCenter.id} value={costCenter.id}>
-                      {costCenter.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          {fields.map((field, index) => {
+            const costCenterError = fieldErrors?.[index]?.costCenterId?.message;
 
-              <Input
-                type="number"
-                step="0.01"
-                min="0"
-                max="100"
-                className="w-24 text-right"
-                {...register(`${name}.${index}.percentage`, { valueAsNumber: true })}
-              />
-              <span className="text-sm text-muted-foreground">%</span>
+            return (
+              <div key={field.id} className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <Select
+                    value={allocations[index]?.costCenterId ?? ''}
+                    onValueChange={(value) =>
+                      setValue(`${name}.${index}.costCenterId`, value, {
+                        shouldValidate: true,
+                      })
+                    }
+                  >
+                    <SelectTrigger className={cn('flex-1', costCenterError && 'border-destructive')}>
+                      <SelectValue placeholder="Elegí un centro de costo" />
+                    </SelectTrigger>
+                    <SelectContent position="popper" className="max-h-[250px]">
+                      {costCenters.map((costCenter) => (
+                        <SelectItem key={costCenter.id} value={costCenter.id}>
+                          {costCenter.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
 
-              <span className="w-32 text-right text-sm tabular-nums">
-                {formatCurrency(amounts[index]?.amount ?? 0)}
-              </span>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="100"
+                    className="w-24 text-right"
+                    {...register(`${name}.${index}.percentage`, { valueAsNumber: true })}
+                  />
+                  <span className="text-sm text-muted-foreground">%</span>
 
-              <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)}>
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </div>
-          ))}
+                  <span className="w-32 text-right text-sm tabular-nums">
+                    {formatCurrency(amounts[index]?.amount ?? 0)}
+                  </span>
+
+                  <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)}>
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+                {costCenterError && <p className="text-sm text-destructive">{costCenterError}</p>}
+              </div>
+            );
+          })}
 
           <div className="flex items-center justify-between border-t pt-2">
             <span
@@ -131,6 +164,7 @@ export function _CostCenterAllocationField({
               </Button>
             )}
           </div>
+          {rootError && <p className="text-sm text-destructive">{rootError}</p>}
         </>
       )}
     </div>
