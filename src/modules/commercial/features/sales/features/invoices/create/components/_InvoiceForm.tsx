@@ -30,10 +30,18 @@ import {
 } from '@/shared/components/ui/popover';
 import { Plus, Trash2, BadgePercent } from 'lucide-react';
 import { getDiscountPresetsForSelect } from '@/modules/company/features/discount-presets/list/actions.server';
-import { createInvoice, updateInvoice, getAllowedVoucherTypesForCustomer, getCustomerInvoicesForSelect } from '../../list/actions.server';
+import {
+  createInvoice,
+  updateInvoice,
+  getAllowedVoucherTypesForCustomer,
+  getCustomerInvoicesForSelect,
+  type SalesCostCenterSelectItem,
+} from '../../list/actions.server';
 import { updateQuoteAfterInvoice } from '@/modules/commercial/features/quotes/list/actions.server';
 import { isCreditNote, isDebitNote } from '@/modules/commercial/shared/voucher-utils';
 import { invoiceFormSchema, VOUCHER_TYPE_LABELS } from '../../shared/validators';
+import { allowsCostCenter, replicateAllocations } from '@/modules/commercial/shared/cost-center';
+import { _CostCenterAllocationField } from '@/modules/commercial/shared/components/_CostCenterAllocationField';
 import { z } from 'zod';
 import moment from 'moment';
 import { useEffect, useRef, useState } from 'react';
@@ -53,16 +61,94 @@ interface InvoiceLineRowProps {
   form: ReturnType<typeof useForm<FormInput>>;
   index: number;
   products: InvoiceFormProps['products'];
+  costCenters: SalesCostCenterSelectItem[];
   discountPresets: Array<{ id: string; name: string; percentage: number }>;
   onProductSelect: (index: number, productId: string) => void;
   onRemove: () => void;
   isTypeC: boolean;
 }
 
+/**
+ * Reparto por centro de costo de una línea de venta (TSK-583).
+ *
+ * Solo aparece si el ítem se imputa a una cuenta de ingresos: repartir
+ * resultados no tiene sentido si la línea no genera ingreso. Al dejarlo
+ * vacío, el asiento cae en el centro predeterminado del ítem. Se reparte el
+ * neto ya con descuentos aplicados, igual que lo que se ve en la fila.
+ */
+function _LineCostCenterField({
+  form,
+  index,
+  products,
+  costCenters,
+}: {
+  form: ReturnType<typeof useForm<FormInput>>;
+  index: number;
+  products: InvoiceFormProps['products'];
+  costCenters: SalesCostCenterSelectItem[];
+}) {
+  const productId = useWatch({ control: form.control, name: `lines.${index}.productId` });
+  const product = products.find((p) => p.id === productId);
+  const quantity = useWatch({ control: form.control, name: `lines.${index}.quantity` });
+  const unitPrice = useWatch({ control: form.control, name: `lines.${index}.unitPrice` });
+  const discountPercent = useWatch({ control: form.control, name: `lines.${index}.discountPercent` });
+  const discountAmount = useWatch({ control: form.control, name: `lines.${index}.discountAmount` });
+
+  if (!allowsCostCenter(product?.defaultIncomeAccountType)) return null;
+
+  const qty = parseFloat(quantity ?? '0');
+  const price = parseFloat(unitPrice ?? '0');
+  const dtoPercent = parseFloat(discountPercent ?? '0');
+  const dtoAmount = parseFloat(discountAmount ?? '0');
+
+  const baseAmount = isNaN(qty) || isNaN(price) ? 0 : Math.round(qty * price * 100) / 100;
+
+  let discountValue = 0;
+  if (!isNaN(dtoPercent) && dtoPercent > 0) {
+    discountValue = Math.round(baseAmount * (dtoPercent / 100) * 100) / 100;
+  } else if (!isNaN(dtoAmount) && dtoAmount > 0) {
+    discountValue = Math.round(Math.min(dtoAmount, baseAmount) * 100) / 100;
+  }
+
+  const lineAmount = Math.round((baseAmount - discountValue) * 100) / 100;
+
+  // Copia el reparto de esta línea a las demás líneas cuyo ítem también
+  // admita centro de costo (TSK-583). Cada línea recibe su propia copia
+  // (replicateAllocations): compartir los mismos objetos haría que editar el
+  // porcentaje de una filtrara el cambio a todas las demás.
+  const applyToAllLines = () => {
+    const allocations = form.getValues(`lines.${index}.costCenterAllocations`) ?? [];
+    const lines = form.getValues('lines');
+
+    lines.forEach((line, i) => {
+      if (i === index) return;
+      const lineProduct = products.find((p) => p.id === line.productId);
+      if (!allowsCostCenter(lineProduct?.defaultIncomeAccountType)) return;
+
+      form.setValue(`lines.${i}.costCenterAllocations`, replicateAllocations(allocations), {
+        shouldValidate: true,
+        shouldDirty: true,
+      });
+    });
+  };
+
+  return (
+    <div className="pt-2">
+      <_CostCenterAllocationField
+        name={`lines.${index}.costCenterAllocations`}
+        lineAmount={lineAmount}
+        costCenters={costCenters}
+        onApplyToAll={applyToAllLines}
+      />
+    </div>
+  );
+}
+
 function _InvoiceLineRow({
   form,
   index,
   products,
+  costCenters,
   discountPresets,
   onProductSelect,
   onRemove,
@@ -402,6 +488,8 @@ function _InvoiceLineRow({
           <span className="font-semibold">Total: {formatCurrency(total)}</span>
         </div>
       </div>
+
+      <_LineCostCenterField form={form} index={index} products={products} costCenters={costCenters} />
     </div>
   );
 }
@@ -424,14 +512,17 @@ interface InvoiceFormProps {
     salePriceWithTax: any;
     vatRate: any;
     trackStock: boolean;
+    // El tipo de la cuenta de ingresos decide si el ítem admite centro de costo (TSK-583).
+    defaultIncomeAccountType?: string | null;
   }>;
+  costCenters: SalesCostCenterSelectItem[];
   mode?: 'create' | 'edit';
   invoiceId?: string;
   initialData?: FormInput;
   fromQuoteId?: string;
 }
 
-export function InvoiceForm({ customers, pointsOfSale, products, mode = 'create', invoiceId, initialData, fromQuoteId }: InvoiceFormProps) {
+export function InvoiceForm({ customers, pointsOfSale, products, costCenters, mode = 'create', invoiceId, initialData, fromQuoteId }: InvoiceFormProps) {
   const router = useRouter();
   const isEdit = mode === 'edit';
   const [totals, setTotals] = useState({
@@ -695,6 +786,7 @@ export function InvoiceForm({ customers, pointsOfSale, products, mode = 'create'
       vatRate: isTypeC ? '0' : '21',
       discountPercent: '',
       discountAmount: '',
+      costCenterAllocations: [],
     });
   };
 
@@ -963,6 +1055,7 @@ export function InvoiceForm({ customers, pointsOfSale, products, mode = 'create'
                     form={form}
                     index={index}
                     products={products}
+                    costCenters={costCenters}
                     discountPresets={discountPresets}
                     onProductSelect={handleProductSelect}
                     onRemove={() => remove(index)}

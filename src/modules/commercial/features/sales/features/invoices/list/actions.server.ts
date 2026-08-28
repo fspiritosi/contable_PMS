@@ -17,6 +17,10 @@ import {
 import { createJournalEntryForSalesInvoice } from '@/modules/accounting/features/integrations/commercial';
 import { isCreditNote, isDebitNote } from '@/modules/commercial/shared/voucher-utils';
 import { applySalesCreditNote } from '@/modules/commercial/shared/credit-note-compensation';
+import {
+  buildMissingCostCenterMessage,
+  findLinesMissingCostCenter,
+} from '@/modules/commercial/shared/cost-center';
 
 // Obtener todas las facturas de venta
 export async function getInvoices() {
@@ -251,6 +255,10 @@ export async function getInvoiceById(id: string) {
                 unitOfMeasure: true,
               },
             },
+            // Reparto por centro de costo de la línea (TSK-583).
+            costCenterAllocations: {
+              select: { costCenterId: true, percentage: true },
+            },
           },
         },
         journalEntry: {
@@ -354,6 +362,10 @@ export async function getInvoiceById(id: string) {
         total: Number(line.total),
         discountPercent: line.discountPercent ? Number(line.discountPercent) : null,
         discountAmount: line.discountAmount ? Number(line.discountAmount) : null,
+        costCenterAllocations: line.costCenterAllocations.map((a) => ({
+          costCenterId: a.costCenterId,
+          percentage: Number(a.percentage),
+        })),
       })),
       creditDebitNotes: invoice.creditDebitNotes.map((cn) => ({
         ...cn,
@@ -546,6 +558,24 @@ export async function getCustomerInvoicesForSelect(customerId: string) {
   }));
 }
 
+/**
+ * Centros de costo activos, para imputar líneas de factura (TSK-583).
+ */
+export async function getSalesCostCentersForSelect() {
+  await checkPermission('commercial.invoices', 'view', { redirect: true });
+
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  return prisma.costCenter.findMany({
+    where: { companyId, isActive: true },
+    select: { id: true, name: true },
+    orderBy: { name: 'asc' },
+  });
+}
+
+export type SalesCostCenterSelectItem = Awaited<ReturnType<typeof getSalesCostCentersForSelect>>[number];
+
 // Crear una nueva factura
 export async function createInvoice(data: unknown) {
   await checkPermission('commercial.invoices', 'create', { redirect: true });
@@ -648,6 +678,12 @@ export async function createInvoice(data: unknown) {
         total: new Prisma.Decimal(amounts.total),
         discountPercent: line.discountPercent != null ? new Prisma.Decimal(line.discountPercent) : null,
         discountAmount: line.discountAmount != null ? new Prisma.Decimal(line.discountAmount) : null,
+        costCenterAllocations: {
+          create: (line.costCenterAllocations ?? []).map((a) => ({
+            costCenterId: a.costCenterId,
+            percentage: a.percentage,
+          })),
+        },
       };
     });
 
@@ -766,8 +802,11 @@ export async function confirmInvoice(id: string) {
                 code: true,
                 name: true,
                 trackStock: true,
+                // El tipo de la cuenta decide si la línea exige centro de costo (TSK-583).
+                defaultIncomeAccount: { select: { type: true } },
               },
             },
+            costCenterAllocations: true,
           },
         },
       },
@@ -775,6 +814,28 @@ export async function confirmInvoice(id: string) {
 
     if (!invoice) {
       throw new Error('Factura no encontrada o ya está confirmada');
+    }
+
+    const settings = await prisma.accountingSettings.findUnique({
+      where: { companyId },
+      select: { requireCostCenter: true },
+    });
+
+    if (settings?.requireCostCenter) {
+      const missing = findLinesMissingCostCenter(
+        invoice.lines.map((line) => ({
+          description: line.description,
+          accountType: line.product?.defaultIncomeAccount?.type ?? null,
+          allocations: line.costCenterAllocations.map((a) => ({
+            costCenterId: a.costCenterId,
+            percentage: Number(a.percentage),
+          })),
+        }))
+      );
+
+      if (missing.length > 0) {
+        throw new Error(buildMissingCostCenterMessage(missing));
+      }
     }
 
     // Confirmar y descontar stock en transacción
@@ -1067,6 +1128,12 @@ export async function updateInvoice(id: string, data: unknown) {
         total: new Prisma.Decimal(amounts.total),
         discountPercent: line.discountPercent != null ? new Prisma.Decimal(line.discountPercent) : null,
         discountAmount: line.discountAmount != null ? new Prisma.Decimal(line.discountAmount) : null,
+        costCenterAllocations: {
+          create: (line.costCenterAllocations ?? []).map((a) => ({
+            costCenterId: a.costCenterId,
+            percentage: a.percentage,
+          })),
+        },
       };
     });
 
@@ -1091,6 +1158,8 @@ export async function updateInvoice(id: string, data: unknown) {
     const discountTotal = totalLineDiscounts + globalDiscount;
 
     const result = await prisma.$transaction(async (tx) => {
+      // Eliminar líneas existentes: el cascade también borra su reparto por
+      // centro de costo (SalesInvoiceLineCostCenter.onDelete: Cascade).
       await tx.salesInvoiceLine.deleteMany({ where: { invoiceId: id } });
 
       return tx.salesInvoice.update({

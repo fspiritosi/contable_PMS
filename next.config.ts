@@ -2,6 +2,12 @@ import type { NextConfig } from "next";
 import { instanceConfig } from "./instance.config";
 
 const nextConfig: NextConfig = {
+  // Fija la raiz del workspace. Sin esto Next la infiere buscando el lockfile mas
+  // cercano hacia arriba, y un package.json suelto en un directorio padre rompe la
+  // resolucion de modulos (ej: tailwindcss).
+  turbopack: {
+    root: __dirname,
+  },
   // Ignorar errores de TS en build (hay errores preexistentes en opening-balances)
   typescript: {
     ignoreBuildErrors: true,

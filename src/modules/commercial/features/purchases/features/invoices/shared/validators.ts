@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { VoucherType, PurchaseInvoiceStatus } from '@/generated/prisma/enums';
+import { allocationFieldSchema } from '@/modules/commercial/shared/allocation-form';
 
 // ============================================
 // CONSTANTES - Etiquetas para UI
@@ -37,8 +38,13 @@ export const purchaseInvoiceLineSchema = z.object({
   unitCost: z.string().regex(/^\d+(\.\d{1,2})?$/, 'Valor unitario inválido'),
   vatRate: z.string().regex(/^\d+(\.\d{1,2})?$/, 'Alícuota de IVA inválida'),
   purchaseOrderLineId: z.string().uuid().optional().or(z.literal('')),
-  // Solo se completa en lineas imputadas a cuentas de resultado (TSK-583).
-  costCenterId: z.string().uuid().optional().or(z.literal('')),
+  // Reparto por centro de costo. Vacío = centro predeterminado del ítem (TSK-583).
+  // Nota: se usa `.optional()` en lugar de `.default([])` porque el `default`
+  // hace que el tipo de entrada del formulario (antes de validar) y el tipo de
+  // salida (ya validado) diverjan, y react-hook-form + zodResolver no aceptan
+  // esa asimetría sin declarar un tercer genérico en useForm (ver mismo
+  // problema, preexistente, en _PurchaseOrderForm.tsx con `installments`).
+  costCenterAllocations: allocationFieldSchema.optional(),
 });
 
 // Schema para crear/editar factura de compra

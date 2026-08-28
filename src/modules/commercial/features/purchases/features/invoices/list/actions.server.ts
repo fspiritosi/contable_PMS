@@ -22,6 +22,10 @@ import { createJournalEntryForPurchaseInvoice } from '@/modules/accounting/featu
 import { isCreditNote, isDebitNote } from '@/modules/commercial/shared/voucher-utils';
 import { applyPurchaseCreditNote } from '@/modules/commercial/shared/credit-note-compensation';
 import { selectConfirmableInvoices, type BulkConfirmFailure } from '../shared/bulk-confirm';
+import {
+  buildMissingCostCenterMessage,
+  findLinesMissingCostCenter,
+} from '@/modules/commercial/shared/cost-center';
 
 // ============================================
 // QUERIES
@@ -266,6 +270,10 @@ export async function getPurchaseInvoiceById(id: string) {
                 trackStock: true,
               },
             },
+            // Reparto por centro de costo de la linea (TSK-583).
+            costCenterAllocations: {
+              select: { costCenterId: true, percentage: true },
+            },
           },
         },
         company: {
@@ -433,6 +441,10 @@ export async function getPurchaseInvoiceById(id: string) {
         vatAmount: Number(line.vatAmount),
         subtotal: Number(line.subtotal),
         total: Number(line.total),
+        costCenterAllocations: line.costCenterAllocations.map((a) => ({
+          costCenterId: a.costCenterId,
+          percentage: Number(a.percentage),
+        })),
       })),
       creditDebitNotes: invoice.creditDebitNotes.map((cn) => ({
         ...cn,
@@ -846,7 +858,12 @@ export async function createPurchaseInvoice(input: PurchaseInvoiceFormInput) {
         subtotal: lineSubtotal,
         total: lineTotal,
         purchaseOrderLineId: line.purchaseOrderLineId || null,
-        costCenterId: line.costCenterId || null,
+        costCenterAllocations: {
+          create: (line.costCenterAllocations ?? []).map((a) => ({
+            costCenterId: a.costCenterId,
+            percentage: a.percentage,
+          })),
+        },
       };
     });
 
@@ -989,7 +1006,12 @@ export async function updatePurchaseInvoice(id: string, input: PurchaseInvoiceFo
         subtotal: lineSubtotal,
         total: lineTotal,
         purchaseOrderLineId: line.purchaseOrderLineId || null,
-        costCenterId: line.costCenterId || null,
+        costCenterAllocations: {
+          create: (line.costCenterAllocations ?? []).map((a) => ({
+            costCenterId: a.costCenterId,
+            percentage: a.percentage,
+          })),
+        },
       };
     });
 
@@ -1094,7 +1116,12 @@ export async function confirmPurchaseInvoice(id: string) {
       include: {
         lines: {
           include: {
-            product: true,
+            product: {
+              include: {
+                defaultExpenseAccount: { select: { type: true } },
+              },
+            },
+            costCenterAllocations: true,
           },
         },
       },
@@ -1110,6 +1137,28 @@ export async function confirmPurchaseInvoice(id: string) {
 
     if (invoice.status !== 'DRAFT') {
       throw new Error('Solo se pueden confirmar facturas en estado borrador');
+    }
+
+    const settings = await prisma.accountingSettings.findUnique({
+      where: { companyId },
+      select: { requireCostCenter: true },
+    });
+
+    if (settings?.requireCostCenter) {
+      const missing = findLinesMissingCostCenter(
+        invoice.lines.map((line) => ({
+          description: line.description,
+          accountType: line.product?.defaultExpenseAccount?.type ?? null,
+          allocations: line.costCenterAllocations.map((a) => ({
+            costCenterId: a.costCenterId,
+            percentage: Number(a.percentage),
+          })),
+        }))
+      );
+
+      if (missing.length > 0) {
+        throw new Error(buildMissingCostCenterMessage(missing));
+      }
     }
 
     // Confirmar factura en transacción

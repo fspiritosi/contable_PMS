@@ -1,0 +1,413 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>TSK-583 — Reparto de facturas entre centros de costo</title>
+<style>
+  @page {
+    size: A4;
+    margin: 0;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #1f2430;
+    font-size: 13px;
+    line-height: 1.55;
+    background: #ffffff;
+  }
+
+  .page {
+    padding: 4mm 2mm;
+  }
+
+  header.cover {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    text-align: left;
+    padding: 10mm 2mm 8mm 2mm;
+    border-bottom: 3px solid #2f6f4f;
+    margin-bottom: 10mm;
+  }
+
+  .eyebrow {
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 11px;
+    font-weight: 700;
+    color: #2f6f4f;
+    margin-bottom: 6px;
+  }
+
+  h1 {
+    font-size: 26px;
+    margin: 0 0 8px 0;
+    color: #14251c;
+  }
+
+  .subtitle {
+    font-size: 14px;
+    color: #4b5563;
+    margin: 0;
+  }
+
+  section {
+    margin-bottom: 9mm;
+    page-break-inside: avoid;
+  }
+
+  h2 {
+    font-size: 16px;
+    color: #14251c;
+    border-left: 4px solid #2f6f4f;
+    padding-left: 8px;
+    margin: 0 0 6mm 0;
+  }
+
+  .step-number {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #2f6f4f;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    margin-right: 8px;
+    flex-shrink: 0;
+  }
+
+  .quote {
+    background: #f4f7f5;
+    border-left: 4px solid #2f6f4f;
+    padding: 10px 14px;
+    font-style: italic;
+    color: #2b3a33;
+    margin: 0 0 6px 0;
+  }
+
+  .quote cite {
+    display: block;
+    font-style: normal;
+    font-size: 11.5px;
+    color: #6b7280;
+    margin-top: 6px;
+  }
+
+  .before-after {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    page-break-inside: avoid;
+  }
+
+  .card {
+    border: 1px solid #e2e5e0;
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+
+  .card.before { background: #fbf7f2; border-color: #ecd9bd; }
+  .card.after { background: #f2f8f4; border-color: #bfe0cb; }
+
+  .card h3 {
+    margin: 0 0 6px 0;
+    font-size: 12.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .card.before h3 { color: #9a6a1f; }
+  .card.after h3 { color: #226240; }
+
+  .card p { margin: 0; }
+
+  ol.steps {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    counter-reset: step;
+  }
+
+  ol.steps > li {
+    counter-increment: step;
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+    page-break-inside: avoid;
+  }
+
+  ol.steps > li::before {
+    content: counter(step);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    border-radius: 50%;
+    background: #2f6f4f;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .step-body { flex: 1; }
+
+  .step-body strong { color: #14251c; }
+
+  figure {
+    margin: 8px 0 0 0;
+    page-break-inside: avoid;
+  }
+
+  figure img {
+    max-width: 100%;
+    border: 1px solid #d9dce0;
+    border-radius: 6px;
+    display: block;
+  }
+
+  figcaption {
+    font-size: 11px;
+    color: #6b7280;
+    margin-top: 4px;
+  }
+
+  .callout {
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin: 0 0 8px 0;
+  }
+
+  .callout.config {
+    background: #f2f6fb;
+    border: 1px solid #cddaeb;
+  }
+
+  .callout.warning {
+    background: #fdf5ec;
+    border: 1px solid #efd6a8;
+  }
+
+  .callout h3 {
+    margin: 0 0 4px 0;
+    font-size: 13px;
+  }
+
+  ul.plain {
+    margin: 4px 0 0 0;
+    padding-left: 18px;
+  }
+
+  ul.plain li { margin-bottom: 4px; }
+
+  .no-change-list {
+    display: grid;
+    gap: 6px;
+  }
+
+  .no-change-item {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+  }
+
+  .check {
+    color: #2f6f4f;
+    font-weight: 700;
+  }
+
+  footer.doc-footer {
+    text-align: center;
+    color: #9ca3af;
+    font-size: 10.5px;
+    margin-top: 10mm;
+  }
+
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10mm;
+    align-items: start;
+  }
+</style>
+</head>
+<body>
+
+<div class="page">
+
+  <header class="cover">
+    <div class="eyebrow">Ticket 583 · Comercial y Contabilidad</div>
+    <h1>Reparto de facturas entre varios centros de costo</h1>
+    <p class="subtitle">Guía de presentación — qué se pidió, qué cambió y cómo usarlo</p>
+  </header>
+
+  <section>
+    <h2>1. Qué pedías</h2>
+    <p>El ticket 583 ya se había entregado una vez: renombramos "Costo Unitario" a "Valor Unitario",
+    agregamos el centro de costo por línea de factura de compra y permitimos confirmar varias
+    facturas a la vez. Pero al usarlo en el día a día, nos escribiste para aclarar que faltaba
+    algo importante:</p>
+    <div class="quote">
+      "No sé si quedó claro que si elijo trabajar obligatoriamente con centros de costos, tengo
+      que imputar a alguna en cualquier factura compra o venta que tenga ítems relacionados con
+      cuentas contables en las 4, o sea, ingresos o egresos. No activo, ni pasivo. Y también
+      puede ser que sea 100% a 1 cc o mitad a 2 cc. Etc."
+      <cite>— Elizabeth Pérez</cite>
+    </div>
+    <p>En criollo: pedías dos cosas que la primera entrega no cubría. Primero, que si tu empresa
+    decide trabajar con centros de costo, no sea opcional: toda factura de compra o venta con
+    ítems de ingresos o egresos tiene que tener su centro asignado antes de poder confirmarse.
+    Segundo, que una misma línea pueda repartirse entre más de un centro, no solo elegir uno de
+    una lista.</p>
+  </section>
+
+  <section>
+    <h2>2. Qué cambió en pantalla</h2>
+    <div class="before-after">
+      <div class="card before">
+        <h3>Antes</h3>
+        <p>Cada línea de la factura tenía un <strong>selector simple</strong>: elegías un único
+        centro de costo de una lista desplegable, o lo dejabas vacío. No había forma de repartir
+        una misma línea entre dos o más centros, y nada impedía confirmar una factura sin
+        completar ese dato.</p>
+      </div>
+      <div class="card after">
+        <h3>Ahora</h3>
+        <p>Cada línea tiene un <strong>editor de reparto</strong>: agregás los centros que
+        necesites, con el porcentaje que le corresponde a cada uno. Si tu empresa lo exige, la
+        factura no se puede confirmar hasta completar el reparto de todas las líneas que
+        correspondan.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>3. Cómo se usa — un ejemplo concreto</h2>
+    <p>Vamos a seguir el caso típico: una factura de compra de combustible por <strong>$100.000</strong>
+    que corresponde repartir 60% a Logística y 40% a Mantenimiento.</p>
+    <ol class="steps">
+      <li>
+        <div class="step-body">
+          <strong>Cargá la factura como siempre.</strong> Elegís el proveedor, el tipo de
+          comprobante y agregás la línea del ítem (en este caso, Combustible por $100.000). Si el
+          ítem se imputa a una cuenta de ingresos o egresos, debajo de la línea aparece la sección
+          <strong>"Centros de costo"</strong>.
+        </div>
+      </li>
+      <li>
+        <div class="step-body">
+          <strong>Repartí el importe.</strong> Con <strong>"Agregar centro"</strong> sumás filas: elegís
+          el centro y el porcentaje que le corresponde. El pie de la línea muestra el acumulado —
+          en <strong>verde</strong> cuando llega a 100%, en rojo mientras falte o se pase — y a la derecha
+          de cada fila ves cuánto le toca a ese centro en pesos.
+          <figure>
+            <img src="assets/captura-reparto.png" alt="Editor de reparto con 60% a Logística y 40% a Mantenimiento" />
+            <figcaption>La línea de Combustible repartida 60% a Logística ($60.000) y 40% a
+            Mantenimiento ($40.000). El total da 100,00% en verde.</figcaption>
+          </figure>
+        </div>
+      </li>
+      <li>
+        <div class="step-body">
+          <strong>Guardá y confirmá la factura.</strong> Si tu empresa exige centro de costo y te
+          olvidás de repartir alguna línea, el sistema no te deja confirmar: te avisa exactamente
+          qué línea falta completar.
+          <figure>
+            <img src="assets/captura-error.png" alt="Aviso de que falta el centro de costo en la línea Combustible" />
+            <figcaption>Así avisa el sistema cuando falta el reparto: "Falta el centro de costo en
+            1 línea: Combustible". La factura queda en borrador hasta que lo completes.</figcaption>
+          </figure>
+        </div>
+      </li>
+      <li>
+        <div class="step-body">
+          <strong>Mirá el asiento contable.</strong> Una vez confirmada, el asiento generado
+          muestra una imputación separada por cada centro: no es una sola línea de $100.000, son
+          dos líneas de $60.000 y $40.000 a la cuenta de Combustible, cada una con su centro. El
+          IVA queda aparte, sin repartir.
+          <figure>
+            <img src="assets/captura-asiento.png" alt="Asiento contable con dos imputaciones de Combustible, una por cada centro de costo" />
+            <figcaption>El asiento: dos líneas de Combustible ($60.000 y $40.000), la línea de
+            IVA Crédito Fiscal ($21.000) sin repartir, y la línea de Acreedores por el total
+            ($121.000).</figcaption>
+          </figure>
+        </div>
+      </li>
+    </ol>
+    <p>Si un ítem se imputa 100% a un solo centro, el editor arranca con una única fila al 100% (el
+    centro predeterminado del ítem, si lo tiene cargado) y se ve prácticamente igual que el
+    selector de antes: el caso simple no se complica. Y si varias líneas se reparten de la misma
+    forma, el botón <strong>"Aplicar a todas las líneas"</strong> copia el reparto sin tener que
+    cargarlo de nuevo en cada una.</p>
+  </section>
+
+  <section>
+    <h2>4. Qué hay que configurar</h2>
+    <div class="callout config">
+      <h3>El switch "Exigir centro de costo"</h3>
+      <p>En <strong>Contabilidad → Configuración → Integración Comercial</strong> encontrás el
+      nuevo switch. Con el switch <strong>activado</strong>, toda línea de una factura de compra o
+      de venta que se impute a una cuenta de ingresos o egresos necesita su reparto completo para
+      poder confirmarse. Con el switch <strong>apagado</strong> (que es como queda por defecto),
+      el centro de costo sigue siendo opcional, exactamente como funcionaba hasta ahora.</p>
+      <figure>
+        <img src="assets/captura-switch.png" alt="Switch de Exigir centro de costo activado en Configuración Contable" />
+        <figcaption>El switch "Exigir centro de costo" en Configuración Contable, activado.</figcaption>
+      </figure>
+    </div>
+    <p>Si tenés varias facturas en borrador para confirmar de una vez, la <strong>confirmación
+    masiva</strong> sigue funcionando igual que antes: las que tengan el reparto incompleto quedan
+    afuera, se confirman las demás, y al final te dice cuáles faltaron y por qué.</p>
+  </section>
+
+  <section>
+    <h2>5. Qué no cambió</h2>
+    <div class="no-change-list">
+      <div class="no-change-item">
+        <span class="check">✓</span>
+        <span>Las facturas que ya estaban confirmadas <strong>no se tocan</strong>. La validación
+        corre solo al confirmar, así que activar el switch no te obliga a revisar ni recargar
+        nada de lo que ya cerraste.</span>
+      </div>
+      <div class="no-change-item">
+        <span class="check">✓</span>
+        <span>El <strong>IVA nunca se reparte</strong>. Va siempre a la cuenta de IVA
+        correspondiente, porque no es una cuenta de ingresos ni de egresos.</span>
+      </div>
+      <div class="no-change-item">
+        <span class="check">✓</span>
+        <span>Comprar o vender un <strong>activo</strong> (por ejemplo, un rodado o una
+        maquinaria) sigue sin pedir centro de costo: un activo no consume presupuesto de ningún
+        centro.</span>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="callout warning">
+      <h3>⚠ Un aviso importante sobre los asientos de venta</h3>
+      <p>Hasta ahora, una factura de <strong>venta</strong> con ítems de distintos centros de costo
+      imputaba todo el asiento a un solo centro — eso era un error que veníamos arrastrando. Con
+      esta entrega se corrige: cada centro recibe su propia imputación, igual que en compras. Es
+      una mejora, pero como consecuencia, <strong>los asientos nuevos de venta se van a ver
+      distintos de los que generaste hasta ahora</strong> para facturas con varios centros. Los
+      asientos viejos no se recalculan ni se modifican.</p>
+    </div>
+  </section>
+
+  <footer class="doc-footer">
+    TSK-583 — Centros de costo obligatorios y reparto entre varios centros
+  </footer>
+
+</div>
+
+</body>
+</html>

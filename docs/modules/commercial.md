@@ -619,6 +619,34 @@ Cada documento comercial confirmado genera un asiento contable automático:
 
 **Comportamiento ante errores**: La creación del asiento contable es **no-bloqueante**. Si falla o no están configuradas las cuentas, logea warning pero la operación comercial continúa.
 
+### Reparto por Centro de Costo (TSK-583)
+
+Cada línea de factura (compra o venta) puede repartirse entre varios centros de costo por
+porcentaje, en vez de un único centro fijo. Reglas:
+
+- Solo aplica a líneas cuyo ítem se imputa a una cuenta de tipo `REVENUE` o `EXPENSE`. Una
+  cuenta patrimonial (`ASSET`, `LIABILITY`, `EQUITY`) no admite reparto: comprar o vender un
+  activo no consume presupuesto de ningún centro.
+- Un reparto suma exactamente 100% o está vacío; vacío cae en `Product.defaultCostCenterId`.
+- Solo se reparte el `subtotal` (neto) de la línea. El IVA nunca se reparte: siempre va a la
+  cuenta de IVA (crédito o débito fiscal), que no es de resultado.
+- Al generar el asiento, `expandByCostCenter()` (en
+  `modules/commercial/shared/cost-center.ts`) expande cada línea en tantas imputaciones como
+  centros tenga, **agrupando por `cuenta + centro`** — antes se agrupaba solo por cuenta, lo
+  que en ventas colapsaba el reparto en un único centro (bug corregido en esta entrega).
+- **Prorrateo:** cada monto se redondea a 2 decimales y el último centro del reparto absorbe
+  la diferencia, para que la suma de las partes sea exacta y el asiento no descuadre.
+- **Obligatoriedad configurable** (`AccountingSettings.requireCostCenter`): con el flag
+  activo, al **confirmar** una factura toda línea imputada a cuenta de resultado debe tener
+  reparto completo; si falta, la confirmación se rechaza nombrando las líneas incompletas
+  (`findLinesMissingCostCenter` / `buildMissingCostCenterMessage`). La confirmación masiva
+  omite esas facturas, sigue con el resto e informa el motivo. Con el flag apagado (default),
+  el comportamiento es el previo a esta entrega.
+- Facturas ya confirmadas no se revalidan: la regla corre solo al confirmar.
+
+Modelo de datos: `PurchaseInvoiceLineCostCenter` y `SalesInvoiceLineCostCenter` (ver
+[data-model.md](../architecture/data-model.md)).
+
 ---
 
 ## Retenciones
@@ -659,12 +687,16 @@ Tanto Recibos como Órdenes de Pago soportan retenciones impositivas:
 - Si tiene remitos confirmados, stock ya manejado
 - Requiere depósito principal activo para stock
 - Al vincular con OC: no puede exceder cantidad pendiente por línea
+- Con `AccountingSettings.requireCostCenter` activo: al confirmar, toda línea imputada a
+  cuenta de resultado debe tener reparto de centro de costo completo (TSK-583)
 
 ### Factura de Venta
 - voucherType válido según reglas AFIP (matriz emisor/receptor)
 - Punto de venta autorizado AFIP (si habilitado)
 - Solo editar si DRAFT
 - No cancelar si PAID o PARTIAL_PAID
+- Con `AccountingSettings.requireCostCenter` activo: al confirmar, toda línea imputada a
+  cuenta de resultado debe tener reparto de centro de costo completo (TSK-583)
 
 ### Recibo / Orden de Pago
 - Requiere sesión de caja ABIERTA si paga en efectivo

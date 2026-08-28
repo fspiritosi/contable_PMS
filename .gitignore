@@ -65,3 +65,6 @@ notas.md
 backup_db.sql
 .devin
 backups/
+
+# scripts locales de desarrollo (contienen credenciales de prueba)
+reset-pass.ts

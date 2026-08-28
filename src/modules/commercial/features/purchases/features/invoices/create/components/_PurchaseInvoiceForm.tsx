@@ -23,7 +23,8 @@ import {
 import { Input } from '@/shared/components/ui/input';
 import { padPointOfSale, padVoucherNumber } from '@/modules/commercial/shared/voucher-number';
 import { MoneyInput } from '@/shared/components/ui/money-input';
-import { allowsCostCenter } from '../../shared/cost-center';
+import { allowsCostCenter, replicateAllocations } from '@/modules/commercial/shared/cost-center';
+import { _CostCenterAllocationField } from '@/modules/commercial/shared/components/_CostCenterAllocationField';
 import { Textarea } from '@/shared/components/ui/textarea';
 import { Plus, Trash2, Loader2 } from 'lucide-react';
 import {
@@ -74,15 +75,12 @@ function _PurchaseLineTotals({ form, index }: { form: ReturnType<typeof useForm<
   );
 }
 
-/** Valor centinela: Select de shadcn no acepta "" como valor de opcion. */
-const NO_COST_CENTER = '__SIN_CENTRO__';
-
 /**
- * Centro de costo de una linea (TSK-583).
+ * Reparto por centro de costo de una linea (TSK-583).
  *
  * Solo aparece si el item se imputa a una cuenta de resultado: repartir por
- * centro de costo no tiene sentido en una compra de activo. Al no elegir
- * ninguno, el asiento cae en el centro predeterminado del item.
+ * centro de costo no tiene sentido en una compra de activo. Al dejarlo vacio,
+ * el asiento cae en el centro predeterminado del item.
  */
 function _LineCostCenterField({
   form,
@@ -97,40 +95,45 @@ function _LineCostCenterField({
 }) {
   const productId = useWatch({ control: form.control, name: `lines.${index}.productId` });
   const product = products.find((p) => p.id === productId);
+  const quantity = useWatch({ control: form.control, name: `lines.${index}.quantity` });
+  const unitCost = useWatch({ control: form.control, name: `lines.${index}.unitCost` });
 
   if (!allowsCostCenter(product?.defaultExpenseAccountType)) return null;
 
+  const qty = parseFloat(quantity ?? '0');
+  const cost = parseFloat(unitCost ?? '0');
+  const lineAmount = isNaN(qty) || isNaN(cost) ? 0 : Math.round(qty * cost * 100) / 100;
+
+  // Copia el reparto de esta linea a las demas lineas cuyo item tambien
+  // admita centro de costo (TSK-583).
+  const applyToAllLines = () => {
+    const allocations = form.getValues(`lines.${index}.costCenterAllocations`) ?? [];
+    const lines = form.getValues('lines');
+
+    lines.forEach((line, i) => {
+      if (i === index) return;
+      const lineProduct = products.find((p) => p.id === line.productId);
+      if (!allowsCostCenter(lineProduct?.defaultExpenseAccountType)) return;
+
+      // Cada línea recibe su propia copia: si compartieran los mismos
+      // objetos, editar el porcentaje de una filtraría el cambio a todas
+      // las demás (TSK-583, hallazgo de revisión).
+      form.setValue(`lines.${i}.costCenterAllocations`, replicateAllocations(allocations), {
+        shouldValidate: true,
+        shouldDirty: true,
+      });
+    });
+  };
+
   return (
-    <FormField
-      control={form.control}
-      name={`lines.${index}.costCenterId`}
-      render={({ field }) => (
-        <FormItem>
-          <FormLabel>Centro de Costo</FormLabel>
-          <Select
-            onValueChange={(value) =>
-              field.onChange(value === NO_COST_CENTER ? '' : value)
-            }
-            value={field.value || NO_COST_CENTER}
-          >
-            <FormControl>
-              <SelectTrigger>
-                <SelectValue placeholder="Predeterminado del ítem" />
-              </SelectTrigger>
-            </FormControl>
-            <SelectContent position="popper" className="max-h-[250px]">
-              <SelectItem value={NO_COST_CENTER}>Predeterminado del ítem</SelectItem>
-              {costCenters.map((costCenter) => (
-                <SelectItem key={costCenter.id} value={costCenter.id}>
-                  {costCenter.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <FormMessage />
-        </FormItem>
-      )}
-    />
+    <div className="md:col-span-2 lg:col-span-3">
+      <_CostCenterAllocationField
+        name={`lines.${index}.costCenterAllocations`}
+        lineAmount={lineAmount}
+        costCenters={costCenters}
+        onApplyToAll={applyToAllLines}
+      />
+    </div>
   );
 }
 
@@ -292,6 +295,7 @@ export function _PurchaseInvoiceForm({
           unitCost: String(line.unitCost),
           vatRate: String(line.vatRate),
           purchaseOrderLineId: line.id,
+          costCenterAllocations: [],
         }))
       );
     }
@@ -360,6 +364,7 @@ export function _PurchaseInvoiceForm({
       unitCost: '0',
       vatRate: isTypeC ? '0' : '21',
       purchaseOrderLineId: '',
+      costCenterAllocations: [],
     });
   };
 

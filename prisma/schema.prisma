@@ -613,6 +613,9 @@ model AccountingSettings {
   productCodePrefix String @default("PROD") @map("product_code_prefix")
   lastProductNumber Int    @default(0) @map("last_product_number")
 
+  // Reparto por centro de costo obligatorio en líneas de resultado (TSK-583)
+  requireCostCenter Boolean @default(false) @map("require_cost_center")
+
   // Cuentas de IVA por alícuota (overrides opcionales)
   vatAccounts AccountingVatAccount[]
 
@@ -1015,11 +1018,12 @@ model CostCenter {
   companyId String  @map("company_id") @db.Uuid
   company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
-  employees         Employee[]
-  vehicles          Vehicle[]
-  journalEntryLines JournalEntryLine[]
-  defaultProducts   Product[]          @relation("ProductCostCenter")
-  purchaseInvoiceLines PurchaseInvoiceLine[] @relation("PurchaseInvoiceLineCostCenter")
+  employees               Employee[]
+  vehicles                Vehicle[]
+  journalEntryLines       JournalEntryLine[]
+  defaultProducts         Product[]                       @relation("ProductCostCenter")
+  purchaseLineAllocations PurchaseInvoiceLineCostCenter[]
+  salesLineAllocations    SalesInvoiceLineCostCenter[]
 
   @@unique([companyId, name])
   @@map("cost_centers")
@@ -2817,6 +2821,8 @@ model SalesInvoiceLine {
   invoice SalesInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   product Product      @relation(fields: [productId], references: [id])
 
+  costCenterAllocations SalesInvoiceLineCostCenter[]
+
   @@map("sales_invoice_lines")
 }
 
@@ -2937,17 +2943,45 @@ model PurchaseInvoiceLine {
   // Vinculación con línea de OC (opcional)
   purchaseOrderLineId String? @map("purchase_order_line_id") @db.Uuid
 
-  // Centro de costo de esta línea. Pisa el predeterminado del ítem, que es
-  // global y no sirve cuando una misma compra se reparte entre varios centros
-  // (TSK-583). Solo aplica a líneas imputadas a cuentas de resultado.
-  costCenterId String? @map("cost_center_id") @db.Uuid
-
   invoice           PurchaseInvoice    @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   product           Product?           @relation(fields: [productId], references: [id])
   purchaseOrderLine PurchaseOrderLine? @relation(fields: [purchaseOrderLineId], references: [id])
-  costCenter        CostCenter?        @relation("PurchaseInvoiceLineCostCenter", fields: [costCenterId], references: [id])
+
+  costCenterAllocations PurchaseInvoiceLineCostCenter[]
 
   @@map("purchase_invoice_lines")
+}
+
+// Reparto de una línea de compra entre varios centros de costo, por
+// porcentaje del subtotal (neto). El IVA nunca se reparte (TSK-583).
+model PurchaseInvoiceLineCostCenter {
+  id           String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lineId       String  @map("line_id") @db.Uuid
+  costCenterId String  @map("cost_center_id") @db.Uuid
+  percentage   Decimal @db.Decimal(5, 2)
+
+  line       PurchaseInvoiceLine @relation(fields: [lineId], references: [id], onDelete: Cascade)
+  costCenter CostCenter          @relation(fields: [costCenterId], references: [id])
+
+  @@unique([lineId, costCenterId])
+  @@index([costCenterId])
+  @@map("purchase_invoice_line_cost_centers")
+}
+
+// Reparto de una línea de venta entre varios centros de costo, por
+// porcentaje del subtotal (neto). El IVA nunca se reparte (TSK-583).
+model SalesInvoiceLineCostCenter {
+  id           String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lineId       String  @map("line_id") @db.Uuid
+  costCenterId String  @map("cost_center_id") @db.Uuid
+  percentage   Decimal @db.Decimal(5, 2)
+
+  line       SalesInvoiceLine @relation(fields: [lineId], references: [id], onDelete: Cascade)
+  costCenter CostCenter       @relation(fields: [costCenterId], references: [id])
+
+  @@unique([lineId, costCenterId])
+  @@index([costCenterId])
+  @@map("sales_invoice_line_cost_centers")
 }
 
 // ============================================

@@ -62,7 +62,10 @@ export async function EditPurchaseInvoice({ invoiceId }: EditPurchaseInvoiceProp
       quantity: line.quantity.toString(),
       unitCost: line.unitCost.toString(),
       vatRate: line.vatRate.toString(),
-      costCenterId: line.costCenterId || '',
+      costCenterAllocations: line.costCenterAllocations.map((a) => ({
+        costCenterId: a.costCenterId,
+        percentage: Number(a.percentage),
+      })),
     })),
   };
 

@@ -4,9 +4,11 @@ import { accountField, commercialIntegrationSchema } from './validators';
 
 const CUENTA = '3f2504e0-4f89-11d3-9a0c-0305e82c3301';
 
-/** Todos los campos del formulario, en su forma "sin asignar". */
+/** Todas las cuentas del formulario, en su forma "sin asignar". */
 const vacio = Object.fromEntries(
-  Object.keys(commercialIntegrationSchema.shape).map((key) => [key, null])
+  Object.keys(commercialIntegrationSchema.shape)
+    .filter((key) => key.endsWith('AccountId'))
+    .map((key) => [key, null])
 );
 
 describe('accountField', () => {
@@ -70,6 +72,21 @@ describe('commercialIntegrationSchema', () => {
   });
 
   it('cubre las 23 cuentas configurables', () => {
-    expect(Object.keys(commercialIntegrationSchema.shape)).toHaveLength(23);
+    const cuentas = Object.keys(commercialIntegrationSchema.shape).filter((key) =>
+      key.endsWith('AccountId')
+    );
+    expect(cuentas).toHaveLength(23);
+  });
+});
+
+describe('exigir centro de costo', () => {
+  it('viene apagado si el formulario no lo manda', () => {
+    const parsed = commercialIntegrationSchema.parse({});
+    expect(parsed.requireCostCenter).toBe(false);
+  });
+
+  it('conserva el valor cuando se activa', () => {
+    const parsed = commercialIntegrationSchema.parse({ requireCostCenter: true });
+    expect(parsed.requireCostCenter).toBe(true);
   });
 });

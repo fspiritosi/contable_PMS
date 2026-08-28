@@ -1,0 +1,192 @@
+/**
+ * Cuándo una línea de factura de compra admite centro de costo (TSK-583).
+ *
+ * El centro de costo reparte resultados: solo tiene sentido cuando la línea se
+ * imputa a una cuenta de ingresos o de egresos. Comprar un activo mueve
+ * patrimonio, no consume presupuesto de ningún centro, así que esas líneas no
+ * ofrecen el campo.
+ */
+
+/** Tipos de cuenta que participan del resultado del ejercicio. */
+export const RESULT_ACCOUNT_TYPES = ['REVENUE', 'EXPENSE'] as const;
+
+/**
+ * `accountType` es el tipo de la cuenta con la que se imputa la línea. Viene
+ * vacío cuando la línea no tiene ítem asociado (un gasto suelto), y en ese caso
+ * tampoco se ofrece el campo: sin cuenta conocida no hay criterio.
+ */
+export function allowsCostCenter(accountType: string | null | undefined): boolean {
+  if (!accountType) return false;
+
+  return (RESULT_ACCOUNT_TYPES as readonly string[]).includes(accountType);
+}
+
+/** Un tramo del reparto: qué centro se lleva qué porcentaje de la línea. */
+export interface CostCenterAllocation {
+  costCenterId: string;
+  percentage: number;
+}
+
+/** Redondeo a 2 decimales, evitando el arrastre binario de 0.1 + 0.2. */
+function round2(value: number): number {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+/** Suma de los porcentajes del reparto, con 2 decimales. */
+export function totalPercentage(allocations: CostCenterAllocation[]): number {
+  return round2(allocations.reduce((acc, a) => acc + a.percentage, 0));
+}
+
+export type AllocationError =
+  | 'DUPLICATE_COST_CENTER'
+  | 'NON_POSITIVE_PERCENTAGE'
+  | 'INCOMPLETE_TOTAL';
+
+/** Mensajes para el usuario, en un solo lugar para formulario y server action. */
+export const ALLOCATION_ERROR_MESSAGES: Record<AllocationError, string> = {
+  DUPLICATE_COST_CENTER: 'No se puede repetir el mismo centro de costo en una línea',
+  NON_POSITIVE_PERCENTAGE: 'Cada centro de costo debe llevarse un porcentaje mayor a cero',
+  INCOMPLETE_TOTAL: 'El reparto debe sumar 100%',
+};
+
+/**
+ * Un reparto es válido si está vacío (imputación opcional, cae en el centro
+ * predeterminado del ítem) o si suma exactamente 100%. Un valor intermedio deja
+ * plata sin imputar, así que no se admite ni siquiera con la obligatoriedad
+ * apagada.
+ */
+export function validateAllocations(
+  allocations: CostCenterAllocation[]
+): AllocationError | null {
+  if (allocations.length === 0) return null;
+
+  const ids = new Set(allocations.map((a) => a.costCenterId));
+  if (ids.size !== allocations.length) return 'DUPLICATE_COST_CENTER';
+
+  if (allocations.some((a) => a.percentage <= 0)) return 'NON_POSITIVE_PERCENTAGE';
+
+  if (totalPercentage(allocations) !== 100) return 'INCOMPLETE_TOTAL';
+
+  return null;
+}
+
+/**
+ * Reparte un importe según los porcentajes.
+ *
+ * El último centro absorbe la diferencia de redondeo: sin eso, un 33/33/34 sobre
+ * $10 devuelve partes que suman $9,99 y el asiento no cierra, así que la factura
+ * no se puede confirmar.
+ */
+export function prorateAmount(
+  amount: number,
+  allocations: CostCenterAllocation[]
+): Array<{ costCenterId: string; amount: number }> {
+  if (allocations.length === 0) return [];
+
+  const parts = allocations.map((a) => ({
+    costCenterId: a.costCenterId,
+    amount: round2((amount * a.percentage) / 100),
+  }));
+
+  const assigned = round2(parts.slice(0, -1).reduce((acc, p) => acc + p.amount, 0));
+  parts[parts.length - 1].amount = round2(amount - assigned);
+
+  return parts;
+}
+
+/**
+ * Copia independiente de un reparto (TSK-583).
+ *
+ * Se usa al replicar el reparto de una línea a otras (ej. "Aplicar a todas
+ * las líneas" en el formulario). Un `slice`/spread superficial del array no
+ * alcanza: los objetos `{costCenterId, percentage}` de adentro seguirían
+ * siendo los mismos por referencia, así que editar el porcentaje de una sola
+ * línea a través del formulario mutaría en silencio el reparto de las demás
+ * líneas que recibieron la "copia". Clonamos también cada objeto interno.
+ */
+export function replicateAllocations(
+  allocations: CostCenterAllocation[]
+): CostCenterAllocation[] {
+  return allocations.map((a) => ({ ...a }));
+}
+
+/** Una línea de factura, vista desde la regla de obligatoriedad. */
+export interface CostCenterLineCheck {
+  description: string;
+  accountType?: string | null;
+  allocations: CostCenterAllocation[];
+}
+
+/**
+ * Líneas que exigirían reparto y no lo tienen completo.
+ *
+ * Solo se mira lo imputado a cuentas de resultado: una compra de activo no
+ * consume presupuesto de ningún centro, y una línea sin cuenta conocida no tiene
+ * criterio para exigir nada.
+ *
+ * Ojo con el reparto vacío: `validateAllocations([])` devuelve `null` porque el
+ * vacío es válido cuando la obligatoriedad está apagada. Acá, en cambio, el
+ * vacío es justamente lo que falta, así que se chequea aparte.
+ */
+export function findLinesMissingCostCenter<T extends CostCenterLineCheck>(lines: T[]): T[] {
+  return lines.filter((line) => {
+    if (!allowsCostCenter(line.accountType)) return false;
+    if (line.allocations.length === 0) return true;
+
+    return validateAllocations(line.allocations) !== null;
+  });
+}
+
+/** Aviso para el usuario, nombrando qué líneas hay que completar. */
+export function buildMissingCostCenterMessage(missing: CostCenterLineCheck[]): string {
+  const nombres = missing.map((l) => l.description).join(', ');
+  const sustantivo = missing.length === 1 ? 'línea' : 'líneas';
+
+  return `Falta el centro de costo en ${missing.length} ${sustantivo}: ${nombres}`;
+}
+
+/** Una línea de factura, vista desde la generación del asiento. */
+export interface ExpandableLine {
+  accountId: string;
+  subtotal: number;
+  allocations: CostCenterAllocation[];
+  defaultCostCenterId?: string | null;
+}
+
+/**
+ * Convierte las líneas en imputaciones de asiento, una por cuenta y centro.
+ *
+ * Agrupa por `cuenta + centro`: agrupando solo por cuenta, un reparto entre
+ * varios centros se perdía y sobrevivía uno solo. Sin reparto, cae en el centro
+ * predeterminado del ítem, que es el comportamiento de siempre.
+ */
+export function expandByCostCenter(
+  lines: ExpandableLine[]
+): Array<{ accountId: string; costCenterId?: string; total: number }> {
+  const grouped = new Map<
+    string,
+    { accountId: string; costCenterId?: string; total: number }
+  >();
+
+  const add = (accountId: string, costCenterId: string | undefined, amount: number) => {
+    const key = `${accountId}::${costCenterId ?? ''}`;
+    const existing = grouped.get(key) || { accountId, costCenterId, total: 0 };
+    existing.total = round2(existing.total + amount);
+    grouped.set(key, existing);
+  };
+
+  for (const line of lines) {
+    if (line.subtotal <= 0) continue;
+
+    if (line.allocations.length === 0) {
+      add(line.accountId, line.defaultCostCenterId ?? undefined, line.subtotal);
+      continue;
+    }
+
+    for (const part of prorateAmount(line.subtotal, line.allocations)) {
+      add(line.accountId, part.costCenterId, part.amount);
+    }
+  }
+
+  return [...grouped.values()];
+}
