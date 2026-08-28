@@ -31,7 +31,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/shared/components/ui/select';
-import { Input } from '@/shared/components/ui/input';
 import { MoneyInput } from '@/shared/components/ui/money-input';
 import { createPriceListItem } from '../../list/actions.server';
 import { getProducts } from '../../../list/actions.server';

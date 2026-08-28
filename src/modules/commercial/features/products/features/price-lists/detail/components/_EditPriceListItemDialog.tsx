@@ -22,7 +22,6 @@ import {
   FormLabel,
   FormMessage,
 } from '@/shared/components/ui/form';
-import { Input } from '@/shared/components/ui/input';
 import { MoneyInput } from '@/shared/components/ui/money-input';
 import { updatePriceListItem } from '../../list/actions.server';
 import { updatePriceListItemSchema, type UpdatePriceListItemFormData } from '../../../../shared/validators';
