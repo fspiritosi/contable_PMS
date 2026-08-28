@@ -289,6 +289,7 @@ export async function createJournalEntryForSalesInvoice(
         lines: {
           select: {
             lineType: true, vatRate: true, vatAmount: true, subtotal: true,
+            costCenterAllocations: { select: { costCenterId: true, percentage: true } },
             product: { select: { defaultIncomeAccountId: true, defaultCostCenterId: true } },
           },
         },
@@ -322,21 +323,26 @@ export async function createJournalEntryForSalesInvoice(
       },
     ];
 
-    // Agrupar subtotales de líneas por cuenta contable (override por ítem o global)
-    const salesByAccount = new Map<string, { total: number; costCenterId?: string }>();
-    for (const line of invoice.lines) {
-      const lineSubtotal = parseFloat(line.subtotal.toString());
-      if (lineSubtotal <= 0) continue;
-      const accountId = line.product?.defaultIncomeAccountId || settings.salesAccountId;
-      const existing = salesByAccount.get(accountId) || { total: 0 };
-      existing.total += lineSubtotal;
-      if (line.product?.defaultCostCenterId && !existing.costCenterId) {
-        existing.costCenterId = line.product.defaultCostCenterId;
-      }
-      salesByAccount.set(accountId, existing);
-    }
+    // Agrupar subtotales de líneas por cuenta contable y centro de costo.
+    //
+    // El reparto de la línea (TSK-583) pisa el centro predeterminado del ítem
+    // cuando existe. `expandByCostCenter` agrupa por cuenta + centro para que
+    // una misma cuenta repartida entre varios centros genere una imputación
+    // por cada uno: agrupando solo por cuenta, el reparto (o el centro
+    // predeterminado del ítem) se perdía y sobrevivía un único centro.
+    const expanded = expandByCostCenter(
+      invoice.lines.map((line) => ({
+        accountId: line.product?.defaultIncomeAccountId || settings.salesAccountId!,
+        subtotal: parseFloat(line.subtotal.toString()),
+        allocations: line.costCenterAllocations.map((a) => ({
+          costCenterId: a.costCenterId,
+          percentage: Number(a.percentage),
+        })),
+        defaultCostCenterId: line.product?.defaultCostCenterId,
+      }))
+    );
 
-    for (const [accountId, { total: accountTotal, costCenterId }] of salesByAccount) {
+    for (const { accountId, costCenterId, total: accountTotal } of expanded) {
       lines.push({
         accountId,
         debit: isNC ? accountTotal : 0,

@@ -358,3 +358,32 @@ describe('expansión de líneas para el asiento', () => {
     expect(resultado.reduce((acc, r) => acc + r.total, 0)).toBe(10);
   });
 });
+
+/**
+ * Regresión: el asiento de ventas agrupaba solo por cuenta y conservaba el
+ * primer centro de costo que encontraba, así que una venta con ítems de centros
+ * distintos imputaba todo a uno solo (TSK-583).
+ */
+describe('venta con ítems de distintos centros (regresión)', () => {
+  it('mantiene separada la imputación de cada centro', () => {
+    const resultado = expandByCostCenter([
+      {
+        accountId: CUENTA_SERVICIOS,
+        subtotal: 1000,
+        allocations: [],
+        defaultCostCenterId: LOGISTICA,
+      },
+      {
+        accountId: CUENTA_SERVICIOS,
+        subtotal: 500,
+        allocations: [],
+        defaultCostCenterId: MANTENIMIENTO,
+      },
+    ]);
+
+    expect(resultado).toEqual([
+      { accountId: CUENTA_SERVICIOS, costCenterId: LOGISTICA, total: 1000 },
+      { accountId: CUENTA_SERVICIOS, costCenterId: MANTENIMIENTO, total: 500 },
+    ]);
+  });
+});
