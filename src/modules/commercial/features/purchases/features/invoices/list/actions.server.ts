@@ -266,6 +266,10 @@ export async function getPurchaseInvoiceById(id: string) {
                 trackStock: true,
               },
             },
+            // Reparto por centro de costo de la linea (TSK-583).
+            costCenterAllocations: {
+              select: { costCenterId: true, percentage: true },
+            },
           },
         },
         company: {
@@ -433,6 +437,10 @@ export async function getPurchaseInvoiceById(id: string) {
         vatAmount: Number(line.vatAmount),
         subtotal: Number(line.subtotal),
         total: Number(line.total),
+        costCenterAllocations: line.costCenterAllocations.map((a) => ({
+          costCenterId: a.costCenterId,
+          percentage: Number(a.percentage),
+        })),
       })),
       creditDebitNotes: invoice.creditDebitNotes.map((cn) => ({
         ...cn,
@@ -846,7 +854,12 @@ export async function createPurchaseInvoice(input: PurchaseInvoiceFormInput) {
         subtotal: lineSubtotal,
         total: lineTotal,
         purchaseOrderLineId: line.purchaseOrderLineId || null,
-        costCenterId: line.costCenterId || null,
+        costCenterAllocations: {
+          create: (line.costCenterAllocations ?? []).map((a) => ({
+            costCenterId: a.costCenterId,
+            percentage: a.percentage,
+          })),
+        },
       };
     });
 
@@ -989,7 +1002,12 @@ export async function updatePurchaseInvoice(id: string, input: PurchaseInvoiceFo
         subtotal: lineSubtotal,
         total: lineTotal,
         purchaseOrderLineId: line.purchaseOrderLineId || null,
-        costCenterId: line.costCenterId || null,
+        costCenterAllocations: {
+          create: (line.costCenterAllocations ?? []).map((a) => ({
+            costCenterId: a.costCenterId,
+            percentage: a.percentage,
+          })),
+        },
       };
     });
 
