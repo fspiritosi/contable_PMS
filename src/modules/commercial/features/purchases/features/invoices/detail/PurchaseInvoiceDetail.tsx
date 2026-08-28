@@ -18,6 +18,7 @@ import { _LinkPurchaseInvoiceToProjection } from './components/_LinkPurchaseInvo
 import { _PurchaseInvoicePDFButton } from './components/_PurchaseInvoicePDFButton';
 import { _PayPurchaseInvoiceButton } from './components/_PayPurchaseInvoiceButton';
 import { calculatePurchaseInvoiceBalance } from '@/modules/commercial/shared/purchase-invoice-balance';
+import { formatCurrency } from '@/shared/utils/formatters';
 
 interface Props {
   invoiceId: string;
@@ -215,16 +216,16 @@ export async function PurchaseInvoiceDetail({ invoiceId }: Props) {
                           {line.product?.unitOfMeasure || 'UN'}
                         </td>
                         <td className="py-3 text-right font-mono">
-                          ${Number(line.unitCost).toFixed(2)}
+                          {formatCurrency(Number(line.unitCost))}
                         </td>
                         <td className="py-3 text-right">
                           {Number(line.vatRate).toFixed(2)}%
                         </td>
                         <td className="py-3 text-right font-mono">
-                          ${Number(line.subtotal).toFixed(2)}
+                          {formatCurrency(Number(line.subtotal))}
                         </td>
                         <td className="py-3 text-right font-mono font-semibold">
-                          ${Number(line.total).toFixed(2)}
+                          {formatCurrency(Number(line.total))}
                         </td>
                       </tr>
                     ))}
@@ -235,10 +236,10 @@ export async function PurchaseInvoiceDetail({ invoiceId }: Props) {
                         TOTALES
                       </td>
                       <td className="pt-3 text-right">
-                        ${Number(invoice.subtotal).toFixed(2)}
+                        {formatCurrency(Number(invoice.subtotal))}
                       </td>
                       <td className="pt-3 text-right">
-                        ${Number(invoice.total).toFixed(2)}
+                        {formatCurrency(Number(invoice.total))}
                       </td>
                     </tr>
                   </tfoot>
@@ -394,24 +395,24 @@ export async function PurchaseInvoiceDetail({ invoiceId }: Props) {
             <CardContent className="space-y-2">
               <div className="flex justify-between">
                 <span className="text-sm text-muted-foreground">Subtotal</span>
-                <span className="font-mono">${Number(invoice.subtotal).toFixed(2)}</span>
+                <span className="font-mono">{formatCurrency(Number(invoice.subtotal))}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-sm text-muted-foreground">IVA</span>
-                <span className="font-mono">${Number(invoice.vatAmount).toFixed(2)}</span>
+                <span className="font-mono">{formatCurrency(Number(invoice.vatAmount))}</span>
               </div>
               {Number(invoice.otherTaxes) > 0 && (
                 <div className="flex justify-between">
                   <span className="text-sm text-muted-foreground">Otros Impuestos</span>
                   <span className="font-mono">
-                    ${Number(invoice.otherTaxes).toFixed(2)}
+                    {formatCurrency(Number(invoice.otherTaxes))}
                   </span>
                 </div>
               )}
               <Separator />
               <div className="flex justify-between text-lg font-semibold">
                 <span>Total</span>
-                <span className="font-mono">${Number(invoice.total).toFixed(2)}</span>
+                <span className="font-mono">{formatCurrency(Number(invoice.total))}</span>
               </div>
             </CardContent>
           </Card>

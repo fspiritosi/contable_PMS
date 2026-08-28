@@ -8,6 +8,7 @@ import { styles } from './styles';
 import type { PurchaseInvoicePDFData } from './types';
 import { LinkedDocumentsSection } from '@/modules/commercial/shared/pdf/LinkedDocumentsSection';
 import moment from 'moment';
+import { formatCurrency } from '@/shared/utils/formatters';
 
 interface PurchaseInvoiceTemplateProps {
   data: PurchaseInvoicePDFData;
@@ -152,10 +153,10 @@ export function PurchaseInvoiceTemplate({ data }: PurchaseInvoiceTemplateProps) 
               <Text style={styles.col2}>{line.description}</Text>
               <Text style={styles.col3}>{line.quantity.toFixed(3)}</Text>
               <Text style={styles.col4}>{line.unitOfMeasure}</Text>
-              <Text style={styles.col5}>${line.unitCost.toFixed(2)}</Text>
+              <Text style={styles.col5}>{formatCurrency(line.unitCost)}</Text>
               {isTypeA && <Text style={styles.col6}>{line.vatRate.toFixed(2)}%</Text>}
-              <Text style={styles.col7}>${line.subtotal.toFixed(2)}</Text>
-              <Text style={styles.col8}>${line.total.toFixed(2)}</Text>
+              <Text style={styles.col7}>{formatCurrency(line.subtotal)}</Text>
+              <Text style={styles.col8}>{formatCurrency(line.total)}</Text>
             </View>
           ))}
         </View>
