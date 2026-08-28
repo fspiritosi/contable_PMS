@@ -49,5 +49,10 @@ export const commercialIntegrationSchema = z.object({
 
 /** Lo que maneja el formulario: un campo sin default llega como undefined. */
 export type CommercialIntegrationInput = z.input<typeof commercialIntegrationSchema>;
-/** Lo que sale ya normalizado hacia el server action: siempre string | null. */
+/**
+ * Lo que sale ya normalizado hacia el server action: los campos de cuenta
+ * siempre `string | null` (por `accountField`); `requireCostCenter` siempre
+ * `boolean` (TSK-583 dejó de ser cierto que todo el objeto fuera `string |
+ * null`).
+ */
 export type CommercialIntegrationValues = z.output<typeof commercialIntegrationSchema>;
