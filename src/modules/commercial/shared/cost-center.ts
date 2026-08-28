@@ -93,3 +93,19 @@ export function prorateAmount(
 
   return parts;
 }
+
+/**
+ * Copia independiente de un reparto (TSK-583).
+ *
+ * Se usa al replicar el reparto de una línea a otras (ej. "Aplicar a todas
+ * las líneas" en el formulario). Un `slice`/spread superficial del array no
+ * alcanza: los objetos `{costCenterId, percentage}` de adentro seguirían
+ * siendo los mismos por referencia, así que editar el porcentaje de una sola
+ * línea a través del formulario mutaría en silencio el reparto de las demás
+ * líneas que recibieron la "copia". Clonamos también cada objeto interno.
+ */
+export function replicateAllocations(
+  allocations: CostCenterAllocation[]
+): CostCenterAllocation[] {
+  return allocations.map((a) => ({ ...a }));
+}

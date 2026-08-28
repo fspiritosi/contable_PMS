@@ -4,6 +4,7 @@ import {
   RESULT_ACCOUNT_TYPES,
   allowsCostCenter,
   prorateAmount,
+  replicateAllocations,
   totalPercentage,
   validateAllocations,
   type CostCenterAllocation,
@@ -154,5 +155,49 @@ describe('prorrateo del importe de la línea', () => {
 
   it('sin reparto no devuelve partes', () => {
     expect(prorateAmount(1000, [])).toEqual([]);
+  });
+});
+
+
+/**
+ * Regresión de revisión de TSK-583 (Tarea 5). "Aplicar a todas las líneas"
+ * copiaba el array de `form.getValues(...)` por referencia a otras líneas:
+ * los objetos `{costCenterId, percentage}` de adentro quedaban compartidos,
+ * así que editar el porcentaje de una sola línea (vía `register(...
+ * percentage)`) mutaba en silencio el reparto de todas las líneas que habían
+ * recibido la "copia". `replicateAllocations` existe para que ese clonado se
+ * pueda probar sin montar el formulario entero.
+ */
+describe('replicateAllocations: independencia entre líneas al "Aplicar a todas"', () => {
+  it('devuelve un array distinto por referencia del original', () => {
+    const original: CostCenterAllocation[] = [{ costCenterId: LOGISTICA, percentage: 100 }];
+    expect(replicateAllocations(original)).not.toBe(original);
+  });
+
+  it('devuelve objetos internos independientes: mutar la copia no afecta al original', () => {
+    const original: CostCenterAllocation[] = [
+      { costCenterId: LOGISTICA, percentage: 60 },
+      { costCenterId: MANTENIMIENTO, percentage: 40 },
+    ];
+    const copia = replicateAllocations(original);
+
+    // Simula lo que hace el usuario al editar el porcentaje de una línea
+    // que recibió la "copia" del reparto de otra.
+    copia[0].percentage = 999;
+
+    expect(original[0].percentage).toBe(60);
+    expect(copia[0].percentage).toBe(999);
+  });
+
+  it('preserva los valores del reparto original', () => {
+    const original: CostCenterAllocation[] = [
+      { costCenterId: LOGISTICA, percentage: 60 },
+      { costCenterId: MANTENIMIENTO, percentage: 40 },
+    ];
+    expect(replicateAllocations(original)).toEqual(original);
+  });
+
+  it('un reparto vacío da una copia vacía', () => {
+    expect(replicateAllocations([])).toEqual([]);
   });
 });

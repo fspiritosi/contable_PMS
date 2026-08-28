@@ -23,7 +23,7 @@ import {
 import { Input } from '@/shared/components/ui/input';
 import { padPointOfSale, padVoucherNumber } from '@/modules/commercial/shared/voucher-number';
 import { MoneyInput } from '@/shared/components/ui/money-input';
-import { allowsCostCenter } from '@/modules/commercial/shared/cost-center';
+import { allowsCostCenter, replicateAllocations } from '@/modules/commercial/shared/cost-center';
 import { _CostCenterAllocationField } from '@/modules/commercial/shared/components/_CostCenterAllocationField';
 import { Textarea } from '@/shared/components/ui/textarea';
 import { Plus, Trash2, Loader2 } from 'lucide-react';
@@ -107,7 +107,7 @@ function _LineCostCenterField({
   // Copia el reparto de esta linea a las demas lineas cuyo item tambien
   // admita centro de costo (TSK-583).
   const applyToAllLines = () => {
-    const allocations = form.getValues(`lines.${index}.costCenterAllocations`);
+    const allocations = form.getValues(`lines.${index}.costCenterAllocations`) ?? [];
     const lines = form.getValues('lines');
 
     lines.forEach((line, i) => {
@@ -115,7 +115,10 @@ function _LineCostCenterField({
       const lineProduct = products.find((p) => p.id === line.productId);
       if (!allowsCostCenter(lineProduct?.defaultExpenseAccountType)) return;
 
-      form.setValue(`lines.${i}.costCenterAllocations`, allocations, {
+      // Cada línea recibe su propia copia: si compartieran los mismos
+      // objetos, editar el porcentaje de una filtraría el cambio a todas
+      // las demás (TSK-583, hallazgo de revisión).
+      form.setValue(`lines.${i}.costCenterAllocations`, replicateAllocations(allocations), {
         shouldValidate: true,
         shouldDirty: true,
       });
