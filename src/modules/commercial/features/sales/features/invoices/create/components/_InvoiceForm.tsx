@@ -1,6 +1,6 @@
 'use client';
 
-import { useForm, useFieldArray, useWatch } from 'react-hook-form';
+import { useForm, useFieldArray, useWatch, type FieldErrors } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
@@ -40,7 +40,11 @@ import {
 import { updateQuoteAfterInvoice } from '@/modules/commercial/features/quotes/list/actions.server';
 import { isCreditNote, isDebitNote } from '@/modules/commercial/shared/voucher-utils';
 import { invoiceFormSchema, VOUCHER_TYPE_LABELS } from '../../shared/validators';
-import { allowsCostCenter, replicateAllocations } from '@/modules/commercial/shared/cost-center';
+import {
+  allowsCostCenter,
+  effectiveAccountType,
+  replicateAllocations,
+} from '@/modules/commercial/shared/cost-center';
 import { _CostCenterAllocationField } from '@/modules/commercial/shared/components/_CostCenterAllocationField';
 import { z } from 'zod';
 import moment from 'moment';
@@ -62,6 +66,8 @@ interface InvoiceLineRowProps {
   index: number;
   products: InvoiceFormProps['products'];
   costCenters: SalesCostCenterSelectItem[];
+  /** Cuenta de ventas por defecto de la empresa (TSK-583, revisión final). */
+  defaultAccountType: string | null;
   discountPresets: Array<{ id: string; name: string; percentage: number }>;
   onProductSelect: (index: number, productId: string) => void;
   onRemove: () => void;
@@ -81,11 +87,14 @@ function _LineCostCenterField({
   index,
   products,
   costCenters,
+  defaultAccountType,
 }: {
   form: ReturnType<typeof useForm<FormInput>>;
   index: number;
   products: InvoiceFormProps['products'];
   costCenters: SalesCostCenterSelectItem[];
+  /** Cuenta de ventas por defecto de la empresa (TSK-583, revisión final). */
+  defaultAccountType: string | null;
 }) {
   const productId = useWatch({ control: form.control, name: `lines.${index}.productId` });
   const product = products.find((p) => p.id === productId);
@@ -94,7 +103,14 @@ function _LineCostCenterField({
   const discountPercent = useWatch({ control: form.control, name: `lines.${index}.discountPercent` });
   const discountAmount = useWatch({ control: form.control, name: `lines.${index}.discountAmount` });
 
-  if (!allowsCostCenter(product?.defaultIncomeAccountType)) return null;
+  // El ítem puede no tener cuenta propia: en ese caso el asiento igual la
+  // imputa a la cuenta de ventas por defecto de la empresa, así que el
+  // criterio tiene que mirar esa cuenta efectiva, no solo la del ítem
+  // (TSK-583, hallazgo de revisión final).
+  if (
+    !allowsCostCenter(effectiveAccountType(product?.defaultIncomeAccountType, defaultAccountType))
+  )
+    return null;
 
   const qty = parseFloat(quantity ?? '0');
   const price = parseFloat(unitPrice ?? '0');
@@ -123,7 +139,12 @@ function _LineCostCenterField({
     lines.forEach((line, i) => {
       if (i === index) return;
       const lineProduct = products.find((p) => p.id === line.productId);
-      if (!allowsCostCenter(lineProduct?.defaultIncomeAccountType)) return;
+      if (
+        !allowsCostCenter(
+          effectiveAccountType(lineProduct?.defaultIncomeAccountType, defaultAccountType)
+        )
+      )
+        return;
 
       form.setValue(`lines.${i}.costCenterAllocations`, replicateAllocations(allocations), {
         shouldValidate: true,
@@ -149,6 +170,7 @@ function _InvoiceLineRow({
   index,
   products,
   costCenters,
+  defaultAccountType,
   discountPresets,
   onProductSelect,
   onRemove,
@@ -489,7 +511,13 @@ function _InvoiceLineRow({
         </div>
       </div>
 
-      <_LineCostCenterField form={form} index={index} products={products} costCenters={costCenters} />
+      <_LineCostCenterField
+        form={form}
+        index={index}
+        products={products}
+        costCenters={costCenters}
+        defaultAccountType={defaultAccountType}
+      />
     </div>
   );
 }
@@ -516,13 +544,15 @@ interface InvoiceFormProps {
     defaultIncomeAccountType?: string | null;
   }>;
   costCenters: SalesCostCenterSelectItem[];
+  /** Cuenta de ventas por defecto de la empresa (TSK-583, revisión final). */
+  defaultAccountType?: string | null;
   mode?: 'create' | 'edit';
   invoiceId?: string;
   initialData?: FormInput;
   fromQuoteId?: string;
 }
 
-export function InvoiceForm({ customers, pointsOfSale, products, costCenters, mode = 'create', invoiceId, initialData, fromQuoteId }: InvoiceFormProps) {
+export function InvoiceForm({ customers, pointsOfSale, products, costCenters, defaultAccountType = null, mode = 'create', invoiceId, initialData, fromQuoteId }: InvoiceFormProps) {
   const router = useRouter();
   const isEdit = mode === 'edit';
   const [totals, setTotals] = useState({
@@ -796,6 +826,11 @@ export function InvoiceForm({ customers, pointsOfSale, products, costCenters, mo
       form.setValue(`lines.${index}.description`, product.name);
       form.setValue(`lines.${index}.unitPrice`, product.salePrice.toString());
       form.setValue(`lines.${index}.vatRate`, isTypeC ? '0' : product.vatRate.toString());
+      // Cambiar de ítem invalida el reparto anterior: si el nuevo ítem no
+      // admite centro de costo, el campo se oculta pero el reparto quedaba
+      // guardado en el formulario y se confirmaba igual, aplicado a una
+      // cuenta que no lo admite (TSK-583, hallazgo de revisión final).
+      form.setValue(`lines.${index}.costCenterAllocations`, []);
     }
   };
 
@@ -840,9 +875,27 @@ export function InvoiceForm({ customers, pointsOfSale, products, costCenters, mo
     }
   };
 
+  /**
+   * Sin esto, un submit inválido (ej. reparto de centro de costo incompleto)
+   * no hacía nada: sin toast, sin campo en rojo, sin explicación. Mismo
+   * patrón que `_CommercialIntegrationForm.tsx` (TSK-492), hallazgo de
+   * revisión final de TSK-583.
+   */
+  const handleInvalid = (errors: FieldErrors<FormInput>) => {
+    const campos = Object.keys(errors);
+    logger.error('Validación fallida en factura de venta', {
+      data: { campos, errors },
+    });
+    toast.error(
+      campos.length > 0
+        ? `No se pudo guardar: revisá los campos ${campos.join(', ')}`
+        : 'No se pudo guardar: hay campos inválidos'
+    );
+  };
+
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+      <form onSubmit={form.handleSubmit(onSubmit, handleInvalid)} className="space-y-6">
         {/* Encabezado de Factura */}
         <Card className="p-6">
           <h3 className="text-lg font-semibold mb-4">Datos de la Factura</h3>
@@ -1056,6 +1109,7 @@ export function InvoiceForm({ customers, pointsOfSale, products, costCenters, mo
                     index={index}
                     products={products}
                     costCenters={costCenters}
+                    defaultAccountType={defaultAccountType}
                     discountPresets={discountPresets}
                     onProductSelect={handleProductSelect}
                     onRemove={() => remove(index)}
