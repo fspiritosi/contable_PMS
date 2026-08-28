@@ -211,6 +211,7 @@ Cuando se confirma una factura (venta o compra), la integracion contable agrupa 
 | `SalesPointOfSale` | Punto de venta | name, number |
 | `SalesInvoice` | Factura de venta | voucherType, number, status, subtotal, taxAmount, total, clientId |
 | `SalesInvoiceLine` | Linea de factura | productId, quantity, unitPrice, taxRate, total |
+| `SalesInvoiceLineCostCenter` | Reparto de la linea entre centros de costo (TSK-583) | lineId, costCenterId, percentage (Decimal 5,2), unique(lineId, costCenterId) |
 | `SalesCreditNoteApplication` | Aplicacion de NC a factura | creditNoteId, invoiceId, amount |
 
 **Enums:**
@@ -226,11 +227,30 @@ Cuando se confirma una factura (venta o compra), la integracion contable agrupa 
 | Modelo | Descripcion | Campos clave |
 |--------|-------------|--------------|
 | `PurchaseInvoice` | Factura de compra | voucherType, number, status, supplierId |
-| `PurchaseInvoiceLine` | Linea de compra | productId, quantity, unitCost, costCenterId |
+| `PurchaseInvoiceLine` | Linea de compra | productId, quantity, unitCost |
+| `PurchaseInvoiceLineCostCenter` | Reparto de la linea entre centros de costo (TSK-583) | lineId, costCenterId, percentage (Decimal 5,2), unique(lineId, costCenterId) |
 | `PurchaseCreditNoteApplication` | Aplicacion de NC | creditNoteId, invoiceId, amount |
 
 **Enums:**
 - `PurchaseInvoiceStatus`: DRAFT, CONFIRMED, CANCELLED
+
+**Centro de costo por linea (TSK-583):** `PurchaseInvoiceLine.costCenterId` (columna unica) se
+reemplazo por `PurchaseInvoiceLineCostCenter` / `SalesInvoiceLineCostCenter`, dos tablas
+gemelas que permiten repartir el subtotal (neto) de una linea entre N centros por porcentaje.
+Reglas:
+- Un reparto **suma exactamente 100.00 o esta vacio** (`percentage` es `Decimal(5,2)`, `number`
+  en TypeScript). Vacio cae en `Product.defaultCostCenterId` (comportamiento previo).
+- Solo aplica a lineas cuyo item se imputa a una cuenta `REVENUE` o `EXPENSE`. Las cuentas
+  patrimoniales (`ASSET`, `LIABILITY`, `EQUITY`) no admiten centro de costo: comprar/vender un
+  activo no consume presupuesto de ningun centro.
+- Solo se reparte el `subtotal` (neto). El IVA nunca se reparte: va siempre a la cuenta de IVA,
+  que no es de resultado.
+- **Prorrateo:** cada monto se redondea a 2 decimales y **el ultimo centro del reparto absorbe
+  la diferencia**, para que la suma de las partes sea exacta y el asiento no descuadre (ej.
+  33/33/34% sobre un monto no divisible exacto). Logica centralizada en
+  `modules/commercial/shared/cost-center.ts` (`prorateAmount`, `expandByCostCenter`).
+- La migracion copia el `costCenterId` existente como un reparto al 100% antes de eliminar la
+  columna (`INSERT ... SELECT` + `DROP COLUMN`), sin perder datos de la entrega anterior.
 
 ---
 
@@ -328,7 +348,7 @@ Cuando se confirma una factura (venta o compra), la integracion contable agrupa 
 | `Account` | Cuenta contable (arbol) | code (formato x.x.x/xx/xx), name, type, nature, parentId, isLeaf, isActive, disabledFrom, disabledFromFiscalYearId |
 | `JournalEntry` | Asiento contable | number, date, description, status, isAutomatic, reversedById |
 | `JournalEntryLine` | Linea de asiento | accountId, debit, credit, description |
-| `AccountingSettings` | Config contable | salesAccountId, purchasesAccountId, vatAccountId, fixedAssetAccountId, depreciationExpenseAccountId, lockedUntilDate, productCodePrefix (default "PROD"), lastProductNumber (default 0), etc. |
+| `AccountingSettings` | Config contable | salesAccountId, purchasesAccountId, vatAccountId, fixedAssetAccountId, depreciationExpenseAccountId, lockedUntilDate, productCodePrefix (default "PROD"), lastProductNumber (default 0), requireCostCenter (Boolean, default false, TSK-583), etc. |
 | `RecurringEntry` | Asiento recurrente | frequency, nextExecution, templateLines |
 | `RecurringEntryLine` | Linea de asiento recurrente | accountId, debitAmount, creditAmount |
 

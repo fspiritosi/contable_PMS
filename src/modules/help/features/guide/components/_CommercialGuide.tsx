@@ -302,6 +302,12 @@ export function _CommercialGuide() {
               precio unitario, alícuota IVA
             </li>
             <li>
+              Si el ítem se imputa a una cuenta de ingresos o egresos,
+              la línea muestra el reparto por <strong>centro de costo</strong>{' '}
+              (ver más abajo). Vender un activo no lo pide: un activo no
+              consume presupuesto de ningún centro
+            </li>
+            <li>
               El sistema calcula automáticamente subtotal, IVA y total
             </li>
             <li>
@@ -378,12 +384,44 @@ export function _CommercialGuide() {
               (4.000.000,50), así no hay que contar dígitos
             </li>
             <li>
-              Cada línea puede tener su propio <strong>centro de costo</strong>.
-              El campo aparece solo si el ítem se imputa a una cuenta de
-              resultado: comprar un activo no consume presupuesto de ningún
-              centro. Si no elegís ninguno, se usa el predeterminado del ítem
+              Cada línea puede repartirse entre uno o varios{' '}
+              <strong>centros de costo</strong> (ver más abajo). El campo
+              aparece solo si el ítem se imputa a una cuenta de resultado:
+              comprar un activo no consume presupuesto de ningún centro
             </li>
           </ul>
+
+          <p className="font-medium mt-3">Repartir una línea entre varios centros de costo</p>
+          <p className="text-muted-foreground">
+            En vez de elegir un único centro de costo, cada línea tiene un
+            editor de reparto: empieza con una fila al 100% (el centro
+            predeterminado del ítem, si tiene uno cargado). Con{' '}
+            <strong>Agregar centro</strong> se suman más filas, cada una con
+            su centro y su porcentaje, y el pie de la línea muestra el
+            importe que le corresponde a cada una en pesos.
+          </p>
+          <p className="text-muted-foreground">
+            El acumulado se ve en <strong>verde</strong> cuando llega a
+            100% y en <strong>rojo</strong> mientras falte o se pase. No se
+            puede guardar un reparto a mitad de camino: o suma 100% o queda
+            vacío (y en ese caso se usa el centro predeterminado del ítem,
+            como antes). Si varias líneas se reparten igual, el botón{' '}
+            <strong>Aplicar a todas las líneas</strong> copia el mismo
+            reparto al resto sin tener que cargarlo de nuevo.
+          </p>
+          <p className="text-sm text-muted-foreground">
+            Ejemplo: una factura de $100.000 repartida 60% a Logística y 40%
+            a Mantenimiento le imputa $60.000 a un centro y $40.000 al otro.
+            Solo se reparte el neto de la línea; el IVA nunca se reparte.
+          </p>
+          <p className="text-sm text-muted-foreground">
+            Si en <strong>Contabilidad → Configuración</strong> está
+            activado <strong>Exigir centro de costo</strong>, no se puede{' '}
+            <strong>confirmar</strong> una factura (de compra o de venta) con
+            líneas de resultado sin reparto completo: el sistema avisa cuáles
+            faltan. Al confirmar varias a la vez, esas quedan afuera y las
+            demás se confirman igual.
+          </p>
           <p className="font-medium mt-3">Confirmar varias a la vez</p>
           <p className="text-muted-foreground">
             En el listado podés seleccionar varias facturas y usar

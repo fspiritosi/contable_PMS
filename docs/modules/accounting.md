@@ -214,6 +214,18 @@ Cuentas contables asignadas a funciones del sistema:
 
 Sin estas cuentas configuradas, los asientos de depreciacion y baja de activos no se generan (degradacion suave).
 
+### Centro de Costo Obligatorio (TSK-583)
+
+**Campo:** `AccountingSettings.requireCostCenter` (Boolean, default `false`)
+
+Switch "Exigir centro de costo" en el formulario de Integracion Comercial. Con el flag activo,
+al confirmar una factura de compra o de venta, toda linea imputada a una cuenta `REVENUE` o
+`EXPENSE` debe tener su reparto por centro de costo completo (suma 100%); si falta, la
+confirmacion se rechaza nombrando las lineas incompletas, y la confirmacion masiva omite esas
+facturas informando el motivo. Con el flag apagado (default), el reparto sigue siendo
+opcional y cae en `Product.defaultCostCenterId` cuando esta vacio. El asiento generado agrupa
+las imputaciones por `cuenta + centro`; ver [Modulo Comercial](commercial.md#reparto-por-centro-de-costo-tsk-583).
+
 ---
 
 ## Presupuestos y Control Presupuestario

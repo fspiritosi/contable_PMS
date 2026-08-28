@@ -247,6 +247,13 @@ export function _AccountingGuide() {
               confirmado genera su asiento automáticamente
             </li>
           </ol>
+          <p className="mt-3 text-sm text-muted-foreground">
+            Cuando una línea de factura tiene su importe repartido entre
+            varios centros de costo, el asiento genera una imputación por
+            cada centro (agrupando por cuenta y centro), en vez de una sola
+            línea para toda la cuenta. El IVA nunca se reparte por centro de
+            costo.
+          </p>
         </CardContent>
       </Card>
 
@@ -405,6 +412,15 @@ export function _AccountingGuide() {
             <li>
               <strong>Cuentas de integración</strong>: mapeo de cuentas para
               asientos automáticos desde el módulo comercial
+            </li>
+            <li>
+              <strong>Exigir centro de costo</strong>: con el switch
+              activado, toda línea de una factura de compra o de venta
+              imputada a una cuenta de ingresos o egresos necesita su
+              reparto por centro de costo completo para poder{' '}
+              <strong>confirmarse</strong>. Apagado (valor por defecto), el
+              centro de costo sigue siendo opcional y todo se comporta como
+              hoy
             </li>
           </ul>
         </CardContent>
