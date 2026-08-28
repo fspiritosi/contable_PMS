@@ -144,3 +144,49 @@ export function buildMissingCostCenterMessage(missing: CostCenterLineCheck[]): s
 
   return `Falta el centro de costo en ${missing.length} ${sustantivo}: ${nombres}`;
 }
+
+/** Una línea de factura, vista desde la generación del asiento. */
+export interface ExpandableLine {
+  accountId: string;
+  subtotal: number;
+  allocations: CostCenterAllocation[];
+  defaultCostCenterId?: string | null;
+}
+
+/**
+ * Convierte las líneas en imputaciones de asiento, una por cuenta y centro.
+ *
+ * Agrupa por `cuenta + centro`: agrupando solo por cuenta, un reparto entre
+ * varios centros se perdía y sobrevivía uno solo. Sin reparto, cae en el centro
+ * predeterminado del ítem, que es el comportamiento de siempre.
+ */
+export function expandByCostCenter(
+  lines: ExpandableLine[]
+): Array<{ accountId: string; costCenterId?: string; total: number }> {
+  const grouped = new Map<
+    string,
+    { accountId: string; costCenterId?: string; total: number }
+  >();
+
+  const add = (accountId: string, costCenterId: string | undefined, amount: number) => {
+    const key = `${accountId}::${costCenterId ?? ''}`;
+    const existing = grouped.get(key) || { accountId, costCenterId, total: 0 };
+    existing.total = round2(existing.total + amount);
+    grouped.set(key, existing);
+  };
+
+  for (const line of lines) {
+    if (line.subtotal <= 0) continue;
+
+    if (line.allocations.length === 0) {
+      add(line.accountId, line.defaultCostCenterId ?? undefined, line.subtotal);
+      continue;
+    }
+
+    for (const part of prorateAmount(line.subtotal, line.allocations)) {
+      add(line.accountId, part.costCenterId, part.amount);
+    }
+  }
+
+  return [...grouped.values()];
+}

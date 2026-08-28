@@ -33,6 +33,7 @@ import { BudgetStatus, AccountNature } from '@/generated/prisma/enums';
 import { prisma } from '@/shared/lib/prisma';
 import { logger } from '@/shared/lib/logger';
 import { isCreditNote } from '@/modules/commercial/shared/voucher-utils';
+import { expandByCostCenter } from '@/modules/commercial/shared/cost-center';
 
 // Tipo para el cliente de transacción de Prisma
 type PrismaTransactionClient = Omit<
@@ -435,7 +436,8 @@ export async function createJournalEntryForPurchaseInvoice(
         supplier: { select: { businessName: true } },
         lines: {
           select: {
-            lineType: true, vatRate: true, vatAmount: true, subtotal: true, costCenterId: true,
+            lineType: true, vatRate: true, vatAmount: true, subtotal: true,
+            costCenterAllocations: { select: { costCenterId: true, percentage: true } },
             product: { select: { defaultExpenseAccountId: true, defaultCostCenterId: true } },
           },
         },
@@ -461,36 +463,32 @@ export async function createJournalEntryForPurchaseInvoice(
 
     // Agrupar subtotales de líneas por cuenta contable y centro de costo.
     //
-    // El centro de costo de la línea pisa el predeterminado del ítem (TSK-583).
-    // La clave incluye el centro para que una misma cuenta repartida entre
-    // varios centros genere una línea de asiento por cada uno: agrupando solo
-    // por cuenta, el reparto se perdía y sobrevivía un único centro.
-    const purchasesByAccount = new Map<
-      string,
-      { accountId: string; costCenterId?: string; total: number }
-    >();
-    for (const line of invoice.lines) {
-      const lineSubtotal = parseFloat(line.subtotal.toString());
-      if (lineSubtotal <= 0) continue;
-      const accountId = line.product?.defaultExpenseAccountId || settings.purchasesAccountId;
-      const costCenterId =
-        line.costCenterId ?? line.product?.defaultCostCenterId ?? undefined;
-      const key = `${accountId}::${costCenterId ?? ''}`;
-      const existing = purchasesByAccount.get(key) || { accountId, costCenterId, total: 0 };
-      existing.total += lineSubtotal;
-      purchasesByAccount.set(key, existing);
-    }
+    // El reparto de la línea (TSK-583) pisa el centro predeterminado del ítem
+    // cuando existe. `expandByCostCenter` agrupa por cuenta + centro para que
+    // una misma cuenta repartida entre varios centros genere una imputación
+    // por cada uno: agrupando solo por cuenta, el reparto se perdía y
+    // sobrevivía un único centro.
+    const expanded = expandByCostCenter(
+      invoice.lines.map((line) => ({
+        accountId: line.product?.defaultExpenseAccountId || settings.purchasesAccountId!,
+        subtotal: parseFloat(line.subtotal.toString()),
+        allocations: line.costCenterAllocations.map((a) => ({
+          costCenterId: a.costCenterId,
+          percentage: Number(a.percentage),
+        })),
+        defaultCostCenterId: line.product?.defaultCostCenterId,
+      }))
+    );
 
-    const lines: JournalEntryLineInput[] = [];
-    for (const { accountId, costCenterId, total: accountTotal } of purchasesByAccount.values()) {
-      lines.push({
+    const lines: JournalEntryLineInput[] = expanded.map(
+      ({ accountId, costCenterId, total: accountTotal }) => ({
         accountId,
         debit: isNC ? 0 : accountTotal,
         credit: isNC ? accountTotal : 0,
         description: `Compras - ${invoice.fullNumber}`,
         ...(costCenterId && { costCenterId }),
-      });
-    }
+      })
+    );
 
     // IVA discriminado por alícuota
     const vatByRate = new Map<number, number>();

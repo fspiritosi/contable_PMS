@@ -4,6 +4,7 @@ import {
   RESULT_ACCOUNT_TYPES,
   allowsCostCenter,
   buildMissingCostCenterMessage,
+  expandByCostCenter,
   findLinesMissingCostCenter,
   prorateAmount,
   replicateAllocations,
@@ -249,5 +250,111 @@ describe('líneas que quedan sin imputar con la obligatoriedad activa', () => {
       { description: 'Peajes', accountType: 'EXPENSE', allocations: [] },
     ]);
     expect(mensaje).toBe('Falta el centro de costo en 2 líneas: Combustible, Peajes');
+  });
+});
+
+const CUENTA_COMBUSTIBLE = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+const CUENTA_SERVICIOS = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+
+describe('expansión de líneas para el asiento', () => {
+  it('parte una línea repartida en una imputación por centro', () => {
+    const resultado = expandByCostCenter([
+      {
+        accountId: CUENTA_COMBUSTIBLE,
+        subtotal: 1000,
+        allocations: [
+          { costCenterId: LOGISTICA, percentage: 60 },
+          { costCenterId: MANTENIMIENTO, percentage: 40 },
+        ],
+      },
+    ]);
+
+    expect(resultado).toEqual([
+      { accountId: CUENTA_COMBUSTIBLE, costCenterId: LOGISTICA, total: 600 },
+      { accountId: CUENTA_COMBUSTIBLE, costCenterId: MANTENIMIENTO, total: 400 },
+    ]);
+  });
+
+  it('sin reparto cae en el centro predeterminado del ítem', () => {
+    const resultado = expandByCostCenter([
+      {
+        accountId: CUENTA_COMBUSTIBLE,
+        subtotal: 1000,
+        allocations: [],
+        defaultCostCenterId: LOGISTICA,
+      },
+    ]);
+
+    expect(resultado).toEqual([
+      { accountId: CUENTA_COMBUSTIBLE, costCenterId: LOGISTICA, total: 1000 },
+    ]);
+  });
+
+  it('sin reparto ni predeterminado, la imputación queda sin centro', () => {
+    const resultado = expandByCostCenter([
+      { accountId: CUENTA_COMBUSTIBLE, subtotal: 1000, allocations: [] },
+    ]);
+
+    expect(resultado).toEqual([
+      { accountId: CUENTA_COMBUSTIBLE, costCenterId: undefined, total: 1000 },
+    ]);
+  });
+
+  it('acumula lo que cae en la misma cuenta y el mismo centro', () => {
+    const resultado = expandByCostCenter([
+      {
+        accountId: CUENTA_COMBUSTIBLE,
+        subtotal: 1000,
+        allocations: [{ costCenterId: LOGISTICA, percentage: 100 }],
+      },
+      {
+        accountId: CUENTA_COMBUSTIBLE,
+        subtotal: 500,
+        allocations: [{ costCenterId: LOGISTICA, percentage: 100 }],
+      },
+    ]);
+
+    expect(resultado).toEqual([
+      { accountId: CUENTA_COMBUSTIBLE, costCenterId: LOGISTICA, total: 1500 },
+    ]);
+  });
+
+  it('no mezcla centros distintos de la misma cuenta', () => {
+    const resultado = expandByCostCenter([
+      {
+        accountId: CUENTA_SERVICIOS,
+        subtotal: 1000,
+        allocations: [{ costCenterId: LOGISTICA, percentage: 100 }],
+      },
+      {
+        accountId: CUENTA_SERVICIOS,
+        subtotal: 500,
+        allocations: [{ costCenterId: MANTENIMIENTO, percentage: 100 }],
+      },
+    ]);
+
+    expect(resultado).toHaveLength(2);
+  });
+
+  it('ignora las líneas sin importe', () => {
+    expect(expandByCostCenter([{ accountId: CUENTA_SERVICIOS, subtotal: 0, allocations: [] }])).toEqual(
+      []
+    );
+  });
+
+  it('lo repartido suma exactamente el neto de la línea', () => {
+    const resultado = expandByCostCenter([
+      {
+        accountId: CUENTA_SERVICIOS,
+        subtotal: 10,
+        allocations: [
+          { costCenterId: LOGISTICA, percentage: 33.33 },
+          { costCenterId: MANTENIMIENTO, percentage: 33.33 },
+          { costCenterId: ADMIN, percentage: 33.34 },
+        ],
+      },
+    ]);
+
+    expect(resultado.reduce((acc, r) => acc + r.total, 0)).toBe(10);
   });
 });
