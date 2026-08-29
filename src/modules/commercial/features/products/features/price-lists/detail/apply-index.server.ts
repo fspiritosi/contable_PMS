@@ -10,6 +10,9 @@ import { prisma } from '@/shared/lib/prisma';
 
 import { adjustItems, findPreviousApplication, type AdjustableItem } from '../shared/price-index-calc';
 
+/** Cliente de una transacción de Prisma: mismo molde que `credit-note-compensation.ts`. */
+type TransactionClient = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
+
 // ============================================
 // TIPOS
 // ============================================
@@ -88,9 +91,14 @@ async function resolveAppliedByNames(userIds: Array<string | null>): Promise<Map
 /**
  * Trae los ítems de la lista con lo necesario para ajustar (precio e IVA del
  * producto) y para mostrar (nombre del producto).
+ *
+ * Acepta un cliente de Prisma opcional (`tx`) para poder leerse **dentro**
+ * de la misma transacción que después escribe: leída afuera, un precio
+ * editado a mano entre la lectura y la escritura quedaría pisado sin
+ * conflicto ni aviso (TSK-621, revisión final #3).
  */
-async function getItemsForAdjustment(priceListId: string) {
-  return prisma.priceListItem.findMany({
+async function getItemsForAdjustment(priceListId: string, client: TransactionClient | typeof prisma = prisma) {
+  return client.priceListItem.findMany({
     where: { priceListId },
     select: {
       id: true,
@@ -176,8 +184,11 @@ export async function previewPriceIndexApplication(
       throw new Error('Lista de precios no encontrada');
     }
 
+    // `isActive: true` en el índice: un índice desactivado se muestra como
+    // "Inactivo" en el selector, y el servidor debe hacerlo cumplir también,
+    // no solo ocultarlo del listado (TSK-621, revisión final #2).
     const indexValue = await prisma.priceIndexValue.findFirst({
-      where: { id: indexValueId, index: { companyId } },
+      where: { id: indexValueId, index: { companyId, isActive: true } },
       select: { id: true, indexId: true, percentage: true },
     });
     if (!indexValue) {
@@ -311,6 +322,13 @@ export async function applyPriceIndexToList(
   await checkPermission('commercial.price-lists', 'update', { redirect: true });
 
   const userId = await getCurrentUserId();
+  // El rastro de quién aplicó el ajuste es la razón de ser de esta feature:
+  // un `appliedBy` nulo se vería como "Usuario desconocido" para una
+  // aplicación real, sin ruido. Mismo patrón que `list/actions.server.ts`
+  // (TSK-621, revisión final #6).
+  if (!userId) {
+    throw new Error('No autenticado');
+  }
   const companyId = await getActiveCompanyId();
   if (!companyId) {
     throw new Error('No se encontró empresa activa');
@@ -325,30 +343,37 @@ export async function applyPriceIndexToList(
       throw new Error('Lista de precios no encontrada');
     }
 
+    // `isActive: true`: un índice desactivado no debe poder aplicarse, ni
+    // siquiera desde un diálogo abierto antes de desactivarlo o desde el
+    // cache de la vista previa (TSK-621, revisión final #2).
     const indexValue = await prisma.priceIndexValue.findFirst({
-      where: { id: indexValueId, index: { companyId } },
+      where: { id: indexValueId, index: { companyId, isActive: true } },
       select: { id: true, indexId: true, percentage: true },
     });
     if (!indexValue) {
       throw new Error('Valor de índice no encontrado');
     }
 
-    const rawItems = await getItemsForAdjustment(priceListId);
-    if (rawItems.length === 0) {
-      throw new Error('La lista no tiene ítems para actualizar');
-    }
-
     const percentage = Number(indexValue.percentage);
 
-    const adjustableItems: AdjustableItem[] = rawItems.map((item) => ({
-      id: item.id,
-      price: Number(item.price),
-      vatRate: Number(item.product.vatRate),
-    }));
-
-    const adjusted = adjustItems(adjustableItems, percentage);
-
     const adjustment = await prisma.$transaction(async (tx) => {
+      // Los ítems se leen ACÁ, dentro de la transacción, no antes: si se
+      // leyeran afuera habría una ventana entre la lectura y la escritura
+      // donde otro usuario podría editar un precio a mano, y el ajuste lo
+      // pisaría sin conflicto ni aviso (TSK-621, revisión final #3).
+      const rawItems = await getItemsForAdjustment(priceListId, tx);
+      if (rawItems.length === 0) {
+        throw new Error('La lista no tiene ítems para actualizar');
+      }
+
+      const adjustableItems: AdjustableItem[] = rawItems.map((item) => ({
+        id: item.id,
+        price: Number(item.price),
+        vatRate: Number(item.product.vatRate),
+      }));
+
+      const adjusted = adjustItems(adjustableItems, percentage);
+
       await Promise.all(
         adjusted.map((item) =>
           tx.priceListItem.update({
@@ -382,7 +407,7 @@ export async function applyPriceIndexToList(
 
     revalidatePath(`/dashboard/commercial/price-lists/${priceListId}`);
     logger.info('Indice aplicado a lista de precios', {
-      data: { priceListId, indexValueId, itemsAffected: adjusted.length },
+      data: { priceListId, indexValueId, itemsAffected: adjustment.itemsAffected },
     });
 
     return {
