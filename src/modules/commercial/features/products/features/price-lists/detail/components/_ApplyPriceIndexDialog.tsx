@@ -246,7 +246,8 @@ export function _ApplyPriceIndexDialog({ priceListId, itemCount }: Props) {
                     <p>
                       Esta lista ya recibió {selectedIndex?.name}
                       {selectedValue ? ` ${moment.utc(selectedValue.period).format('MM/YYYY')}` : ''} el{' '}
-                      {moment(preview.previousApplication.appliedAt).format('DD/MM/YYYY')}.
+                      {moment(preview.previousApplication.appliedAt).format('DD/MM/YYYY')}, aplicado por{' '}
+                      {preview.previousApplication.appliedByName}.
                     </p>
                   </div>
                 )}

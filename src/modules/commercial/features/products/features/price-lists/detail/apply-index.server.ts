@@ -39,7 +39,7 @@ export interface PreviewPriceIndexApplicationResult {
     indexId: string;
     indexValueId: string;
     appliedAt: Date;
-    appliedBy: string | null;
+    appliedByName: string;
   } | null;
   items: PreviewItem[];
 }
@@ -50,9 +50,40 @@ export interface ApplyPriceIndexResult {
   appliedAt: Date;
 }
 
+/** Una aplicación de índice ya registrada, para el historial de la lista. */
+export interface PriceListAdjustmentHistoryItem {
+  id: string;
+  indexName: string;
+  period: Date;
+  percentage: number;
+  itemsAffected: number;
+  appliedAt: Date;
+  appliedByName: string;
+}
+
 // ============================================
 // HELPERS INTERNOS
 // ============================================
+
+/**
+ * Resuelve ids de usuario a un nombre para mostrar. `appliedBy` guarda el id
+ * crudo del usuario sin FK, así que hay que ir a buscarlo: si tiene nombre se
+ * usa el nombre, si no el email, y si el id no resuelve a nadie (usuario
+ * borrado, dato viejo) se muestra algo neutro en vez de un uuid o de romper.
+ */
+async function resolveAppliedByNames(userIds: Array<string | null>): Promise<Map<string, string>> {
+  const ids = [...new Set(userIds.filter((id): id is string => Boolean(id)))];
+  if (ids.length === 0) {
+    return new Map();
+  }
+
+  const users = await prisma.user.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, name: true, email: true },
+  });
+
+  return new Map(users.map((user) => [user.id, user.name?.trim() || user.email]));
+}
 
 /**
  * Trae los ítems de la lista con lo necesario para ajustar (precio e IVA del
@@ -178,7 +209,19 @@ export async function previewPriceIndexApplication(
       select: { indexId: true, indexValueId: true, appliedAt: true, appliedBy: true },
     });
 
-    const previousApplication = findPreviousApplication(history, indexValueId);
+    const previous = findPreviousApplication(history, indexValueId);
+
+    let previousApplication: PreviewPriceIndexApplicationResult['previousApplication'] = null;
+    if (previous) {
+      const namesById = await resolveAppliedByNames([previous.appliedBy]);
+      previousApplication = {
+        indexId: previous.indexId,
+        indexValueId: previous.indexValueId,
+        appliedAt: previous.appliedAt,
+        appliedByName:
+          (previous.appliedBy ? namesById.get(previous.appliedBy) : undefined) ?? 'Usuario desconocido',
+      };
+    }
 
     return { percentage, previousApplication, items };
   } catch (error) {
@@ -189,6 +232,67 @@ export async function previewPriceIndexApplication(
       throw error;
     }
     throw new Error('Error al calcular la vista previa del ajuste por indice');
+  }
+}
+
+/**
+ * Historial de aplicaciones de índice sobre una lista de precios, más
+ * reciente primero. Es lo que responde "¿por qué subió este precio?".
+ */
+export async function getPriceListAdjustments(
+  priceListId: string
+): Promise<PriceListAdjustmentHistoryItem[]> {
+  await checkPermission('commercial.price-lists', 'view', { redirect: true });
+
+  const companyId = await getActiveCompanyId();
+  if (!companyId) {
+    throw new Error('No se encontró empresa activa');
+  }
+
+  try {
+    const priceList = await prisma.priceList.findFirst({
+      where: { id: priceListId, companyId },
+      select: { id: true },
+    });
+    if (!priceList) {
+      throw new Error('Lista de precios no encontrada');
+    }
+
+    const adjustments = await prisma.priceListAdjustment.findMany({
+      where: { priceListId },
+      orderBy: { appliedAt: 'desc' },
+      select: {
+        id: true,
+        percentage: true,
+        itemsAffected: true,
+        appliedAt: true,
+        appliedBy: true,
+        index: { select: { name: true } },
+        indexValue: { select: { period: true } },
+      },
+    });
+
+    const namesById = await resolveAppliedByNames(adjustments.map((a) => a.appliedBy));
+
+    return adjustments.map((adjustment) => ({
+      id: adjustment.id,
+      indexName: adjustment.index.name,
+      period: adjustment.indexValue.period,
+      percentage: Number(adjustment.percentage),
+      itemsAffected: adjustment.itemsAffected,
+      appliedAt: adjustment.appliedAt,
+      appliedByName:
+        (adjustment.appliedBy ? namesById.get(adjustment.appliedBy) : undefined) ??
+        'Usuario desconocido',
+    }));
+  } catch (error) {
+    logger.error('Error al obtener el historial de ajustes de la lista de precios', {
+      data: { error, priceListId },
+    });
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error('Error al obtener el historial de ajustes de la lista de precios');
   }
 }
 

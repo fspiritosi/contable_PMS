@@ -10,15 +10,18 @@ import { BackButton } from '@/shared/components/common/BackButton';
 import moment from 'moment';
 import { _PriceListItemsTable } from './components/_PriceListItemsTable';
 import { _ApplyPriceIndexDialog } from './components/_ApplyPriceIndexDialog';
+import { _PriceListAdjustmentsHistory } from './components/_PriceListAdjustmentsHistory';
+import { getPriceListAdjustments } from './apply-index.server';
 
 interface PriceListDetailProps {
   priceListId: string;
 }
 
 export async function PriceListDetail({ priceListId }: PriceListDetailProps) {
-  const [priceList, items] = await Promise.all([
+  const [priceList, items, adjustments] = await Promise.all([
     getPriceListById(priceListId),
     getPriceListItems(priceListId),
+    getPriceListAdjustments(priceListId),
   ]);
 
   if (!priceList) {
@@ -121,6 +124,8 @@ export async function PriceListDetail({ priceListId }: PriceListDetailProps) {
             <_PriceListItemsTable priceListId={priceList.id} items={items} />
           </CardContent>
         </Card>
+
+        <_PriceListAdjustmentsHistory adjustments={adjustments} />
       </div>
     </PermissionGuard>
   );
