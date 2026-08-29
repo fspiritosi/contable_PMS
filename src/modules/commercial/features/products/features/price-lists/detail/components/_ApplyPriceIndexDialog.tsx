@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -8,6 +8,7 @@ import moment from 'moment';
 import { toast } from 'sonner';
 import { TrendingUp, TriangleAlert } from 'lucide-react';
 
+import { logger } from '@/shared/lib/logger';
 import { Button } from '@/shared/components/ui/button';
 import {
   Dialog,
@@ -53,11 +54,25 @@ export function _ApplyPriceIndexDialog({ priceListId, itemCount }: Props) {
   const [selectedIndexId, setSelectedIndexId] = useState<string>('');
   const [selectedValueId, setSelectedValueId] = useState<string>('');
 
-  const { data: indexes, isLoading: isLoadingIndexes } = useQuery({
+  const {
+    data: indexes,
+    isLoading: isLoadingIndexes,
+    isError: isIndexesError,
+    error: indexesError,
+    refetch: refetchIndexes,
+  } = useQuery({
     queryKey: ['applicable-price-indexes'],
     queryFn: () => getApplicablePriceIndexes(),
     enabled: open,
   });
+
+  useEffect(() => {
+    if (indexesError) {
+      logger.error('Error al cargar los índices de precios aplicables', {
+        data: { error: indexesError },
+      });
+    }
+  }, [indexesError]);
 
   const selectedIndex = useMemo(
     () => indexes?.find((index) => index.id === selectedIndexId) ?? null,
@@ -74,6 +89,14 @@ export function _ApplyPriceIndexDialog({ priceListId, itemCount }: Props) {
     queryFn: () => previewPriceIndexApplication(priceListId, selectedValueId),
     enabled: open && !!selectedValueId,
   });
+
+  useEffect(() => {
+    if (previewQuery.error) {
+      logger.error('Error al calcular la vista previa del ajuste por índice', {
+        data: { error: previewQuery.error, priceListId, indexValueId: selectedValueId },
+      });
+    }
+  }, [previewQuery.error, priceListId, selectedValueId]);
 
   const applyMutation = useMutation({
     mutationFn: () => applyPriceIndexToList(priceListId, selectedValueId),
@@ -129,6 +152,19 @@ export function _ApplyPriceIndexDialog({ priceListId, itemCount }: Props) {
 
         {isLoadingIndexes ? (
           <div className="py-6 text-center text-sm text-muted-foreground">Cargando índices...</div>
+        ) : isIndexesError ? (
+          <div className="space-y-3 py-4 text-sm">
+            <div className="flex items-start gap-2 rounded-md border border-destructive/50 bg-destructive/10 p-3">
+              <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+              <p>
+                No se pudieron cargar los índices de precios. Puede ser un problema temporario de
+                conexión.
+              </p>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => refetchIndexes()}>
+              Reintentar
+            </Button>
+          </div>
         ) : !hasApplicableIndexes ? (
           <div className="space-y-3 py-4 text-sm">
             <p>Todavía no hay ningún índice con valores cargados.</p>
@@ -183,6 +219,22 @@ export function _ApplyPriceIndexDialog({ priceListId, itemCount }: Props) {
             {previewQuery.isLoading && (
               <div className="py-6 text-center text-sm text-muted-foreground">
                 Calculando vista previa...
+              </div>
+            )}
+
+            {previewQuery.isError && (
+              <div className="space-y-3">
+                <div className="flex items-start gap-2 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm">
+                  <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+                  <p>
+                    {previewQuery.error instanceof Error
+                      ? previewQuery.error.message
+                      : 'No se pudo calcular la vista previa de los precios.'}
+                  </p>
+                </div>
+                <Button variant="outline" size="sm" onClick={() => previewQuery.refetch()}>
+                  Reintentar
+                </Button>
               </div>
             )}
 
