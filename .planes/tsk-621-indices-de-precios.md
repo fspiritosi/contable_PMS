@@ -28,13 +28,13 @@ de Precios**, sobre la lista "Sistema RH". Ahí es donde espera encontrar el apa
 
 ## 3. Decisiones tomadas
 
-| Decisión | Elección | Por qué |
-|---|---|---|
-| Qué es un "parámetro" | **Índice con un valor por período** | Cubre el caso IPC, que es el que ella nombra primero, y deja registro de qué valor se aplicó en cada actualización |
-| Alcance de la aplicación | **Toda la lista, con vista previa** | Es el caso real: sale el índice del mes y se actualiza la lista entera |
-| Redondeo | **2 decimales** | Fiel al índice, sin introducir un criterio comercial que nadie pidió |
-| Deshacer | **Fuera de alcance** | Ver abajo |
-| Fórmula polinómica | **Fuera de alcance** | Ver abajo |
+| Decisión                 | Elección                            | Por qué                                                                                                            |
+|--------------------------|-------------------------------------|--------------------------------------------------------------------------------------------------------------------|
+| Qué es un "parámetro"    | **Índice con un valor por período** | Cubre el caso IPC, que es el que ella nombra primero, y deja registro de qué valor se aplicó en cada actualización |
+| Alcance de la aplicación | **Toda la lista, con vista previa** | Es el caso real: sale el índice del mes y se actualiza la lista entera                                             |
+| Redondeo                 | **2 decimales**                     | Fiel al índice, sin introducir un criterio comercial que nadie pidió                                               |
+| Deshacer                 | **Fuera de alcance**                | Ver abajo                                                                                                          |
+| Fórmula polinómica       | **Fuera de alcance**                | Ver abajo                                                                                                          |
 
 ### Por qué no hay "deshacer"
 
@@ -132,17 +132,23 @@ período, porcentaje, fecha, usuario y cantidad de ítems.
 
 ## 7. Archivos
 
-| Capa | Archivos |
-|---|---|
-| Datos | `prisma/schema.prisma` + migración con los tres modelos |
-| Cálculo | `price-lists/shared/price-index-calc.ts` — aplicar porcentaje, redondear, recalcular `priceWithTax` |
-| Catálogo | `company/features/price-indexes/` — listado, modal de alta, detalle con valores |
-| Aplicación | `_ApplyPriceIndexDialog.tsx` + action transaccional en `price-lists` |
-| Historial | Sección en el detalle de la lista de precios |
-| Navegación | Entrada en el sidebar de configuración |
+| Capa       | Archivos                                                                                            |
+|------------|-----------------------------------------------------------------------------------------------------|
+| Datos      | `prisma/schema.prisma` + migración con los tres modelos                                             |
+| Cálculo    | `price-lists/shared/price-index-calc.ts` — aplicar porcentaje, redondear, recalcular `priceWithTax` |
+| Catálogo   | `company/features/price-indexes/` — listado, modal de alta, detalle con valores                     |
+| Aplicación | `_ApplyPriceIndexDialog.tsx` + action transaccional en `price-lists`                                |
+| Historial  | Sección en el detalle de la lista de precios                                                        |
+| Navegación | Entrada en el sidebar de configuración                                                              |
 
-**Permisos:** `commercial.price-lists` para todo, incluido el ABM de índices. El índice no sirve
-para otra cosa que actualizar listas de precios, así que no se le crea un permiso propio.
+**Permisos:** el ABM de índices usa un permiso propio, **`company.price-indexes`**, y la
+aplicación del índice a una lista usa `commercial.price-lists` con acción `update`.
+
+> Corrección sobre la decisión inicial: se había resuelto usar `commercial.price-lists` para
+> todo, para no crear un permiso más. Al relevar el código se vio que **cada catálogo de empresa
+> tiene su propio permiso** (`company.discount-presets`, `company.cost-centers`, etc.) y que el
+> sidebar filtra por él. Sin permiso propio, la entrada del menú no se podría ocultar por rol y
+> quedaría fuera del patrón del proyecto.
 
 ## 8. Pruebas
 
