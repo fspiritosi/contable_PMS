@@ -88,6 +88,7 @@ export const PERMISSION_MODULE_MAP: Record<string, ActivatableModule> = {
 
   'company.document-types': 'documents',
   'company.discount-presets': 'commercial',
+  'company.price-indexes': 'commercial',
 };
 
 /**

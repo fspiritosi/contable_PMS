@@ -77,6 +77,7 @@ export const MODULES = {
 
   // Configuración de Empresa - Comercial
   'company.discount-presets': 'company.discount-presets',
+  'company.price-indexes': 'company.price-indexes',
 
   // Módulo Contable
   'accounting.accounts': 'accounting.accounts',
@@ -173,6 +174,7 @@ export const MODULE_LABELS: Record<Module, string> = {
   'company.document-types': 'Tipos de Documento',
 
   'company.discount-presets': 'Descuentos Predefinidos',
+  'company.price-indexes': 'Índices de Precios',
 
   // Módulo Contable
   'accounting.accounts': 'Plan de Cuentas',
@@ -276,7 +278,7 @@ export const MODULE_GROUPS = {
   },
   configuracionComercial: {
     label: 'Configuración - Comercial',
-    modules: ['company.discount-presets'] as Module[],
+    modules: ['company.discount-presets', 'company.price-indexes'] as Module[],
   },
   configuracionContable: {
     label: 'Contabilidad',
