@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { adjustItem, adjustItems, applyPercentage } from './price-index-calc';
+import {
+  adjustItem,
+  adjustItems,
+  applyPercentage,
+  findPreviousApplication,
+} from './price-index-calc';
 
 describe('aplicar un porcentaje a un importe', () => {
   it('aumenta segun el indice', () => {
@@ -69,5 +74,35 @@ describe('ajuste de varios items', () => {
 
   it('una lista vacia no rompe', () => {
     expect(adjustItems([], 5)).toEqual([]);
+  });
+});
+
+const APLICACIONES = [
+  { indexId: 'ipc', indexValueId: 'v-2026-07', appliedAt: new Date('2026-08-02'), appliedBy: 'Ana' },
+  { indexId: 'ipc', indexValueId: 'v-2026-08', appliedAt: new Date('2026-09-12'), appliedBy: 'Fabricio' },
+];
+
+describe('deteccion de doble aplicacion', () => {
+  it('encuentra la aplicacion previa del mismo valor de indice', () => {
+    const previa = findPreviousApplication(APLICACIONES, 'v-2026-08');
+
+    expect(previa?.appliedBy).toBe('Fabricio');
+  });
+
+  it('no marca nada si ese periodo nunca se aplico', () => {
+    expect(findPreviousApplication(APLICACIONES, 'v-2026-09')).toBeNull();
+  });
+
+  it('sin aplicaciones previas devuelve null', () => {
+    expect(findPreviousApplication([], 'v-2026-08')).toBeNull();
+  });
+
+  it('con dos aplicaciones del mismo valor devuelve la mas reciente', () => {
+    const repetidas = [
+      ...APLICACIONES,
+      { indexId: 'ipc', indexValueId: 'v-2026-08', appliedAt: new Date('2026-09-20'), appliedBy: 'Ana' },
+    ];
+
+    expect(findPreviousApplication(repetidas, 'v-2026-08')?.appliedBy).toBe('Ana');
   });
 });

@@ -52,3 +52,25 @@ export function adjustItem(item: AdjustableItem, percentage: number): AdjustedIt
 export function adjustItems(items: AdjustableItem[], percentage: number): AdjustedItem[] {
   return items.map((item) => adjustItem(item, percentage));
 }
+
+/** Una aplicación ya registrada, vista desde la detección de repetidos. */
+export interface PreviousApplication {
+  indexId: string;
+  indexValueId: string;
+  appliedAt: Date;
+  appliedBy: string | null;
+}
+
+/**
+ * La aplicación más reciente del mismo valor de índice sobre esta lista, si la
+ * hay. Sirve para avisar antes de repetir: aplicar dos veces un 4,2% sube 8,6%.
+ */
+export function findPreviousApplication<T extends PreviousApplication>(
+  applications: T[],
+  indexValueId: string
+): T | null {
+  const matches = applications.filter((a) => a.indexValueId === indexValueId);
+  if (matches.length === 0) return null;
+
+  return matches.reduce((latest, a) => (a.appliedAt > latest.appliedAt ? a : latest));
+}
