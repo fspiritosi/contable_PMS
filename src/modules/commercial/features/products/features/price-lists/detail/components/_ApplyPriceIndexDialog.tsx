@@ -44,10 +44,9 @@ import {
 
 interface Props {
   priceListId: string;
-  itemCount: number;
 }
 
-export function _ApplyPriceIndexDialog({ priceListId, itemCount }: Props) {
+export function _ApplyPriceIndexDialog({ priceListId }: Props) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
@@ -88,6 +87,11 @@ export function _ApplyPriceIndexDialog({ priceListId, itemCount }: Props) {
     queryKey: ['price-index-preview', priceListId, selectedValueId],
     queryFn: () => previewPriceIndexApplication(priceListId, selectedValueId),
     enabled: open && !!selectedValueId,
+    // Es un cálculo contra estado vivo (precios, historial de aplicaciones),
+    // no un catálogo: el staleTime global de 60s dejaría reabrir el diálogo
+    // con la vista previa de antes de aplicar, ocultando el aviso de doble
+    // aplicación (TSK-621, revisión final #1).
+    staleTime: 0,
   });
 
   useEffect(() => {
@@ -107,6 +111,10 @@ export function _ApplyPriceIndexDialog({ priceListId, itemCount }: Props) {
           : `Se actualizaron ${result.itemsAffected} ítems`
       );
       queryClient.invalidateQueries({ queryKey: ['applicable-price-indexes'] });
+      // Invalida toda vista previa de esta lista (sin fijar el valor de
+      // índice), para que reabrir el diálogo enseguida no muestre el estado
+      // "antes de aplicar" cacheado (TSK-621, revisión final #1).
+      queryClient.invalidateQueries({ queryKey: ['price-index-preview', priceListId] });
       handleOpenChange(false);
       router.refresh();
     },
@@ -292,7 +300,14 @@ export function _ApplyPriceIndexDialog({ priceListId, itemCount }: Props) {
             >
               {applyMutation.isPending
                 ? 'Aplicando...'
-                : `Aplicar a los ${itemCount} ítem${itemCount !== 1 ? 's' : ''}`}
+                : preview
+                  ? // Se usa la cantidad de la vista previa (calculada al
+                    // momento), no un conteo renderizado en el servidor al
+                    // cargar la página: si se agregó un ítem mientras tanto,
+                    // el botón no debe prometer un número distinto del que
+                    // realmente se va a aplicar (TSK-621, revisión final #5).
+                    `Aplicar a los ${preview.items.length} ítem${preview.items.length !== 1 ? 's' : ''}`
+                  : 'Aplicar'}
             </Button>
           )}
         </DialogFooter>
