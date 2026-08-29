@@ -180,6 +180,33 @@ Resolucion: Owner/Developer → acceso total. Otros → rol base + overrides ind
 - `SupplierTaxCondition`: MONOTRIBUTISTA, RESPONSABLE_INSCRIPTO, EXENTO, CONSUMIDOR_FINAL, NO_RESPONSABLE
 - `SupplierStatus`: ACTIVE, INACTIVE
 
+**Indices de precios (TSK-621):**
+
+| Modelo | Descripcion | Campos clave |
+|--------|-------------|--------------|
+| `PriceIndex` | Indice de precios (IPC, etc.), por empresa | name, description?, isActive, unique(companyId, name) |
+| `PriceIndexValue` | Valor del indice para un periodo | indexId, period (fecha, dia 1 del mes), percentage (Decimal 6,3), unique(indexId, period) |
+| `PriceListAdjustment` | Historial de aplicaciones de un indice a una lista | priceListId, indexId, indexValueId, percentage (Decimal 6,3, el efectivamente aplicado), itemsAffected, appliedAt, appliedBy |
+
+- `percentage` admite negativos (un indice puede dar baja) y se guarda con 3 decimales; en
+  TypeScript es `number`.
+- `PriceListAdjustment.percentage` es redundante a proposito respecto de `PriceIndexValue`: si
+  el valor del indice se corrige despues, el historial tiene que seguir diciendo que porcentaje
+  se aplico realmente ese dia.
+- **Calculo:** `price` nuevo = `price` actual x (1 + `percentage` / 100), redondeado a 2
+  decimales. `priceWithTax` **se recalcula desde el `price` ya ajustado** con la alicuota de IVA
+  del item (`price x (1 + vatRate / 100)`, tambien redondeado a 2 decimales) — no se le aplica el
+  porcentaje del indice por separado, porque los dos caminos divergen por redondeo y
+  desincronizan los campos. Logica pura en
+  `modules/commercial/features/products/features/price-lists/shared/price-index-calc.ts`
+  (`applyPercentage`, `adjustItem`, `adjustItems`), sin dependencias de Prisma.
+- La aplicacion de un indice a una lista corre en una transaccion (todos los items o ninguno) y
+  no tiene deshacer: revertir exigiria guardar el precio anterior de cada item y resolver que
+  pasa si el precio actual ya cambio por otro motivo (edicion manual, otro indice aplicado
+  encima). El historial (`PriceListAdjustment`) es lo que permite reconstruir que paso.
+- Doble aplicacion del mismo indice y periodo a la misma lista: se detecta y se avisa, pero no
+  se bloquea.
+
 **Conceptos contables por producto (Product):**
 - `defaultExpenseAccountId` → Account (naturaleza DEBIT, cuentas hoja). Sobrescribe `purchasesAccountId` de AccountingSettings al generar asientos de compra.
 - `defaultIncomeAccountId` → Account (naturaleza CREDIT, cuentas hoja). Sobrescribe `salesAccountId` de AccountingSettings al generar asientos de venta.
