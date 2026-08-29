@@ -136,6 +136,7 @@ model Company {
   products                  Product[]
   productGroups             ProductGroup[]
   priceLists                PriceList[]
+  priceIndexes              PriceIndex[]
   warehouses                Warehouse[]
   stockMovements            StockMovement[]
   stockTransfers            StockTransfer[]
@@ -2319,9 +2320,10 @@ model PriceList {
   isDefault   Boolean @default(false) @map("is_default")
   isActive    Boolean @default(true) @map("is_active")
 
-  company     Company         @relation(fields: [companyId], references: [id])
+  company     Company               @relation(fields: [companyId], references: [id])
   items       PriceListItem[]
   contractors Contractor[]
+  adjustments PriceListAdjustment[]
 
   createdBy      String?  @map("created_by")
   lastModifiedBy String?  @map("last_modified_by")
@@ -2346,6 +2348,65 @@ model PriceListItem {
 
   @@unique([priceListId, productId])
   @@map("price_list_items")
+}
+
+model PriceIndex {
+  id          String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId   String  @map("company_id") @db.Uuid
+  name        String
+  description String?
+  isActive    Boolean @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  company     Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  values      PriceIndexValue[]
+  adjustments PriceListAdjustment[]
+
+  @@unique([companyId, name])
+  @@map("price_indexes")
+}
+
+model PriceIndexValue {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  indexId    String   @map("index_id") @db.Uuid
+  /// Primer día del mes al que corresponde el valor.
+  period     DateTime @map("period") @db.Date
+  /// Porcentaje del período. Admite negativos: un índice puede dar baja.
+  percentage Decimal  @db.Decimal(6, 3)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  index       PriceIndex            @relation(fields: [indexId], references: [id], onDelete: Cascade)
+  adjustments PriceListAdjustment[]
+
+  @@unique([indexId, period])
+  @@index([indexId])
+  @@map("price_index_values")
+}
+
+model PriceListAdjustment {
+  id            String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  priceListId   String  @map("price_list_id") @db.Uuid
+  indexId       String  @map("index_id") @db.Uuid
+  indexValueId  String  @map("index_value_id") @db.Uuid
+  /// El porcentaje realmente aplicado. Redundante a proposito: si despues se
+  /// corrige el valor del indice, el historial tiene que seguir diciendo que
+  /// se aplico ese dia.
+  percentage    Decimal @db.Decimal(6, 3)
+  itemsAffected Int     @map("items_affected")
+
+  appliedAt DateTime @default(now()) @map("applied_at")
+  appliedBy String?  @map("applied_by")
+
+  priceList  PriceList       @relation(fields: [priceListId], references: [id], onDelete: Cascade)
+  index      PriceIndex      @relation(fields: [indexId], references: [id])
+  indexValue PriceIndexValue @relation(fields: [indexValueId], references: [id])
+
+  @@index([priceListId])
+  @@map("price_list_adjustments")
 }
 
 // ============================================
