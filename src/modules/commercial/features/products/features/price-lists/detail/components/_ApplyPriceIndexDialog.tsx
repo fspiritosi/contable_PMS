@@ -107,7 +107,7 @@ export function _ApplyPriceIndexDialog({ priceListId, itemCount }: Props) {
           : `Se actualizaron ${result.itemsAffected} ítems`
       );
       queryClient.invalidateQueries({ queryKey: ['applicable-price-indexes'] });
-      setOpen(false);
+      handleOpenChange(false);
       router.refresh();
     },
     onError: (error) => {
@@ -171,7 +171,7 @@ export function _ApplyPriceIndexDialog({ priceListId, itemCount }: Props) {
             <Link
               href="/dashboard/company/price-indexes"
               className="text-blue-600 hover:underline"
-              onClick={() => setOpen(false)}
+              onClick={() => handleOpenChange(false)}
             >
               Ir a Índices de Precios
             </Link>
@@ -282,7 +282,7 @@ export function _ApplyPriceIndexDialog({ priceListId, itemCount }: Props) {
         )}
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => setOpen(false)} disabled={applyMutation.isPending}>
+          <Button variant="outline" onClick={() => handleOpenChange(false)} disabled={applyMutation.isPending}>
             Cancelar
           </Button>
           {hasApplicableIndexes && (
