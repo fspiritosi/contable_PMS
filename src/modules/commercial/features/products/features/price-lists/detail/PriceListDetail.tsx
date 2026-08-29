@@ -18,15 +18,23 @@ interface PriceListDetailProps {
 }
 
 export async function PriceListDetail({ priceListId }: PriceListDetailProps) {
-  const [priceList, items, adjustments] = await Promise.all([
-    getPriceListById(priceListId),
-    getPriceListItems(priceListId),
-    getPriceListAdjustments(priceListId),
-  ]);
+  // `priceList` se resuelve primero y por separado: si la lista no es de la
+  // empresa activa, `getPriceListById` devuelve null y acá se corta con
+  // notFound(). Si en cambio fuera parte del mismo Promise.all que
+  // getPriceListAdjustments (que ante el mismo caso lanza una excepción),
+  // Promise.all rechazaría antes de que el `if (!priceList)` llegue a
+  // ejecutarse, y un 404 legítimo se mostraría como error genérico
+  // (TSK-621, revisión final #4).
+  const priceList = await getPriceListById(priceListId);
 
   if (!priceList) {
     notFound();
   }
+
+  const [items, adjustments] = await Promise.all([
+    getPriceListItems(priceListId),
+    getPriceListAdjustments(priceListId),
+  ]);
 
   return (
     <PermissionGuard module="commercial.price-lists" action="view" redirect>
@@ -44,7 +52,7 @@ export async function PriceListDetail({ priceListId }: PriceListDetailProps) {
           <div className="flex items-center gap-2">
             {items.length > 0 && (
               <PermissionGuard module="commercial.price-lists" action="update">
-                <_ApplyPriceIndexDialog priceListId={priceList.id} itemCount={items.length} />
+                <_ApplyPriceIndexDialog priceListId={priceList.id} />
               </PermissionGuard>
             )}
             <Link href={`/dashboard/commercial/price-lists/${priceList.id}/edit`}>
