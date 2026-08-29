@@ -263,6 +263,38 @@ export function _CommercialGuide() {
             Al asignar una lista de precios a un cliente, las facturas de venta
             usarán automáticamente los precios de esa lista.
           </p>
+
+          <p className="mt-3">
+            <strong>Actualizar precios por índice:</strong>
+          </p>
+          <p className="text-muted-foreground">
+            Si la empresa tiene índices de precios cargados (por ejemplo,
+            IPC), podés aplicar un aumento a todos los ítems de la lista de
+            una sola vez:
+          </p>
+          <ol className="list-decimal pl-6 space-y-2 text-muted-foreground">
+            <li>
+              En el detalle de la lista, hacé clic en{' '}
+              <strong>Actualizar por índice</strong> (solo visible si la
+              lista tiene ítems)
+            </li>
+            <li>
+              Elegí el <strong>índice</strong> y el <strong>período</strong>{' '}
+              que querés aplicar
+            </li>
+            <li>
+              Revisá la <strong>vista previa</strong>, que muestra el precio
+              actual y el precio nuevo de cada ítem
+            </li>
+            <li>
+              Confirmá con <strong>Aplicar</strong>: los precios se
+              actualizan y el ajuste queda registrado en el historial
+            </li>
+          </ol>
+          <p className="text-sm text-muted-foreground">
+            Si el mismo período ya se aplicó antes a esa lista, el diálogo lo
+            avisa para evitar aplicar el aumento dos veces por error.
+          </p>
         </CardContent>
       </Card>
 

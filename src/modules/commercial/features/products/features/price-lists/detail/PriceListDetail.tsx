@@ -9,6 +9,7 @@ import { Pencil, Star } from 'lucide-react';
 import { BackButton } from '@/shared/components/common/BackButton';
 import moment from 'moment';
 import { _PriceListItemsTable } from './components/_PriceListItemsTable';
+import { _ApplyPriceIndexDialog } from './components/_ApplyPriceIndexDialog';
 
 interface PriceListDetailProps {
   priceListId: string;
@@ -37,12 +38,19 @@ export async function PriceListDetail({ priceListId }: PriceListDetailProps) {
               <h1 className="text-2xl font-bold">{priceList.name}</h1>
             </div>
           </div>
-          <Link href={`/dashboard/commercial/price-lists/${priceList.id}/edit`}>
-            <Button>
-              <Pencil className="mr-2 h-4 w-4" />
-              Editar
-            </Button>
-          </Link>
+          <div className="flex items-center gap-2">
+            {items.length > 0 && (
+              <PermissionGuard module="commercial.price-lists" action="update">
+                <_ApplyPriceIndexDialog priceListId={priceList.id} itemCount={items.length} />
+              </PermissionGuard>
+            )}
+            <Link href={`/dashboard/commercial/price-lists/${priceList.id}/edit`}>
+              <Button>
+                <Pencil className="mr-2 h-4 w-4" />
+                Editar
+              </Button>
+            </Link>
+          </div>
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
