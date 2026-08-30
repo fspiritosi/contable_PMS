@@ -465,6 +465,11 @@ const getNavConfig = (isSingleMode: boolean, activeCompanyId?: string): NavItemW
             href: '/dashboard/company/discount-presets',
             module: 'company.discount-presets',
           },
+          {
+            title: 'Índices de Precios',
+            href: '/dashboard/company/price-indexes',
+            module: 'company.price-indexes',
+          },
         ],
       },
       {

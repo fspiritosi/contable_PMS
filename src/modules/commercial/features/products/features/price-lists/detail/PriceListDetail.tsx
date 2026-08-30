@@ -9,20 +9,32 @@ import { Pencil, Star } from 'lucide-react';
 import { BackButton } from '@/shared/components/common/BackButton';
 import moment from 'moment';
 import { _PriceListItemsTable } from './components/_PriceListItemsTable';
+import { _ApplyPriceIndexDialog } from './components/_ApplyPriceIndexDialog';
+import { _PriceListAdjustmentsHistory } from './components/_PriceListAdjustmentsHistory';
+import { getPriceListAdjustments } from './apply-index.server';
 
 interface PriceListDetailProps {
   priceListId: string;
 }
 
 export async function PriceListDetail({ priceListId }: PriceListDetailProps) {
-  const [priceList, items] = await Promise.all([
-    getPriceListById(priceListId),
-    getPriceListItems(priceListId),
-  ]);
+  // `priceList` se resuelve primero y por separado: si la lista no es de la
+  // empresa activa, `getPriceListById` devuelve null y acá se corta con
+  // notFound(). Si en cambio fuera parte del mismo Promise.all que
+  // getPriceListAdjustments (que ante el mismo caso lanza una excepción),
+  // Promise.all rechazaría antes de que el `if (!priceList)` llegue a
+  // ejecutarse, y un 404 legítimo se mostraría como error genérico
+  // (TSK-621, revisión final #4).
+  const priceList = await getPriceListById(priceListId);
 
   if (!priceList) {
     notFound();
   }
+
+  const [items, adjustments] = await Promise.all([
+    getPriceListItems(priceListId),
+    getPriceListAdjustments(priceListId),
+  ]);
 
   return (
     <PermissionGuard module="commercial.price-lists" action="view" redirect>
@@ -37,12 +49,19 @@ export async function PriceListDetail({ priceListId }: PriceListDetailProps) {
               <h1 className="text-2xl font-bold">{priceList.name}</h1>
             </div>
           </div>
-          <Link href={`/dashboard/commercial/price-lists/${priceList.id}/edit`}>
-            <Button>
-              <Pencil className="mr-2 h-4 w-4" />
-              Editar
-            </Button>
-          </Link>
+          <div className="flex items-center gap-2">
+            {items.length > 0 && (
+              <PermissionGuard module="commercial.price-lists" action="update">
+                <_ApplyPriceIndexDialog priceListId={priceList.id} />
+              </PermissionGuard>
+            )}
+            <Link href={`/dashboard/commercial/price-lists/${priceList.id}/edit`}>
+              <Button>
+                <Pencil className="mr-2 h-4 w-4" />
+                Editar
+              </Button>
+            </Link>
+          </div>
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
@@ -113,6 +132,8 @@ export async function PriceListDetail({ priceListId }: PriceListDetailProps) {
             <_PriceListItemsTable priceListId={priceList.id} items={items} />
           </CardContent>
         </Card>
+
+        <_PriceListAdjustmentsHistory adjustments={adjustments} />
       </div>
     </PermissionGuard>
   );

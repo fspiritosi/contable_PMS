@@ -263,6 +263,82 @@ export function _CommercialGuide() {
             Al asignar una lista de precios a un cliente, las facturas de venta
             usarán automáticamente los precios de esa lista.
           </p>
+
+          <p className="mt-3">
+            <strong>Actualizar precios por índice:</strong>
+          </p>
+          <p className="text-muted-foreground">
+            Si la empresa tiene índices de precios cargados (por ejemplo,
+            IPC), podés aplicar un aumento a todos los ítems de la lista de
+            una sola vez.
+          </p>
+
+          <p className="mt-2">
+            <strong>Antes de aplicar un índice, hay que darlo de alta:</strong>
+          </p>
+          <ol className="list-decimal pl-6 space-y-2 text-muted-foreground">
+            <li>
+              Ve a <strong>Empresa → Comercial → Índices de Precios</strong> y
+              creá el índice (por ejemplo, &quot;IPC&quot;), con un{' '}
+              <strong>nombre</strong> y una <strong>descripción</strong>{' '}
+              opcional
+            </li>
+            <li>
+              Entrá al <strong>detalle</strong> del índice y cargá el{' '}
+              <strong>porcentaje</strong> de cada período (mes/año) a medida
+              que se va publicando. Un índice sin ningún valor cargado no se
+              puede aplicar a una lista
+            </li>
+          </ol>
+
+          <p className="mt-2">
+            <strong>Para aplicarlo a una lista:</strong>
+          </p>
+          <ol className="list-decimal pl-6 space-y-2 text-muted-foreground">
+            <li>
+              En el detalle de la lista, hacé clic en{' '}
+              <strong>Actualizar por índice</strong> (solo visible si la
+              lista tiene ítems)
+            </li>
+            <li>
+              Elegí el <strong>índice</strong> y el <strong>período</strong>{' '}
+              que querés aplicar
+            </li>
+            <li>
+              Revisá la <strong>vista previa</strong>, que muestra el precio
+              actual y el precio nuevo de cada ítem
+            </li>
+            <li>
+              Confirmá con <strong>Aplicar</strong>: los precios se
+              actualizan y el ajuste queda registrado en el historial
+            </li>
+          </ol>
+          <p className="text-sm text-muted-foreground">
+            Si el mismo período ya se aplicó antes a esa lista, el diálogo lo
+            avisa (con la fecha y quién lo aplicó) para evitar aplicar el
+            aumento dos veces por error sin darse cuenta.
+          </p>
+
+          <p className="mt-2">
+            <strong>Historial:</strong> en el detalle de la lista, la sección{' '}
+            <strong>Historial de actualizaciones por índice</strong> muestra
+            cada aplicación con el índice, el período, el porcentaje, la
+            fecha, quién la hizo y sobre cuántos ítems.
+          </p>
+
+          <Alert className="mt-2">
+            <Info className="h-4 w-4" />
+            <AlertDescription>
+              <strong>No hay forma de deshacer</strong> una actualización ya
+              aplicada. Entre que se aplica un índice y que alguien quisiera
+              revertirlo, los precios pueden haberse editado a mano o
+              haber recibido otro índice encima, así que restar el
+              porcentaje no devuelve los precios anteriores: los rompe. Por
+              eso es clave revisar bien la vista previa antes de confirmar;
+              si algo se aplicó por error, se corrige a mano usando el
+              historial como referencia.
+            </AlertDescription>
+          </Alert>
         </CardContent>
       </Card>
 

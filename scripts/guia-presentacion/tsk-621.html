@@ -1,0 +1,423 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>TSK-621 — Actualización de listas de precios por índice</title>
+<style>
+  @page {
+    size: A4;
+    margin: 0;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #1f2430;
+    font-size: 13px;
+    line-height: 1.55;
+    background: #ffffff;
+  }
+
+  .page {
+    padding: 4mm 2mm;
+  }
+
+  header.cover {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    text-align: left;
+    padding: 10mm 2mm 8mm 2mm;
+    border-bottom: 3px solid #2f6f4f;
+    margin-bottom: 10mm;
+  }
+
+  .eyebrow {
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 11px;
+    font-weight: 700;
+    color: #2f6f4f;
+    margin-bottom: 6px;
+  }
+
+  h1 {
+    font-size: 26px;
+    margin: 0 0 8px 0;
+    color: #14251c;
+  }
+
+  .subtitle {
+    font-size: 14px;
+    color: #4b5563;
+    margin: 0;
+  }
+
+  section {
+    margin-bottom: 9mm;
+    page-break-inside: avoid;
+  }
+
+  h2 {
+    font-size: 16px;
+    color: #14251c;
+    border-left: 4px solid #2f6f4f;
+    padding-left: 8px;
+    margin: 0 0 6mm 0;
+  }
+
+  .step-number {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #2f6f4f;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    margin-right: 8px;
+    flex-shrink: 0;
+  }
+
+  .quote {
+    background: #f4f7f5;
+    border-left: 4px solid #2f6f4f;
+    padding: 10px 14px;
+    font-style: italic;
+    color: #2b3a33;
+    margin: 0 0 6px 0;
+  }
+
+  .quote cite {
+    display: block;
+    font-style: normal;
+    font-size: 11.5px;
+    color: #6b7280;
+    margin-top: 6px;
+  }
+
+  .before-after {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    page-break-inside: avoid;
+  }
+
+  .card {
+    border: 1px solid #e2e5e0;
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+
+  .card.before { background: #fbf7f2; border-color: #ecd9bd; }
+  .card.after { background: #f2f8f4; border-color: #bfe0cb; }
+
+  .card h3 {
+    margin: 0 0 6px 0;
+    font-size: 12.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .card.before h3 { color: #9a6a1f; }
+  .card.after h3 { color: #226240; }
+
+  .card p { margin: 0; }
+
+  ol.steps {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    counter-reset: step;
+  }
+
+  ol.steps > li {
+    counter-increment: step;
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+    page-break-inside: avoid;
+  }
+
+  ol.steps > li::before {
+    content: counter(step);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    border-radius: 50%;
+    background: #2f6f4f;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .step-body { flex: 1; }
+
+  .step-body strong { color: #14251c; }
+
+  figure {
+    margin: 8px 0 0 0;
+    page-break-inside: avoid;
+  }
+
+  figure img {
+    max-width: 100%;
+    border: 1px solid #d9dce0;
+    border-radius: 6px;
+    display: block;
+  }
+
+  figcaption {
+    font-size: 11px;
+    color: #6b7280;
+    margin-top: 4px;
+  }
+
+  .callout {
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin: 0 0 8px 0;
+  }
+
+  .callout.config {
+    background: #f2f6fb;
+    border: 1px solid #cddaeb;
+  }
+
+  .callout.warning {
+    background: #fdf5ec;
+    border: 1px solid #efd6a8;
+  }
+
+  .callout h3 {
+    margin: 0 0 4px 0;
+    font-size: 13px;
+  }
+
+  ul.plain {
+    margin: 4px 0 0 0;
+    padding-left: 18px;
+  }
+
+  ul.plain li { margin-bottom: 4px; }
+
+  .no-change-list {
+    display: grid;
+    gap: 6px;
+  }
+
+  .no-change-item {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+  }
+
+  .check {
+    color: #2f6f4f;
+    font-weight: 700;
+  }
+
+  footer.doc-footer {
+    text-align: center;
+    color: #9ca3af;
+    font-size: 10.5px;
+    margin-top: 10mm;
+  }
+
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10mm;
+    align-items: start;
+  }
+</style>
+</head>
+<body>
+
+<div class="page">
+
+  <header class="cover">
+    <div class="eyebrow">Ticket 621 · Almacenes y Comercial</div>
+    <h1>Actualizar una lista de precios por índice</h1>
+    <p class="subtitle">Guía de presentación — qué pedías, qué cambió y cómo usarlo</p>
+  </header>
+
+  <section>
+    <h2>1. Qué pedías</h2>
+    <p>En Almacenes, sobre la lista de precios "Sistema RH", nos escribiste para pedir una forma de
+    actualizar los precios de una lista completa de una sola vez, en lugar de tener que editarlos
+    ítem por ítem:</p>
+    <div class="quote">
+      "Se necesitaría un apartado de la posibilidad de actualizar por un parámetro, que pudiera
+      ser elegible (por ejemplo IPC, Polinómica, etc, armadas previamente) y que se reajuste los
+      precios a ese porcentaje."
+      <cite>— Elizabeth Pérez</cite>
+    </div>
+    <p>Hasta ahora, una lista de precios se armaba y corregía a mano, ítem por ítem. No había
+    ningún lugar donde guardar "el IPC de este mes" ni una forma de aplicarlo a todos los precios
+    de golpe.</p>
+  </section>
+
+  <section>
+    <h2>2. Qué cambió en pantalla</h2>
+    <div class="before-after">
+      <div class="card before">
+        <h3>Antes</h3>
+        <p>Para actualizar precios por inflación había que entrar ítem por ítem, calcular el nuevo
+        precio a mano y cargarlo. En una lista con varias decenas de ítems, era un trabajo largo y
+        con más margen de error.</p>
+      </div>
+      <div class="card after">
+        <h3>Ahora</h3>
+        <p>Se cargan los <strong>índices de precios</strong> de la empresa (por ejemplo, el IPC)
+        con su valor de cada mes, y desde cualquier lista de precios se elige el índice y el
+        período: el sistema calcula y actualiza todos los precios de la lista de una sola vez,
+        mostrando antes una vista previa de cómo va a quedar cada uno.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>3. Cómo se usa — un ejemplo concreto</h2>
+    <p>Vamos a seguir el caso típico: sale el <strong>IPC de agosto (+4,2%)</strong> y hay que
+    aplicárselo a la lista "Sistema RH".</p>
+    <ol class="steps">
+      <li>
+        <div class="step-body">
+          <strong>Cargá el valor del mes en el índice.</strong> En
+          <strong>Empresa → Comercial → Índices de Precios</strong> entrás al detalle del índice
+          "IPC" y agregás el porcentaje de agosto. Cada mes se suma como una fila nueva, así que
+          con el tiempo queda el historial completo de valores publicados.
+          <figure>
+            <img src="assets/tsk621-indice-detalle.png" alt="Detalle del índice IPC con los valores de julio y agosto cargados" />
+            <figcaption>El índice "IPC" con sus valores por período: julio (+4,1%) y agosto
+            (+4,2%). Cada valor se carga una sola vez, cuando se publica.</figcaption>
+          </figure>
+        </div>
+      </li>
+      <li>
+        <div class="step-body">
+          <strong>Andá a la lista de precios y elegí "Actualizar por índice".</strong> El botón
+          aparece en el detalle de cualquier lista que tenga ítems cargados.
+          <figure>
+            <img src="assets/tsk621-lista-detalle.png" alt="Detalle de la lista Sistema RH con el botón Actualizar por índice" />
+            <figcaption>La lista "Sistema RH", con sus dos ítems y el botón "Actualizar por
+            índice" arriba a la derecha.</figcaption>
+          </figure>
+        </div>
+      </li>
+      <li>
+        <div class="step-body">
+          <strong>Elegí el índice y el período, y revisá la vista previa.</strong> Antes de tocar
+          un solo precio, la pantalla muestra una tabla con el precio actual y el precio nuevo de
+          cada ítem, para que puedas revisar que el resultado es el esperado.
+          <figure>
+            <img src="assets/tsk621-preview-dialog.png" alt="Vista previa de precios nuevos al aplicar IPC agosto 2026" />
+            <figcaption>Vista previa: con IPC de agosto (+4,2%), Combustible pasa de $120.000 a
+            $125.040 y Soporte Técnico de $80.000 a $83.360. Todavía no se aplicó nada.</figcaption>
+          </figure>
+        </div>
+      </li>
+      <li>
+        <div class="step-body">
+          <strong>Confirmá con "Aplicar".</strong> Los precios de todos los ítems de la lista se
+          actualizan al mismo tiempo, y la actualización queda registrada en el
+          <strong>historial</strong> de la lista: qué índice, qué período, qué porcentaje, cuándo
+          y quién la aplicó.
+          <figure>
+            <img src="assets/tsk621-historial.png" alt="Historial de actualizaciones por índice mostrando la aplicación de IPC agosto 2026" />
+            <figcaption>Después de aplicar: los precios ya actualizados, y en "Historial de
+            actualizaciones por índice" queda la fila con IPC, 08/2026, +4,2%, la fecha y quién la
+            aplicó.</figcaption>
+          </figure>
+        </div>
+      </li>
+    </ol>
+    <p>El precio con IVA no hay que calcularlo aparte: siempre se recalcula automáticamente a
+    partir del precio nuevo, con la alícuota de cada ítem.</p>
+  </section>
+
+  <section>
+    <h2>4. Qué hay que configurar</h2>
+    <div class="callout config">
+      <h3>Dar de alta el índice antes de poder usarlo</h3>
+      <p>En <strong>Empresa → Comercial → Índices de Precios</strong> se crean los índices que se
+      van a usar (por ejemplo "IPC" o "Costo de Vida"), y en el detalle de cada uno se cargan los
+      valores mes a mes, a medida que se van publicando. Un índice sin ningún valor cargado para
+      el período que se necesita no se puede aplicar: la pantalla lo avisa y no deja continuar
+      hasta que se cargue.</p>
+    </div>
+    <p>No hace falta ninguna otra configuración: en cuanto el índice tiene su valor del mes
+    cargado, cualquier lista de precios con ítems ya puede usarlo.</p>
+  </section>
+
+  <section>
+    <h2>5. Qué no cambió</h2>
+    <div class="no-change-list">
+      <div class="no-change-item">
+        <span class="check">✓</span>
+        <span>Seguís pudiendo editar el precio de un ítem <strong>a mano</strong>, uno por uno,
+        exactamente como antes. El índice es una forma más rápida de actualizar toda la lista de
+        una vez, no reemplaza la edición manual.</span>
+      </div>
+      <div class="no-change-item">
+        <span class="check">✓</span>
+        <span>El <strong>ajuste masivo de precios de ítems</strong> (el que aplica un porcentaje o
+        un monto fijo escrito a mano sobre ítems seleccionados) sigue funcionando igual que
+        siempre. Es una herramienta distinta, para otro caso de uso.</span>
+      </div>
+      <div class="no-change-item">
+        <span class="check">✓</span>
+        <span>Asignar una lista de precios a un cliente y que se use automáticamente al facturar
+        <strong>sigue funcionando exactamente igual</strong>.</span>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>6. Si el mismo índice ya se aplicó antes</h2>
+    <p>El sistema recuerda cada actualización que se hizo. Si volvés a elegir un índice y un
+    período que esa misma lista ya recibió, aparece un aviso con la fecha y quién lo aplicó — pero
+    te deja continuar igual, porque puede haber un motivo válido para repetirlo. Lo que buscamos
+    evitar es que se aplique dos veces <strong>por error</strong>, sin darse cuenta: aplicar dos
+    veces un 4,2% no es un 4,2%, es casi un 8,6%.</p>
+    <figure>
+      <img src="assets/tsk621-doble-aplicacion.png" alt="Aviso de que la lista ya recibió el índice IPC agosto 2026 anteriormente" />
+      <figcaption>El aviso que aparece al intentar aplicar de nuevo IPC 08/2026 a la misma
+      lista: fecha y usuario de la aplicación anterior, con la opción de continuar de todas
+      formas.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <div class="callout warning">
+      <h3>⚠ Un aviso importante: esto no se puede deshacer</h3>
+      <p>Una vez que confirmás "Aplicar", <strong>no hay un botón para deshacer</strong> esa
+      actualización. Parece que alcanzaría con restar el mismo porcentaje para volver atrás, pero
+      no es así: entre que se aplica un índice y que alguien quisiera revertirlo, los precios de
+      esa lista pueden haberse corregido a mano, pueden haberse agregado ítems nuevos, o puede
+      haberse aplicado otro índice encima. Restar el porcentaje sobre ese estado no devuelve los
+      precios de antes: los rompe.</p>
+      <p>Por eso la <strong>vista previa</strong> del paso 3 es el momento clave: es la oportunidad
+      de revisar que el resultado es el que esperás, antes de que se toque un solo precio. Y si
+      igual algo se aplicó por error, el <strong>historial</strong> de la lista siempre queda
+      disponible para ver exactamente qué se hizo y corregir a mano con esa información a la
+      vista.</p>
+    </div>
+  </section>
+
+  <footer class="doc-footer">
+    TSK-621 — Índices de precios y actualización masiva de listas de precios
+  </footer>
+
+</div>
+
+</body>
+</html>
