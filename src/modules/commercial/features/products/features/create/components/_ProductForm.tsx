@@ -23,6 +23,7 @@ import {
 } from '@/shared/components/ui/select';
 import { Checkbox } from '@/shared/components/ui/checkbox';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/card';
+import { MoneyInput } from '@/shared/components/ui/money-input';
 import { createProductSchema, updateProductSchema, type CreateProductFormData, type UpdateProductFormData } from '../../../shared/validators';
 import { ProductType, ProductStatus, ProductUsage } from '@/generated/prisma/enums';
 import type { ProductCategory } from '../../../shared/types';
@@ -36,6 +37,7 @@ import {
 import { useEffect, useState } from 'react';
 import { useIndustry } from '@/providers/IndustryProvider';
 import { _AccountingDefaultsSection } from './_AccountingDefaultsSection';
+import { formatCurrency } from '@/shared/utils/formatters';
 
 interface EquivalenceOption {
   id: string;
@@ -317,12 +319,13 @@ export function _ProductForm({
                   <FormItem>
                     <FormLabel>Precio de Costo *</FormLabel>
                     <FormControl>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        placeholder="0.00"
-                        {...field}
+                      <MoneyInput
+                        placeholder="0,00"
+                        value={field.value}
+                        onChange={field.onChange}
+                        onBlur={field.onBlur}
+                        name={field.name}
+                        ref={field.ref}
                       />
                     </FormControl>
                     <FormMessage />
@@ -362,12 +365,13 @@ export function _ProductForm({
                   <FormItem>
                     <FormLabel>Precio de Venta *</FormLabel>
                     <FormControl>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        placeholder="0.00"
-                        {...field}
+                      <MoneyInput
+                        placeholder="0,00"
+                        value={field.value}
+                        onChange={field.onChange}
+                        onBlur={field.onBlur}
+                        name={field.name}
+                        ref={field.ref}
                       />
                     </FormControl>
                     <FormMessage />
@@ -406,7 +410,7 @@ export function _ProductForm({
 
             <div className="rounded-md bg-muted p-4">
               <p className="text-sm font-medium">Precio Final con IVA:</p>
-              <p className="text-2xl font-bold">${salePriceWithTax.toFixed(2)}</p>
+              <p className="text-2xl font-bold">{formatCurrency(salePriceWithTax)}</p>
             </div>
           </CardContent>
         </Card>

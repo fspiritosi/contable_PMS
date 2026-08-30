@@ -26,6 +26,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/components/ui/tabs';
 import { Skeleton } from '@/shared/components/ui/skeleton';
 import { Separator } from '@/shared/components/ui/separator';
+import { MoneyInput } from '@/shared/components/ui/money-input';
 import moment from 'moment';
 import { formatCurrency } from '@/shared/utils/formatters';
 
@@ -490,12 +491,14 @@ export function CreatePaymentOrderModal({
                                   <FormItem className="mb-0">
                                     <div className="flex items-center justify-end gap-1">
                                       <FormControl>
-                                        <Input
-                                          type="number"
-                                          step="0.01"
-                                          placeholder="0.00"
+                                        <MoneyInput
+                                          placeholder="0,00"
                                           className="w-28 text-right"
-                                          {...amountField}
+                                          value={amountField.value}
+                                          onChange={amountField.onChange}
+                                          onBlur={amountField.onBlur}
+                                          name={amountField.name}
+                                          ref={amountField.ref}
                                         />
                                       </FormControl>
                                       <Button
@@ -633,7 +636,14 @@ export function CreatePaymentOrderModal({
                             <FormLabel className="text-xs">Monto *</FormLabel>
                             <div className="flex gap-1">
                               <FormControl>
-                                <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                                <MoneyInput
+                                  placeholder="0,00"
+                                  value={field.value}
+                                  onChange={field.onChange}
+                                  onBlur={field.onBlur}
+                                  name={field.name}
+                                  ref={field.ref}
+                                />
                               </FormControl>
                               <Button
                                 type="button"
@@ -1031,7 +1041,14 @@ export function CreatePaymentOrderModal({
                         <FormItem>
                           <FormLabel className="text-xs">Monto *</FormLabel>
                           <FormControl>
-                            <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                            <MoneyInput
+                              placeholder="0,00"
+                              value={field.value}
+                              onChange={field.onChange}
+                              onBlur={field.onBlur}
+                              name={field.name}
+                              ref={field.ref}
+                            />
                           </FormControl>
                           <FormMessage />
                         </FormItem>

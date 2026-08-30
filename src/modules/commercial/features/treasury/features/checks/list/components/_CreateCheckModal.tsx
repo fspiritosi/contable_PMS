@@ -30,6 +30,7 @@ import {
   SelectValue,
 } from '@/shared/components/ui/select';
 import { Button } from '@/shared/components/ui/button';
+import { MoneyInput } from '@/shared/components/ui/money-input';
 import { createCheckSchema, type CreateCheckFormData, CHECK_TYPE_LABELS } from '../../../../shared/validators';
 import { createCheck } from '../../actions.server';
 
@@ -175,7 +176,14 @@ export function _CreateCheckModal({ open, onOpenChange }: Props) {
                   <FormItem>
                     <FormLabel>Monto</FormLabel>
                     <FormControl>
-                      <Input type="number" min="0" step="0.01" placeholder="0.00" {...field} />
+                      <MoneyInput
+                        placeholder="0,00"
+                        value={field.value}
+                        onChange={field.onChange}
+                        onBlur={field.onBlur}
+                        name={field.name}
+                        ref={field.ref}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

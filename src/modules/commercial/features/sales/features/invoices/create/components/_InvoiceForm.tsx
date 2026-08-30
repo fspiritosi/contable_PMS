@@ -52,6 +52,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Card } from '@/shared/components/ui/card';
 import { logger } from '@/shared/lib/logger';
 import { Separator } from '@/shared/components/ui/separator';
+import { MoneyInput } from '@/shared/components/ui/money-input';
 import type { VoucherType } from '@/generated/prisma/enums';
 
 type FormInput = z.infer<typeof invoiceFormSchema>;
@@ -1200,20 +1201,14 @@ export function InvoiceForm({ customers, pointsOfSale, products, costCenters, de
                   <FormItem>
                     <FormLabel>Dto $</FormLabel>
                     <FormControl>
-                      <Input
-                        {...field}
-                        value={field.value ?? ''}
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        placeholder="0"
+                      <MoneyInput
+                        placeholder="0,00"
                         className="w-24"
-                        onChange={(e) => {
-                          field.onChange(e.target.value);
-                          if (e.target.value) {
-                            form.setValue('globalDiscountPercent', '');
-                          }
-                        }}
+                        value={field.value}
+                        onChange={field.onChange}
+                        onBlur={field.onBlur}
+                        name={field.name}
+                        ref={field.ref}
                       />
                     </FormControl>
                     <FormMessage />

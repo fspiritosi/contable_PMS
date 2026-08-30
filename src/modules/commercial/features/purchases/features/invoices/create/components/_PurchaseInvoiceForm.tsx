@@ -51,14 +51,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Card } from '@/shared/components/ui/card';
 import { Separator } from '@/shared/components/ui/separator';
+import { formatCurrency } from '@/shared/utils/formatters';
 import type {
   SupplierSelectItem,
   ProductSelectItem,
   CostCenterSelectItem,
 } from '../../list/actions.server';
-
-const formatCurrency = (value: number) =>
-  `$${value.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 function _PurchaseLineTotals({ form, index }: { form: ReturnType<typeof useForm<PurchaseInvoiceFormInput>>; index: number }) {
   const line = useWatch({ control: form.control, name: `lines.${index}` });
@@ -893,16 +891,16 @@ export function _PurchaseInvoiceForm({
             <div className="space-y-2">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Subtotal:</span>
-                <span className="font-mono">${totals.subtotal.toFixed(2)}</span>
+                <span className="font-mono">{formatCurrency(totals.subtotal)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">IVA:</span>
-                <span className="font-mono">${totals.vatAmount.toFixed(2)}</span>
+                <span className="font-mono">{formatCurrency(totals.vatAmount)}</span>
               </div>
               <Separator />
               <div className="flex justify-between text-lg font-semibold">
                 <span>Total:</span>
-                <span className="font-mono">${totals.total.toFixed(2)}</span>
+                <span className="font-mono">{formatCurrency(totals.total)}</span>
               </div>
             </div>
           </Card>

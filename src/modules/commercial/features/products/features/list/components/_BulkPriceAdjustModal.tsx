@@ -46,6 +46,7 @@ import { Skeleton } from '@/shared/components/ui/skeleton';
 import { useDebounce } from '@/shared/hooks/useDebounce';
 import { bulkUpdatePrices, previewBulkPriceUpdate } from '../actions.server';
 import type { BulkPriceAdjustmentType } from '../actions.server';
+import { formatCurrency } from '@/shared/utils/formatters';
 
 const ADJUSTMENT_TYPE_OPTIONS: { value: BulkPriceAdjustmentType; label: string }[] = [
   { value: 'increase_percent', label: 'Aumento porcentual (%)' },
@@ -70,9 +71,6 @@ interface Props {
   onSuccess: () => void;
 }
 
-function formatCurrency(value: number): string {
-  return `$${value.toFixed(2)}`;
-}
 
 export function _BulkPriceAdjustModal({ selectedIds, open, onOpenChange, onSuccess }: Props) {
   const queryClient = useQueryClient();

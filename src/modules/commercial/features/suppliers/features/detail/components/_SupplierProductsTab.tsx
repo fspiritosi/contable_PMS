@@ -9,7 +9,7 @@ import { Plus, Trash2, Package } from 'lucide-react';
 import { Button } from '@/shared/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card';
 import { Badge } from '@/shared/components/ui/badge';
-import { Input } from '@/shared/components/ui/input';
+import { MoneyInput } from '@/shared/components/ui/money-input';
 import {
   Dialog,
   DialogContent,
@@ -168,21 +168,10 @@ export function _SupplierProductsTab({ supplierId, initialProducts }: Props) {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Código del Proveedor</label>
-                    <Input
-                      placeholder="Código del proveedor"
-                      value={supplierCode}
-                      onChange={(e) => setSupplierCode(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Precio del Proveedor</label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      placeholder="0.00"
+                    <MoneyInput
+                      placeholder="0,00"
                       value={supplierPrice}
-                      onChange={(e) => setSupplierPrice(e.target.value)}
+                      onChange={(raw) => setSupplierCode(raw)}
                     />
                   </div>
                 </div>

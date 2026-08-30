@@ -20,6 +20,7 @@ import { Badge } from '@/shared/components/ui/badge';
 import { Label } from '@/shared/components/ui/label';
 import { Textarea } from '@/shared/components/ui/textarea';
 import { Separator } from '@/shared/components/ui/separator';
+import { MoneyInput } from '@/shared/components/ui/money-input';
 import { logger } from '@/shared/lib/logger';
 import { formatCurrency } from '@/shared/utils/formatters';
 
@@ -257,16 +258,12 @@ export function _LinkToProjectionModal({
                     <DollarSign className="h-4 w-4" />
                     Monto a vincular
                   </Label>
-                  <Input
+                  <MoneyInput
                     id="link-amount"
-                    type="number"
-                    step="0.01"
-                    min="0.01"
-                    max={selectedProjection.remainingAmount}
                     value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
+                    onChange={(raw) => setAmount(raw)}
                     className="mt-1"
-                    placeholder="0.00"
+                    placeholder="0,00"
                   />
                   <p className="text-xs text-muted-foreground mt-1">
                     Máximo: {formatCurrency(selectedProjection.remainingAmount)}

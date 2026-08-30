@@ -25,6 +25,7 @@ import {
 } from '@/shared/components/ui/select';
 import { Switch } from '@/shared/components/ui/switch';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card';
+import { MoneyInput } from '@/shared/components/ui/money-input';
 import { CardType, CardOwnerType } from '@/generated/prisma/enums';
 import { CARD_TYPE_LABELS, CARD_OWNER_TYPE_LABELS } from '../../../shared/types';
 import { cardSchema, type CardFormData } from '../../../shared/validators';
@@ -235,16 +236,13 @@ export function _CardForm({
                     <FormItem>
                       <FormLabel>Límite de Crédito (opcional)</FormLabel>
                       <FormControl>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          placeholder="0.00"
-                          {...field}
+                        <MoneyInput
+                          placeholder="0,00"
                           value={field.value ?? ''}
-                          onChange={(e) => {
-                            const value = e.target.value;
-                            field.onChange(value === '' ? undefined : Number(value));
-                          }}
+                          onChange={(raw) => field.onChange(raw === '' ? undefined : Number(raw))}
+                          onBlur={field.onBlur}
+                          name={field.name}
+                          ref={field.ref}
                         />
                       </FormControl>
                       <FormMessage />

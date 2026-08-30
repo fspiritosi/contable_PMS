@@ -24,6 +24,7 @@ import { Badge } from '@/shared/components/ui/badge';
 import { Separator } from '@/shared/components/ui/separator';
 import { Skeleton } from '@/shared/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/shared/components/ui/alert';
+import { MoneyInput } from '@/shared/components/ui/money-input';
 import {
   Form,
   FormControl,
@@ -539,11 +540,13 @@ export function _PartnerRepaymentDialog({
                                 <FormLabel className="text-xs">Monto *</FormLabel>
                                 <div className="flex gap-1">
                                   <FormControl>
-                                    <Input
-                                      type="number"
-                                      step="0.01"
-                                      placeholder="0.00"
-                                      {...field}
+                                    <MoneyInput
+                                      placeholder="0,00"
+                                      value={field.value}
+                                      onChange={field.onChange}
+                                      onBlur={field.onBlur}
+                                      name={field.name}
+                                      ref={field.ref}
                                     />
                                   </FormControl>
                                   <Button

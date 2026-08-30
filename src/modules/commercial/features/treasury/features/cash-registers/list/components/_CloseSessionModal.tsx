@@ -31,6 +31,7 @@ import { AlertCircle, TrendingDown, TrendingUp } from 'lucide-react';
 
 import { closeCashSession } from '../../../sessions/actions.server';
 import { closeSessionSchema, type CloseSessionFormData } from '../../../../shared/validators';
+import { formatCurrency } from '@/shared/utils/formatters';
 
 interface ActiveSession {
   id: string;
@@ -100,7 +101,7 @@ export function _CloseSessionModal({ open, onOpenChange, session, onSuccess }: P
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Saldo Esperado (Sistema)</p>
-                  <p className="text-2xl font-bold">${session.expectedBalance.toFixed(2)}</p>
+                  <p className="text-2xl font-bold">{formatCurrency(session.expectedBalance)}</p>
                 </div>
               </div>
             </div>
@@ -151,14 +152,14 @@ export function _CloseSessionModal({ open, onOpenChange, session, onSuccess }: P
                         <>
                           <TrendingUp className="h-4 w-4 text-green-600" />
                           <Badge variant="outline" className="bg-green-50 text-green-700">
-                            +${Math.abs(difference).toFixed(2)} (Sobrante)
+                            +{formatCurrency(Math.abs(difference))} (Sobrante)
                           </Badge>
                         </>
                       ) : difference < 0 ? (
                         <>
                           <TrendingDown className="h-4 w-4 text-red-600" />
                           <Badge variant="outline" className="bg-red-50 text-red-700">
-                            -${Math.abs(difference).toFixed(2)} (Faltante)
+                            -{formatCurrency(Math.abs(difference))} (Faltante)
                           </Badge>
                         </>
                       ) : (

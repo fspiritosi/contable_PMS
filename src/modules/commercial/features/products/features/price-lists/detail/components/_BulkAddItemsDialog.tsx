@@ -30,6 +30,7 @@ import { ScrollArea } from '@/shared/components/ui/scroll-area';
 
 import { getProducts } from '../../../list/actions.server';
 import { bulkAddPriceListItems } from '../../list/actions.server';
+import { formatCurrency } from '@/shared/utils/formatters';
 
 interface Props {
   priceListId: string;
@@ -226,7 +227,7 @@ export function _BulkAddItemsDialog({ priceListId, existingProductIds }: Props) 
                     </div>
                   </div>
                   <span className="text-sm font-mono text-muted-foreground shrink-0">
-                    ${Number(product.salePrice).toFixed(2)}
+                    {formatCurrency(Number(product.salePrice))}
                   </span>
                   {selectedIds.has(product.id) && (
                     <Check className="h-4 w-4 text-green-600 shrink-0" />

@@ -29,6 +29,7 @@ import {
 } from '@/shared/components/ui/form';
 import { Input } from '@/shared/components/ui/input';
 import { Textarea } from '@/shared/components/ui/textarea';
+import { MoneyInput } from '@/shared/components/ui/money-input';
 import {
   Select,
   SelectContent,
@@ -159,16 +160,13 @@ export function _PartnerMovementDialog({ partnerId }: PartnerMovementDialogProps
                 <FormItem>
                   <FormLabel>Monto *</FormLabel>
                   <FormControl>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      placeholder="0.00"
-                      {...field}
+                    <MoneyInput
+                      placeholder="0,00"
                       value={field.value ?? ''}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        field.onChange(value === '' ? undefined : Number(value));
-                      }}
+                      onChange={(raw) => field.onChange(raw === '' ? undefined : Number(raw))}
+                      onBlur={field.onBlur}
+                      name={field.name}
+                      ref={field.ref}
                     />
                   </FormControl>
                   <FormDescription>Ingresá un monto positivo.</FormDescription>

@@ -26,6 +26,7 @@ import { Input } from '@/shared/components/ui/input';
 import { Textarea } from '@/shared/components/ui/textarea';
 import { Badge } from '@/shared/components/ui/badge';
 import { Separator } from '@/shared/components/ui/separator';
+import { MoneyInput } from '@/shared/components/ui/money-input';
 
 import { formatCurrency } from '@/shared/utils/formatters';
 import { cn } from '@/shared/lib/utils';
@@ -302,13 +303,13 @@ export function _LinkDocumentModal({ projection, open, onOpenChange, onSuccess }
                       <FormItem>
                         <FormLabel>Monto a confirmar</FormLabel>
                         <FormControl>
-                          <Input
-                            type="number"
-                            step="0.01"
-                            min="0.01"
-                            max={remaining.toFixed(2)}
-                            placeholder="0.00"
-                            {...field}
+                          <MoneyInput
+                            placeholder="0,00"
+                            value={field.value}
+                            onChange={field.onChange}
+                            onBlur={field.onBlur}
+                            name={field.name}
+                            ref={field.ref}
                           />
                         </FormControl>
                         <p className="text-xs text-muted-foreground">

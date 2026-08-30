@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { useForm } from 'react-hook-form';
+import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -12,6 +12,7 @@ import { Button } from '@/shared/components/ui/button';
 import { Input } from '@/shared/components/ui/input';
 import { Label } from '@/shared/components/ui/label';
 import { Textarea } from '@/shared/components/ui/textarea';
+import { MoneyInput } from '@/shared/components/ui/money-input';
 import {
   Dialog,
   DialogContent,
@@ -241,13 +242,10 @@ export function _CreateBudgetModal({
             <Label>Distribuir uniformemente (opcional)</Label>
             <div className="flex items-end gap-2">
               <div className="flex-1">
-                <Input
-                  type="number"
-                  step="0.01"
-                  min="0"
+                <MoneyInput
                   placeholder="Monto total a distribuir"
                   value={distributeAmount}
-                  onChange={(e) => setDistributeAmount(e.target.value)}
+                  onChange={(raw) => setDistributeAmount(raw)}
                 />
               </div>
               <Button
@@ -270,14 +268,19 @@ export function _CreateBudgetModal({
                   <Label className="text-xs text-muted-foreground capitalize">
                     {label}
                   </Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    placeholder="0.00"
-                    {...form.register(`monthlyAmounts.${index}`, {
-                      valueAsNumber: true,
-                    })}
+                  <Controller
+                    control={form.control}
+                    name={`monthlyAmounts.${index}`}
+                    render={({ field }) => (
+                      <MoneyInput
+                        placeholder="0,00"
+                        value={field.value ?? ''}
+                        onChange={(raw) => field.onChange(raw === '' ? undefined : Number(raw))}
+                        onBlur={field.onBlur}
+                        name={field.name}
+                        ref={field.ref}
+                      />
+                    )}
                   />
                   {form.formState.errors.monthlyAmounts?.[index] && (
                     <p className="text-xs text-destructive">
