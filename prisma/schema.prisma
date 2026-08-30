@@ -2536,6 +2536,7 @@ enum VoucherType {
   NOTA_DEBITO_B // Nota de Débito B
   NOTA_DEBITO_C // Nota de Débito C
   RECIBO // Recibo
+  GASTOS_BANCARIOS // Gastos Bancarios: el resumen del banco como comprobante de compra (TSK-585)
 
   @@map("voucher_type")
 }

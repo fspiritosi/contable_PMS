@@ -24,6 +24,9 @@ export const VOUCHER_TYPE_LABELS: Partial<Record<VoucherType, string>> = {
   NOTA_DEBITO_A: 'Nota de Débito A',
   NOTA_DEBITO_B: 'Nota de Débito B',
   NOTA_DEBITO_C: 'Nota de Débito C',
+  // El resumen bancario, para poder computar el IVA de los gastos del banco.
+  // Solo compras: en ventas la lista de tipos es propia y no lo incluye (TSK-585).
+  GASTOS_BANCARIOS: 'Gastos Bancarios',
 };
 
 // ============================================
