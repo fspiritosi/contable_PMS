@@ -11,6 +11,7 @@ import { Prisma } from '@/generated/prisma/client';
 import type { DataTableSearchParams } from '@/shared/components/common/DataTable';
 import { parseSearchParams, stateToPrismaParams } from '@/shared/components/common/DataTable/helpers';
 import { filterExpenseAccounts } from '@/modules/commercial/features/products/shared/account-filters';
+import { buildImputableAccountsWhere } from '@/shared/lib/accounts/imputable-accounts';
 import { sumLines } from '../shared/lines-calc';
 import {
   fundMovementSchema,
@@ -147,6 +148,30 @@ export async function getFundMovementCatalogs() {
     partners,
     hasContributionsAccount: Boolean(settings?.partnerContributionsAccountId),
   };
+}
+
+/**
+ * Cuentas imputables para los conceptos de gastos e impuestos bancarios: el
+ * mismo criterio con el que `assertLineAccounts` valida en el servidor
+ * (`filterExpenseAccounts`, TSK-579), para que el combobox nunca ofrezca algo
+ * que el guardado va a rechazar después (TSK-585).
+ */
+export async function getFundMovementLineAccounts() {
+  await checkPermission('commercial.treasury.fund-movements', 'view', { redirect: true });
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  const accounts = await prisma.account.findMany({
+    where: buildImputableAccountsWhere({ companyId }),
+    select: { id: true, code: true, name: true, type: true },
+    orderBy: { code: 'asc' },
+  });
+
+  return filterExpenseAccounts(accounts).map((account) => ({
+    id: account.id,
+    code: account.code,
+    name: account.name,
+  }));
 }
 
 // ============================================================================
@@ -372,7 +397,7 @@ interface FundMovementLineData {
  */
 function buildLinesData(data: FundMovementFormInput): FundMovementLineData[] {
   if (data.type !== 'BANK_CHARGES') return [];
-  return data.lines.map((line, index) => ({
+  return (data.lines ?? []).map((line, index) => ({
     accountId: line.accountId,
     description: line.description.trim(),
     amount: new Prisma.Decimal(parseFloat(line.amount)).toDecimalPlaces(2),
@@ -714,9 +739,12 @@ export async function confirmFundMovement(id: string): Promise<FundMovementActio
         );
         entryLines = parLineas(dest.accountId, src.accountId);
       } else {
-        // Un tipo nuevo tiene que fallar acá y no colarse como transferencia.
+        // Descarte exhaustivo: si se agrega un quinto FundMovementType y no se
+        // contempla acá, esto deja de tipar y rompe el build en vez de llegar
+        // a producción y fallar recién en runtime (TSK-585).
+        const _exhaustive: never = movement.type;
         logger.error('Tipo de movimiento de fondos sin asiento definido', {
-          data: { id, companyId, type: movement.type },
+          data: { id, companyId, type: _exhaustive },
         });
         throw new BusinessError('Tipo de movimiento no soportado');
       }

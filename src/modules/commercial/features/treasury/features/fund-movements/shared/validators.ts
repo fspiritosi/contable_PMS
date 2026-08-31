@@ -72,6 +72,13 @@ export const fundMovementSchema = z
     // Socio (aporte / retiro), informativo
     partnerId: z.string().uuid().optional().or(z.literal('')),
     // Conceptos del débito bancario. Solo los usa BANK_CHARGES (TSK-585).
+    //
+    // `.optional()` en lugar de `.default([])`: el `default` hace que el tipo
+    // de entrada del formulario (antes de validar) y el de salida (ya
+    // validado) diverjan, y react-hook-form + zodResolver no aceptan esa
+    // asimetría sin declarar un tercer genérico en `useForm` (mismo problema,
+    // preexistente, documentado en `purchases/features/invoices/shared/validators.ts`
+    // con `costCenterAllocations`).
     lines: z
       .array(
         z.object({
@@ -80,7 +87,7 @@ export const fundMovementSchema = z
           amount: z.string(),
         })
       )
-      .default([]),
+      .optional(),
   })
   .superRefine((data, ctx) => {
     const validRef = (v?: string) => Boolean(v && parseFundRef(v));
@@ -142,7 +149,7 @@ export const fundMovementSchema = z
         });
       }
 
-      const problema = validateLines(data.lines);
+      const problema = validateLines(data.lines ?? []);
       if (problema) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,

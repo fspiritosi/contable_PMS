@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Loader2, AlertTriangle } from 'lucide-react';
 import moment from 'moment';
@@ -48,11 +49,14 @@ import {
   createFundMovement,
   updateFundMovement,
   confirmFundMovement,
+  getFundMovementById,
+  getFundMovementLineAccounts,
   type FundMovementActionResult,
   type FundOption,
   type FundMovementPartnerOption,
   type FundMovementListItem,
 } from '../actions.server';
+import { _FundMovementLinesField } from './_FundMovementLinesField';
 
 interface Props {
   open: boolean;
@@ -94,7 +98,26 @@ export function _CreateFundMovementModal({
       sourceFund: '',
       destinationFund: '',
       partnerId: '',
+      lines: [],
     },
+  });
+
+  // Conceptos del movimiento en edición: solo BANK_CHARGES los tiene, y el
+  // listado (`movement`) no los trae. Se buscan aparte para no cargar la
+  // relación en el listado de los otros tres tipos, que no la usan.
+  const { data: movementDetail } = useQuery({
+    queryKey: ['fund-movement-detail', movement?.id],
+    queryFn: () => getFundMovementById(movement!.id),
+    enabled: open && Boolean(movement) && movement?.type === 'BANK_CHARGES',
+  });
+
+  // Cuentas imputables para los conceptos (egreso o activo, TSK-579): siempre
+  // se piden con el modal abierto, para tenerlas listas apenas se elige el
+  // tipo "Gastos e impuestos bancarios".
+  const { data: lineAccounts = [] } = useQuery({
+    queryKey: ['fund-movement-line-accounts'],
+    queryFn: getFundMovementLineAccounts,
+    enabled: open,
   });
 
   // Al abrir en modo edición, precargar los datos del movimiento
@@ -109,6 +132,14 @@ export function _CreateFundMovementModal({
         sourceFund: fundRefFrom(movement.fundOutKind, movement.fundOutId),
         destinationFund: fundRefFrom(movement.fundInKind, movement.fundInId),
         partnerId: movement.partnerId ?? '',
+        lines:
+          movement.type === 'BANK_CHARGES' && movementDetail
+            ? movementDetail.lines.map((line) => ({
+                accountId: line.accountId,
+                description: line.description,
+                amount: String(line.amount),
+              }))
+            : [],
       });
     } else if (open && !movement) {
       form.reset({
@@ -119,16 +150,38 @@ export function _CreateFundMovementModal({
         sourceFund: '',
         destinationFund: '',
         partnerId: '',
+        lines: [],
       });
     }
-  }, [open, movement, form]);
+  }, [open, movement, movementDetail, form]);
 
   const type = form.watch('type') as FundMovementTypeValue;
   const isContribution = type === 'PARTNER_CONTRIBUTION';
   const isWithdrawal = type === 'PARTNER_WITHDRAWAL';
   const isTransfer = type === 'ACCOUNT_TRANSFER';
+  const isBankCharges = type === 'BANK_CHARGES';
   const isPartnerMovement = isContribution || isWithdrawal;
   const noFundAccounts = banks.length === 0 && cashRegisters.length === 0;
+
+  // Al cambiar el tipo de movimiento, los campos que dejan de aplicar no
+  // pueden quedar colgados en el formulario: los conceptos se mandarían con
+  // un tipo que no los usa, y un destino suelto de un tipo anterior se
+  // resolvería igual en el servidor porque no depende de qué campos se
+  // muestran en pantalla (TSK-585).
+  //
+  // El campo "amount" no se vacía a '': el esquema exige un string no vacío
+  // con formato de importe (`min(1)` + regex) para los cuatro tipos, y solo
+  // el superRefine de "> 0" se salta para BANK_CHARGES. Se fija en '0', que
+  // cumple ese formato; el servidor igual lo descarta y calcula el importe
+  // sumando los conceptos (`resolveMovementAmount`).
+  useEffect(() => {
+    if (!isBankCharges) {
+      if (form.getValues('lines')?.length) form.setValue('lines', []);
+    } else {
+      if (form.getValues('amount') !== '0') form.setValue('amount', '0');
+      if (form.getValues('destinationFund')) form.setValue('destinationFund', '');
+    }
+  }, [isBankCharges, form]);
 
   const persist = async (data: FundMovementFormInput, confirm: boolean) => {
     setIsSubmitting(true);
@@ -246,27 +299,7 @@ export function _CreateFundMovementModal({
               </div>
             )}
 
-            <div className="grid gap-4 md:grid-cols-2">
-              <FormField
-                control={form.control}
-                name="amount"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Monto *</FormLabel>
-                    <FormControl>
-                      <MoneyInput
-                        placeholder="0,00"
-                        value={field.value}
-                        onChange={field.onChange}
-                        onBlur={field.onBlur}
-                        name={field.name}
-                        ref={field.ref}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+            {isBankCharges ? (
               <FormField
                 control={form.control}
                 name="date"
@@ -280,7 +313,43 @@ export function _CreateFundMovementModal({
                   </FormItem>
                 )}
               />
-            </div>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2">
+                <FormField
+                  control={form.control}
+                  name="amount"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Monto *</FormLabel>
+                      <FormControl>
+                        <MoneyInput
+                          placeholder="0,00"
+                          value={field.value}
+                          onChange={field.onChange}
+                          onBlur={field.onBlur}
+                          name={field.name}
+                          ref={field.ref}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="date"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Fecha *</FormLabel>
+                      <FormControl>
+                        <Input type="date" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            )}
 
             {(isContribution || isTransfer) && (
               <FormField
@@ -305,14 +374,16 @@ export function _CreateFundMovementModal({
               />
             )}
 
-            {(isWithdrawal || isTransfer) && (
+            {(isWithdrawal || isTransfer || isBankCharges) && (
               <FormField
                 control={form.control}
                 name="sourceFund"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>
-                      {isWithdrawal ? 'Banco/caja de donde salen los fondos *' : 'Banco/caja origen *'}
+                      {isWithdrawal || isBankCharges
+                        ? 'Banco/caja de donde salen los fondos *'
+                        : 'Banco/caja origen *'}
                     </FormLabel>
                     <Select onValueChange={field.onChange} value={field.value || undefined}>
                       <FormControl>
@@ -327,6 +398,8 @@ export function _CreateFundMovementModal({
                 )}
               />
             )}
+
+            {isBankCharges && <_FundMovementLinesField accounts={lineAccounts} />}
 
             {isPartnerMovement && (
               <FormField
