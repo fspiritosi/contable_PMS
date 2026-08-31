@@ -126,3 +126,83 @@ describe('fundMovementSchema', () => {
     expect(fundMovementSchema.safeParse({ ...aporte, amount: '1.234' }).success).toBe(false);
   });
 });
+
+import { FUND_MOVEMENT_TYPE_LABELS } from './validators';
+
+const uuidCuenta = '11111111-1111-4111-8111-111111111111';
+const uuidBanco = '33333333-3333-4333-8333-333333333333';
+
+const gastosBancarios = {
+  type: 'BANK_CHARGES' as const,
+  date: '2026-07-31',
+  amount: '0',
+  description: 'Gastos e impuestos de julio',
+  sourceFund: `BANK:${uuidBanco}`,
+  destinationFund: '',
+  partnerId: '',
+  lines: [
+    { accountId: uuidCuenta, description: 'Sircreb IIBB', amount: '302574.16' },
+    { accountId: uuidCuenta, description: 'Impuesto a los débitos', amount: '1434154.28' },
+  ],
+};
+
+describe('gastos e impuestos bancarios (TSK-585)', () => {
+  it('está entre los tipos disponibles, con su etiqueta', () => {
+    expect(FUND_MOVEMENT_TYPE_LABELS.BANK_CHARGES).toBe('Gastos e impuestos bancarios');
+  });
+
+  it('acepta un movimiento con conceptos y origen', () => {
+    expect(fundMovementSchema.safeParse(gastosBancarios).success).toBe(true);
+  });
+
+  it('exige el banco o caja de donde sale la plata', () => {
+    const result = fundMovementSchema.safeParse({ ...gastosBancarios, sourceFund: '' });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]?.path).toEqual(['sourceFund']);
+  });
+
+  it('exige al menos un concepto', () => {
+    const result = fundMovementSchema.safeParse({ ...gastosBancarios, lines: [] });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]?.message).toBe('Agregá al menos un concepto');
+  });
+
+  it('señala el concepto sin cuenta', () => {
+    const result = fundMovementSchema.safeParse({
+      ...gastosBancarios,
+      lines: [gastosBancarios.lines[0], { accountId: '', description: 'X', amount: '10' }],
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]?.message).toBe('Elegí la cuenta contable del concepto');
+  });
+});
+
+describe('los tipos que ya existían no piden conceptos (regresión TSK-585)', () => {
+  const aporte = {
+    type: 'PARTNER_CONTRIBUTION' as const,
+    date: '2026-07-31',
+    amount: '1000.00',
+    description: 'Aporte del socio',
+    sourceFund: '',
+    destinationFund: `BANK:${uuidBanco}`,
+    partnerId: '',
+  };
+
+  it('un aporte sigue siendo válido sin líneas', () => {
+    expect(fundMovementSchema.safeParse(aporte).success).toBe(true);
+  });
+
+  it('una transferencia sigue siendo válida sin líneas', () => {
+    const transferencia = {
+      ...aporte,
+      type: 'ACCOUNT_TRANSFER' as const,
+      sourceFund: `BANK:${uuidBanco}`,
+      destinationFund: `CASH:${uuidCuenta}`,
+    };
+
+    expect(fundMovementSchema.safeParse(transferencia).success).toBe(true);
+  });
+});

@@ -1,6 +1,8 @@
 import moment from 'moment';
 import { z } from 'zod';
 
+import { LINE_ERROR_MESSAGES, validateLines } from './lines-calc';
+
 /**
  * Convierte la fecha del formulario ("YYYY-MM-DD") a Date.
  *
@@ -25,6 +27,7 @@ export const FUND_MOVEMENT_TYPES = [
   'PARTNER_CONTRIBUTION',
   'PARTNER_WITHDRAWAL',
   'ACCOUNT_TRANSFER',
+  'BANK_CHARGES',
 ] as const;
 
 export type FundMovementTypeValue = (typeof FUND_MOVEMENT_TYPES)[number];
@@ -33,6 +36,7 @@ export const FUND_MOVEMENT_TYPE_LABELS: Record<FundMovementTypeValue, string> = 
   PARTNER_CONTRIBUTION: 'Aporte de socio',
   PARTNER_WITHDRAWAL: 'Retiro de socio',
   ACCOUNT_TRANSFER: 'Transferencia entre cuentas',
+  BANK_CHARGES: 'Gastos e impuestos bancarios',
 };
 
 /**
@@ -59,8 +63,7 @@ export const fundMovementSchema = z
     amount: z
       .string()
       .min(1, 'El monto es requerido')
-      .regex(amountRegex, 'Monto inválido (hasta 2 decimales)')
-      .refine((v) => parseFloat(v) > 0, 'El monto debe ser mayor a 0'),
+      .regex(amountRegex, 'Monto inválido (hasta 2 decimales)'),
     description: z.string().min(2, 'La descripción es requerida'),
     // Banco/caja de donde salen los fondos (retiro / transferencia): "BANK:id" | "CASH:id"
     sourceFund: z.string().optional().or(z.literal('')),
@@ -68,9 +71,29 @@ export const fundMovementSchema = z
     destinationFund: z.string().optional().or(z.literal('')),
     // Socio (aporte / retiro), informativo
     partnerId: z.string().uuid().optional().or(z.literal('')),
+    // Conceptos del débito bancario. Solo los usa BANK_CHARGES (TSK-585).
+    lines: z
+      .array(
+        z.object({
+          accountId: z.string(),
+          description: z.string(),
+          amount: z.string(),
+        })
+      )
+      .default([]),
   })
   .superRefine((data, ctx) => {
     const validRef = (v?: string) => Boolean(v && parseFundRef(v));
+
+    // El total de los gastos bancarios lo calcula el servidor sumando los
+    // conceptos, así que el formulario manda 0 y este campo no aplica (TSK-585).
+    if (data.type !== 'BANK_CHARGES' && !(parseFloat(data.amount) > 0)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['amount'],
+        message: 'El monto debe ser mayor a 0',
+      });
+    }
 
     if (data.type === 'PARTNER_CONTRIBUTION') {
       if (!validRef(data.destinationFund)) {
@@ -108,6 +131,23 @@ export const fundMovementSchema = z
           code: z.ZodIssueCode.custom,
           path: ['destinationFund'],
           message: 'El destino debe ser distinto del origen',
+        });
+      }
+    } else if (data.type === 'BANK_CHARGES') {
+      if (!validRef(data.sourceFund)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['sourceFund'],
+          message: 'Seleccioná el banco o caja de donde salen los fondos',
+        });
+      }
+
+      const problema = validateLines(data.lines);
+      if (problema) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: problema.index === -1 ? ['lines'] : ['lines', problema.index],
+          message: LINE_ERROR_MESSAGES[problema.error],
         });
       }
     }
