@@ -87,11 +87,19 @@ export const fundMovementSchema = z
     lines: z
       .array(
         z.object({
-          accountId: z.string(),
+          // `.uuid()`, igual que `partnerId` más arriba: sin esta validación un id
+          // malformado (payload manipulado, o un bug de otro lado del formulario)
+          // llegaba hasta Prisma y explotaba con un P2023 que el usuario veía como
+          // "Ocurrió un error inesperado" (hallazgo de revisión final, TSK-585).
+          accountId: z.string().uuid('Cuenta contable inválida'),
           description: z.string(),
           amount: z.string(),
         })
       )
+      // Tope holgado para un resumen bancario real, pero que evita que un
+      // payload de miles de líneas genere un asiento de miles de líneas
+      // (hallazgo de revisión final, TSK-585).
+      .max(100, 'No se pueden cargar más de 100 conceptos por movimiento')
       .optional(),
   })
   .superRefine((data, ctx) => {

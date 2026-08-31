@@ -81,7 +81,7 @@ vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 import { getActiveCompanyId } from '@/shared/lib/company';
 import { getCurrentUserId } from '@/shared/lib/current-user';
 // Código real de producción: nada de esto se reimplementa acá.
-import { createFundMovement, getFundMovementById } from './actions.server';
+import { createFundMovement, getFundMovementById, getFundMovementLineAccounts } from './actions.server';
 
 const PREFIX = 'TSK585-TEST-';
 
@@ -204,17 +204,25 @@ describe.skipIf(!dbAvailable)('integración: conceptos del movimiento de fondos 
   });
 
   afterAll(async () => {
-    // Orden inverso de dependencias: primero los movimientos (cascadean sus
-    // conceptos) y los asientos (cascadean sus líneas) -las líneas de ambos
-    // tienen FK RESTRICT hacia `accounts`-, después los bancos (cascadean
-    // sus `bank_movements`) y la configuración, después las cuentas, después
-    // la empresa.
-    await prisma.fundMovement.deleteMany({ where: { companyId } });
-    await prisma.journalEntry.deleteMany({ where: { companyId } });
-    await prisma.bankAccount.deleteMany({ where: { companyId } });
-    await prisma.accountingSettings.deleteMany({ where: { companyId } });
-    await prisma.account.deleteMany({ where: { companyId } });
-    await prisma.company.deleteMany({ where: { id: companyId } });
+    // Guarda: si el `create` de la empresa del `beforeAll` falló, `companyId`
+    // queda `undefined`, y Prisma OMITE los filtros `undefined` en vez de no
+    // matchear nada. Sin esta guarda, cada `deleteMany({ where: { companyId }
+    // })` de abajo borraría esa tabla ENTERA en la base que apunte
+    // `DATABASE_URL` -compartida con otras ramas-, no solo las filas de este
+    // test (hallazgo de revisión final, TSK-585).
+    if (companyId) {
+      // Orden inverso de dependencias: primero los movimientos (cascadean sus
+      // conceptos) y los asientos (cascadean sus líneas) -las líneas de ambos
+      // tienen FK RESTRICT hacia `accounts`-, después los bancos (cascadean
+      // sus `bank_movements`) y la configuración, después las cuentas, después
+      // la empresa.
+      await prisma.fundMovement.deleteMany({ where: { companyId } });
+      await prisma.journalEntry.deleteMany({ where: { companyId } });
+      await prisma.bankAccount.deleteMany({ where: { companyId } });
+      await prisma.accountingSettings.deleteMany({ where: { companyId } });
+      await prisma.account.deleteMany({ where: { companyId } });
+      await prisma.company.deleteMany({ where: { id: companyId } });
+    }
 
     // Verificación de que no sobrevive ninguna fila de la corrida.
     const [remainingMovements, remainingAccounts, remainingCompanies] = await Promise.all([
@@ -481,6 +489,81 @@ describe.skipIf(!dbAvailable)('integración: conceptos del movimiento de fondos 
       expect(releidas[0]).toMatchObject({ accountId: commissionAccountId, amount: 850.3 });
       expect(releidas[1]).toMatchObject({ accountId: commissionAccountId, amount: 178.56 });
       expect(releidas[2]).toMatchObject({ accountId: sircrebAccountId, amount: 1200 });
+    });
+  });
+
+  describe('caso 5: assertLineAccounts respeta el corte de ejercicio (hallazgo de revisión final, TSK-585)', () => {
+    // Antes de este arreglo, `assertLineAccounts` armaba su propio `where`
+    // (`isActive`/`isLeaf` a mano) en vez de reusar `buildImputableAccountsWhere`
+    // -el mismo criterio con el que `getFundMovementLineAccounts` arma el
+    // combobox- y no replicaba la exclusión de cuentas con `disabledFrom` ya
+    // vigente. Una cuenta dada de baja por corte de ejercicio, que el combobox
+    // ya no ofrece, igual pasaba el guardado si el id llegaba en el payload.
+    let disabledAccountId: string;
+
+    beforeAll(async () => {
+      const disabled = await prisma.account.create({
+        data: {
+          companyId,
+          code: 'T585-BAJA',
+          name: `${PREFIX}Cuenta dada de baja`,
+          type: 'EXPENSE',
+          nature: 'DEBIT',
+          disabledFrom: new Date('2020-01-01'), // corte ya vigente, muy anterior a las fechas usadas en este archivo
+        },
+      });
+      disabledAccountId = disabled.id;
+    });
+
+    it('rechaza un concepto que imputa a una cuenta con corte de ejercicio vigente', async () => {
+      const result = await createFundMovement({
+        type: 'BANK_CHARGES',
+        date: '2026-03-01',
+        description: `${PREFIX}Gastos con cuenta dada de baja`,
+        sourceFund: `BANK:${bankSourceId}`,
+        destinationFund: '',
+        partnerId: '',
+        lines: [{ accountId: disabledAccountId, description: `${PREFIX}Concepto invalido`, amount: '100' }],
+      });
+
+      expect(result.success).toBe(false);
+      if (result.success) return;
+      expect(result.error).toBe(
+        'Alguna de las cuentas de los conceptos no es válida: revisá que estén activas, sean imputables y de tipo egreso o activo.'
+      );
+    });
+
+    // `getFundMovementLineAccounts` arma el combobox con el mismo criterio
+    // (`buildImputableAccountsWhere`), así que la cuenta dada de baja no debe
+    // ofrecerse para conceptos nuevos...
+    it('no ofrece la cuenta dada de baja para conceptos nuevos', async () => {
+      const accounts = await getFundMovementLineAccounts();
+      expect(accounts.some((a) => a.id === disabledAccountId)).toBe(false);
+    });
+
+    // ...pero si el borrador ya la tenía cargada (`includeIds`), tiene que
+    // seguir apareciendo: si no, al reabrir el borrador el combobox no
+    // encuentra la cuenta y el campo se ve vacío aunque el formulario todavía
+    // la tenga guardada (hallazgo de revisión final, TSK-585).
+    it('preserva la cuenta dada de baja cuando viene en `includeIds` (borrador ya cargado)', async () => {
+      const accounts = await getFundMovementLineAccounts([disabledAccountId]);
+      expect(accounts.some((a) => a.id === disabledAccountId)).toBe(true);
+    });
+
+    it('la misma cuenta, sin el corte, sigue siendo aceptada (control: el rechazo es por disabledFrom, no por otra razón)', async () => {
+      await prisma.account.update({ where: { id: disabledAccountId }, data: { disabledFrom: null } });
+
+      const result = await createFundMovement({
+        type: 'BANK_CHARGES',
+        date: '2026-03-02',
+        description: `${PREFIX}Gastos con cuenta reactivada`,
+        sourceFund: `BANK:${bankSourceId}`,
+        destinationFund: '',
+        partnerId: '',
+        lines: [{ accountId: disabledAccountId, description: `${PREFIX}Concepto valido`, amount: '100' }],
+      });
+
+      expect(result.success).toBe(true);
     });
   });
 });

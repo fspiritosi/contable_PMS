@@ -222,7 +222,59 @@ describe('gastos e impuestos bancarios (TSK-585)', () => {
     });
 
     expect(result.success).toBe(false);
-    expect(result.error?.issues[0]?.message).toBe('Elegí la cuenta contable del concepto');
+    // Con `.uuid()` en `accountId` (hallazgo de revisión final, TSK-585), una
+    // cuenta vacía también incumple el formato: `safeParse` reporta ese
+    // problema además del de `validateLines`, así que se busca el mensaje de
+    // dominio entre todos los issues en vez de asumir que es el primero. El
+    // combobox de conceptos (`_FundMovementLinesField`) solo lee el error de
+    // raíz de la línea, así que en la UI el usuario sigue viendo únicamente
+    // este mensaje.
+    expect(result.error?.issues.some((i) => i.message === 'Elegí la cuenta contable del concepto')).toBe(
+      true
+    );
+  });
+
+  /**
+   * Regresión: `accountId` no tenía `.uuid()`, a diferencia de `partnerId`. Un
+   * id malformado (payload manipulado, o un bug en otro punto del formulario)
+   * llegaba hasta Prisma y explotaba con un P2023 que el usuario veía como
+   * "Ocurrió un error inesperado" en vez de un mensaje útil (hallazgo de
+   * revisión final, TSK-585).
+   */
+  it('rechaza un id de cuenta con formato inválido', () => {
+    const result = fundMovementSchema.safeParse({
+      ...gastosBancarios,
+      lines: [{ accountId: 'no-es-un-uuid', description: 'X', amount: '10' }],
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues.some((i) => i.message === 'Cuenta contable inválida')).toBe(true);
+  });
+
+  /**
+   * Regresión: no había tope de cantidad de conceptos. Un payload con miles
+   * de líneas generaba un asiento de miles de líneas (hallazgo de revisión
+   * final, TSK-585).
+   */
+  it('rechaza más de 100 conceptos, pero acepta exactamente 100', () => {
+    const unConcepto = { accountId: uuidCuenta, description: 'Concepto', amount: '10' };
+
+    const conCien = fundMovementSchema.safeParse({
+      ...gastosBancarios,
+      lines: Array.from({ length: 100 }, () => unConcepto),
+    });
+    expect(conCien.success).toBe(true);
+
+    const conCientoUno = fundMovementSchema.safeParse({
+      ...gastosBancarios,
+      lines: Array.from({ length: 101 }, () => unConcepto),
+    });
+    expect(conCientoUno.success).toBe(false);
+    expect(
+      conCientoUno.error?.issues.some(
+        (i) => i.message === 'No se pueden cargar más de 100 conceptos por movimiento'
+      )
+    ).toBe(true);
   });
 });
 

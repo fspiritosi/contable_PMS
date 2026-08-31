@@ -155,14 +155,28 @@ export async function getFundMovementCatalogs() {
  * mismo criterio con el que `assertLineAccounts` valida en el servidor
  * (`filterExpenseAccounts`, TSK-579), para que el combobox nunca ofrezca algo
  * que el guardado va a rechazar después (TSK-585).
+ *
+ * `includeIds` preserva cuentas ya guardadas en un borrador aunque hoy no
+ * cumplan el filtro (ej. una cuenta dada de baja por corte de ejercicio
+ * después de cargar el concepto), con el mismo patrón que
+ * `getAccountsForBankMovement` en `treasury/bank-movements`: sin esto, al
+ * reabrir el borrador el combobox no encuentra la cuenta y el campo se ve
+ * vacío aunque el formulario todavía la tenga cargada (hallazgo de revisión
+ * final, TSK-585).
  */
-export async function getFundMovementLineAccounts() {
+export async function getFundMovementLineAccounts(includeIds?: string[]) {
   await checkPermission('commercial.treasury.fund-movements', 'view', { redirect: true });
   const companyId = await getActiveCompanyId();
   if (!companyId) throw new Error('No hay empresa activa');
 
+  const imputableWhere = buildImputableAccountsWhere({ companyId });
+  const where =
+    includeIds && includeIds.length > 0
+      ? { OR: [imputableWhere, { companyId, id: { in: includeIds } }] }
+      : imputableWhere;
+
   const accounts = await prisma.account.findMany({
-    where: buildImputableAccountsWhere({ companyId }),
+    where,
     select: { id: true, code: true, name: true, type: true },
     orderBy: { code: 'asc' },
   });
@@ -431,21 +445,29 @@ function resolveMovementAmount(
 
 /**
  * Verifica que las cuentas de los conceptos sean de la empresa, estén activas,
- * sean imputables (hoja) y de un tipo que pueda ser contrapartida de un débito
- * bancario. El tipo se decide con `filterExpenseAccounts` (TSK-579), el mismo
- * criterio que usan los ítems al comprarse: egreso o activo. El activo entra
- * porque hay conceptos que son retenciones a computar (Sircreb) y no gastos;
- * pasivo y patrimonio quedan fuera.
+ * sean imputables (hoja, sin corte de ejercicio vigente) y de un tipo que
+ * pueda ser contrapartida de un débito bancario.
+ *
+ * El criterio de "imputable" es `buildImputableAccountsWhere` (compartido con
+ * `getFundMovementLineAccounts`, que arma el combobox): antes esta función
+ * repetía `isActive`/`isLeaf` a mano y se olvidaba de excluir las cuentas con
+ * `disabledFrom` ya vigente, así que el servidor terminaba siendo más
+ * permisivo que el combobox que decía replicar (hallazgo de revisión final,
+ * TSK-585). El tipo se decide aparte con `filterExpenseAccounts` (TSK-579),
+ * el mismo criterio que usan los ítems al comprarse: egreso o activo. El
+ * activo entra porque hay conceptos que son retenciones a computar (Sircreb)
+ * y no gastos; pasivo y patrimonio quedan fuera.
  *
  * Sin esta comprobación la regla viviría solo en el combobox, y un id
  * manipulado en el payload del server action podía imputar a otra empresa, a
- * una cuenta de agrupación o a una cuenta de un tipo que no corresponde.
+ * una cuenta de agrupación, a una cuenta dada de baja por corte de ejercicio
+ * o a una cuenta de un tipo que no corresponde.
  */
 async function assertLineAccounts(accountIds: string[], companyId: string) {
   if (accountIds.length === 0) return;
   const unicos = Array.from(new Set(accountIds));
   const cuentas = await prisma.account.findMany({
-    where: { id: { in: unicos }, companyId, isActive: true, isLeaf: true },
+    where: { ...buildImputableAccountsWhere({ companyId }), id: { in: unicos } },
     select: { id: true, type: true },
   });
   if (filterExpenseAccounts(cuentas).length !== unicos.length) {
