@@ -21,8 +21,8 @@ export async function FundMovementsList({ searchParams = {} }: Props) {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Movimientos de Fondos</h1>
           <p className="text-muted-foreground">
-            Aportes de socios, retiros y transferencias entre cuentas. Cada movimiento genera su
-            asiento contable automáticamente.
+            Aportes de socios, retiros, transferencias entre cuentas y gastos e impuestos
+            bancarios. Cada movimiento genera su asiento contable automáticamente.
           </p>
         </div>
 

@@ -256,7 +256,7 @@ export function _CreateFundMovementModal({
         </DialogHeader>
 
         <Form {...form}>
-          <form className="space-y-4">
+          <form className="min-w-0 space-y-4">
             <FormField
               control={form.control}
               name="type"
