@@ -11,38 +11,52 @@
  * (`sumLines`, `validateLines`) ni las de `../shared/validators.ts`
  * (`parseFundMovementDate`, el `superRefine` de `fundMovementSchema`) — ya
  * tienen tests unitarios en `lines-calc.test.ts` y `validators.test.ts`. Acá
- * se ejercita la cadena real contra la base: el asiento que efectivamente
- * queda grabado, y que el total y los conceptos de un movimiento se
- * persistan y relean correctamente.
+ * se ejercita la cadena real contra la base.
  *
- * LIMITACIÓN CONOCIDA (documentada también en el reporte de la Tarea 6):
- * los server actions de `../list/actions.server.ts` (`createFundMovement`,
- * `confirmFundMovement`, etc.) no se pueden invocar desde un test de Vitest:
- * usan `checkPermission` y `getCurrentUserId`, que dependen de `next/headers`
- * (sesión/request de Next) y explotan fuera de ese contexto. Y la función
- * genérica que arma el asiento, `createJournalEntryForFundMovement` -la que
- * esta entrega generalizó para que reciba las líneas ya armadas en vez de
- * construir siempre dos-, tampoco se puede importar: vive en ese mismo
- * archivo `'use server'` y no está exportada (ni podría estarlo sin volverse
- * candidata a Server Action, con un parámetro -el cliente de transacción-
- * que no es serializable).
+ * CÓDIGO REAL DE PRODUCCIÓN, NO UNA RÉPLICA
+ * ------------------------------------------
+ * Este archivo invoca `createFundMovement` (con `confirm: true`, que
+ * internamente llama a la `confirmFundMovement` real) y `getFundMovementById`
+ * -las funciones reales de `../list/actions.server.ts`, sin ninguna copia- y
+ * verifica lo que efectivamente queda grabado en la base. Solo se aísla la
+ * FRONTERA de autenticación/framework, nunca la lógica de dominio:
  *
- * Por eso este archivo REPLICA, a propósito y línea por línea, la secuencia
- * real de `confirmFundMovement` y de `createJournalEntryForFundMovement`
- * (ver `persistJournalEntry` y el comentario de cada `describe`), en vez de
- * invocarlas. Qué protege: que esa secuencia, ejecutada contra la base real,
- * arma y persiste exactamente las líneas que describe el ticket -incluida
- * la regresión de los tres tipos que ya estaban en producción-. Qué NO
- * protege: que `confirmFundMovement` siga llamando a esta secuencia tal
- * cual; si alguien cambia `createJournalEntryForFundMovement` o el armado de
- * líneas por tipo sin tocar este archivo, el cambio puede pasar
- * desapercibido para estos tests. Es la misma limitación -y la misma
- * solución- que ya adoptó `cost-center.integration.test.ts` para su caso 5.
+ *   - `checkPermission` (`@/shared/lib/permissions`): decide si el usuario
+ *     puede hacer la operación; no es lógica del ticket.
+ *   - `getCurrentUserId` (`@/shared/lib/current-user`): depende de la sesión
+ *     de Clerk vía `next/headers`, que no existe fuera de un request de
+ *     Next.
+ *   - `getActiveCompanyId` (`@/shared/lib/company`): depende a su vez de
+ *     `getCurrentUserId`.
+ *   - `revalidatePath` (`next/cache`): invalidación de caché de Next: no
+ *     tiene efecto ni sentido fuera de un request, y sin mockearlo explota
+ *     (no hay "static generation store" bajo Vitest).
  *
- * No se ejercita `applyFundSide` (actualización de saldos de banco/caja):
- * no está exportada, y está fuera del alcance de los 4 casos pedidos, que
- * son sobre el asiento contable y la persistencia de los conceptos, no
- * sobre el movimiento de saldos.
+ * Los cuatro `vi.mock(...)` de más abajo reemplazan ÚNICAMENTE esos cuatro
+ * módulos. Todo lo demás -el cálculo del total, el armado de las líneas del
+ * asiento por tipo de movimiento, la verificación de partida doble, la
+ * persistencia del movimiento y del asiento, la lectura ordenada de los
+ * conceptos- es el código real, sin duplicar ni una línea. Si alguien rompe
+ * `createJournalEntryForFundMovement`, el armado de líneas de
+ * `confirmFundMovement`, `buildLinesData` o `resolveMovementAmount`, estos
+ * tests se rompen con él: no hay una copia propia que pueda quedarse
+ * desactualizada y seguir en verde.
+ *
+ * (Versión anterior de este archivo: como la firma de `confirmFundMovement`
+ * son server actions de un módulo `'use server'`, se asumió que no podían
+ * ejecutarse fuera de un request de Next y se optó por replicar su
+ * secuencia. Esa premisa era incorrecta: `'use server'` es una anotación
+ * para el bundler de Next -decide qué queda expuesto como endpoint-, no
+ * una restricción de Node/Vitest sobre cómo se puede importar el módulo. Lo
+ * que sí impide ejecutar el código tal cual es la frontera de sesión y
+ * framework de arriba, y esa es aislable con `vi.mock`.)
+ *
+ * No se ejercita `applyFundSide` en el sentido de comprobar el `balance` del
+ * banco resultante (aunque sí se ejecuta de verdad como parte de
+ * `confirmFundMovement`, y por eso el `beforeAll` siembra bancos con saldo
+ * y cuenta contable reales): verificar saldos está fuera del alcance de los
+ * 4 casos pedidos, que son sobre el asiento contable y la persistencia de
+ * los conceptos.
  *
  * Aislamiento de datos: todo lo que este archivo crea usa el prefijo
  * `TSK585-TEST-` (empresa, cuentas, bancos, descripciones de movimientos y
@@ -50,13 +64,24 @@
  * verifica que no sobrevive ninguna fila con el prefijo.
  */
 import 'dotenv/config';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
-import { Prisma } from '@/generated/prisma/client';
 import { prisma } from '@/shared/lib/prisma';
 
 import { sumLines } from '../shared/lines-calc';
-import { fundMovementSchema, type FundMovementFormInput } from '../shared/validators';
+import type { FundMovementFormInput } from '../shared/validators';
+
+// Frontera aislada: sesión/permisos/empresa activa/caché de Next. Ver el
+// comentario de arriba para el porqué de cada uno.
+vi.mock('@/shared/lib/current-user', () => ({ getCurrentUserId: vi.fn() }));
+vi.mock('@/shared/lib/company', () => ({ getActiveCompanyId: vi.fn() }));
+vi.mock('@/shared/lib/permissions', () => ({ checkPermission: vi.fn().mockResolvedValue(undefined) }));
+vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
+
+import { getActiveCompanyId } from '@/shared/lib/company';
+import { getCurrentUserId } from '@/shared/lib/current-user';
+// Código real de producción: nada de esto se reimplementa acá.
+import { createFundMovement, getFundMovementById } from './actions.server';
 
 const PREFIX = 'TSK585-TEST-';
 
@@ -75,80 +100,21 @@ try {
   dbAvailable = false;
 }
 
-// Cliente de transacción de Prisma (mismo tipo que define
-// `../list/actions.server.ts`; no se puede importar de ahí sin volverlo un
-// export de un archivo `'use server'`).
-type PrismaTransactionClient = Omit<
-  typeof prisma,
-  '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'
->;
-
-/** Una línea del asiento, con la misma forma que arma cada tipo de movimiento. */
-interface JournalLineInput {
-  accountId: string;
-  debit: number;
-  credit: number;
-  description: string;
-}
-
 interface JournalLineRow {
   accountId: string;
   debit: number;
   credit: number;
 }
 
-/**
- * Réplica de `createJournalEntryForFundMovement`
- * (`../list/actions.server.ts`): verifica la partida doble y persiste el
- * asiento con las líneas que le pasa el llamador, incrementando
- * `lastEntryNumber`. Mismo comportamiento, mismo orden de operaciones.
- */
-async function persistJournalEntry(
-  tx: PrismaTransactionClient,
-  params: { companyId: string; date: Date; description: string; lines: JournalLineInput[] }
-): Promise<{ id: string; number: number }> {
-  const { companyId, date, description, lines } = params;
-
-  const totalDebe = lines.reduce((t, l) => t.add(new Prisma.Decimal(l.debit)), new Prisma.Decimal(0));
-  const totalHaber = lines.reduce((t, l) => t.add(new Prisma.Decimal(l.credit)), new Prisma.Decimal(0));
-  if (!totalDebe.equals(totalHaber)) {
-    throw new Error(
-      `Asiento desbalanceado en el test: debe ${totalDebe.toString()} vs haber ${totalHaber.toString()}`
-    );
-  }
-
-  const settings = await tx.accountingSettings.findUniqueOrThrow({
-    where: { companyId },
-    select: { lastEntryNumber: true },
+async function fetchEntryLinesForMovement(movementId: string): Promise<JournalLineRow[]> {
+  const movement = await prisma.fundMovement.findUniqueOrThrow({
+    where: { id: movementId },
+    select: { journalEntryId: true },
   });
-  const nextNumber = settings.lastEntryNumber + 1;
+  if (!movement.journalEntryId) throw new Error('El movimiento no tiene asiento generado');
 
-  const entry = await tx.journalEntry.create({
-    data: {
-      companyId,
-      number: nextNumber,
-      date,
-      description,
-      createdBy: 'test',
-      lines: {
-        create: lines.map((line) => ({
-          accountId: line.accountId,
-          debit: new Prisma.Decimal(line.debit),
-          credit: new Prisma.Decimal(line.credit),
-          description: line.description,
-        })),
-      },
-    },
-    select: { id: true, number: true },
-  });
-
-  await tx.accountingSettings.update({ where: { companyId }, data: { lastEntryNumber: nextNumber } });
-  return entry;
-}
-
-async function fetchEntryLines(entryId: string): Promise<JournalLineRow[]> {
   const rows = await prisma.journalEntryLine.findMany({
-    where: { entryId },
+    where: { entryId: movement.journalEntryId },
     select: { accountId: true, debit: true, credit: true },
   });
   return rows.map((r) => ({ accountId: r.accountId, debit: Number(r.debit), credit: Number(r.credit) }));
@@ -164,11 +130,8 @@ describe.skipIf(!dbAvailable)('integración: conceptos del movimiento de fondos 
   let commissionAccountId: string; // concepto: comisión bancaria (egreso)
   let sircrebAccountId: string; // concepto: percepción Sircreb (activo, a computar)
 
-  let bankSourceId: string; // BankAccount de origen (gasto/retiro/transferencia)
+  let bankSourceId: string; // BankAccount de origen (retiro/gasto/transferencia)
   let bankDestId: string; // BankAccount de destino (aporte/transferencia)
-
-  const createdFundMovementIds: string[] = [];
-  const createdJournalEntryIds: string[] = [];
 
   beforeAll(async () => {
     const company = await prisma.company.create({ data: { name: `${PREFIX}Empresa`, isActive: true } });
@@ -204,7 +167,7 @@ describe.skipIf(!dbAvailable)('integración: conceptos del movimiento de fondos 
           bankName: `${PREFIX}Banco Origen`,
           accountNumber: 'T585-9001',
           accountType: 'CHECKING',
-          balance: 5000000,
+          balance: 10000000,
           status: 'ACTIVE',
           accountId: bankLedgerAccountId,
         },
@@ -233,19 +196,21 @@ describe.skipIf(!dbAvailable)('integración: conceptos del movimiento de fondos 
         partnerContributionsAccountId: capitalAccountId,
       },
     });
+
+    // Único punto donde se aísla la frontera: la empresa activa y el usuario
+    // son los de este test, no una sesión real.
+    vi.mocked(getActiveCompanyId).mockResolvedValue(companyId);
+    vi.mocked(getCurrentUserId).mockResolvedValue(`${PREFIX}user`);
   });
 
   afterAll(async () => {
     // Orden inverso de dependencias: primero los movimientos (cascadean sus
-    // conceptos), después los asientos (cascadean sus líneas), después los
-    // bancos y la configuración (referencian cuentas con RESTRICT), después
-    // las cuentas, después la empresa.
-    for (const id of createdFundMovementIds) {
-      await prisma.fundMovement.delete({ where: { id } }).catch(() => undefined);
-    }
-    for (const id of createdJournalEntryIds) {
-      await prisma.journalEntry.delete({ where: { id } }).catch(() => undefined);
-    }
+    // conceptos) y los asientos (cascadean sus líneas) -las líneas de ambos
+    // tienen FK RESTRICT hacia `accounts`-, después los bancos (cascadean
+    // sus `bank_movements`) y la configuración, después las cuentas, después
+    // la empresa.
+    await prisma.fundMovement.deleteMany({ where: { companyId } });
+    await prisma.journalEntry.deleteMany({ where: { companyId } });
     await prisma.bankAccount.deleteMany({ where: { companyId } });
     await prisma.accountingSettings.deleteMany({ where: { companyId } });
     await prisma.account.deleteMany({ where: { companyId } });
@@ -265,89 +230,30 @@ describe.skipIf(!dbAvailable)('integración: conceptos del movimiento de fondos 
   });
 
   describe('caso 1: el asiento de gastos bancarios tiene N+1 líneas y balancea', () => {
-    // Réplica del branch BANK_CHARGES de `confirmFundMovement`: un débito por
-    // concepto + un crédito al banco por el total. Los importes son los del
-    // ticket: dos conceptos de $302.574,16 y $1.434.154,28.
+    // `createFundMovement(input, true)` real: crea el borrador y lo confirma
+    // en la misma llamada. Los importes son los del ticket: dos conceptos de
+    // $302.574,16 y $1.434.154,28.
     let lines: JournalLineRow[];
 
     beforeAll(async () => {
-      const total = sumLines([
-        { accountId: commissionAccountId, description: 'x', amount: '302574.16' },
-        { accountId: sircrebAccountId, description: 'y', amount: '1434154.28' },
-      ]);
-      expect(total).toBe(1736728.44);
+      const formInput: FundMovementFormInput = {
+        type: 'BANK_CHARGES',
+        date: '2026-01-15',
+        description: `${PREFIX}Gastos e impuestos bancarios de enero`,
+        sourceFund: `BANK:${bankSourceId}`,
+        destinationFund: '',
+        partnerId: '',
+        lines: [
+          { accountId: commissionAccountId, description: `${PREFIX}Comision de mantenimiento`, amount: '302574.16' },
+          { accountId: sircrebAccountId, description: `${PREFIX}Percepcion Sircreb`, amount: '1434154.28' },
+        ],
+      };
 
-      const movement = await prisma.fundMovement.create({
-        data: {
-          companyId,
-          status: 'DRAFT',
-          date: new Date('2026-01-15T12:00:00.000Z'),
-          type: 'BANK_CHARGES',
-          amount: new Prisma.Decimal(total),
-          description: `${PREFIX}Gastos e impuestos bancarios de enero`,
-          fundOutKind: 'BANK',
-          fundOutId: bankSourceId,
-          fundOutLabel: `${PREFIX}Banco Origen`,
-          createdBy: 'test',
-          lines: {
-            create: [
-              {
-                accountId: commissionAccountId,
-                description: `${PREFIX}Comision de mantenimiento`,
-                amount: new Prisma.Decimal('302574.16'),
-                position: 0,
-              },
-              {
-                accountId: sircrebAccountId,
-                description: `${PREFIX}Percepcion Sircreb`,
-                amount: new Prisma.Decimal('1434154.28'),
-                position: 1,
-              },
-            ],
-          },
-        },
-        include: { lines: { orderBy: { position: 'asc' } } },
-      });
-      createdFundMovementIds.push(movement.id);
+      const result = await createFundMovement(formInput, true);
+      expect(result.success).toBe(true);
+      if (!result.success) throw new Error(result.error);
 
-      // Mismo armado que el branch BANK_CHARGES real: un débito por concepto
-      // más un crédito al banco por el total.
-      const entryLines: JournalLineInput[] = [
-        ...movement.lines.map((line) => ({
-          accountId: line.accountId,
-          debit: Number(line.amount),
-          credit: 0,
-          description: line.description,
-        })),
-        {
-          accountId: bankLedgerAccountId,
-          debit: 0,
-          credit: Number(movement.amount),
-          description: movement.description,
-        },
-      ];
-
-      const entry = await prisma.$transaction((tx) =>
-        persistJournalEntry(tx, {
-          companyId,
-          date: movement.date,
-          description: movement.description,
-          lines: entryLines,
-        })
-      );
-      createdJournalEntryIds.push(entry.id);
-
-      await prisma.fundMovement.update({
-        where: { id: movement.id },
-        data: {
-          status: 'CONFIRMED',
-          journalEntryId: entry.id,
-          journalEntryNumber: entry.number,
-          confirmedAt: new Date(),
-        },
-      });
-
-      lines = await fetchEntryLines(entry.id);
+      lines = await fetchEntryLinesForMovement(result.id!);
     });
 
     it('genera N+1 líneas: un débito por cada uno de los 2 conceptos y un crédito al banco', () => {
@@ -377,61 +283,34 @@ describe.skipIf(!dbAvailable)('integración: conceptos del movimiento de fondos 
   describe('caso 2: regresión de los tipos existentes (riesgo principal de esta entrega)', () => {
     // Antes de esta entrega, `createJournalEntryForFundMovement` armaba
     // siempre dos líneas (un débito y un crédito) internamente. Ahora las
-    // arma cada llamador y se las pasa ya construidas. Un aporte de socio y
-    // una transferencia entre cuentas -los dos tipos que ya estaban en
-    // producción antes de TSK-585- tienen que seguir generando exactamente
-    // dos líneas, con las mismas cuentas que antes del cambio.
-    //
-    // Si alguien rompe el armado genérico (por ejemplo, agregando o
-    // perdiendo una línea, o invirtiendo débito/crédito), estos tests se
-    // ponen en rojo.
+    // arma cada llamador y se las pasa ya construidas. Los tres tipos que ya
+    // estaban en producción antes de TSK-585 -aporte, retiro y
+    // transferencia- tienen que seguir generando exactamente dos líneas, con
+    // las mismas cuentas que antes del cambio. Cada sub-caso llama a
+    // `createFundMovement(input, true)` real (crea + confirma) y lee el
+    // asiento que quedó en la base.
 
     describe('aporte de socio', () => {
       let lines: JournalLineRow[];
       const amount = 50000;
 
       beforeAll(async () => {
-        const movement = await prisma.fundMovement.create({
-          data: {
-            companyId,
-            status: 'DRAFT',
-            date: new Date('2026-01-20T12:00:00.000Z'),
+        const result = await createFundMovement(
+          {
             type: 'PARTNER_CONTRIBUTION',
-            amount: new Prisma.Decimal(amount),
+            date: '2026-01-20',
+            amount: String(amount),
             description: `${PREFIX}Aporte de socio fundador`,
-            fundInKind: 'BANK',
-            fundInId: bankDestId,
-            fundInLabel: `${PREFIX}Banco Destino`,
-            createdBy: 'test',
+            sourceFund: '',
+            destinationFund: `BANK:${bankDestId}`,
+            partnerId: '',
           },
-        });
-        createdFundMovementIds.push(movement.id);
-
-        // Mismo armado que el branch PARTNER_CONTRIBUTION real: `parLineas`
-        // arma exactamente dos líneas -débito al banco/caja destino, crédito
-        // a la cuenta de aportes-, sin depender de `applyFundSide` para el
-        // `accountId` porque ya lo sembramos en el `BankAccount` del beforeAll.
-        const entryLines: JournalLineInput[] = [
-          { accountId: destLedgerAccountId, debit: amount, credit: 0, description: movement.description },
-          { accountId: capitalAccountId, debit: 0, credit: amount, description: movement.description },
-        ];
-
-        const entry = await prisma.$transaction((tx) =>
-          persistJournalEntry(tx, {
-            companyId,
-            date: movement.date,
-            description: movement.description,
-            lines: entryLines,
-          })
+          true
         );
-        createdJournalEntryIds.push(entry.id);
+        expect(result.success).toBe(true);
+        if (!result.success) throw new Error(result.error);
 
-        await prisma.fundMovement.update({
-          where: { id: movement.id },
-          data: { status: 'CONFIRMED', journalEntryId: entry.id, journalEntryNumber: entry.number, confirmedAt: new Date() },
-        });
-
-        lines = await fetchEntryLines(entry.id);
+        lines = await fetchEntryLinesForMovement(result.id!);
       });
 
       it('genera exactamente dos líneas', () => {
@@ -446,53 +325,62 @@ describe.skipIf(!dbAvailable)('integración: conceptos del movimiento de fondos 
       });
     });
 
+    describe('retiro de socio', () => {
+      let lines: JournalLineRow[];
+      const amount = 15000;
+
+      beforeAll(async () => {
+        const result = await createFundMovement(
+          {
+            type: 'PARTNER_WITHDRAWAL',
+            date: '2026-01-21',
+            amount: String(amount),
+            description: `${PREFIX}Retiro de socio fundador`,
+            sourceFund: `BANK:${bankSourceId}`,
+            destinationFund: '',
+            partnerId: '',
+          },
+          true
+        );
+        expect(result.success).toBe(true);
+        if (!result.success) throw new Error(result.error);
+
+        lines = await fetchEntryLinesForMovement(result.id!);
+      });
+
+      it('genera exactamente dos líneas', () => {
+        expect(lines).toHaveLength(2);
+      });
+
+      it('debita la cuenta de aportes de socios y acredita el banco origen, por el total', () => {
+        const capital = lines.find((l) => l.accountId === capitalAccountId);
+        const banco = lines.find((l) => l.accountId === bankLedgerAccountId);
+        expect(capital).toMatchObject({ debit: amount, credit: 0 });
+        expect(banco).toMatchObject({ debit: 0, credit: amount });
+      });
+    });
+
     describe('transferencia entre cuentas', () => {
       let lines: JournalLineRow[];
       const amount = 25000;
 
       beforeAll(async () => {
-        const movement = await prisma.fundMovement.create({
-          data: {
-            companyId,
-            status: 'DRAFT',
-            date: new Date('2026-01-22T12:00:00.000Z'),
+        const result = await createFundMovement(
+          {
             type: 'ACCOUNT_TRANSFER',
-            amount: new Prisma.Decimal(amount),
+            date: '2026-01-22',
+            amount: String(amount),
             description: `${PREFIX}Transferencia entre bancos`,
-            fundOutKind: 'BANK',
-            fundOutId: bankSourceId,
-            fundOutLabel: `${PREFIX}Banco Origen`,
-            fundInKind: 'BANK',
-            fundInId: bankDestId,
-            fundInLabel: `${PREFIX}Banco Destino`,
-            createdBy: 'test',
+            sourceFund: `BANK:${bankSourceId}`,
+            destinationFund: `BANK:${bankDestId}`,
+            partnerId: '',
           },
-        });
-        createdFundMovementIds.push(movement.id);
-
-        // Mismo armado que el branch ACCOUNT_TRANSFER real: `parLineas` arma
-        // exactamente dos líneas -débito al destino, crédito al origen-.
-        const entryLines: JournalLineInput[] = [
-          { accountId: destLedgerAccountId, debit: amount, credit: 0, description: movement.description },
-          { accountId: bankLedgerAccountId, debit: 0, credit: amount, description: movement.description },
-        ];
-
-        const entry = await prisma.$transaction((tx) =>
-          persistJournalEntry(tx, {
-            companyId,
-            date: movement.date,
-            description: movement.description,
-            lines: entryLines,
-          })
+          true
         );
-        createdJournalEntryIds.push(entry.id);
+        expect(result.success).toBe(true);
+        if (!result.success) throw new Error(result.error);
 
-        await prisma.fundMovement.update({
-          where: { id: movement.id },
-          data: { status: 'CONFIRMED', journalEntryId: entry.id, journalEntryNumber: entry.number, confirmedAt: new Date() },
-        });
-
-        lines = await fetchEntryLines(entry.id);
+        lines = await fetchEntryLinesForMovement(result.id!);
       });
 
       it('genera exactamente dos líneas', () => {
@@ -509,144 +397,79 @@ describe.skipIf(!dbAvailable)('integración: conceptos del movimiento de fondos 
   });
 
   describe('caso 3: el total se calcula en el servidor, no lo que manda el cliente', () => {
-    // `buildLinesData` + `resolveMovementAmount` (ambas privadas de
-    // `../list/actions.server.ts`) redondean cada concepto a 2 decimales y
-    // calculan el total con `sumLines` -la misma función real, importada
-    // acá-, ignorando por completo el campo `amount` del formulario para
-    // BANK_CHARGES. Se manda un `amount` bien distinto de la suma de los
-    // conceptos y se verifica que lo que queda guardado es la suma, no lo
-    // que llegó.
+    // `createFundMovement` real, con un `amount` deliberadamente distinto de
+    // la suma de las líneas. `sumLines` (función real, importada) se usa acá
+    // solo como oráculo independiente para calcular el total esperado; el
+    // valor que se compara es el que devuelve `getFundMovementById` real.
     let storedAmount: number;
-    let sentAmount: number;
-    let sumaConceptos: number;
+    const sentAmount = '999999.99'; // deliberadamente distinto de la suma de las líneas
+    const conceptos = [
+      { accountId: '', description: 'Comision', amount: '100.50' },
+      { accountId: '', description: 'Sircreb', amount: '50.25' },
+    ];
 
     beforeAll(async () => {
-      const formInput: FundMovementFormInput = {
+      conceptos[0].accountId = commissionAccountId;
+      conceptos[1].accountId = sircrebAccountId;
+
+      const result = await createFundMovement({
         type: 'BANK_CHARGES',
         date: '2026-02-01',
-        amount: '999999.99', // deliberadamente distinto de la suma de las líneas
+        amount: sentAmount,
         description: `${PREFIX}Gastos con monto simulado incorrecto`,
         sourceFund: `BANK:${bankSourceId}`,
         destinationFund: '',
         partnerId: '',
-        lines: [
-          { accountId: commissionAccountId, description: 'Comision', amount: '100.50' },
-          { accountId: sircrebAccountId, description: 'Sircreb', amount: '50.25' },
-        ],
-      };
-
-      // El schema no exige que `amount` coincida con la suma para BANK_CHARGES
-      // (ni con nada): confirma la nota de la Tarea 6 de que `amount` quedó
-      // opcional y sin validar para este tipo.
-      const parsed = fundMovementSchema.parse(formInput);
-      sentAmount = parseFloat(parsed.amount!);
-
-      // Réplica de `buildLinesData`: redondeo a 2 decimales por concepto.
-      const linesData = (parsed.lines ?? []).map((line, index) => ({
-        accountId: line.accountId,
-        description: line.description.trim(),
-        amount: new Prisma.Decimal(parseFloat(line.amount)).toDecimalPlaces(2),
-        position: index,
-      }));
-
-      // Réplica de `resolveMovementAmount` para BANK_CHARGES: la suma de los
-      // conceptos ya redondeados, con la función real `sumLines`.
-      sumaConceptos = sumLines(
-        linesData.map((line) => ({
-          accountId: line.accountId,
-          description: line.description,
-          amount: line.amount.toString(),
-        }))
-      );
-      expect(sumaConceptos).toBe(150.75);
-      expect(sumaConceptos).not.toBe(sentAmount);
-
-      const movement = await prisma.fundMovement.create({
-        data: {
-          companyId,
-          status: 'DRAFT',
-          date: new Date('2026-02-01T12:00:00.000Z'),
-          type: 'BANK_CHARGES',
-          amount: new Prisma.Decimal(sumaConceptos),
-          description: formInput.description,
-          fundOutKind: 'BANK',
-          fundOutId: bankSourceId,
-          fundOutLabel: `${PREFIX}Banco Origen`,
-          createdBy: 'test',
-          lines: { create: linesData },
-        },
+        lines: conceptos,
       });
-      createdFundMovementIds.push(movement.id);
+      expect(result.success).toBe(true);
+      if (!result.success) throw new Error(result.error);
 
-      const reread = await prisma.fundMovement.findUniqueOrThrow({ where: { id: movement.id } });
-      storedAmount = Number(reread.amount);
+      const found = await getFundMovementById(result.id!);
+      storedAmount = found!.amount;
     });
 
     it('guarda la suma de los conceptos, no el monto enviado por el cliente', () => {
-      expect(storedAmount).toBe(150.75);
-      expect(storedAmount).not.toBe(sentAmount);
-      expect(storedAmount).toBe(sumaConceptos);
+      const sumaEsperada = sumLines(conceptos);
+      expect(sumaEsperada).toBe(150.75);
+      expect(storedAmount).toBe(sumaEsperada);
+      expect(storedAmount).not.toBe(parseFloat(sentAmount));
     });
   });
 
   describe('caso 4: el borrador guarda y relee sus conceptos, con su orden', () => {
-    // Los conceptos se crean con la `position` desordenada respecto del
-    // array de creación, a propósito: si `getFundMovementById` (o cualquier
-    // lectura) dejara de ordenar por `position` y confiara en el orden de
-    // inserción, este test lo detectaría.
+    // `createFundMovement` (borrador, sin confirmar) + `getFundMovementById`
+    // reales: los tres conceptos se cargan en un orden con sentido -no
+    // alfabético, para que no coincida por casualidad con un posible orden
+    // por descripción- y se verifica que la relectura respeta ese orden.
     let releidas: { description: string; accountId: string; amount: number }[];
 
     beforeAll(async () => {
-      const conceptos = [
-        { accountId: sircrebAccountId, description: `${PREFIX}Percepcion Sircreb`, amount: '1200.00', position: 2 },
-        { accountId: commissionAccountId, description: `${PREFIX}Comision mantenimiento`, amount: '850.30', position: 0 },
-        { accountId: commissionAccountId, description: `${PREFIX}IVA sobre comision`, amount: '178.56', position: 1 },
-      ];
-
-      const movement = await prisma.fundMovement.create({
-        data: {
-          companyId,
-          status: 'DRAFT',
-          date: new Date('2026-02-10T12:00:00.000Z'),
-          type: 'BANK_CHARGES',
-          amount: new Prisma.Decimal(sumLines(conceptos)),
-          description: `${PREFIX}Borrador con tres conceptos`,
-          fundOutKind: 'BANK',
-          fundOutId: bankSourceId,
-          fundOutLabel: `${PREFIX}Banco Origen`,
-          createdBy: 'test',
-          lines: {
-            create: conceptos.map((c) => ({
-              accountId: c.accountId,
-              description: c.description,
-              amount: new Prisma.Decimal(c.amount),
-              position: c.position,
-            })),
-          },
-        },
+      const result = await createFundMovement({
+        type: 'BANK_CHARGES',
+        date: '2026-02-10',
+        description: `${PREFIX}Borrador con tres conceptos`,
+        sourceFund: `BANK:${bankSourceId}`,
+        destinationFund: '',
+        partnerId: '',
+        lines: [
+          { accountId: commissionAccountId, description: `${PREFIX}Comision mantenimiento`, amount: '850.30' },
+          { accountId: commissionAccountId, description: `${PREFIX}IVA sobre comision`, amount: '178.56' },
+          { accountId: sircrebAccountId, description: `${PREFIX}Percepcion Sircreb`, amount: '1200.00' },
+        ],
       });
-      createdFundMovementIds.push(movement.id);
+      expect(result.success).toBe(true);
+      if (!result.success) throw new Error(result.error);
 
-      // Misma lectura que `getFundMovementById`: `include lines orderBy
-      // position asc`, y `Number()` sobre los Decimal (regla de Decimal →
-      // Number antes de llegar a un Client Component).
-      const reread = await prisma.fundMovement.findFirstOrThrow({
-        where: { id: movement.id, companyId },
-        include: { lines: { orderBy: { position: 'asc' } } },
-      });
-
-      releidas = reread.lines.map((l) => ({
-        description: l.description,
-        accountId: l.accountId,
-        amount: Number(l.amount),
-      }));
+      const found = await getFundMovementById(result.id!);
+      releidas = found!.lines.map((l) => ({ description: l.description, accountId: l.accountId, amount: l.amount }));
     });
 
     it('relee los tres conceptos', () => {
       expect(releidas).toHaveLength(3);
     });
 
-    it('los relee en el orden de `position`, no en el orden en que se insertaron', () => {
+    it('los relee en el mismo orden en que se cargaron', () => {
       expect(releidas.map((l) => l.description)).toEqual([
         `${PREFIX}Comision mantenimiento`,
         `${PREFIX}IVA sobre comision`,
