@@ -169,17 +169,20 @@ export function _CreateFundMovementModal({
   // resolvería igual en el servidor porque no depende de qué campos se
   // muestran en pantalla (TSK-585).
   //
-  // El campo "amount" no se vacía a '': el esquema exige un string no vacío
-  // con formato de importe (`min(1)` + regex) para los cuatro tipos, y solo
-  // el superRefine de "> 0" se salta para BANK_CHARGES. Se fija en '0', que
-  // cumple ese formato; el servidor igual lo descarta y calcula el importe
-  // sumando los conceptos (`resolveMovementAmount`).
+  // "amount" no se toca acá: el schema lo dejó sin ninguna validación para
+  // BANK_CHARGES (ni requerido, ni formato, ni "> 0"), así que un valor
+  // viejo en ese campo oculto no rompe nada y no hace falta pisarlo con un
+  // sentinela. El servidor igual lo ignora y calcula el importe sumando los
+  // conceptos (`resolveMovementAmount`). Esto también evita que este efecto
+  // le gane al `reset` de más arriba cuando se reabre un borrador
+  // BANK_CHARGES para editar: antes, los dos escribían "amount" sin saber
+  // uno del otro y el importe que acababa de cargar el reset (el real,
+  // útil para mostrarlo si se vuelve a otro tipo) se perdía.
   useEffect(() => {
     if (!isBankCharges) {
       if (form.getValues('lines')?.length) form.setValue('lines', []);
-    } else {
-      if (form.getValues('amount') !== '0') form.setValue('amount', '0');
-      if (form.getValues('destinationFund')) form.setValue('destinationFund', '');
+    } else if (form.getValues('destinationFund')) {
+      form.setValue('destinationFund', '');
     }
   }, [isBankCharges, form]);
 

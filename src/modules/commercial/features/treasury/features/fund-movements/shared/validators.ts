@@ -60,10 +60,15 @@ export const fundMovementSchema = z
   .object({
     type: z.enum(FUND_MOVEMENT_TYPES),
     date: z.string().min(1, 'La fecha es requerida'),
-    amount: z
-      .string()
-      .min(1, 'El monto es requerido')
-      .regex(amountRegex, 'Monto inválido (hasta 2 decimales)'),
+    // Opcional en el schema base: BANK_CHARGES no usa este campo (lo calcula
+    // el servidor sumando los conceptos), así que su validación completa
+    // -requerido, formato y "> 0"- queda condicionada en el `superRefine` de
+    // abajo, igual que el resto de las reglas por tipo. Antes exigía formato
+    // acá siempre, y el único llamador que existía se salvaba mandando
+    // '0' -un sentinela sin sentido de dominio-; cualquier otro consumidor
+    // futuro de este schema que mandara '' para BANK_CHARGES caía en un
+    // error silencioso, porque el campo Monto está oculto para ese tipo.
+    amount: z.string().optional(),
     description: z.string().min(2, 'La descripción es requerida'),
     // Banco/caja de donde salen los fondos (retiro / transferencia): "BANK:id" | "CASH:id"
     sourceFund: z.string().optional().or(z.literal('')),
@@ -93,13 +98,28 @@ export const fundMovementSchema = z
     const validRef = (v?: string) => Boolean(v && parseFundRef(v));
 
     // El total de los gastos bancarios lo calcula el servidor sumando los
-    // conceptos, así que el formulario manda 0 y este campo no aplica (TSK-585).
-    if (data.type !== 'BANK_CHARGES' && !(parseFloat(data.amount) > 0)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['amount'],
-        message: 'El monto debe ser mayor a 0',
-      });
+    // conceptos, así que este campo no aplica para ese tipo y no se valida
+    // en absoluto (TSK-585): ni requerido, ni formato, ni "> 0".
+    if (data.type !== 'BANK_CHARGES') {
+      if (!data.amount) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['amount'],
+          message: 'El monto es requerido',
+        });
+      } else if (!amountRegex.test(data.amount)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['amount'],
+          message: 'Monto inválido (hasta 2 decimales)',
+        });
+      } else if (!(parseFloat(data.amount) > 0)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['amount'],
+          message: 'El monto debe ser mayor a 0',
+        });
+      }
     }
 
     if (data.type === 'PARTNER_CONTRIBUTION') {

@@ -407,15 +407,19 @@ function buildLinesData(data: FundMovementFormInput): FundMovementLineData[] {
 
 /**
  * Importe del movimiento. En gastos bancarios lo calcula el servidor sumando los
- * conceptos ya redondeados: el formulario manda 0 y ese valor se descarta
- * (TSK-585). Así el total guardado es exactamente la suma de las líneas, que es
- * lo que después se acredita al banco en el asiento.
+ * conceptos ya redondeados: `amount` ni siquiera llega para ese tipo (TSK-585).
+ * Así el total guardado es exactamente la suma de las líneas, que es lo que
+ * después se acredita al banco en el asiento.
  */
 function resolveMovementAmount(
   data: FundMovementFormInput,
   linesData: FundMovementLineData[]
 ): number {
-  if (data.type !== 'BANK_CHARGES') return parseFloat(data.amount);
+  // El `superRefine` del schema exige `amount` (requerido + formato) para
+  // todo tipo que no sea BANK_CHARGES, así que acá siempre llega un string
+  // válido: la aserción documenta esa garantía en vez de esconder un `?? '0'`
+  // que nunca debería ejecutarse.
+  if (data.type !== 'BANK_CHARGES') return parseFloat(data.amount!);
   return sumLines(
     linesData.map((line) => ({
       accountId: line.accountId,

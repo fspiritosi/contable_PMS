@@ -125,6 +125,33 @@ describe('fundMovementSchema', () => {
     expect(fundMovementSchema.safeParse({ ...aporte, amount: '-5' }).success).toBe(false);
     expect(fundMovementSchema.safeParse({ ...aporte, amount: '1.234' }).success).toBe(false);
   });
+
+  /**
+   * Regresión: `amount` era `.min(1)` en el schema base para los cuatro tipos,
+   * y al volverlo opcional (TSK-585, para que BANK_CHARGES no lo necesite) el
+   * "requerido" pasó a un `superRefine` condicionado por tipo. Sin este test,
+   * un tipeo en esa condición podría dejar a los tres tipos que sí lo usan
+   * aceptando un monto vacío sin que ningún test lo note.
+   */
+  it('exige el monto en los tipos que no son BANK_CHARGES, ausente o vacío', () => {
+    const sinAmount: Partial<typeof aporte> = { ...aporte };
+    delete sinAmount.amount;
+
+    for (const bad of [sinAmount, { ...aporte, amount: '' }]) {
+      const result = fundMovementSchema.safeParse(bad);
+      expect(result.success).toBe(false);
+      expect(result.error?.issues.some((i) => i.path[0] === 'amount')).toBe(true);
+      expect(result.error?.issues.find((i) => i.path[0] === 'amount')?.message).toBe(
+        'El monto es requerido'
+      );
+    }
+
+    for (const type of ['PARTNER_WITHDRAWAL', 'ACCOUNT_TRANSFER'] as const) {
+      const result = fundMovementSchema.safeParse({ ...aporte, type, amount: undefined });
+      expect(result.success).toBe(false);
+      expect(result.error?.issues.some((i) => i.path[0] === 'amount')).toBe(true);
+    }
+  });
 });
 
 import { FUND_MOVEMENT_TYPE_LABELS } from './validators';
@@ -153,6 +180,25 @@ describe('gastos e impuestos bancarios (TSK-585)', () => {
 
   it('acepta un movimiento con conceptos y origen', () => {
     expect(fundMovementSchema.safeParse(gastosBancarios).success).toBe(true);
+  });
+
+  /**
+   * Este tipo no usa "amount" -lo calcula el servidor sumando los conceptos-
+   * así que no debe pedirlo ni con formato ni ausente. Cubre el hallazgo de
+   * la revisión: el schema exigía `amount` para los cuatro tipos aunque
+   * BANK_CHARGES nunca lo mostrara en pantalla, y el único síntoma visible
+   * era un botón "Guardar" que no hacía nada.
+   */
+  it('no exige el monto: ni vacío, ni ausente, ni con cualquier formato', () => {
+    expect(fundMovementSchema.safeParse({ ...gastosBancarios, amount: '' }).success).toBe(true);
+
+    const sinAmount: Partial<typeof gastosBancarios> = { ...gastosBancarios };
+    delete sinAmount.amount;
+    expect(fundMovementSchema.safeParse(sinAmount).success).toBe(true);
+
+    expect(
+      fundMovementSchema.safeParse({ ...gastosBancarios, amount: 'no-es-un-numero' }).success
+    ).toBe(true);
   });
 
   it('exige el banco o caja de donde sale la plata', () => {
