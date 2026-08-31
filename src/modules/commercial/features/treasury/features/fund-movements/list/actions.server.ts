@@ -10,6 +10,7 @@ import { checkPermission } from '@/shared/lib/permissions';
 import { Prisma } from '@/generated/prisma/client';
 import type { DataTableSearchParams } from '@/shared/components/common/DataTable';
 import { parseSearchParams, stateToPrismaParams } from '@/shared/components/common/DataTable/helpers';
+import { filterExpenseAccounts } from '@/modules/commercial/features/products/shared/account-filters';
 import { sumLines } from '../shared/lines-calc';
 import {
   fundMovementSchema,
@@ -287,18 +288,39 @@ interface JournalLineInput {
  * llamador. Los aportes, retiros y transferencias arman dos líneas (un débito y
  * un crédito); los gastos bancarios arman una por concepto más el crédito del
  * total (TSK-585).
+ *
+ * Mientras armaba las dos líneas acá adentro, el balance estaba garantizado por
+ * construcción. Al generalizarla pasó a depender de cada llamador, así que la
+ * partida doble se comprueba explícitamente antes de escribir nada.
  */
 async function createJournalEntryForFundMovement(
   input: {
     companyId: string;
     date: Date;
     description: string;
-    /** Líneas del asiento, ya balanceadas: la suma de débitos iguala la de créditos. */
+    /** Líneas del asiento. Se verifica acá que sumen lo mismo al debe y al haber. */
     lines: JournalLineInput[];
   },
   tx: PrismaTransactionClient
 ) {
   const { companyId, date, description, lines } = input;
+
+  // Partida doble: se suma con Decimal y no con floats, para que un asiento
+  // válido no se rechace por el arrastre binario de 0.1 + 0.2.
+  if (lines.length === 0) {
+    logger.error('Asiento de movimiento de fondos sin líneas', { data: { companyId, description } });
+    throw new BusinessError('El asiento del movimiento no tiene líneas. Avisá al equipo.');
+  }
+  const totalDebe = lines.reduce((t, l) => t.add(new Prisma.Decimal(l.debit)), new Prisma.Decimal(0));
+  const totalHaber = lines.reduce((t, l) => t.add(new Prisma.Decimal(l.credit)), new Prisma.Decimal(0));
+  if (!totalDebe.equals(totalHaber)) {
+    logger.error('Asiento de movimiento de fondos desbalanceado', {
+      data: { companyId, description, debe: totalDebe.toString(), haber: totalHaber.toString() },
+    });
+    throw new BusinessError(
+      'El asiento no balancea: el total del debe no coincide con el del haber. Revisá los importes o avisá al equipo.'
+    );
+  }
 
   const settings = await tx.accountingSettings.findUnique({
     where: { companyId },
@@ -379,19 +401,27 @@ function resolveMovementAmount(
 }
 
 /**
- * Verifica que las cuentas de los conceptos sean de la empresa, estén activas y
- * sean imputables (hoja). Evita que un id manipulado apunte a otra empresa o a
- * una cuenta de agrupación.
+ * Verifica que las cuentas de los conceptos sean de la empresa, estén activas,
+ * sean imputables (hoja) y de un tipo que pueda ser contrapartida de un débito
+ * bancario. El tipo se decide con `filterExpenseAccounts` (TSK-579), el mismo
+ * criterio que usan los ítems al comprarse: egreso o activo. El activo entra
+ * porque hay conceptos que son retenciones a computar (Sircreb) y no gastos;
+ * pasivo y patrimonio quedan fuera.
+ *
+ * Sin esta comprobación la regla viviría solo en el combobox, y un id
+ * manipulado en el payload del server action podía imputar a otra empresa, a
+ * una cuenta de agrupación o a una cuenta de un tipo que no corresponde.
  */
 async function assertLineAccounts(accountIds: string[], companyId: string) {
   if (accountIds.length === 0) return;
   const unicos = Array.from(new Set(accountIds));
-  const validas = await prisma.account.count({
+  const cuentas = await prisma.account.findMany({
     where: { id: { in: unicos }, companyId, isActive: true, isLeaf: true },
+    select: { id: true, type: true },
   });
-  if (validas !== unicos.length) {
+  if (filterExpenseAccounts(cuentas).length !== unicos.length) {
     throw new BusinessError(
-      'Alguna de las cuentas de los conceptos no es válida: revisá que estén activas y sean imputables.'
+      'Alguna de las cuentas de los conceptos no es válida: revisá que estén activas, sean imputables y de tipo egreso o activo.'
     );
   }
 }
@@ -667,7 +697,7 @@ export async function confirmFundMovement(id: string): Promise<FundMovementActio
           })),
           { accountId: src.accountId, debit: 0, credit: amountNumber, description: movement.description },
         ];
-      } else {
+      } else if (movement.type === 'ACCOUNT_TRANSFER') {
         if (!movement.fundOutKind || !movement.fundOutId) throw new BusinessError('Falta el banco/caja origen');
         if (!movement.fundInKind || !movement.fundInId) throw new BusinessError('Falta el banco/caja destino');
         const src = await applyFundSide(
@@ -683,6 +713,12 @@ export async function confirmFundMovement(id: string): Promise<FundMovementActio
           sideCtx
         );
         entryLines = parLineas(dest.accountId, src.accountId);
+      } else {
+        // Un tipo nuevo tiene que fallar acá y no colarse como transferencia.
+        logger.error('Tipo de movimiento de fondos sin asiento definido', {
+          data: { id, companyId, type: movement.type },
+        });
+        throw new BusinessError('Tipo de movimiento no soportado');
       }
 
       const entry = await createJournalEntryForFundMovement(
