@@ -1,0 +1,486 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>TSK-585 — Impuestos y gastos bancarios en el resumen del mes</title>
+<style>
+  @page {
+    size: A4;
+    margin: 0;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #1f2430;
+    font-size: 13px;
+    line-height: 1.55;
+    background: #ffffff;
+  }
+
+  .page {
+    padding: 4mm 2mm;
+  }
+
+  header.cover {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    text-align: left;
+    padding: 10mm 2mm 8mm 2mm;
+    border-bottom: 3px solid #2f6f4f;
+    margin-bottom: 10mm;
+  }
+
+  .eyebrow {
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 11px;
+    font-weight: 700;
+    color: #2f6f4f;
+    margin-bottom: 6px;
+  }
+
+  h1 {
+    font-size: 26px;
+    margin: 0 0 8px 0;
+    color: #14251c;
+  }
+
+  .subtitle {
+    font-size: 14px;
+    color: #4b5563;
+    margin: 0;
+  }
+
+  section {
+    margin-bottom: 9mm;
+  }
+
+  h2 {
+    font-size: 16px;
+    color: #14251c;
+    border-left: 4px solid #2f6f4f;
+    padding-left: 8px;
+    margin: 0 0 6mm 0;
+    page-break-after: avoid;
+  }
+
+  .step-number {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #2f6f4f;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    margin-right: 8px;
+    flex-shrink: 0;
+  }
+
+  .quote {
+    background: #f4f7f5;
+    border-left: 4px solid #2f6f4f;
+    padding: 10px 14px;
+    font-style: italic;
+    color: #2b3a33;
+    margin: 0 0 6px 0;
+  }
+
+  .quote cite {
+    display: block;
+    font-style: normal;
+    font-size: 11.5px;
+    color: #6b7280;
+    margin-top: 6px;
+  }
+
+  .before-after {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    page-break-inside: avoid;
+  }
+
+  .card {
+    border: 1px solid #e2e5e0;
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+
+  .card.before { background: #fbf7f2; border-color: #ecd9bd; }
+  .card.after { background: #f2f8f4; border-color: #bfe0cb; }
+
+  .card h3 {
+    margin: 0 0 6px 0;
+    font-size: 12.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .card.before h3 { color: #9a6a1f; }
+  .card.after h3 { color: #226240; }
+
+  .card p { margin: 0; }
+
+  ol.steps {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    counter-reset: step;
+  }
+
+  ol.steps > li {
+    counter-increment: step;
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+    page-break-inside: avoid;
+  }
+
+  ol.steps > li::before {
+    content: counter(step);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    border-radius: 50%;
+    background: #2f6f4f;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .step-body { flex: 1; }
+
+  .step-body strong { color: #14251c; }
+
+  figure {
+    margin: 8px 0 0 0;
+    page-break-inside: avoid;
+  }
+
+  figure img {
+    max-width: 100%;
+    border: 1px solid #d9dce0;
+    border-radius: 6px;
+    display: block;
+  }
+
+  figcaption {
+    font-size: 11px;
+    color: #6b7280;
+    margin-top: 4px;
+  }
+
+  .callout {
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin: 0 0 8px 0;
+    page-break-inside: avoid;
+  }
+
+  .callout.config {
+    background: #f2f6fb;
+    border: 1px solid #cddaeb;
+  }
+
+  .callout.warning {
+    background: #fdf5ec;
+    border: 1px solid #efd6a8;
+  }
+
+  .callout h3 {
+    margin: 0 0 4px 0;
+    font-size: 13px;
+  }
+
+  .callout p {
+    margin: 4px 0;
+  }
+
+  ul.plain {
+    margin: 4px 0 0 0;
+    padding-left: 18px;
+  }
+
+  ul.plain li { margin-bottom: 4px; }
+
+  .no-change-list {
+    display: grid;
+    gap: 6px;
+  }
+
+  .no-change-item {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+  }
+
+  .check {
+    color: #2f6f4f;
+    font-weight: 700;
+  }
+
+  footer.doc-footer {
+    text-align: center;
+    color: #9ca3af;
+    font-size: 10.5px;
+    margin-top: 4px;
+  }
+
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10mm;
+    align-items: start;
+  }
+
+  .decision-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0 0 6px 0;
+  }
+
+  .decision-table th,
+  .decision-table td {
+    border: 1px solid #d9dce0;
+    padding: 8px 10px;
+    text-align: left;
+    vertical-align: top;
+  }
+
+  .decision-table th {
+    background: #f4f7f5;
+    color: #14251c;
+    font-size: 12px;
+  }
+
+  .decision-table td.sin-iva { background: #f2f8f4; }
+  .decision-table td.con-iva { background: #f2f6fb; }
+</style>
+</head>
+<body>
+
+<div class="page">
+
+  <header class="cover">
+    <div class="eyebrow">Ticket 585 · Tesorería y Contabilidad</div>
+    <h1>Impuestos y gastos bancarios en el resumen del mes</h1>
+    <p class="subtitle">Guía de presentación — qué pedías, qué cambió y cómo usarlo</p>
+  </header>
+
+  <section>
+    <h2>1. Qué pedías</h2>
+    <p>Nos pasaste el resumen de Bejerman de cómo veníamos cargando el débito bancario del mes: un
+    solo movimiento de fondos, con todos los conceptos sumados en un único importe.</p>
+    <div class="quote">
+      "Te paso el print de Bejerman que lo cargamos como un movimiento de fondo, sumando todo el
+      mes en 1 solo movimiento. Es importante discriminar los conceptos y que estén atados a la
+      contabilidad."
+      <cite>— Elizabeth Pérez</cite>
+    </div>
+    <p>El resumen bancario de un mes suele traer conceptos muy distintos entre sí — Sircreb,
+    impuesto a los débitos y créditos, comisiones, IVA sobre esas comisiones — y hasta ahora todo
+    eso se cargaba junto, como un solo número, sin poder saber cuánto correspondía a cada cuenta
+    contable.</p>
+  </section>
+
+  <section>
+    <h2>2. Dos pedidos, dos soluciones — la parte más importante de esta guía</h2>
+    <p>Al mirar el resumen bancario en detalle, los conceptos se dividen en dos grupos que la
+    contabilidad tiene que tratar distinto: los que <strong>no llevan IVA</strong> (impuestos,
+    retenciones) y los que <strong>sí llevan IVA</strong> (comisiones y otros servicios con
+    comprobante fiscal). Por eso el ticket se resolvió en dos entregas independientes, y cada una
+    vive en un lugar distinto del sistema:</p>
+    <table class="decision-table">
+      <thead>
+        <tr>
+          <th>Conceptos sin IVA<br />(Sircreb, imp. a los débitos, retenciones)</th>
+          <th>Conceptos con IVA<br />(comisiones, servicios bancarios facturados)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="sin-iva">
+            Se cargan en <strong>Tesorería → Movimientos de Fondos</strong>, con el tipo
+            <strong>"Gastos e impuestos bancarios"</strong> y un concepto por cada ítem del
+            resumen. Es la parte de esta guía, con capturas reales.
+          </td>
+          <td class="con-iva">
+            Se cargan en <strong>Compras → Facturas de Compra</strong>, como una factura con el
+            banco como proveedor y el tipo de comprobante <strong>"Gastos Bancarios"</strong>, para
+            poder computar el IVA. Esta forma ya se entregó antes: acá se explica en texto, sin
+            capturas nuevas.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <p>La pregunta que conviene hacerse frente a cada línea del resumen es siempre la misma:
+    <strong>¿este concepto tiene IVA discriminado?</strong> Si no lo tiene, va como movimiento de
+    fondos. Si lo tiene, va como factura de compra. Un mismo resumen bancario del mes puede
+    terminar necesitando <strong>las dos cosas</strong>: por un lado el movimiento de fondos con
+    los impuestos y retenciones, por otro la factura de compra con las comisiones que sí llevan
+    IVA.</p>
+  </section>
+
+  <section>
+    <h2>3. Qué cambió en pantalla (parte sin IVA)</h2>
+    <div class="before-after">
+      <div class="card before">
+        <h3>Antes</h3>
+        <p>El movimiento de fondos tenía un único campo de <strong>monto</strong>. Para cargar el
+        débito del mes había que sumar a mano todos los conceptos del resumen y cargar un solo
+        número, sin poder saber después cuánto correspondía a Sircreb, cuánto al impuesto a los
+        débitos, etc. El asiento generado tampoco lo distinguía: todo iba a una única cuenta.</p>
+      </div>
+      <div class="card after">
+        <h3>Ahora</h3>
+        <p>Hay un tipo de movimiento nuevo, <strong>"Gastos e impuestos bancarios"</strong>, con
+        una tabla de <strong>conceptos</strong>: agregás una fila por cada ítem del resumen, cada
+        una con su propia <strong>cuenta contable</strong>, su descripción y su importe. El total
+        se calcula solo, sumando los conceptos, y el asiento sale con un débito por cada uno.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>4. Cómo se usa — el ejemplo del ticket</h2>
+    <p>Vamos a cargar el mismo caso que nos mandaste: el débito bancario del mes de
+    <strong>Banco Santander</strong>, con dos conceptos — <strong>Sircreb IIBB Bcrio</strong> por
+    <strong>$302.574,16</strong> e <strong>Impuesto a los débitos</strong> por
+    <strong>$1.434.154,28</strong> — que suman exactamente <strong>$1.736.728,44</strong>.</p>
+    <ol class="steps">
+      <li>
+        <div class="step-body">
+          <strong>Elegí el tipo "Gastos e impuestos bancarios".</strong> Es una opción nueva junto
+          a las tres de siempre (aporte de socio, retiro de socio y transferencia entre cuentas).
+          <figure>
+            <img src="assets/tsk585-tipo-movimiento.png" alt="Selector de tipo de movimiento mostrando la opción nueva Gastos e impuestos bancarios" />
+            <figcaption>El selector de tipo, con "Gastos e impuestos bancarios" como cuarta opción,
+            debajo de las tres que ya existían.</figcaption>
+          </figure>
+        </div>
+      </li>
+      <li>
+        <div class="step-body">
+          <strong>Indicá el banco de donde sale la plata y cargá los conceptos.</strong> Con este
+          tipo desaparece el campo de monto único y aparece la tabla de
+          <strong>Conceptos</strong>: por cada uno elegís la cuenta contable (buscando por código o
+          por nombre), escribís una descripción y el importe. El total se arma solo, abajo de la
+          tabla.
+          <figure>
+            <img src="assets/tsk585-formulario-conceptos.png" alt="Formulario de movimiento de fondos con dos conceptos cargados: Sircreb IIBB y Impuesto a los débitos" />
+            <figcaption>Los dos conceptos cargados: Sircreb IIBB Bcrio a la cuenta "Percepciones y
+            Retenciones Impto. a los IIBB" ($302.574,16) e Impuesto a los débitos a la cuenta
+            "Impuesto s/ los Débitos y Créditos Bancarios" ($1.434.154,28). El total, abajo, ya da
+            $1.736.728,44.</figcaption>
+          </figure>
+        </div>
+      </li>
+      <li>
+        <div class="step-body">
+          <strong>Guardá y confirmá.</strong> Igual que con los demás movimientos: "Guardar" lo
+          deja en borrador para seguir editando, y "Guardar y Confirmar" lo hace efectivo — mueve
+          el saldo del banco y genera el asiento. En el listado se ve con su tipo, su total y el
+          número de asiento que generó.
+          <figure>
+            <img src="assets/tsk585-listado.png" alt="Listado de movimientos de fondos con el movimiento de Gastos e impuestos bancarios confirmado" />
+            <figcaption>El movimiento confirmado en el listado: tipo "Gastos e impuestos
+            bancarios", total $1.736.728,44 y asiento N° 9.</figcaption>
+          </figure>
+        </div>
+      </li>
+      <li>
+        <div class="step-body">
+          <strong>Mirá el asiento contable.</strong> Acá está el punto que pedías: en vez de una
+          sola imputación genérica, el asiento tiene <strong>un débito por cada concepto</strong>,
+          a su propia cuenta, y un <strong>crédito único</strong> al banco de origen por el total.
+          <figure>
+            <img src="assets/tsk585-asiento.png" alt="Asiento contable con dos débitos, uno por Sircreb IIBB y otro por Impuesto a los débitos, y un crédito al banco" />
+            <figcaption>El asiento: débito de $302.574,16 a "Percepciones y Retenciones Impto. a
+            los IIBB", débito de $1.434.154,28 a "Impuesto s/ los Débitos y Créditos Bancarios", y
+            crédito de $1.736.728,44 a "Banco Santander Río c/c en pesos".</figcaption>
+          </figure>
+        </div>
+      </li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>5. Qué hay que tener en cuenta</h2>
+    <div class="callout config">
+      <h3>Solo cuentas de egreso o de activo</h3>
+      <p>Al elegir la cuenta de un concepto, solo aparecen cuentas <strong>imputables</strong>
+      (de hoja, activas) de tipo <strong>egreso</strong> o <strong>activo</strong>. Tiene sentido:
+      Sircreb es una retención que se descuenta más adelante de otro impuesto (por eso va a una
+      cuenta de activo, como un crédito a favor), mientras que el impuesto a los débitos y
+      créditos es un gasto real (va a una cuenta de egreso). Las cuentas de pasivo y patrimonio no
+      aparecen, porque un débito bancario nunca tiene esas cuentas como contrapartida.</p>
+    </div>
+    <p>El movimiento necesita <strong>al menos un concepto</strong> para poder guardarse: no se
+    puede confirmar un "Gastos e impuestos bancarios" sin ninguna fila cargada. Mientras está en
+    borrador podés agregar, editar o quitar conceptos las veces que haga falta; una vez confirmado,
+    como con cualquier movimiento, ya no se edita.</p>
+  </section>
+
+  <section>
+    <h2>6. Qué no cambió</h2>
+    <div class="no-change-list">
+      <div class="no-change-item">
+        <span class="check">✓</span>
+        <span>Los otros tres tipos de movimiento — <strong>aporte de socio</strong>,
+        <strong>retiro de socio</strong> y <strong>transferencia entre cuentas</strong> — siguen
+        funcionando exactamente igual que antes, con su monto único y su asiento de dos líneas de
+        siempre.</span>
+      </div>
+      <div class="no-change-item">
+        <span class="check">✓</span>
+        <span>Los movimientos que ya tenías cargados <strong>no se tocan</strong>: el cambio solo
+        afecta a los movimientos nuevos que elijas cargar con el tipo "Gastos e impuestos
+        bancarios".</span>
+      </div>
+      <div class="no-change-item">
+        <span class="check">✓</span>
+        <span>Los gastos bancarios <strong>con IVA</strong> se siguen cargando exactamente igual
+        que hasta ahora, como factura de compra con el tipo "Gastos Bancarios" — eso no forma
+        parte de este cambio.</span>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="callout warning">
+      <h3>⚠ Antes de cargar, revisá el resumen línea por línea</h3>
+      <p>La confusión más común va a ser mezclar las dos formas dentro de un mismo concepto. Para
+      no dudar al mirar el resumen bancario del mes, repasá cada línea con esta pregunta: <strong>
+      ¿discrimina IVA?</strong></p>
+      <ul class="plain">
+        <li><strong>No discrimina IVA</strong> (Sircreb, impuesto a los débitos y créditos,
+        sellados, otras retenciones) → <strong>Movimiento de fondos</strong>, tipo "Gastos e
+        impuestos bancarios", un concepto por línea.</li>
+        <li><strong>Discrimina IVA</strong> (comisiones de mantenimiento, servicios con
+        comprobante fiscal del banco) → <strong>Factura de compra</strong>, con el banco como
+        proveedor y el tipo "Gastos Bancarios".</li>
+      </ul>
+      <p>Si un mismo resumen trae los dos tipos de conceptos, se cargan por separado: el
+      movimiento de fondos con lo que no lleva IVA, y la factura de compra con lo que sí.</p>
+    </div>
+  </section>
+
+  <footer class="doc-footer">
+    TSK-585 — Conceptos discriminados en movimientos de fondos, y su relación con los gastos
+    bancarios con IVA
+  </footer>
+
+</div>
+
+</body>
+</html>

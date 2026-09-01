@@ -27,6 +27,7 @@ const TYPE_BADGE_VARIANT: Record<FundMovementTypeValue, 'default' | 'secondary' 
   PARTNER_CONTRIBUTION: 'default',
   PARTNER_WITHDRAWAL: 'secondary',
   ACCOUNT_TRANSFER: 'outline',
+  BANK_CHARGES: 'secondary',
 };
 
 const STATUS_LABELS: Record<string, string> = {

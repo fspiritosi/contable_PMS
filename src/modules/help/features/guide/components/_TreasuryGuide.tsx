@@ -762,7 +762,8 @@ export function _TreasuryGuide() {
             Movimientos de Fondos
           </CardTitle>
           <CardDescription>
-            Aportes de socios, retiros y transferencias entre cuentas
+            Aportes de socios, retiros, transferencias y gastos e impuestos
+            bancarios
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -791,6 +792,14 @@ export function _TreasuryGuide() {
               <strong>Transferencia entre cuentas</strong>: mueve fondos de una
               cuenta a otra (por ejemplo, del banco a la caja).
             </li>
+            <li>
+              <strong>Gastos e impuestos bancarios</strong>: el débito que el
+              banco cobra en el resumen del mes <strong>sin IVA</strong> —
+              Sircreb, impuesto a los débitos y créditos, comisiones sin
+              discriminar, etc. En vez de un monto único se cargan uno o más{' '}
+              <strong>conceptos</strong>, cada uno con su propia cuenta
+              contable.
+            </li>
           </ul>
           <p>
             <strong>Cómo registrar uno:</strong>
@@ -800,11 +809,22 @@ export function _TreasuryGuide() {
               Ve a <strong>Tesorería → Movimientos de Fondos</strong> y hacé clic
               en <strong>Nuevo Movimiento</strong>
             </li>
-            <li>Elegí el tipo, el monto y la fecha</li>
+            <li>
+              Elegí el tipo y la fecha. Para aporte, retiro o transferencia
+              indicá también el <strong>monto</strong>.
+            </li>
             <li>
               Seleccioná el banco o caja de origen y/o destino (según el tipo) y,
               para aportes o retiros, opcionalmente el socio. Las cajas deben
               tener una sesión abierta para operar.
+            </li>
+            <li>
+              Si el tipo es <strong>Gastos e impuestos bancarios</strong>, no
+              hay un monto único: cargá la tabla de <strong>Conceptos</strong>,
+              agregando una fila por cada ítem del resumen bancario. Por cada
+              uno elegís la cuenta contable, escribís una descripción y el
+              importe. El total se calcula solo, sumando los conceptos, y no
+              se puede confirmar sin al menos uno cargado.
             </li>
             <li>
               Escribí una descripción y elegí:
@@ -825,6 +845,13 @@ export function _TreasuryGuide() {
               movimiento ya no se edita.
             </li>
           </ol>
+          <p className="text-sm text-muted-foreground">
+            Al confirmar un movimiento de <strong>Gastos e impuestos
+            bancarios</strong>, el asiento no imputa todo a una única cuenta de
+            gastos: lleva <strong>un débito por cada concepto</strong>, a su
+            propia cuenta, y un solo <strong>crédito</strong> al banco o caja
+            de origen por el total.
+          </p>
           <Alert>
             <Info className="h-4 w-4" />
             <AlertDescription>
@@ -832,6 +859,23 @@ export function _TreasuryGuide() {
               <strong>Cuenta de aportes de socios</strong> en{' '}
               <strong>Ajustes contables</strong> (es una cuenta de Patrimonio
               Neto).
+            </AlertDescription>
+          </Alert>
+          <Alert>
+            <Info className="h-4 w-4" />
+            <AlertDescription>
+              <strong>¿Movimiento de fondos o factura de compra?</strong> Si el
+              gasto bancario <strong>no lleva IVA</strong> (Sircreb, impuesto a
+              los débitos y créditos, comisiones sin discriminar), cargalo acá
+              como <strong>Gastos e impuestos bancarios</strong>, con un
+              concepto por cada ítem del resumen. Si en cambio el gasto{' '}
+              <strong>lleva IVA</strong> y tenés un comprobante fiscal del
+              banco, cargalo en <strong>Compras → Facturas de Compra</strong>{' '}
+              como una factura con el banco como proveedor y el tipo{' '}
+              <strong>Gastos Bancarios</strong>: solo así se computa el IVA.
+              Un mismo resumen bancario puede necesitar las dos cosas: los
+              ítems sin IVA por acá, y los que sí llevan IVA como factura de
+              compra.
             </AlertDescription>
           </Alert>
         </CardContent>

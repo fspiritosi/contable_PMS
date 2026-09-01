@@ -79,7 +79,7 @@ export function AccountCombobox({
           aria-invalid={ariaInvalid}
           disabled={disabled}
           className={cn(
-            'w-full justify-between font-normal',
+            'w-full min-w-0 justify-between font-normal',
             !selected && 'text-muted-foreground',
             className
           )}

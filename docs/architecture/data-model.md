@@ -345,6 +345,8 @@ Reglas:
 | `CashRegister` | Caja registradora |
 | `CashRegisterSession` | Sesion de caja (apertura/cierre) |
 | `CashMovement` | Movimiento de caja |
+| `FundMovement` | Movimiento de fondos (aporte/retiro de socio, transferencia entre cuentas, gastos e impuestos bancarios) | type, status, date, amount (total), fundOutKind/fundOutId/fundOutLabel, fundInKind/fundInId/fundInLabel, partnerId, journalEntryId |
+| `FundMovementLine` | Concepto de un movimiento de tipo BANK_CHARGES (TSK-585) | movementId, accountId, description, amount (Decimal 15,2), position |
 
 **Enums:**
 - `BankAccountType`: CHECKING, SAVINGS
@@ -352,6 +354,28 @@ Reglas:
 - `PaymentMethod`: CASH, TRANSFER, CHECK, CREDIT_CARD, DEBIT_CARD, ECHEQ, OTHER
 - `ReceiptStatus` / `PaymentOrderStatus`: DRAFT, CONFIRMED, CANCELLED
 - `WithholdingTaxType`: IVA, GANANCIAS, IIBB, SUSS
+- `FundMovementType`: PARTNER_CONTRIBUTION, PARTNER_WITHDRAWAL, ACCOUNT_TRANSFER, BANK_CHARGES (TSK-585)
+- `FundMovementStatus`: DRAFT, CONFIRMED, CANCELLED
+
+**Movimiento de fondos y sus conceptos (TSK-585):**
+- `FundMovement` cubre movimientos de dinero que no son factura, cobro ni pago: aporte/retiro de
+  socio, transferencia entre cuentas propias y, desde TSK-585, gastos e impuestos bancarios
+  **sin IVA** (Sircreb, impuesto a los débitos y créditos, comisiones sin discriminar). El gasto
+  bancario **con** IVA no pasa por acá: se carga como `PurchaseInvoice` con el banco como
+  proveedor y el tipo de comprobante "Gastos Bancarios" (parte B del mismo ticket).
+- `FundMovement.amount` guarda siempre el **total** del movimiento. Para `BANK_CHARGES` ese total
+  no se tipea: se calcula en el servidor como la suma de `FundMovementLine.amount`, para que nunca
+  quede desincronizado del desglose.
+- Solo `BANK_CHARGES` usa `FundMovementLine` (al menos una); los otros tres tipos siguen sin
+  líneas, exactamente igual que antes de TSK-585.
+- Las cuentas de `FundMovementLine.accountId` deben ser imputables (hoja, activas) y de tipo
+  `EXPENSE` o `ASSET` — igual criterio que las líneas de compra/venta desde TSK-579. `LIABILITY` y
+  `EQUITY` quedan afuera: no son contrapartida de un débito bancario.
+- **El asiento generado tiene N+1 líneas para `BANK_CHARGES`** (un débito por cada concepto, a su
+  propia cuenta, más un crédito único al banco/caja de origen por el total), mientras que
+  `PARTNER_CONTRIBUTION`, `PARTNER_WITHDRAWAL` y `ACCOUNT_TRANSFER` siguen generando su asiento de
+  **2 líneas** de siempre. `createJournalEntryForFundMovement` se generalizó para aceptar N débitos
+  contra un crédito sin cambiar el comportamiento de esos tres tipos existentes.
 
 ---
 

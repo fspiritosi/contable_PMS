@@ -10,6 +10,9 @@ import { checkPermission } from '@/shared/lib/permissions';
 import { Prisma } from '@/generated/prisma/client';
 import type { DataTableSearchParams } from '@/shared/components/common/DataTable';
 import { parseSearchParams, stateToPrismaParams } from '@/shared/components/common/DataTable/helpers';
+import { filterExpenseAccounts } from '@/modules/commercial/features/products/shared/account-filters';
+import { buildImputableAccountsWhere } from '@/shared/lib/accounts/imputable-accounts';
+import { sumLines } from '../shared/lines-calc';
 import {
   fundMovementSchema,
   parseFundMovementDate,
@@ -99,9 +102,16 @@ export async function getFundMovementById(id: string) {
   const companyId = await getActiveCompanyId();
   if (!companyId) throw new Error('No hay empresa activa');
 
-  const movement = await prisma.fundMovement.findFirst({ where: { id, companyId } });
+  const movement = await prisma.fundMovement.findFirst({
+    where: { id, companyId },
+    include: { lines: { orderBy: { position: 'asc' } } },
+  });
   if (!movement) return null;
-  return { ...movement, amount: Number(movement.amount) };
+  return {
+    ...movement,
+    amount: Number(movement.amount),
+    lines: movement.lines.map((line) => ({ ...line, amount: Number(line.amount) })),
+  };
 }
 
 /** Catálogos para el formulario: bancos, cajas con sesión abierta, socios y estado de config. */
@@ -138,6 +148,44 @@ export async function getFundMovementCatalogs() {
     partners,
     hasContributionsAccount: Boolean(settings?.partnerContributionsAccountId),
   };
+}
+
+/**
+ * Cuentas imputables para los conceptos de gastos e impuestos bancarios: el
+ * mismo criterio con el que `assertLineAccounts` valida en el servidor
+ * (`filterExpenseAccounts`, TSK-579), para que el combobox nunca ofrezca algo
+ * que el guardado va a rechazar después (TSK-585).
+ *
+ * `includeIds` preserva cuentas ya guardadas en un borrador aunque hoy no
+ * cumplan el filtro (ej. una cuenta dada de baja por corte de ejercicio
+ * después de cargar el concepto), con el mismo patrón que
+ * `getAccountsForBankMovement` en `treasury/bank-movements`: sin esto, al
+ * reabrir el borrador el combobox no encuentra la cuenta y el campo se ve
+ * vacío aunque el formulario todavía la tenga cargada (hallazgo de revisión
+ * final, TSK-585).
+ */
+export async function getFundMovementLineAccounts(includeIds?: string[]) {
+  await checkPermission('commercial.treasury.fund-movements', 'view', { redirect: true });
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  const imputableWhere = buildImputableAccountsWhere({ companyId });
+  const where =
+    includeIds && includeIds.length > 0
+      ? { OR: [imputableWhere, { companyId, id: { in: includeIds } }] }
+      : imputableWhere;
+
+  const accounts = await prisma.account.findMany({
+    where,
+    select: { id: true, code: true, name: true, type: true },
+    orderBy: { code: 'asc' },
+  });
+
+  return filterExpenseAccounts(accounts).map((account) => ({
+    id: account.id,
+    code: account.code,
+    name: account.name,
+  }));
 }
 
 // ============================================================================
@@ -266,19 +314,52 @@ async function applyFundSide(
   return { accountId };
 }
 
-/** Genera el asiento (2 líneas balanceadas) dentro de la transacción. */
+/** Una línea del asiento, tal como la arma cada tipo de movimiento. */
+interface JournalLineInput {
+  accountId: string;
+  debit: number;
+  credit: number;
+  description: string;
+}
+
+/**
+ * Genera el asiento dentro de la transacción, con las líneas que le pasa el
+ * llamador. Los aportes, retiros y transferencias arman dos líneas (un débito y
+ * un crédito); los gastos bancarios arman una por concepto más el crédito del
+ * total (TSK-585).
+ *
+ * Mientras armaba las dos líneas acá adentro, el balance estaba garantizado por
+ * construcción. Al generalizarla pasó a depender de cada llamador, así que la
+ * partida doble se comprueba explícitamente antes de escribir nada.
+ */
 async function createJournalEntryForFundMovement(
   input: {
     companyId: string;
     date: Date;
     description: string;
-    amount: number;
-    debitAccountId: string;
-    creditAccountId: string;
+    /** Líneas del asiento. Se verifica acá que sumen lo mismo al debe y al haber. */
+    lines: JournalLineInput[];
   },
   tx: PrismaTransactionClient
 ) {
-  const { companyId, date, description, amount, debitAccountId, creditAccountId } = input;
+  const { companyId, date, description, lines } = input;
+
+  // Partida doble: se suma con Decimal y no con floats, para que un asiento
+  // válido no se rechace por el arrastre binario de 0.1 + 0.2.
+  if (lines.length === 0) {
+    logger.error('Asiento de movimiento de fondos sin líneas', { data: { companyId, description } });
+    throw new BusinessError('El asiento del movimiento no tiene líneas. Avisá al equipo.');
+  }
+  const totalDebe = lines.reduce((t, l) => t.add(new Prisma.Decimal(l.debit)), new Prisma.Decimal(0));
+  const totalHaber = lines.reduce((t, l) => t.add(new Prisma.Decimal(l.credit)), new Prisma.Decimal(0));
+  if (!totalDebe.equals(totalHaber)) {
+    logger.error('Asiento de movimiento de fondos desbalanceado', {
+      data: { companyId, description, debe: totalDebe.toString(), haber: totalHaber.toString() },
+    });
+    throw new BusinessError(
+      'El asiento no balancea: el total del debe no coincide con el del haber. Revisá los importes o avisá al equipo.'
+    );
+  }
 
   const settings = await tx.accountingSettings.findUnique({
     where: { companyId },
@@ -299,10 +380,12 @@ async function createJournalEntryForFundMovement(
       description,
       createdBy: 'system',
       lines: {
-        create: [
-          { accountId: debitAccountId, debit: new Prisma.Decimal(amount), credit: new Prisma.Decimal(0), description },
-          { accountId: creditAccountId, debit: new Prisma.Decimal(0), credit: new Prisma.Decimal(amount), description },
-        ],
+        create: lines.map((line) => ({
+          accountId: line.accountId,
+          debit: new Prisma.Decimal(line.debit),
+          credit: new Prisma.Decimal(line.credit),
+          description: line.description,
+        })),
       },
     },
     select: { id: true, number: true },
@@ -310,6 +393,88 @@ async function createJournalEntryForFundMovement(
 
   await tx.accountingSettings.update({ where: { companyId }, data: { lastEntryNumber: nextNumber } });
   return entry;
+}
+
+/** Un concepto listo para persistir. */
+interface FundMovementLineData {
+  accountId: string;
+  description: string;
+  amount: Prisma.Decimal;
+  position: number;
+}
+
+/**
+ * Conceptos listos para persistir. Solo los tiene el tipo BANK_CHARGES; el resto
+ * de los tipos guarda el movimiento sin líneas. El importe se redondea acá a los
+ * 2 decimales de la columna, para que la base no lo redondee por su cuenta y el
+ * total quede diferente de la suma de los conceptos.
+ */
+function buildLinesData(data: FundMovementFormInput): FundMovementLineData[] {
+  if (data.type !== 'BANK_CHARGES') return [];
+  return (data.lines ?? []).map((line, index) => ({
+    accountId: line.accountId,
+    description: line.description.trim(),
+    amount: new Prisma.Decimal(parseFloat(line.amount)).toDecimalPlaces(2),
+    position: index,
+  }));
+}
+
+/**
+ * Importe del movimiento. En gastos bancarios lo calcula el servidor sumando los
+ * conceptos ya redondeados: `amount` ni siquiera llega para ese tipo (TSK-585).
+ * Así el total guardado es exactamente la suma de las líneas, que es lo que
+ * después se acredita al banco en el asiento.
+ */
+function resolveMovementAmount(
+  data: FundMovementFormInput,
+  linesData: FundMovementLineData[]
+): number {
+  // El `superRefine` del schema exige `amount` (requerido + formato) para
+  // todo tipo que no sea BANK_CHARGES, así que acá siempre llega un string
+  // válido: la aserción documenta esa garantía en vez de esconder un `?? '0'`
+  // que nunca debería ejecutarse.
+  if (data.type !== 'BANK_CHARGES') return parseFloat(data.amount!);
+  return sumLines(
+    linesData.map((line) => ({
+      accountId: line.accountId,
+      description: line.description,
+      amount: line.amount.toString(),
+    }))
+  );
+}
+
+/**
+ * Verifica que las cuentas de los conceptos sean de la empresa, estén activas,
+ * sean imputables (hoja, sin corte de ejercicio vigente) y de un tipo que
+ * pueda ser contrapartida de un débito bancario.
+ *
+ * El criterio de "imputable" es `buildImputableAccountsWhere` (compartido con
+ * `getFundMovementLineAccounts`, que arma el combobox): antes esta función
+ * repetía `isActive`/`isLeaf` a mano y se olvidaba de excluir las cuentas con
+ * `disabledFrom` ya vigente, así que el servidor terminaba siendo más
+ * permisivo que el combobox que decía replicar (hallazgo de revisión final,
+ * TSK-585). El tipo se decide aparte con `filterExpenseAccounts` (TSK-579),
+ * el mismo criterio que usan los ítems al comprarse: egreso o activo. El
+ * activo entra porque hay conceptos que son retenciones a computar (Sircreb)
+ * y no gastos; pasivo y patrimonio quedan fuera.
+ *
+ * Sin esta comprobación la regla viviría solo en el combobox, y un id
+ * manipulado en el payload del server action podía imputar a otra empresa, a
+ * una cuenta de agrupación, a una cuenta dada de baja por corte de ejercicio
+ * o a una cuenta de un tipo que no corresponde.
+ */
+async function assertLineAccounts(accountIds: string[], companyId: string) {
+  if (accountIds.length === 0) return;
+  const unicos = Array.from(new Set(accountIds));
+  const cuentas = await prisma.account.findMany({
+    where: { ...buildImputableAccountsWhere({ companyId }), id: { in: unicos } },
+    select: { id: true, type: true },
+  });
+  if (filterExpenseAccounts(cuentas).length !== unicos.length) {
+    throw new BusinessError(
+      'Alguna de las cuentas de los conceptos no es válida: revisá que estén activas, sean imputables y de tipo egreso o activo.'
+    );
+  }
 }
 
 /** Datos del movimiento resueltos desde el form, para crear/editar en borrador. */
@@ -341,6 +506,11 @@ export async function createFundMovement(
 
     const data = fundMovementSchema.parse(input);
     const { sourceRef, destRef } = buildDraftData(data);
+    const linesData = buildLinesData(data);
+    await assertLineAccounts(
+      linesData.map((line) => line.accountId),
+      companyId
+    );
 
     // fundOut = origen (retiro/transferencia); fundIn = destino (aporte/transferencia)
     const fundOut = sourceRef ? await resolveFundRefLabel(sourceRef, companyId) : null;
@@ -361,7 +531,7 @@ export async function createFundMovement(
         status: 'DRAFT',
         date: parseFundMovementDate(data.date),
         type: data.type,
-        amount: new Prisma.Decimal(parseFloat(data.amount)),
+        amount: new Prisma.Decimal(resolveMovementAmount(data, linesData)),
         description: data.description,
         fundOutKind: fundOut?.kind ?? null,
         fundOutId: fundOut?.id ?? null,
@@ -372,6 +542,7 @@ export async function createFundMovement(
         partnerId: data.partnerId || null,
         partnerName,
         createdBy: userId,
+        ...(linesData.length > 0 ? { lines: { create: linesData } } : {}),
       },
       select: { id: true },
     });
@@ -415,6 +586,11 @@ export async function updateFundMovement(
 
     const data = fundMovementSchema.parse(input);
     const { sourceRef, destRef } = buildDraftData(data);
+    const linesData = buildLinesData(data);
+    await assertLineAccounts(
+      linesData.map((line) => line.accountId),
+      companyId
+    );
 
     const fundOut = sourceRef ? await resolveFundRefLabel(sourceRef, companyId) : null;
     const fundIn = destRef ? await resolveFundRefLabel(destRef, companyId) : null;
@@ -428,22 +604,33 @@ export async function updateFundMovement(
       partnerName = partner?.name ?? null;
     }
 
-    await prisma.fundMovement.update({
-      where: { id },
-      data: {
-        date: parseFundMovementDate(data.date),
-        type: data.type,
-        amount: new Prisma.Decimal(parseFloat(data.amount)),
-        description: data.description,
-        fundOutKind: fundOut?.kind ?? null,
-        fundOutId: fundOut?.id ?? null,
-        fundOutLabel: fundOut?.label ?? null,
-        fundInKind: fundIn?.kind ?? null,
-        fundInId: fundIn?.id ?? null,
-        fundInLabel: fundIn?.label ?? null,
-        partnerId: data.partnerId || null,
-        partnerName,
-      },
+    // Los conceptos se reemplazan enteros: se borran los anteriores y se
+    // recrean con la posición del formulario, en la misma transacción.
+    await prisma.$transaction(async (tx) => {
+      await tx.fundMovement.update({
+        where: { id },
+        data: {
+          date: parseFundMovementDate(data.date),
+          type: data.type,
+          amount: new Prisma.Decimal(resolveMovementAmount(data, linesData)),
+          description: data.description,
+          fundOutKind: fundOut?.kind ?? null,
+          fundOutId: fundOut?.id ?? null,
+          fundOutLabel: fundOut?.label ?? null,
+          fundInKind: fundIn?.kind ?? null,
+          fundInId: fundIn?.id ?? null,
+          fundInLabel: fundIn?.label ?? null,
+          partnerId: data.partnerId || null,
+          partnerName,
+        },
+      });
+
+      await tx.fundMovementLine.deleteMany({ where: { movementId: id } });
+      if (linesData.length > 0) {
+        await tx.fundMovementLine.createMany({
+          data: linesData.map((line) => ({ ...line, movementId: id })),
+        });
+      }
     });
 
     revalidatePath('/dashboard/commercial/treasury/fund-movements');
@@ -466,7 +653,10 @@ export async function confirmFundMovement(id: string): Promise<FundMovementActio
     const companyId = await getActiveCompanyId();
     if (!companyId) throw new BusinessError('No hay empresa activa');
 
-    const movement = await prisma.fundMovement.findFirst({ where: { id, companyId } });
+    const movement = await prisma.fundMovement.findFirst({
+      where: { id, companyId },
+      include: { lines: { orderBy: { position: 'asc' } } },
+    });
     if (!movement) throw new BusinessError('Movimiento no encontrado');
     if (movement.status !== 'DRAFT') {
       throw new BusinessError('El movimiento ya fue confirmado o anulado');
@@ -509,8 +699,14 @@ export async function confirmFundMovement(id: string): Promise<FundMovementActio
         settings: fundSettings,
       };
 
-      let debitAccountId: string;
-      let creditAccountId: string;
+      const amountNumber = Number(movement.amount);
+      /** Las dos líneas clásicas: un débito y un crédito por el total. */
+      const parLineas = (debitAccountId: string, creditAccountId: string): JournalLineInput[] => [
+        { accountId: debitAccountId, debit: amountNumber, credit: 0, description: movement.description },
+        { accountId: creditAccountId, debit: 0, credit: amountNumber, description: movement.description },
+      ];
+
+      let entryLines: JournalLineInput[];
 
       if (movement.type === 'PARTNER_CONTRIBUTION') {
         if (!movement.fundInKind || !movement.fundInId) throw new BusinessError('Falta el banco/caja destino');
@@ -520,8 +716,7 @@ export async function confirmFundMovement(id: string): Promise<FundMovementActio
           'IN',
           sideCtx
         );
-        debitAccountId = dest.accountId;
-        creditAccountId = capitalAccountId!;
+        entryLines = parLineas(dest.accountId, capitalAccountId!);
       } else if (movement.type === 'PARTNER_WITHDRAWAL') {
         if (!movement.fundOutKind || !movement.fundOutId) throw new BusinessError('Falta el banco/caja origen');
         const src = await applyFundSide(
@@ -530,9 +725,30 @@ export async function confirmFundMovement(id: string): Promise<FundMovementActio
           'OUT',
           sideCtx
         );
-        debitAccountId = capitalAccountId!;
-        creditAccountId = src.accountId;
-      } else {
+        entryLines = parLineas(capitalAccountId!, src.accountId);
+      } else if (movement.type === 'BANK_CHARGES') {
+        // Los fondos salen del banco/caja como en un retiro, pero el asiento
+        // lleva un débito por cada concepto y un solo crédito por el total.
+        if (!movement.fundOutKind || !movement.fundOutId) throw new BusinessError('Falta el banco/caja origen');
+        if (movement.lines.length === 0) {
+          throw new BusinessError('El movimiento no tiene conceptos cargados');
+        }
+        const src = await applyFundSide(
+          tx,
+          { kind: movement.fundOutKind as FundSourceKind, id: movement.fundOutId },
+          'OUT',
+          sideCtx
+        );
+        entryLines = [
+          ...movement.lines.map((line) => ({
+            accountId: line.accountId,
+            debit: Number(line.amount),
+            credit: 0,
+            description: line.description,
+          })),
+          { accountId: src.accountId, debit: 0, credit: amountNumber, description: movement.description },
+        ];
+      } else if (movement.type === 'ACCOUNT_TRANSFER') {
         if (!movement.fundOutKind || !movement.fundOutId) throw new BusinessError('Falta el banco/caja origen');
         if (!movement.fundInKind || !movement.fundInId) throw new BusinessError('Falta el banco/caja destino');
         const src = await applyFundSide(
@@ -547,8 +763,16 @@ export async function confirmFundMovement(id: string): Promise<FundMovementActio
           'IN',
           sideCtx
         );
-        debitAccountId = dest.accountId;
-        creditAccountId = src.accountId;
+        entryLines = parLineas(dest.accountId, src.accountId);
+      } else {
+        // Descarte exhaustivo: si se agrega un quinto FundMovementType y no se
+        // contempla acá, esto deja de tipar y rompe el build en vez de llegar
+        // a producción y fallar recién en runtime (TSK-585).
+        const _exhaustive: never = movement.type;
+        logger.error('Tipo de movimiento de fondos sin asiento definido', {
+          data: { id, companyId, type: _exhaustive },
+        });
+        throw new BusinessError('Tipo de movimiento no soportado');
       }
 
       const entry = await createJournalEntryForFundMovement(
@@ -556,9 +780,7 @@ export async function confirmFundMovement(id: string): Promise<FundMovementActio
           companyId,
           date: movement.date,
           description: movement.description,
-          amount: Number(movement.amount),
-          debitAccountId,
-          creditAccountId,
+          lines: entryLines,
         },
         tx
       );

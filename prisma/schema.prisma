@@ -363,6 +363,7 @@ model Account {
   withholdingRegimes             WithholdingRegime[]
   productsAsExpenseAccount       Product[]              @relation("ProductExpenseAccount")
   productsAsIncomeAccount        Product[]              @relation("ProductIncomeAccount")
+  fundMovementLines              FundMovementLine[]
 
   @@unique([companyId, code])
   @@index([companyId, disabledFromFiscalYearId])
@@ -4287,6 +4288,7 @@ enum FundMovementType {
   PARTNER_CONTRIBUTION // Aporte de socio (banco/caja contra capital)
   PARTNER_WITHDRAWAL // Retiro de socio (capital contra banco/caja)
   ACCOUNT_TRANSFER // Transferencia entre cuentas (activo contra activo)
+  BANK_CHARGES // Gastos e impuestos bancarios: débito del banco desglosado en conceptos (TSK-585)
 
   @@map("fund_movement_type")
 }
@@ -4332,10 +4334,31 @@ model FundMovement {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  lines   FundMovementLine[]
 
   @@index([companyId])
   @@map("fund_movements")
+}
+
+/// Un concepto dentro de un movimiento de gastos e impuestos bancarios (TSK-585).
+model FundMovementLine {
+  id          String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  movementId  String  @map("movement_id") @db.Uuid
+  accountId   String  @map("account_id") @db.Uuid
+  description String
+  amount      Decimal @db.Decimal(15, 2)
+  /// Orden de carga, para mostrarlos como los escribió el usuario.
+  position    Int
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  movement FundMovement @relation(fields: [movementId], references: [id], onDelete: Cascade)
+  account  Account      @relation(fields: [accountId], references: [id])
+
+  @@index([movementId])
+  @@map("fund_movement_lines")
 }
 
 /// Socio de la empresa. Puede ser titular de tarjetas y tener cuenta corriente.

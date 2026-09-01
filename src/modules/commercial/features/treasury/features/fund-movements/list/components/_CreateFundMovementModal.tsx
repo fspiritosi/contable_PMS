@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Loader2, AlertTriangle } from 'lucide-react';
 import moment from 'moment';
@@ -48,11 +49,14 @@ import {
   createFundMovement,
   updateFundMovement,
   confirmFundMovement,
+  getFundMovementById,
+  getFundMovementLineAccounts,
   type FundMovementActionResult,
   type FundOption,
   type FundMovementPartnerOption,
   type FundMovementListItem,
 } from '../actions.server';
+import { _FundMovementLinesField } from './_FundMovementLinesField';
 
 interface Props {
   open: boolean;
@@ -83,6 +87,7 @@ export function _CreateFundMovementModal({
 }: Props) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isEdit = Boolean(movement);
+  const queryClient = useQueryClient();
 
   const form = useForm<FundMovementFormInput>({
     resolver: zodResolver(fundMovementSchema),
@@ -94,12 +99,60 @@ export function _CreateFundMovementModal({
       sourceFund: '',
       destinationFund: '',
       partnerId: '',
+      lines: [],
     },
   });
 
+  // Conceptos del movimiento en edición: solo BANK_CHARGES los tiene, y el
+  // listado (`movement`) no los trae. Se buscan aparte para no cargar la
+  // relación en el listado de los otros tres tipos, que no la usan.
+  const { data: movementDetail } = useQuery({
+    queryKey: ['fund-movement-detail', movement?.id],
+    queryFn: () => getFundMovementById(movement!.id),
+    enabled: open && Boolean(movement) && movement?.type === 'BANK_CHARGES',
+  });
+
+  // Cuentas imputables para los conceptos (egreso o activo, TSK-579): siempre
+  // se piden con el modal abierto, para tenerlas listas apenas se elige el
+  // tipo "Gastos e impuestos bancarios". `includeIds` preserva las cuentas ya
+  // guardadas en el detalle aunque hoy no cumplan el filtro (mismo patrón que
+  // `getAccountsForBankMovement`), para que reabrir un borrador con una cuenta
+  // dada de baja no muestre el combo vacío (hallazgo de revisión final, TSK-585).
+  const detailAccountIds = movementDetail?.lines.map((line) => line.accountId) ?? [];
+  const { data: lineAccounts = [] } = useQuery({
+    queryKey: ['fund-movement-line-accounts', detailAccountIds],
+    queryFn: () => getFundMovementLineAccounts(detailAccountIds),
+    enabled: open,
+  });
+
+  // Evita que el `useQuery` de `movementDetail` pise lo que el usuario ya
+  // escribió: la cache de React Query no se invalida en ningún otro lado
+  // (`router.refresh()` en `_FundMovementsTable` solo refresca el Server
+  // Component), así que al reabrir un movimiento recién editado esta query
+  // sirve los conceptos viejos al instante y, si después llega un refetch en
+  // segundo plano con los datos frescos, `movementDetail` cambia de
+  // identidad otra vez. Sin esta guarda el efecto de abajo se disparaba una
+  // segunda vez con ese refetch y pisaba lo que el usuario hubiera tecleado
+  // en el medio (hallazgo de revisión final, TSK-585). Por eso el reset de
+  // los datos del movimiento se aplica una sola vez por apertura del modal
+  // para un movimiento dado, en vez de cada vez que cambia la identidad de
+  // `movementDetail`.
+  const appliedDetailRef = useRef<string | null>(null);
+
   // Al abrir en modo edición, precargar los datos del movimiento
   useEffect(() => {
-    if (open && movement) {
+    if (!open) {
+      appliedDetailRef.current = null;
+      return;
+    }
+    if (movement) {
+      const needsDetail = movement.type === 'BANK_CHARGES';
+      // Para BANK_CHARGES hace falta esperar a que llegue `movementDetail`
+      // (aunque sea de cache) antes de resetear con sus conceptos.
+      if (needsDetail && !movementDetail) return;
+      if (appliedDetailRef.current === movement.id) return;
+      appliedDetailRef.current = movement.id;
+
       form.reset({
         type: movement.type as FundMovementTypeValue,
         // UTC: la fecha se guarda anclada a mediodía UTC, leerla en local la corría un día (TSK-483)
@@ -109,8 +162,17 @@ export function _CreateFundMovementModal({
         sourceFund: fundRefFrom(movement.fundOutKind, movement.fundOutId),
         destinationFund: fundRefFrom(movement.fundInKind, movement.fundInId),
         partnerId: movement.partnerId ?? '',
+        lines:
+          needsDetail && movementDetail
+            ? movementDetail.lines.map((line) => ({
+                accountId: line.accountId,
+                description: line.description,
+                amount: String(line.amount),
+              }))
+            : [],
       });
-    } else if (open && !movement) {
+    } else if (appliedDetailRef.current !== 'new') {
+      appliedDetailRef.current = 'new';
       form.reset({
         type: 'PARTNER_CONTRIBUTION',
         date: moment().format('YYYY-MM-DD'),
@@ -119,16 +181,51 @@ export function _CreateFundMovementModal({
         sourceFund: '',
         destinationFund: '',
         partnerId: '',
+        lines: [],
       });
     }
-  }, [open, movement, form]);
+  }, [open, movement, movementDetail, form]);
 
   const type = form.watch('type') as FundMovementTypeValue;
   const isContribution = type === 'PARTNER_CONTRIBUTION';
   const isWithdrawal = type === 'PARTNER_WITHDRAWAL';
   const isTransfer = type === 'ACCOUNT_TRANSFER';
+  const isBankCharges = type === 'BANK_CHARGES';
   const isPartnerMovement = isContribution || isWithdrawal;
   const noFundAccounts = banks.length === 0 && cashRegisters.length === 0;
+
+  // Al cambiar el tipo de movimiento, los campos que dejan de aplicar no
+  // pueden quedar colgados en el formulario: los conceptos se mandarían con
+  // un tipo que no los usa, y un destino suelto de un tipo anterior se
+  // resolvería igual en el servidor porque no depende de qué campos se
+  // muestran en pantalla (TSK-585).
+  //
+  // "amount" no se toca acá: el schema lo dejó sin ninguna validación para
+  // BANK_CHARGES (ni requerido, ni formato, ni "> 0"), así que un valor
+  // viejo en ese campo oculto no rompe nada y no hace falta pisarlo con un
+  // sentinela. El servidor igual lo ignora y calcula el importe sumando los
+  // conceptos (`resolveMovementAmount`). Esto también evita que este efecto
+  // le gane al `reset` de más arriba cuando se reabre un borrador
+  // BANK_CHARGES para editar: antes, los dos escribían "amount" sin saber
+  // uno del otro y el importe que acababa de cargar el reset (el real,
+  // útil para mostrarlo si se vuelve a otro tipo) se perdía.
+  //
+  // El servidor persiste `partnerId` y `sourceFund` sin mirar el tipo, así
+  // que faltaba limpiarlos también: antes solo se limpiaban `lines` y
+  // `destinationFund`, y un gasto bancario podía guardarse con un socio
+  // colgado de un tipo anterior, o un aporte de socio con un origen suelto de
+  // una transferencia previa (hallazgo de revisión final, TSK-585).
+  useEffect(() => {
+    if (!isBankCharges) {
+      if (form.getValues('lines')?.length) form.setValue('lines', []);
+    } else {
+      if (form.getValues('destinationFund')) form.setValue('destinationFund', '');
+      if (form.getValues('partnerId')) form.setValue('partnerId', '');
+    }
+    if (isContribution && form.getValues('sourceFund')) {
+      form.setValue('sourceFund', '');
+    }
+  }, [isBankCharges, isContribution, form]);
 
   const persist = async (data: FundMovementFormInput, confirm: boolean) => {
     setIsSubmitting(true);
@@ -149,6 +246,15 @@ export function _CreateFundMovementModal({
       if (!result.success) {
         toast.error(result.error);
         return;
+      }
+
+      // La cache de `movementDetail` no se invalida sola: `onSuccess` hace
+      // `router.refresh()` (ver `_FundMovementsTable`), que refresca el Server
+      // Component pero no toca React Query. Sin esto, reabrir este mismo
+      // movimiento poco después podía servir los conceptos previos a esta
+      // edición (hallazgo de revisión final, TSK-585).
+      if (isEdit && movement) {
+        await queryClient.invalidateQueries({ queryKey: ['fund-movement-detail', movement.id] });
       }
 
       toast.success(
@@ -200,7 +306,7 @@ export function _CreateFundMovementModal({
         </DialogHeader>
 
         <Form {...form}>
-          <form className="space-y-4">
+          <form className="min-w-0 space-y-4">
             <FormField
               control={form.control}
               name="type"
@@ -246,27 +352,7 @@ export function _CreateFundMovementModal({
               </div>
             )}
 
-            <div className="grid gap-4 md:grid-cols-2">
-              <FormField
-                control={form.control}
-                name="amount"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Monto *</FormLabel>
-                    <FormControl>
-                      <MoneyInput
-                        placeholder="0,00"
-                        value={field.value}
-                        onChange={field.onChange}
-                        onBlur={field.onBlur}
-                        name={field.name}
-                        ref={field.ref}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+            {isBankCharges ? (
               <FormField
                 control={form.control}
                 name="date"
@@ -280,7 +366,43 @@ export function _CreateFundMovementModal({
                   </FormItem>
                 )}
               />
-            </div>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2">
+                <FormField
+                  control={form.control}
+                  name="amount"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Monto *</FormLabel>
+                      <FormControl>
+                        <MoneyInput
+                          placeholder="0,00"
+                          value={field.value}
+                          onChange={field.onChange}
+                          onBlur={field.onBlur}
+                          name={field.name}
+                          ref={field.ref}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="date"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Fecha *</FormLabel>
+                      <FormControl>
+                        <Input type="date" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            )}
 
             {(isContribution || isTransfer) && (
               <FormField
@@ -305,14 +427,16 @@ export function _CreateFundMovementModal({
               />
             )}
 
-            {(isWithdrawal || isTransfer) && (
+            {(isWithdrawal || isTransfer || isBankCharges) && (
               <FormField
                 control={form.control}
                 name="sourceFund"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>
-                      {isWithdrawal ? 'Banco/caja de donde salen los fondos *' : 'Banco/caja origen *'}
+                      {isWithdrawal || isBankCharges
+                        ? 'Banco/caja de donde salen los fondos *'
+                        : 'Banco/caja origen *'}
                     </FormLabel>
                     <Select onValueChange={field.onChange} value={field.value || undefined}>
                       <FormControl>
@@ -327,6 +451,8 @@ export function _CreateFundMovementModal({
                 )}
               />
             )}
+
+            {isBankCharges && <_FundMovementLinesField accounts={lineAccounts} />}
 
             {isPartnerMovement && (
               <FormField

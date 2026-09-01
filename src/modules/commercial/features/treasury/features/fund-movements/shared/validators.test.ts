@@ -125,4 +125,182 @@ describe('fundMovementSchema', () => {
     expect(fundMovementSchema.safeParse({ ...aporte, amount: '-5' }).success).toBe(false);
     expect(fundMovementSchema.safeParse({ ...aporte, amount: '1.234' }).success).toBe(false);
   });
+
+  /**
+   * Regresión: `amount` era `.min(1)` en el schema base para los cuatro tipos,
+   * y al volverlo opcional (TSK-585, para que BANK_CHARGES no lo necesite) el
+   * "requerido" pasó a un `superRefine` condicionado por tipo. Sin este test,
+   * un tipeo en esa condición podría dejar a los tres tipos que sí lo usan
+   * aceptando un monto vacío sin que ningún test lo note.
+   */
+  it('exige el monto en los tipos que no son BANK_CHARGES, ausente o vacío', () => {
+    const sinAmount: Partial<typeof aporte> = { ...aporte };
+    delete sinAmount.amount;
+
+    for (const bad of [sinAmount, { ...aporte, amount: '' }]) {
+      const result = fundMovementSchema.safeParse(bad);
+      expect(result.success).toBe(false);
+      expect(result.error?.issues.some((i) => i.path[0] === 'amount')).toBe(true);
+      expect(result.error?.issues.find((i) => i.path[0] === 'amount')?.message).toBe(
+        'El monto es requerido'
+      );
+    }
+
+    for (const type of ['PARTNER_WITHDRAWAL', 'ACCOUNT_TRANSFER'] as const) {
+      const result = fundMovementSchema.safeParse({ ...aporte, type, amount: undefined });
+      expect(result.success).toBe(false);
+      expect(result.error?.issues.some((i) => i.path[0] === 'amount')).toBe(true);
+    }
+  });
+});
+
+import { FUND_MOVEMENT_TYPE_LABELS } from './validators';
+
+const uuidCuenta = '11111111-1111-4111-8111-111111111111';
+const uuidBanco = '33333333-3333-4333-8333-333333333333';
+
+const gastosBancarios = {
+  type: 'BANK_CHARGES' as const,
+  date: '2026-07-31',
+  amount: '0',
+  description: 'Gastos e impuestos de julio',
+  sourceFund: `BANK:${uuidBanco}`,
+  destinationFund: '',
+  partnerId: '',
+  lines: [
+    { accountId: uuidCuenta, description: 'Sircreb IIBB', amount: '302574.16' },
+    { accountId: uuidCuenta, description: 'Impuesto a los débitos', amount: '1434154.28' },
+  ],
+};
+
+describe('gastos e impuestos bancarios (TSK-585)', () => {
+  it('está entre los tipos disponibles, con su etiqueta', () => {
+    expect(FUND_MOVEMENT_TYPE_LABELS.BANK_CHARGES).toBe('Gastos e impuestos bancarios');
+  });
+
+  it('acepta un movimiento con conceptos y origen', () => {
+    expect(fundMovementSchema.safeParse(gastosBancarios).success).toBe(true);
+  });
+
+  /**
+   * Este tipo no usa "amount" -lo calcula el servidor sumando los conceptos-
+   * así que no debe pedirlo ni con formato ni ausente. Cubre el hallazgo de
+   * la revisión: el schema exigía `amount` para los cuatro tipos aunque
+   * BANK_CHARGES nunca lo mostrara en pantalla, y el único síntoma visible
+   * era un botón "Guardar" que no hacía nada.
+   */
+  it('no exige el monto: ni vacío, ni ausente, ni con cualquier formato', () => {
+    expect(fundMovementSchema.safeParse({ ...gastosBancarios, amount: '' }).success).toBe(true);
+
+    const sinAmount: Partial<typeof gastosBancarios> = { ...gastosBancarios };
+    delete sinAmount.amount;
+    expect(fundMovementSchema.safeParse(sinAmount).success).toBe(true);
+
+    expect(
+      fundMovementSchema.safeParse({ ...gastosBancarios, amount: 'no-es-un-numero' }).success
+    ).toBe(true);
+  });
+
+  it('exige el banco o caja de donde sale la plata', () => {
+    const result = fundMovementSchema.safeParse({ ...gastosBancarios, sourceFund: '' });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]?.path).toEqual(['sourceFund']);
+  });
+
+  it('exige al menos un concepto', () => {
+    const result = fundMovementSchema.safeParse({ ...gastosBancarios, lines: [] });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]?.message).toBe('Agregá al menos un concepto');
+  });
+
+  it('señala el concepto sin cuenta', () => {
+    const result = fundMovementSchema.safeParse({
+      ...gastosBancarios,
+      lines: [gastosBancarios.lines[0], { accountId: '', description: 'X', amount: '10' }],
+    });
+
+    expect(result.success).toBe(false);
+    // Con `.uuid()` en `accountId` (hallazgo de revisión final, TSK-585), una
+    // cuenta vacía también incumple el formato: `safeParse` reporta ese
+    // problema además del de `validateLines`, así que se busca el mensaje de
+    // dominio entre todos los issues en vez de asumir que es el primero. El
+    // combobox de conceptos (`_FundMovementLinesField`) solo lee el error de
+    // raíz de la línea, así que en la UI el usuario sigue viendo únicamente
+    // este mensaje.
+    expect(result.error?.issues.some((i) => i.message === 'Elegí la cuenta contable del concepto')).toBe(
+      true
+    );
+  });
+
+  /**
+   * Regresión: `accountId` no tenía `.uuid()`, a diferencia de `partnerId`. Un
+   * id malformado (payload manipulado, o un bug en otro punto del formulario)
+   * llegaba hasta Prisma y explotaba con un P2023 que el usuario veía como
+   * "Ocurrió un error inesperado" en vez de un mensaje útil (hallazgo de
+   * revisión final, TSK-585).
+   */
+  it('rechaza un id de cuenta con formato inválido', () => {
+    const result = fundMovementSchema.safeParse({
+      ...gastosBancarios,
+      lines: [{ accountId: 'no-es-un-uuid', description: 'X', amount: '10' }],
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues.some((i) => i.message === 'Cuenta contable inválida')).toBe(true);
+  });
+
+  /**
+   * Regresión: no había tope de cantidad de conceptos. Un payload con miles
+   * de líneas generaba un asiento de miles de líneas (hallazgo de revisión
+   * final, TSK-585).
+   */
+  it('rechaza más de 100 conceptos, pero acepta exactamente 100', () => {
+    const unConcepto = { accountId: uuidCuenta, description: 'Concepto', amount: '10' };
+
+    const conCien = fundMovementSchema.safeParse({
+      ...gastosBancarios,
+      lines: Array.from({ length: 100 }, () => unConcepto),
+    });
+    expect(conCien.success).toBe(true);
+
+    const conCientoUno = fundMovementSchema.safeParse({
+      ...gastosBancarios,
+      lines: Array.from({ length: 101 }, () => unConcepto),
+    });
+    expect(conCientoUno.success).toBe(false);
+    expect(
+      conCientoUno.error?.issues.some(
+        (i) => i.message === 'No se pueden cargar más de 100 conceptos por movimiento'
+      )
+    ).toBe(true);
+  });
+});
+
+describe('los tipos que ya existían no piden conceptos (regresión TSK-585)', () => {
+  const aporte = {
+    type: 'PARTNER_CONTRIBUTION' as const,
+    date: '2026-07-31',
+    amount: '1000.00',
+    description: 'Aporte del socio',
+    sourceFund: '',
+    destinationFund: `BANK:${uuidBanco}`,
+    partnerId: '',
+  };
+
+  it('un aporte sigue siendo válido sin líneas', () => {
+    expect(fundMovementSchema.safeParse(aporte).success).toBe(true);
+  });
+
+  it('una transferencia sigue siendo válida sin líneas', () => {
+    const transferencia = {
+      ...aporte,
+      type: 'ACCOUNT_TRANSFER' as const,
+      sourceFund: `BANK:${uuidBanco}`,
+      destinationFund: `CASH:${uuidCuenta}`,
+    };
+
+    expect(fundMovementSchema.safeParse(transferencia).success).toBe(true);
+  });
 });

@@ -1,6 +1,8 @@
 import moment from 'moment';
 import { z } from 'zod';
 
+import { LINE_ERROR_MESSAGES, validateLines } from './lines-calc';
+
 /**
  * Convierte la fecha del formulario ("YYYY-MM-DD") a Date.
  *
@@ -25,6 +27,7 @@ export const FUND_MOVEMENT_TYPES = [
   'PARTNER_CONTRIBUTION',
   'PARTNER_WITHDRAWAL',
   'ACCOUNT_TRANSFER',
+  'BANK_CHARGES',
 ] as const;
 
 export type FundMovementTypeValue = (typeof FUND_MOVEMENT_TYPES)[number];
@@ -33,6 +36,7 @@ export const FUND_MOVEMENT_TYPE_LABELS: Record<FundMovementTypeValue, string> = 
   PARTNER_CONTRIBUTION: 'Aporte de socio',
   PARTNER_WITHDRAWAL: 'Retiro de socio',
   ACCOUNT_TRANSFER: 'Transferencia entre cuentas',
+  BANK_CHARGES: 'Gastos e impuestos bancarios',
 };
 
 /**
@@ -56,11 +60,15 @@ export const fundMovementSchema = z
   .object({
     type: z.enum(FUND_MOVEMENT_TYPES),
     date: z.string().min(1, 'La fecha es requerida'),
-    amount: z
-      .string()
-      .min(1, 'El monto es requerido')
-      .regex(amountRegex, 'Monto inválido (hasta 2 decimales)')
-      .refine((v) => parseFloat(v) > 0, 'El monto debe ser mayor a 0'),
+    // Opcional en el schema base: BANK_CHARGES no usa este campo (lo calcula
+    // el servidor sumando los conceptos), así que su validación completa
+    // -requerido, formato y "> 0"- queda condicionada en el `superRefine` de
+    // abajo, igual que el resto de las reglas por tipo. Antes exigía formato
+    // acá siempre, y el único llamador que existía se salvaba mandando
+    // '0' -un sentinela sin sentido de dominio-; cualquier otro consumidor
+    // futuro de este schema que mandara '' para BANK_CHARGES caía en un
+    // error silencioso, porque el campo Monto está oculto para ese tipo.
+    amount: z.string().optional(),
     description: z.string().min(2, 'La descripción es requerida'),
     // Banco/caja de donde salen los fondos (retiro / transferencia): "BANK:id" | "CASH:id"
     sourceFund: z.string().optional().or(z.literal('')),
@@ -68,9 +76,59 @@ export const fundMovementSchema = z
     destinationFund: z.string().optional().or(z.literal('')),
     // Socio (aporte / retiro), informativo
     partnerId: z.string().uuid().optional().or(z.literal('')),
+    // Conceptos del débito bancario. Solo los usa BANK_CHARGES (TSK-585).
+    //
+    // `.optional()` en lugar de `.default([])`: el `default` hace que el tipo
+    // de entrada del formulario (antes de validar) y el de salida (ya
+    // validado) diverjan, y react-hook-form + zodResolver no aceptan esa
+    // asimetría sin declarar un tercer genérico en `useForm` (mismo problema,
+    // preexistente, documentado en `purchases/features/invoices/shared/validators.ts`
+    // con `costCenterAllocations`).
+    lines: z
+      .array(
+        z.object({
+          // `.uuid()`, igual que `partnerId` más arriba: sin esta validación un id
+          // malformado (payload manipulado, o un bug de otro lado del formulario)
+          // llegaba hasta Prisma y explotaba con un P2023 que el usuario veía como
+          // "Ocurrió un error inesperado" (hallazgo de revisión final, TSK-585).
+          accountId: z.string().uuid('Cuenta contable inválida'),
+          description: z.string(),
+          amount: z.string(),
+        })
+      )
+      // Tope holgado para un resumen bancario real, pero que evita que un
+      // payload de miles de líneas genere un asiento de miles de líneas
+      // (hallazgo de revisión final, TSK-585).
+      .max(100, 'No se pueden cargar más de 100 conceptos por movimiento')
+      .optional(),
   })
   .superRefine((data, ctx) => {
     const validRef = (v?: string) => Boolean(v && parseFundRef(v));
+
+    // El total de los gastos bancarios lo calcula el servidor sumando los
+    // conceptos, así que este campo no aplica para ese tipo y no se valida
+    // en absoluto (TSK-585): ni requerido, ni formato, ni "> 0".
+    if (data.type !== 'BANK_CHARGES') {
+      if (!data.amount) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['amount'],
+          message: 'El monto es requerido',
+        });
+      } else if (!amountRegex.test(data.amount)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['amount'],
+          message: 'Monto inválido (hasta 2 decimales)',
+        });
+      } else if (!(parseFloat(data.amount) > 0)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['amount'],
+          message: 'El monto debe ser mayor a 0',
+        });
+      }
+    }
 
     if (data.type === 'PARTNER_CONTRIBUTION') {
       if (!validRef(data.destinationFund)) {
@@ -108,6 +166,23 @@ export const fundMovementSchema = z
           code: z.ZodIssueCode.custom,
           path: ['destinationFund'],
           message: 'El destino debe ser distinto del origen',
+        });
+      }
+    } else if (data.type === 'BANK_CHARGES') {
+      if (!validRef(data.sourceFund)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['sourceFund'],
+          message: 'Seleccioná el banco o caja de donde salen los fondos',
+        });
+      }
+
+      const problema = validateLines(data.lines ?? []);
+      if (problema) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: problema.index === -1 ? ['lines'] : ['lines', problema.index],
+          message: LINE_ERROR_MESSAGES[problema.error],
         });
       }
     }
