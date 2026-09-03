@@ -1,5 +1,9 @@
 import { z } from 'zod';
 import { allocationFieldSchema } from '@/modules/commercial/shared/allocation-form';
+import {
+  internalTaxesSchema,
+  perceptionSchema,
+} from '@/modules/commercial/shared/perceptions';
 
 // Schema para línea de factura
 export const invoiceLineSchema = z.object({
@@ -49,6 +53,9 @@ export const invoiceFormSchema = z.object({
   globalDiscountPercent: z.string().optional(),
   globalDiscountAmount: z.string().optional(),
   lines: z.array(invoiceLineSchema).min(1, 'Debe agregar al menos una línea'),
+  // Percepciones e impuestos internos del comprobante (TSK-644).
+  perceptions: z.array(perceptionSchema).optional(),
+  internalTaxes: internalTaxesSchema,
 });
 
 // Schema para creación con transformación
@@ -106,6 +113,12 @@ export const createInvoiceSchema = z.object({
   globalDiscountAmount: z.string().optional()
     .transform((val) => (val ? parseFloat(val) : null))
     .pipe(z.number().nonnegative().nullable()),
+  // Percepciones e impuestos internos (TSK-644). A diferencia del resto de este
+  // schema, los importes NO se transforman a número acá: `toPerceptionRecords`
+  // y `parseInternalTaxes` lo hacen, y son los mismos helpers que usa compras,
+  // así que ambos circuitos derivan la alícuota con idéntico criterio.
+  perceptions: z.array(perceptionSchema).optional(),
+  internalTaxes: internalTaxesSchema,
 });
 
 // Tipos de voucher labels

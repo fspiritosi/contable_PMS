@@ -56,6 +56,14 @@ export async function EditInvoice({ id }: EditInvoiceProps) {
     })),
     globalDiscountPercent: invoice.globalDiscountPercent?.toString() ?? '',
     globalDiscountAmount: invoice.globalDiscountAmount?.toString() ?? '',
+    // Percepciones e impuestos internos ya cargados (TSK-644).
+    perceptions: invoice.perceptions.map((p) => ({
+      type: p.type,
+      jurisdiction: p.jurisdiction ?? '',
+      baseAmount: p.baseAmount.toFixed(2),
+      amount: p.amount.toFixed(2),
+    })),
+    internalTaxes: invoice.internalTaxes > 0 ? invoice.internalTaxes.toFixed(2) : '',
   };
 
   return (

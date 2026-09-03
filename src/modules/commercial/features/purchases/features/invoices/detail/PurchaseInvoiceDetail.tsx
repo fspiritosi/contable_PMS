@@ -19,6 +19,7 @@ import { _PurchaseInvoicePDFButton } from './components/_PurchaseInvoicePDFButto
 import { _PayPurchaseInvoiceButton } from './components/_PayPurchaseInvoiceButton';
 import { calculatePurchaseInvoiceBalance } from '@/modules/commercial/shared/purchase-invoice-balance';
 import { formatCurrency } from '@/shared/utils/formatters';
+import { perceptionLabel } from '@/modules/commercial/shared/perceptions';
 
 interface Props {
   invoiceId: string;
@@ -401,11 +402,24 @@ export async function PurchaseInvoiceDetail({ invoiceId }: Props) {
                 <span className="text-sm text-muted-foreground">IVA</span>
                 <span className="font-mono">{formatCurrency(Number(invoice.vatAmount))}</span>
               </div>
-              {Number(invoice.otherTaxes) > 0 && (
-                <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">Otros Impuestos</span>
+              {/* Desglose de tributos: una línea por percepción y otra por
+                  impuestos internos, en vez del agregado sin explicación que
+                  había antes (TSK-644) */}
+              {invoice.perceptions.map((perception) => (
+                <div className="flex justify-between" key={perception.id}>
+                  <span className="text-sm text-muted-foreground">
+                    {perceptionLabel(perception)}
+                  </span>
                   <span className="font-mono">
-                    {formatCurrency(Number(invoice.otherTaxes))}
+                    {formatCurrency(Number(perception.amount))}
+                  </span>
+                </div>
+              ))}
+              {Number(invoice.internalTaxes) > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-sm text-muted-foreground">Impuestos Internos</span>
+                  <span className="font-mono">
+                    {formatCurrency(Number(invoice.internalTaxes))}
                   </span>
                 </div>
               )}

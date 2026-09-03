@@ -77,8 +77,9 @@ export async function requestCAE(invoiceId: string): Promise<RequestCAEResult> {
             subtotal: true,
           },
         },
+        internalTaxes: true,
         perceptions: {
-          select: { type: true, rate: true, amount: true, jurisdiction: true },
+          select: { type: true, rate: true, amount: true, jurisdiction: true, baseAmount: true },
         },
         company: {
           select: { taxId: true },
@@ -140,19 +141,38 @@ export async function requestCAE(invoiceId: string): Promise<RequestCAEResult> {
       importe: amounts.importe,
     }));
 
-    // Mapear percepciones como tributos
-    const tributos = invoice.perceptions
-      .filter((p) => Number(p.amount) > 0)
-      .map((p) => {
-        const tributeId = p.type === 'IIBB' ? 7 : 99;
-        return {
-          id: tributeId,
-          desc: `Percepción ${p.type}${p.jurisdiction ? ` ${p.jurisdiction}` : ''}`,
-          baseImp: Number(invoice.netTaxed),
-          alic: Number(p.rate),
-          importe: Number(p.amount),
-        };
-      });
+    // Mapear percepciones e impuestos internos como tributos.
+    //
+    // AFIP valida `ImpTrib == Σ Tributos.Importe`. `impTrib` se informa desde
+    // `otherTaxes`, que es percepciones + impuestos internos (TSK-644), así
+    // que el impuesto interno tiene que ir en este array o el CAE se rechaza.
+    const tributos = [
+      ...invoice.perceptions
+        .filter((p) => Number(p.amount) > 0)
+        .map((p) => {
+          // Códigos de tributo de AFIP: 7 = IIBB, 6 = municipales, 99 = otros.
+          const tributeId = p.type === 'IIBB' ? 7 : p.type === 'MUNICIPAL' ? 6 : 99;
+          return {
+            id: tributeId,
+            desc: `Percepción ${p.type}${p.jurisdiction ? ` ${p.jurisdiction}` : ''}`,
+            baseImp: Number(p.baseAmount),
+            alic: Number(p.rate),
+            importe: Number(p.amount),
+          };
+        }),
+      ...(Number(invoice.internalTaxes) > 0
+        ? [
+            {
+              // 4 = Impuestos Internos en la tabla de tributos de AFIP.
+              id: 4,
+              desc: 'Impuestos internos',
+              baseImp: Number(invoice.netTaxed),
+              alic: 0,
+              importe: Number(invoice.internalTaxes),
+            },
+          ]
+        : []),
+    ];
 
     // Determinar tipo de documento del cliente
     const docTipo = invoice.customer.taxId

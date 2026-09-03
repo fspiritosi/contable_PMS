@@ -88,7 +88,7 @@ export function _LibroIVATable({ type, fetchData }: Props) {
       { key: 'iva21', title: 'IVA 21%', width: 13 },
       { key: 'iva27', title: 'IVA 27%', width: 13 },
       { key: 'perceptions', title: 'Percepciones', width: 13 },
-      { key: 'otherTaxes', title: 'Otros Imp.', width: 13 },
+      { key: 'otherTaxes', title: 'Imp. Internos', width: 13 },
       { key: 'total', title: 'Total', width: 15 },
     ];
 
@@ -196,7 +196,7 @@ export function _LibroIVATable({ type, fetchData }: Props) {
                       <th className="pb-3 text-right">IVA 21%</th>
                       <th className="pb-3 text-right">IVA 27%</th>
                       <th className="pb-3 text-right">Perc.</th>
-                      <th className="pb-3 text-right">Otros</th>
+                      <th className="pb-3 text-right">Imp. Int.</th>
                       <th className="pb-3 text-right">Total</th>
                     </tr>
                   </thead>

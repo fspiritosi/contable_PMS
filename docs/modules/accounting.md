@@ -54,7 +54,7 @@ DRAFT ──(post)──> POSTED ──(reverse)──> REVERSED
 ### Asientos Automaticos
 
 Se generan al confirmar documentos comerciales (ver [Modulo Comercial](commercial.md#integracion-contable)):
-- Facturas de venta/compra
+- Facturas de venta/compra (incluyen una linea por percepcion y otra por impuestos internos, TSK-644)
 - Recibos de cobro
 - Ordenes de pago
 - Gastos
@@ -202,6 +202,29 @@ Cuentas contables asignadas a funciones del sistema:
 
 - Emitidas: IVA, Ganancias, IIBB, SUSS
 - Sufridas: IVA, Ganancias, IIBB, SUSS
+
+### Cuentas de Percepciones e Impuestos Internos (7 campos, TSK-644)
+
+| Campo | Funcion | Tipo Cuenta |
+|-------|---------|-------------|
+| `perceptionIvaCollectedAccountId` | Perc. IVA cobrada (a depositar) | LIABILITY |
+| `perceptionIibbCollectedAccountId` | Perc. IIBB cobrada | LIABILITY |
+| `perceptionMunicipalCollectedAccountId` | Perc. Municipal cobrada | LIABILITY |
+| `perceptionIvaSufferedAccountId` | Perc. IVA sufrida (credito fiscal) | ASSET |
+| `perceptionIibbSufferedAccountId` | Perc. IIBB sufrida | ASSET |
+| `perceptionMunicipalSufferedAccountId` | Perc. Municipal sufrida | ASSET |
+| `internalTaxesAccountId` | Impuestos internos | EXPENSE (compras) / LIABILITY (ventas) |
+
+Las cuatro de IVA/IIBB existian en el modelo desde antes y el asiento ya las usaba, pero **nunca
+se expusieron en la UI de configuracion**: eran inconfigurables. TSK-644 las expone junto a las
+tres nuevas (municipales e impuestos internos).
+
+**Sin degradacion suave, a diferencia de los activos fijos:** si una factura tiene un tributo cuya
+cuenta no esta configurada, `confirmPurchaseInvoice` / `confirmInvoice` **abortan la confirmacion**
+con un mensaje que nombra la cuenta faltante. El motivo: el total del comprobante ya incluye ese
+tributo, asi que omitir su linea produce un asiento descuadrado que `validateBalance` rechaza
+dentro de un `catch` que lo degradaba a `logger.warn` — la factura terminaba confirmada y sin
+asiento, en silencio. La validacion corre **antes** de abrir la transaccion.
 
 ### Cuentas de Activos Fijos (4 campos)
 

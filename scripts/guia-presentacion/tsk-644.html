@@ -1,0 +1,439 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>TSK-644 — Percepciones e impuestos internos</title>
+<style>
+  @page {
+    size: A4;
+    margin: 0;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #1f2430;
+    font-size: 13px;
+    line-height: 1.55;
+    background: #ffffff;
+  }
+
+  .page {
+    padding: 4mm 2mm;
+  }
+
+  header.cover {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    text-align: left;
+    padding: 10mm 2mm 8mm 2mm;
+    border-bottom: 3px solid #2f6f4f;
+    margin-bottom: 10mm;
+  }
+
+  .eyebrow {
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 11px;
+    font-weight: 700;
+    color: #2f6f4f;
+    margin-bottom: 6px;
+  }
+
+  h1 {
+    font-size: 26px;
+    margin: 0 0 8px 0;
+    color: #14251c;
+  }
+
+  .subtitle {
+    font-size: 14px;
+    color: #4b5563;
+    margin: 0;
+  }
+
+  section {
+    margin-bottom: 9mm;
+    page-break-inside: avoid;
+  }
+
+  h2 {
+    font-size: 16px;
+    color: #14251c;
+    border-left: 4px solid #2f6f4f;
+    padding-left: 8px;
+    margin: 0 0 6mm 0;
+  }
+
+  .step-number {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #2f6f4f;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    margin-right: 8px;
+    flex-shrink: 0;
+  }
+
+  .quote {
+    background: #f4f7f5;
+    border-left: 4px solid #2f6f4f;
+    padding: 10px 14px;
+    font-style: italic;
+    color: #2b3a33;
+    margin: 0 0 6px 0;
+  }
+
+  .quote cite {
+    display: block;
+    font-style: normal;
+    font-size: 11.5px;
+    color: #6b7280;
+    margin-top: 6px;
+  }
+
+  .before-after {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    page-break-inside: avoid;
+  }
+
+  .card {
+    border: 1px solid #e2e5e0;
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+
+  .card.before { background: #fbf7f2; border-color: #ecd9bd; }
+  .card.after { background: #f2f8f4; border-color: #bfe0cb; }
+
+  .card h3 {
+    margin: 0 0 6px 0;
+    font-size: 12.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .card.before h3 { color: #9a6a1f; }
+  .card.after h3 { color: #226240; }
+
+  .card p { margin: 0; }
+
+  ol.steps {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    counter-reset: step;
+  }
+
+  ol.steps > li {
+    counter-increment: step;
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+    page-break-inside: avoid;
+  }
+
+  ol.steps > li::before {
+    content: counter(step);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    border-radius: 50%;
+    background: #2f6f4f;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .step-body { flex: 1; }
+
+  .step-body strong { color: #14251c; }
+
+  figure {
+    margin: 8px 0 0 0;
+    page-break-inside: avoid;
+  }
+
+  figure img {
+    max-width: 100%;
+    border: 1px solid #d9dce0;
+    border-radius: 6px;
+    display: block;
+  }
+
+  figcaption {
+    font-size: 11px;
+    color: #6b7280;
+    margin-top: 4px;
+  }
+
+  .callout {
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin: 0 0 8px 0;
+  }
+
+  .callout.config {
+    background: #f2f6fb;
+    border: 1px solid #cddaeb;
+  }
+
+  .callout.warning {
+    background: #fdf5ec;
+    border: 1px solid #efd6a8;
+  }
+
+  .callout h3 {
+    margin: 0 0 4px 0;
+    font-size: 13px;
+  }
+
+  ul.plain {
+    margin: 4px 0 0 0;
+    padding-left: 18px;
+  }
+
+  ul.plain li { margin-bottom: 4px; }
+
+  .no-change-list {
+    display: grid;
+    gap: 6px;
+  }
+
+  .no-change-item {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+  }
+
+  .check {
+    color: #2f6f4f;
+    font-weight: 700;
+  }
+
+  footer.doc-footer {
+    text-align: center;
+    color: #9ca3af;
+    font-size: 10.5px;
+    margin-top: 10mm;
+  }
+
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10mm;
+    align-items: start;
+  }
+</style>
+
+</head>
+<body>
+
+<div class="page">
+
+  <header class="cover">
+    <div class="eyebrow">Ticket 644 · Comercial</div>
+    <h1>Percepciones e impuestos internos en las facturas</h1>
+    <p class="subtitle">Guía de presentación — qué pedías, qué cambió y cómo usarlo</p>
+  </header>
+
+  <section>
+    <h2>1. Qué pedías</h2>
+    <p>Nos escribiste mientras pasabas una factura de La Anónima de Bejerman a PMS, y viste que no
+    había dónde cargar dos cosas que el comprobante sí trae:</p>
+    <div class="quote">
+      "Justo estoy pasando a Bejerman en PM, y veo que si tuviera que cargar la misma factura en
+      PMS en este sistema no tiene la parte de cargar las percepciones ni el impuesto interno."
+      <cite>— Elizabeth Pérez</cite>
+    </div>
+    <p>La factura que adjuntaste discriminaba <strong>Percep. NQN $1.832,43</strong>,
+    <strong>Percep. IVA $4.128,01</strong> e <strong>IMP. INTERNOS $326,95</strong>. Sin un lugar
+    donde cargarlos, la única forma de que el total cerrara era inventar líneas de gasto, lo que
+    ensuciaba el neto gravado y distorsionaba el Libro IVA.</p>
+  </section>
+
+  <section>
+    <h2>2. Qué cambió en pantalla</h2>
+    <div class="before-after">
+      <div class="card before">
+        <h3>Antes</h3>
+        <p>La factura solo permitía cargar ítems con su IVA. Las percepciones y los impuestos
+        internos no tenían lugar: había que sumarlos como si fueran una línea de mercadería más,
+        con lo cual quedaban contados como neto gravado.</p>
+      </div>
+      <div class="card after">
+        <h3>Ahora</h3>
+        <p>Debajo de los ítems aparece la sección <strong>Percepciones e impuestos internos</strong>.
+        Se cargan tal como los imprime el comprobante y forman parte del total, del asiento
+        contable y del Libro IVA, sin tocar el neto gravado. Está tanto en facturas de compra
+        como de venta.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>3. Cómo se usa — la misma factura de La Anónima</h2>
+    <ol class="steps">
+      <li>
+        <div class="step-body">
+          <strong>Cargá los ítems como siempre.</strong> En este caso, los dos netos del
+          comprobante: $91.957,84 al 21% y $91.284,86 al 10,5%.
+        </div>
+      </li>
+      <li>
+        <div class="step-body">
+          <strong>Agregá cada percepción.</strong> Con el botón "Agregar percepción" se suma una
+          fila: elegís el tipo (IVA, IIBB o Municipal), escribís la jurisdicción si corresponde
+          —NQN, en este caso— y cargás el monto que figura en la factura. La
+          <strong>base imponible</strong> viene sugerida con el neto gravado y podés cambiarla si
+          tu régimen calcula sobre otra base.
+          <figure>
+            <img src="assets/tsk644-percepciones-cargadas.png" alt="Sección de percepciones con la percepción IIBB de NQN por 1.832,43, la percepción de IVA por 4.128,01 y 326,95 de impuestos internos" />
+            <figcaption>Las dos percepciones de la factura y el impuesto interno ya cargados. Abajo,
+            el total de otros tributos: $6.287,39.</figcaption>
+          </figure>
+        </div>
+      </li>
+      <li>
+        <div class="step-body">
+          <strong>La alícuota se calcula sola.</strong> No hace falta cargarla: sale de dividir el
+          monto por la base. En la captura de arriba se ve 1,000% para la percepción de IIBB y
+          2,253% para la de IVA. Sirve para contrastar contra el comprobante del proveedor: si la
+          alícuota que muestra no es la que esperabas, algún importe está mal tipeado.
+        </div>
+      </li>
+      <li>
+        <div class="step-body">
+          <strong>Cargá los impuestos internos.</strong> Van como un único monto al pie de la
+          sección, tal como los imprime el comprobante: $326,95.
+        </div>
+      </li>
+      <li>
+        <div class="step-body">
+          <strong>Revisá el total.</strong> El panel de Totales suma un renglón nuevo,
+          <strong>Otros tributos</strong>, con las percepciones más los impuestos internos, y lo
+          incluye en el total del comprobante.
+          <figure>
+            <img src="assets/tsk644-totales.png" alt="Panel de totales con subtotal 183.242,70, IVA 28.896,06, otros tributos 6.287,39 y total 218.426,15" />
+            <figcaption>El total de la factura queda en $218.426,15, contra los $218.426,14 que
+            imprime el ticket: la diferencia de un centavo es el redondeo del IVA en el emisor, no
+            un error de carga.</figcaption>
+          </figure>
+        </div>
+      </li>
+    </ol>
+    <p>Ese total con tributos incluidos es el que después se usa para el <strong>saldo con el
+    proveedor</strong> y para armar la orden de pago; en ventas, para el saldo a cobrar.</p>
+  </section>
+
+  <section>
+    <h2>4. Qué configuración hace falta</h2>
+    <div class="callout config">
+      <h3>Las cuentas contables de los tributos</h3>
+      <p>Para que una factura con percepciones o impuestos internos se pueda confirmar, esos
+      tributos necesitan su cuenta contable asignada en <strong>Empresa → Contabilidad →
+      Configuración</strong>. Son tres secciones nuevas al final del formulario de integración
+      comercial.</p>
+    </div>
+    <figure>
+      <img src="assets/tsk644-config-contable.png" alt="Secciones de configuración de percepciones cobradas, percepciones sufridas e impuestos internos" />
+      <figcaption>Las cuentas a configurar: percepciones cobradas (las que tu empresa le cobra al
+      cliente, un pasivo a depositar), percepciones sufridas (las que te aplican los proveedores,
+      crédito fiscal) e impuestos internos.</figcaption>
+    </figure>
+    <p>Se configuran <strong>una sola vez</strong>. Alcanza con cargar las que la empresa
+    efectivamente usa: si nunca te aplican percepciones municipales, esa cuenta puede quedar
+    vacía.</p>
+    <div class="callout warning">
+      <h3>⚠ Si falta una cuenta, la factura no se confirma</h3>
+      <p>Si intentás confirmar una factura con un tributo cuya cuenta no está configurada, el
+      sistema <strong>no deja confirmar</strong> y te dice exactamente cuál falta cargar.</p>
+      <p>Puede parecer molesto, pero es a propósito, y corrige algo que venía fallando en silencio:
+      el total de la factura incluye el tributo, así que si el asiento no tiene dónde imputarlo, no
+      cierra. Antes, en esa situación, la factura quedaba <strong>confirmada pero sin asiento
+      contable</strong>, y nadie se enteraba hasta revisar el libro diario semanas después.
+      Ahora el problema se ve en el momento, con el nombre de la cuenta que hay que configurar.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>5. Dónde se ven después</h2>
+    <div class="no-change-list">
+      <div class="no-change-item">
+        <span class="check">✓</span>
+        <span>En el <strong>detalle de la factura</strong> y en su <strong>PDF</strong>, cada
+        percepción aparece como un renglón propio con su tipo y jurisdicción ("Percepción IIBB
+        NQN"), y los impuestos internos en el suyo. Antes había un único renglón "Otros
+        Impuestos" que no explicaba de qué se trataba.</span>
+      </div>
+      <div class="no-change-item">
+        <span class="check">✓</span>
+        <span>En el <strong>Libro IVA</strong>, las percepciones van en la columna "Perc." y los
+        impuestos internos en "Imp. Int.".</span>
+      </div>
+      <div class="no-change-item">
+        <span class="check">✓</span>
+        <span>En el <strong>asiento contable</strong>, cada percepción se imputa a su cuenta y los
+        impuestos internos a la suya, y el asiento cierra contra el total del comprobante.</span>
+      </div>
+      <div class="no-change-item">
+        <span class="check">✓</span>
+        <span>En el <strong>Libro IVA Digital</strong> y en la <strong>emisión electrónica de
+        facturas de venta</strong>, los tributos se informan a AFIP en los campos que corresponden
+        a cada uno.</span>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>6. Qué no cambió</h2>
+    <div class="no-change-list">
+      <div class="no-change-item">
+        <span class="check">✓</span>
+        <span>Una factura <strong>sin</strong> percepciones ni impuestos internos se carga
+        exactamente igual que antes: la sección queda vacía y el total no cambia. No hay nada
+        nuevo que completar en las facturas de siempre.</span>
+      </div>
+      <div class="no-change-item">
+        <span class="check">✓</span>
+        <span>Las <strong>retenciones</strong> siguen donde estaban, en el circuito de pagos y
+        cobros. Son otra cosa: la retención se practica al pagar, la percepción viene en la
+        factura.</span>
+      </div>
+      <div class="no-change-item">
+        <span class="check">✓</span>
+        <span>Las facturas <strong>ya cargadas</strong> quedan intactas. Los tributos se pueden
+        agregar a cualquier factura que todavía esté en borrador; una vez confirmada, no se
+        modifica, igual que hasta ahora.</span>
+      </div>
+      <div class="no-change-item">
+        <span class="check">✓</span>
+        <span>La <strong>importación de comprobantes de AFIP</strong> sigue funcionando igual.
+        Como AFIP informa los tributos en un único importe sin desglosar, entran como impuestos
+        internos; si querés separarlos, editás la factura en borrador y bajás ese monto a medida
+        que cargás cada percepción.</span>
+      </div>
+    </div>
+  </section>
+
+  <footer class="doc-footer">
+    TSK-644 — Percepciones e impuestos internos en facturas de compra y de venta
+  </footer>
+
+</div>
+
+</body>
+</html>

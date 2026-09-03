@@ -35,7 +35,7 @@ export async function getLibroIVAVentas(
         netTaxed: true,
         netNonTaxed: true,
         netExempt: true,
-        otherTaxes: true,
+        internalTaxes: true,
         total: true,
         cae: true,
         customer: {
@@ -95,7 +95,11 @@ export async function getLibroIVAVentas(
         iva21: ivaByRate[21],
         iva27: ivaByRate[27],
         perceptions: percTotal,
-        otherTaxes: Number(inv.otherTaxes),
+        // `otherTaxes` del comprobante = percepciones + impuestos internos
+        // (TSK-644). Acá se informa solo la parte de impuestos internos: las
+        // percepciones ya viajan en la columna `perceptions` y sumarlas dos
+        // veces inflaría el libro.
+        otherTaxes: Number(inv.internalTaxes),
         total: Number(inv.total),
         cae: inv.cae,
       };
@@ -162,7 +166,7 @@ export async function getLibroIVACompras(
         netTaxed: true,
         netNonTaxed: true,
         netExempt: true,
-        otherTaxes: true,
+        internalTaxes: true,
         total: true,
         cae: true,
         supplier: {
@@ -222,7 +226,11 @@ export async function getLibroIVACompras(
         iva21: ivaByRate[21],
         iva27: ivaByRate[27],
         perceptions: percTotal,
-        otherTaxes: Number(inv.otherTaxes),
+        // `otherTaxes` del comprobante = percepciones + impuestos internos
+        // (TSK-644). Acá se informa solo la parte de impuestos internos: las
+        // percepciones ya viajan en la columna `perceptions` y sumarlas dos
+        // veces inflaría el libro.
+        otherTaxes: Number(inv.internalTaxes),
         total: Number(inv.total),
         cae: inv.cae,
       };

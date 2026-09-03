@@ -239,6 +239,7 @@ Cuando se confirma una factura (venta o compra), la integracion contable agrupa 
 | `SalesInvoice` | Factura de venta | voucherType, number, status, subtotal, taxAmount, total, clientId |
 | `SalesInvoiceLine` | Linea de factura | productId, quantity, unitPrice, taxRate, total |
 | `SalesInvoiceLineCostCenter` | Reparto de la linea entre centros de costo (TSK-583) | lineId, costCenterId, percentage (Decimal 5,2), unique(lineId, costCenterId) |
+| `SalesInvoicePerception` | Percepcion del comprobante (TSK-644) | invoiceId, type (IVA/IIBB/MUNICIPAL), jurisdiction, rate (Decimal 6,3), baseAmount, amount |
 | `SalesCreditNoteApplication` | Aplicacion de NC a factura | creditNoteId, invoiceId, amount |
 
 **Enums:**
@@ -253,10 +254,24 @@ Cuando se confirma una factura (venta o compra), la integracion contable agrupa 
 
 | Modelo | Descripcion | Campos clave |
 |--------|-------------|--------------|
-| `PurchaseInvoice` | Factura de compra | voucherType, number, status, supplierId |
+| `PurchaseInvoice` | Factura de compra | voucherType, number, status, supplierId, internalTaxes, otherTaxes |
 | `PurchaseInvoiceLine` | Linea de compra | productId, quantity, unitCost |
 | `PurchaseInvoiceLineCostCenter` | Reparto de la linea entre centros de costo (TSK-583) | lineId, costCenterId, percentage (Decimal 5,2), unique(lineId, costCenterId) |
+| `PurchaseInvoicePerception` | Percepcion del comprobante (TSK-644) | invoiceId, type (IVA/IIBB/MUNICIPAL), jurisdiction, rate (Decimal 6,3), baseAmount, amount |
 | `PurchaseCreditNoteApplication` | Aplicacion de NC | creditNoteId, invoiceId, amount |
+
+**Tributos del comprobante (TSK-644):** `SalesInvoice` y `PurchaseInvoice` comparten el mismo
+esquema de tributos no-IVA:
+- `otherTaxes` es un **agregado derivado**: `suma de percepciones + internalTaxes`. Es lo que
+  AFIP entiende por "Otros Tributos" (incluye las percepciones), y es lo que la emision
+  electronica informa como `ImpTrib`. Nunca se captura a mano: lo calcula el server action.
+- `internalTaxes` guarda los impuestos internos discriminados, cargados como monto de cabecera.
+- El desglose de percepciones vive en `*_invoice_perceptions`. `rate` se **deriva** de
+  `amount / baseAmount` (no se le pide al usuario) y se persiste porque ARCA la exige en `alic`.
+- `total = subtotal + vatAmount + otherTaxes`.
+- Consecuencia para reportes: un consumidor **no puede** sumar `otherTaxes` y las percepciones
+  a la vez sin contar dos veces. El Libro IVA informa las percepciones en su columna y
+  `internalTaxes` (no `otherTaxes`) en la de impuestos internos.
 
 **Enums:**
 - `PurchaseInvoiceStatus`: DRAFT, CONFIRMED, CANCELLED

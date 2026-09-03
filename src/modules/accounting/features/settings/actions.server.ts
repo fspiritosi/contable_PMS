@@ -55,6 +55,14 @@ export async function saveAccountingSettings(
     withholdingGananciasSufferedAccountId?: string | null;
     withholdingIibbSufferedAccountId?: string | null;
     withholdingSussSufferedAccountId?: string | null;
+    // Cuentas de Percepciones e Impuestos Internos (TSK-644)
+    perceptionIvaCollectedAccountId?: string | null;
+    perceptionIibbCollectedAccountId?: string | null;
+    perceptionMunicipalCollectedAccountId?: string | null;
+    perceptionIvaSufferedAccountId?: string | null;
+    perceptionIibbSufferedAccountId?: string | null;
+    perceptionMunicipalSufferedAccountId?: string | null;
+    internalTaxesAccountId?: string | null;
     // Cuentas de Activos Fijos
     fixedAssetAccountId?: string | null;
     accumulatedDepreciationAccountId?: string | null;

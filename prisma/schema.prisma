@@ -323,47 +323,50 @@ model Account {
   cashRegisters            CashRegister[] // Relación con cajas (para cuentas contables)
 
   // Relaciones inversas para AccountingSettings (many-to-one)
-  settingsAsSalesAccount         AccountingSettings[]   @relation("SalesAccount")
-  settingsAsPurchasesAccount     AccountingSettings[]   @relation("PurchasesAccount")
-  settingsAsReceivablesAccount   AccountingSettings[]   @relation("ReceivablesAccount")
-  settingsAsPayablesAccount      AccountingSettings[]   @relation("PayablesAccount")
-  settingsAsVatDebitAccount      AccountingSettings[]   @relation("VatDebitAccount")
-  settingsAsVatCreditAccount     AccountingSettings[]   @relation("VatCreditAccount")
-  settingsAsDefaultCashAccount   AccountingSettings[]   @relation("DefaultCashAccount")
-  settingsAsDefaultBankAccount   AccountingSettings[]   @relation("DefaultBankAccount")
-  settingsAsExpensesAccount      AccountingSettings[]   @relation("ExpensesAccount")
-  settingsAsResultAccount        AccountingSettings[]   @relation("ResultAccount")
-  settingsAsPartnerContributions AccountingSettings[]   @relation("PartnerContributionsAccount")
-  settingsAsWhIvaEmitted         AccountingSettings[]   @relation("WhIvaEmittedAccount")
-  settingsAsWhGananciasEmitted   AccountingSettings[]   @relation("WhGananciasEmittedAccount")
-  settingsAsWhIibbEmitted        AccountingSettings[]   @relation("WhIibbEmittedAccount")
-  settingsAsWhSussEmitted        AccountingSettings[]   @relation("WhSussEmittedAccount")
-  settingsAsWhIvaSuffered        AccountingSettings[]   @relation("WhIvaSufferedAccount")
-  settingsAsWhGananciasSuffered  AccountingSettings[]   @relation("WhGananciasSufferedAccount")
-  settingsAsWhIibbSuffered       AccountingSettings[]   @relation("WhIibbSufferedAccount")
-  settingsAsWhSussSuffered       AccountingSettings[]   @relation("WhSussSufferedAccount")
-  settingsAsFixedAsset           AccountingSettings[]   @relation("FixedAssetAccount")
-  settingsAsAccumulatedDepr      AccountingSettings[]   @relation("AccumulatedDepreciationAccount")
-  settingsAsDepreciationExpense  AccountingSettings[]   @relation("DepreciationExpenseAccount")
-  settingsAsAssetDisposalGL      AccountingSettings[]   @relation("AssetDisposalGainLossAccount")
-  settingsAsPercIvaCollected     AccountingSettings[]   @relation("PercIvaCollectedAccount")
-  settingsAsPercIibbCollected    AccountingSettings[]   @relation("PercIibbCollectedAccount")
-  settingsAsPercIvaSuffered      AccountingSettings[]   @relation("PercIvaSufferedAccount")
-  settingsAsPercIibbSuffered     AccountingSettings[]   @relation("PercIibbSufferedAccount")
-  settingsAsCogs                 AccountingSettings[]   @relation("CogsAccount")
-  settingsAsInventory            AccountingSettings[]   @relation("InventoryAccount")
-  settingsAsChecksReceived       AccountingSettings[]   @relation("ChecksReceivedAccount")
-  settingsAsChecksRejected       AccountingSettings[]   @relation("ChecksRejectedAccount")
-  settingsAsVatPayable           AccountingSettings[]   @relation("VatPayableAccount")
-  settingsAsVatBalance           AccountingSettings[]   @relation("VatBalanceAccount")
-  settingsAsRecpam               AccountingSettings[]   @relation("RecpamAccount")
-  vatAccountMappings             AccountingVatAccount[]
-  recurringEntryLines            RecurringEntryLine[]
-  budgets                        Budget[]
-  withholdingRegimes             WithholdingRegime[]
-  productsAsExpenseAccount       Product[]              @relation("ProductExpenseAccount")
-  productsAsIncomeAccount        Product[]              @relation("ProductIncomeAccount")
-  fundMovementLines              FundMovementLine[]
+  settingsAsSalesAccount           AccountingSettings[]   @relation("SalesAccount")
+  settingsAsPurchasesAccount       AccountingSettings[]   @relation("PurchasesAccount")
+  settingsAsReceivablesAccount     AccountingSettings[]   @relation("ReceivablesAccount")
+  settingsAsPayablesAccount        AccountingSettings[]   @relation("PayablesAccount")
+  settingsAsVatDebitAccount        AccountingSettings[]   @relation("VatDebitAccount")
+  settingsAsVatCreditAccount       AccountingSettings[]   @relation("VatCreditAccount")
+  settingsAsDefaultCashAccount     AccountingSettings[]   @relation("DefaultCashAccount")
+  settingsAsDefaultBankAccount     AccountingSettings[]   @relation("DefaultBankAccount")
+  settingsAsExpensesAccount        AccountingSettings[]   @relation("ExpensesAccount")
+  settingsAsResultAccount          AccountingSettings[]   @relation("ResultAccount")
+  settingsAsPartnerContributions   AccountingSettings[]   @relation("PartnerContributionsAccount")
+  settingsAsWhIvaEmitted           AccountingSettings[]   @relation("WhIvaEmittedAccount")
+  settingsAsWhGananciasEmitted     AccountingSettings[]   @relation("WhGananciasEmittedAccount")
+  settingsAsWhIibbEmitted          AccountingSettings[]   @relation("WhIibbEmittedAccount")
+  settingsAsWhSussEmitted          AccountingSettings[]   @relation("WhSussEmittedAccount")
+  settingsAsWhIvaSuffered          AccountingSettings[]   @relation("WhIvaSufferedAccount")
+  settingsAsWhGananciasSuffered    AccountingSettings[]   @relation("WhGananciasSufferedAccount")
+  settingsAsWhIibbSuffered         AccountingSettings[]   @relation("WhIibbSufferedAccount")
+  settingsAsWhSussSuffered         AccountingSettings[]   @relation("WhSussSufferedAccount")
+  settingsAsFixedAsset             AccountingSettings[]   @relation("FixedAssetAccount")
+  settingsAsAccumulatedDepr        AccountingSettings[]   @relation("AccumulatedDepreciationAccount")
+  settingsAsDepreciationExpense    AccountingSettings[]   @relation("DepreciationExpenseAccount")
+  settingsAsAssetDisposalGL        AccountingSettings[]   @relation("AssetDisposalGainLossAccount")
+  settingsAsPercIvaCollected       AccountingSettings[]   @relation("PercIvaCollectedAccount")
+  settingsAsPercIibbCollected      AccountingSettings[]   @relation("PercIibbCollectedAccount")
+  settingsAsPercMunicipalCollected AccountingSettings[]   @relation("PercMunicipalCollectedAccount")
+  settingsAsPercIvaSuffered        AccountingSettings[]   @relation("PercIvaSufferedAccount")
+  settingsAsPercIibbSuffered       AccountingSettings[]   @relation("PercIibbSufferedAccount")
+  settingsAsPercMunicipalSuffered  AccountingSettings[]   @relation("PercMunicipalSufferedAccount")
+  settingsAsInternalTaxes          AccountingSettings[]   @relation("InternalTaxesAccount")
+  settingsAsCogs                   AccountingSettings[]   @relation("CogsAccount")
+  settingsAsInventory              AccountingSettings[]   @relation("InventoryAccount")
+  settingsAsChecksReceived         AccountingSettings[]   @relation("ChecksReceivedAccount")
+  settingsAsChecksRejected         AccountingSettings[]   @relation("ChecksRejectedAccount")
+  settingsAsVatPayable             AccountingSettings[]   @relation("VatPayableAccount")
+  settingsAsVatBalance             AccountingSettings[]   @relation("VatBalanceAccount")
+  settingsAsRecpam                 AccountingSettings[]   @relation("RecpamAccount")
+  vatAccountMappings               AccountingVatAccount[]
+  recurringEntryLines              RecurringEntryLine[]
+  budgets                          Budget[]
+  withholdingRegimes               WithholdingRegime[]
+  productsAsExpenseAccount         Product[]              @relation("ProductExpenseAccount")
+  productsAsIncomeAccount          Product[]              @relation("ProductIncomeAccount")
+  fundMovementLines                FundMovementLine[]
 
   @@unique([companyId, code])
   @@index([companyId, disabledFromFiscalYearId])
@@ -574,16 +577,25 @@ model AccountingSettings {
   assetDisposalGainLossAccount   Account? @relation("AssetDisposalGainLossAccount", fields: [assetDisposalGainLossAccountId], references: [id])
 
   // Cuentas de Percepciones - Cobradas (pasivo, a depositar)
-  perceptionIvaCollectedAccountId  String? @map("perception_iva_collected_account_id") @db.Uuid
-  perceptionIibbCollectedAccountId String? @map("perception_iibb_collected_account_id") @db.Uuid
+  perceptionIvaCollectedAccountId       String? @map("perception_iva_collected_account_id") @db.Uuid
+  perceptionIibbCollectedAccountId      String? @map("perception_iibb_collected_account_id") @db.Uuid
+  perceptionMunicipalCollectedAccountId String? @map("perception_municipal_collected_account_id") @db.Uuid
   // Cuentas de Percepciones - Sufridas (activo, crédito fiscal)
-  perceptionIvaSufferedAccountId   String? @map("perception_iva_suffered_account_id") @db.Uuid
-  perceptionIibbSufferedAccountId  String? @map("perception_iibb_suffered_account_id") @db.Uuid
+  perceptionIvaSufferedAccountId        String? @map("perception_iva_suffered_account_id") @db.Uuid
+  perceptionIibbSufferedAccountId       String? @map("perception_iibb_suffered_account_id") @db.Uuid
+  perceptionMunicipalSufferedAccountId  String? @map("perception_municipal_suffered_account_id") @db.Uuid
 
-  perceptionIvaCollectedAccount  Account? @relation("PercIvaCollectedAccount", fields: [perceptionIvaCollectedAccountId], references: [id])
-  perceptionIibbCollectedAccount Account? @relation("PercIibbCollectedAccount", fields: [perceptionIibbCollectedAccountId], references: [id])
-  perceptionIvaSufferedAccount   Account? @relation("PercIvaSufferedAccount", fields: [perceptionIvaSufferedAccountId], references: [id])
-  perceptionIibbSufferedAccount  Account? @relation("PercIibbSufferedAccount", fields: [perceptionIibbSufferedAccountId], references: [id])
+  perceptionIvaCollectedAccount       Account? @relation("PercIvaCollectedAccount", fields: [perceptionIvaCollectedAccountId], references: [id])
+  perceptionIibbCollectedAccount      Account? @relation("PercIibbCollectedAccount", fields: [perceptionIibbCollectedAccountId], references: [id])
+  perceptionMunicipalCollectedAccount Account? @relation("PercMunicipalCollectedAccount", fields: [perceptionMunicipalCollectedAccountId], references: [id])
+  perceptionIvaSufferedAccount        Account? @relation("PercIvaSufferedAccount", fields: [perceptionIvaSufferedAccountId], references: [id])
+  perceptionIibbSufferedAccount       Account? @relation("PercIibbSufferedAccount", fields: [perceptionIibbSufferedAccountId], references: [id])
+  perceptionMunicipalSufferedAccount  Account? @relation("PercMunicipalSufferedAccount", fields: [perceptionMunicipalSufferedAccountId], references: [id])
+
+  // Cuenta de Impuestos Internos (TSK-644)
+  internalTaxesAccountId String? @map("internal_taxes_account_id") @db.Uuid
+
+  internalTaxesAccount Account? @relation("InternalTaxesAccount", fields: [internalTaxesAccountId], references: [id])
 
   // Cuentas de CMV e Inventario
   cogsAccountId      String? @map("cogs_account_id") @db.Uuid
@@ -2804,13 +2816,16 @@ model SalesInvoice {
   caeExpiryDate DateTime? @map("cae_expiry_date")
 
   // Importes
-  subtotal    Decimal @default(0) @db.Decimal(12, 2) // Base imponible
-  netTaxed    Decimal @default(0) @map("net_taxed") @db.Decimal(12, 2)
-  netNonTaxed Decimal @default(0) @map("net_non_taxed") @db.Decimal(12, 2)
-  netExempt   Decimal @default(0) @map("net_exempt") @db.Decimal(12, 2)
-  vatAmount   Decimal @default(0) @map("vat_amount") @db.Decimal(12, 2)
-  otherTaxes  Decimal @default(0) @map("other_taxes") @db.Decimal(12, 2)
-  total       Decimal @default(0) @db.Decimal(12, 2)
+  subtotal      Decimal @default(0) @db.Decimal(12, 2) // Base imponible
+  netTaxed      Decimal @default(0) @map("net_taxed") @db.Decimal(12, 2)
+  netNonTaxed   Decimal @default(0) @map("net_non_taxed") @db.Decimal(12, 2)
+  netExempt     Decimal @default(0) @map("net_exempt") @db.Decimal(12, 2)
+  vatAmount     Decimal @default(0) @map("vat_amount") @db.Decimal(12, 2)
+  // Impuestos internos discriminados. `otherTaxes` es el agregado que entiende
+  // AFIP por "Otros Tributos": percepciones + impuestos internos (TSK-644).
+  internalTaxes Decimal @default(0) @map("internal_taxes") @db.Decimal(12, 2)
+  otherTaxes    Decimal @default(0) @map("other_taxes") @db.Decimal(12, 2)
+  total         Decimal @default(0) @db.Decimal(12, 2)
 
   // Descuentos
   globalDiscountPercent Decimal? @map("global_discount_percent") @db.Decimal(5, 2)
@@ -2933,13 +2948,15 @@ model PurchaseInvoice {
   validated Boolean @default(false)
 
   // Importes
-  subtotal    Decimal @default(0) @db.Decimal(12, 2)
-  netTaxed    Decimal @default(0) @map("net_taxed") @db.Decimal(12, 2)
-  netNonTaxed Decimal @default(0) @map("net_non_taxed") @db.Decimal(12, 2)
-  netExempt   Decimal @default(0) @map("net_exempt") @db.Decimal(12, 2)
-  vatAmount   Decimal @default(0) @map("vat_amount") @db.Decimal(12, 2)
-  otherTaxes  Decimal @default(0) @map("other_taxes") @db.Decimal(12, 2)
-  total       Decimal @default(0) @db.Decimal(12, 2)
+  subtotal      Decimal @default(0) @db.Decimal(12, 2)
+  netTaxed      Decimal @default(0) @map("net_taxed") @db.Decimal(12, 2)
+  netNonTaxed   Decimal @default(0) @map("net_non_taxed") @db.Decimal(12, 2)
+  netExempt     Decimal @default(0) @map("net_exempt") @db.Decimal(12, 2)
+  vatAmount     Decimal @default(0) @map("vat_amount") @db.Decimal(12, 2)
+  // Ver nota en SalesInvoice: `otherTaxes` = percepciones + impuestos internos (TSK-644).
+  internalTaxes Decimal @default(0) @map("internal_taxes") @db.Decimal(12, 2)
+  otherTaxes    Decimal @default(0) @map("other_taxes") @db.Decimal(12, 2)
+  total         Decimal @default(0) @db.Decimal(12, 2)
 
   // Observaciones
   notes String?

@@ -220,11 +220,22 @@ export function InvoiceTemplate({ data }: InvoiceTemplateProps) {
                 </>
               )}
 
-              {totals.otherTaxes > 0 && (
-                <View style={styles.totalRow}>
-                  <Text style={styles.totalLabel}>Otros Impuestos:</Text>
+              {/* Desglose de tributos, uno por percepción más los impuestos
+                  internos, en vez del agregado mudo de antes (TSK-644) */}
+              {totals.perceptions.map((perception, i) => (
+                <View style={styles.totalRow} key={`perc-${i}`}>
+                  <Text style={styles.totalLabel}>{perception.label}:</Text>
                   <Text style={styles.totalValue}>
-                    ${totals.otherTaxes.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                    ${perception.amount.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                  </Text>
+                </View>
+              ))}
+
+              {totals.internalTaxes > 0 && (
+                <View style={styles.totalRow}>
+                  <Text style={styles.totalLabel}>Impuestos Internos:</Text>
+                  <Text style={styles.totalValue}>
+                    ${totals.internalTaxes.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
                   </Text>
                 </View>
               )}

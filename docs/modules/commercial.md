@@ -335,6 +335,37 @@ DRAFT ──→ CONFIRMED ──→ PAID
          CANCELLED (solo si no PAID/PARTIAL_PAID, revierte stock)
 ```
 
+### Percepciones e Impuestos Internos (TSK-644)
+
+Facturas de compra y de venta pueden registrar tributos no-IVA que el comprobante discrimina:
+
+| Concepto | Dónde vive | Notas |
+|----------|-----------|-------|
+| Percepciones | `*_invoice_perceptions` (N filas) | `type` IVA/IIBB/MUNICIPAL, `jurisdiction`, `baseAmount`, `amount`. La `rate` se **deriva** de monto/base, no se pide al usuario |
+| Impuestos internos | `internalTaxes` (cabecera) | Monto único, cargado a mano |
+| Agregado | `otherTaxes` (cabecera) | **Calculado**: percepciones + impuestos internos. Nunca se captura |
+
+`total = subtotal + vatAmount + otherTaxes`.
+
+**Por qué `otherTaxes` incluye las percepciones:** es la definición de AFIP para "Otros
+Tributos", y es lo que la emisión electrónica informa como `ImpTrib` — AFIP valida
+`ImpTrib == Σ Tributos.Importe`, así que percepciones e impuestos internos deben viajar juntos
+en ese array y en ese total. Es también la semántica que ya usaba la importación de comprobantes
+recibidos (`otrosTributos`).
+
+**Cuidado al consumir:** sumar `otherTaxes` y las percepciones a la vez cuenta doble. El Libro
+IVA informa las percepciones en su columna y `internalTaxes` (no `otherTaxes`) en la de
+impuestos internos; el Libro IVA Digital llena los campos específicos del diseño de registro y
+deja `otrosTributos` en cero.
+
+Helpers compartidos: `@/modules/commercial/shared/perceptions` (`calculateOtherTaxes`,
+`derivePerceptionRate`, `toPerceptionRecords`, `perceptionLabel`,
+`findMissingTributeAccounts`). El formulario y el server action usan los mismos, así que el
+total que ve el usuario mientras carga y el que se persiste no pueden divergir.
+
+Componente de carga: `@/modules/commercial/shared/components/_PerceptionsField`, montado tanto
+en `_PurchaseInvoiceForm` como en `_InvoiceForm`.
+
 ### Tipos de Comprobante (VoucherType)
 
 | Tipo | Uso |
@@ -455,7 +486,8 @@ OC con 3 líneas:
 | Stock -qty | Si es NC | Decrementa stock (devolución al proveedor) |
 | OC.invoicedQty | Si está linkeada a OC | Incrementa `invoicedQty` en líneas de OC |
 | OC.invoicingStatus | Si está linkeada a OC | Recalcula: NOT_INVOICED / PARTIALLY / FULLY |
-| Asiento Contable | Siempre | Dr: Compras + IVA CF → Cr: Ctas por Pagar |
+| Asiento Contable | Siempre | Dr: Compras + IVA CF + percepciones sufridas + imp. internos → Cr: Ctas por Pagar |
+| Validación de cuentas de tributos | Si tiene percepciones o imp. internos | Aborta la confirmación si falta alguna cuenta configurada (TSK-644) |
 | Auto-compensación NC | Si es NC | Aplica NC contra facturas pendientes |
 
 ### Cancelar Factura de Compra

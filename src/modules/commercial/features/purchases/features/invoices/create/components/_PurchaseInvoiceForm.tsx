@@ -30,6 +30,8 @@ import {
   replicateAllocations,
 } from '@/modules/commercial/shared/cost-center';
 import { _CostCenterAllocationField } from '@/modules/commercial/shared/components/_CostCenterAllocationField';
+import { _PerceptionsField } from '@/modules/commercial/shared/components/_PerceptionsField';
+import { calculateOtherTaxes } from '@/modules/commercial/shared/perceptions';
 import { Textarea } from '@/shared/components/ui/textarea';
 import { Plus, Trash2, Loader2 } from 'lucide-react';
 import {
@@ -178,7 +180,12 @@ export function _PurchaseInvoiceForm({
   defaultValues: initialValues,
 }: PurchaseInvoiceFormProps) {
   const router = useRouter();
-  const [totals, setTotals] = useState({ subtotal: 0, vatAmount: 0, total: 0 });
+  const [totals, setTotals] = useState({
+    subtotal: 0,
+    vatAmount: 0,
+    otherTaxes: 0,
+    total: 0,
+  });
   const [originalInvoices, setOriginalInvoices] = useState<Awaited<ReturnType<typeof getSupplierInvoicesForSelect>>>([]);
   const [loadingOriginalInvoices, setLoadingOriginalInvoices] = useState(false);
 
@@ -196,6 +203,8 @@ export function _PurchaseInvoiceForm({
       cae: '',
       notes: '',
       lines: [],
+      perceptions: [],
+      internalTaxes: '',
     },
   });
 
@@ -204,33 +213,43 @@ export function _PurchaseInvoiceForm({
     name: 'lines',
   });
 
-  // Recalcular totales cuando cambien las líneas
+  // Recalcular totales cuando cambien las líneas o los tributos (TSK-644).
+  //
+  // La condición ya no exige `value.lines`: agregar una percepción o tocar el
+  // impuesto interno también mueve el total, y si solo miráramos las líneas el
+  // panel quedaría desactualizado hasta el siguiente tipeo en una línea.
   useEffect(() => {
     const subscription = form.watch((value) => {
-      if (value.lines) {
-        let subtotal = 0;
-        let vatAmount = 0;
+      let subtotal = 0;
+      let vatAmount = 0;
 
-        value.lines.forEach((line) => {
-          if (line?.quantity && line?.unitCost && line?.vatRate) {
-            const qty = parseFloat(line.quantity);
-            const cost = parseFloat(line.unitCost);
-            const vat = parseFloat(line.vatRate);
+      (value.lines ?? []).forEach((line) => {
+        if (line?.quantity && line?.unitCost && line?.vatRate) {
+          const qty = parseFloat(line.quantity);
+          const cost = parseFloat(line.unitCost);
+          const vat = parseFloat(line.vatRate);
 
-            const lineSubtotal = qty * cost;
-            const lineVat = lineSubtotal * (vat / 100);
+          const lineSubtotal = qty * cost;
+          const lineVat = lineSubtotal * (vat / 100);
 
-            subtotal += lineSubtotal;
-            vatAmount += lineVat;
-          }
-        });
+          subtotal += lineSubtotal;
+          vatAmount += lineVat;
+        }
+      });
 
-        setTotals({
-          subtotal: Math.round(subtotal * 100) / 100,
-          vatAmount: Math.round(vatAmount * 100) / 100,
-          total: Math.round((subtotal + vatAmount) * 100) / 100,
-        });
-      }
+      const roundedSubtotal = Math.round(subtotal * 100) / 100;
+      const roundedVat = Math.round(vatAmount * 100) / 100;
+      const otherTaxes = calculateOtherTaxes(
+        (value.perceptions ?? []) as { amount: string }[],
+        value.internalTaxes
+      );
+
+      setTotals({
+        subtotal: roundedSubtotal,
+        vatAmount: roundedVat,
+        otherTaxes,
+        total: Math.round((subtotal + vatAmount + otherTaxes) * 100) / 100,
+      });
     });
 
     return () => subscription.unsubscribe();
@@ -884,6 +903,15 @@ export function _PurchaseInvoiceForm({
           </div>
         </Card>
 
+        {/* Percepciones e impuestos internos (TSK-644) */}
+        <Card className="p-6">
+          <_PerceptionsField
+            name="perceptions"
+            internalTaxesName="internalTaxes"
+            suggestedBase={totals.subtotal}
+          />
+        </Card>
+
         {/* Totales */}
         {fields.length > 0 && (
           <Card className="p-6">
@@ -897,6 +925,12 @@ export function _PurchaseInvoiceForm({
                 <span className="text-muted-foreground">IVA:</span>
                 <span className="font-mono">{formatCurrency(totals.vatAmount)}</span>
               </div>
+              {totals.otherTaxes > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Otros tributos:</span>
+                  <span className="font-mono">{formatCurrency(totals.otherTaxes)}</span>
+                </div>
+              )}
               <Separator />
               <div className="flex justify-between text-lg font-semibold">
                 <span>Total:</span>

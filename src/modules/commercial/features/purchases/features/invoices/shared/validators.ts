@@ -1,6 +1,10 @@
 import { z } from 'zod';
 import type { VoucherType, PurchaseInvoiceStatus } from '@/generated/prisma/enums';
 import { allocationFieldSchema } from '@/modules/commercial/shared/allocation-form';
+import {
+  internalTaxesSchema,
+  perceptionSchema,
+} from '@/modules/commercial/shared/perceptions';
 
 // ============================================
 // CONSTANTES - Etiquetas para UI
@@ -65,6 +69,11 @@ export const purchaseInvoiceFormSchema = z.object({
   lines: z
     .array(purchaseInvoiceLineSchema)
     .min(1, 'Debe agregar al menos una línea'),
+  // Percepciones e impuestos internos del comprobante (TSK-644). Ambos son
+  // opcionales, y por el mismo motivo que `costCenterAllocations` se usa
+  // `.optional()` en lugar de `.default([])`.
+  perceptions: z.array(perceptionSchema).optional(),
+  internalTaxes: internalTaxesSchema,
 });
 
 export type PurchaseInvoiceFormInput = z.infer<typeof purchaseInvoiceFormSchema>;

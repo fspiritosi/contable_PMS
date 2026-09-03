@@ -67,7 +67,10 @@ export interface InvoicePDFData {
   totals: {
     subtotal: number;
     vatAmount: number;
+    /** Percepciones + impuestos internos (TSK-644). */
     otherTaxes: number;
+    internalTaxes: number;
+    perceptions: Array<{ label: string; amount: number }>;
     total: number;
     totalBeforeDiscount?: number;
     discountTotal?: number;
