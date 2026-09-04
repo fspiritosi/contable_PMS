@@ -27,6 +27,14 @@ import {
   effectiveAccountType,
   findLinesMissingCostCenter,
 } from '@/modules/commercial/shared/cost-center';
+import {
+  buildMissingTributeAccountsMessage,
+  calculateOtherTaxes,
+  findMissingTributeAccounts,
+  parseInternalTaxes,
+  perceptionAccountId,
+  toPerceptionRecords,
+} from '@/modules/commercial/shared/perceptions';
 
 // ============================================
 // QUERIES
@@ -277,6 +285,17 @@ export async function getPurchaseInvoiceById(id: string) {
             },
           },
         },
+        // Percepciones del comprobante (TSK-644)
+        perceptions: {
+          select: {
+            id: true,
+            type: true,
+            jurisdiction: true,
+            rate: true,
+            baseAmount: true,
+            amount: true,
+          },
+        },
         company: {
           select: {
             name: true,
@@ -431,9 +450,16 @@ export async function getPurchaseInvoiceById(id: string) {
       ...invoice,
       subtotal: Number(invoice.subtotal),
       vatAmount: Number(invoice.vatAmount),
+      internalTaxes: Number(invoice.internalTaxes),
       otherTaxes: Number(invoice.otherTaxes),
       total: Number(invoice.total),
       receptionStatus,
+      perceptions: invoice.perceptions.map((p) => ({
+        ...p,
+        rate: Number(p.rate),
+        baseAmount: Number(p.baseAmount),
+        amount: Number(p.amount),
+      })),
       lines: invoice.lines.map((line) => ({
         ...line,
         quantity: Number(line.quantity),
@@ -898,7 +924,14 @@ export async function createPurchaseInvoice(rawInput: PurchaseInvoiceFormInput) 
       };
     });
 
-    const total = subtotal + vatAmount;
+    // Percepciones e impuestos internos (TSK-644). `otherTaxes` es el agregado
+    // que AFIP llama "Otros Tributos" e incluye las percepciones; el desglose
+    // queda en la tabla de percepciones y en `internalTaxes`.
+    const perceptionsData = toPerceptionRecords(input.perceptions ?? []);
+    const internalTaxes = parseInternalTaxes(input.internalTaxes);
+    const otherTaxes = calculateOtherTaxes(perceptionsData, internalTaxes);
+
+    const total = subtotal + vatAmount + otherTaxes;
 
     // Verificar que no exista factura duplicada
     const fullNumber = `${input.pointOfSale}-${input.number}`;
@@ -936,13 +969,17 @@ export async function createPurchaseInvoice(rawInput: PurchaseInvoiceFormInput) 
         netNonTaxed: 0,
         netExempt: 0,
         vatAmount,
-        otherTaxes: 0,
+        internalTaxes,
+        otherTaxes,
         total,
         notes: input.notes || null,
         status: 'DRAFT',
         createdBy: userId,
         lines: {
           create: linesData,
+        },
+        perceptions: {
+          create: perceptionsData,
         },
       },
       include: {
@@ -1050,7 +1087,12 @@ export async function updatePurchaseInvoice(id: string, rawInput: PurchaseInvoic
       };
     });
 
-    const total = subtotal + vatAmount;
+    // Ver nota en createPurchaseInvoice sobre la semántica de `otherTaxes`.
+    const perceptionsData = toPerceptionRecords(input.perceptions ?? []);
+    const internalTaxes = parseInternalTaxes(input.internalTaxes);
+    const otherTaxes = calculateOtherTaxes(perceptionsData, internalTaxes);
+
+    const total = subtotal + vatAmount + otherTaxes;
 
     // Verificar que no exista otra factura con el mismo número
     const fullNumber = `${input.pointOfSale}-${input.number}`;
@@ -1076,6 +1118,12 @@ export async function updatePurchaseInvoice(id: string, rawInput: PurchaseInvoic
         where: { invoiceId: id },
       });
 
+      // Ídem percepciones: se reemplazan enteras, no se intenta reconciliar
+      // fila por fila (TSK-644).
+      await tx.purchaseInvoicePerception.deleteMany({
+        where: { invoiceId: id },
+      });
+
       // Actualizar factura con nuevas líneas
       return await tx.purchaseInvoice.update({
         where: { id },
@@ -1094,11 +1142,15 @@ export async function updatePurchaseInvoice(id: string, rawInput: PurchaseInvoic
           netNonTaxed: 0,
           netExempt: 0,
           vatAmount,
-          otherTaxes: 0,
+          internalTaxes,
+          otherTaxes,
           total,
           notes: input.notes || null,
           lines: {
             create: linesData,
+          },
+          perceptions: {
+            create: perceptionsData,
           },
         },
         include: {
@@ -1159,6 +1211,7 @@ export async function confirmPurchaseInvoice(id: string) {
             costCenterAllocations: true,
           },
         },
+        perceptions: { select: { type: true, amount: true } },
       },
     });
 
@@ -1178,6 +1231,11 @@ export async function confirmPurchaseInvoice(id: string) {
       where: { companyId },
       select: {
         requireCostCenter: true,
+        // Cuentas de los tributos del comprobante (TSK-644)
+        internalTaxesAccountId: true,
+        perceptionIvaSufferedAccountId: true,
+        perceptionIibbSufferedAccountId: true,
+        perceptionMunicipalSufferedAccountId: true,
         // Cuenta que usaria el asiento si el item no tiene una propia
         // (TSK-583, hallazgo de revision final): sin esto, un item sin
         // cuenta propia nunca exigia reparto aunque el asiento lo imputara
@@ -1185,6 +1243,37 @@ export async function confirmPurchaseInvoice(id: string) {
         purchasesAccount: { select: { type: true } },
       },
     });
+
+    // Tributos sin cuenta contable configurada (TSK-644).
+    //
+    // Se comprueba ANTES de abrir la transacción: si falta una cuenta, el
+    // asiento quedaría descuadrado y moriría dentro del `catch` que lo degrada
+    // a `logger.warn`, dejando la factura confirmada y sin asiento. Mejor no
+    // dejar confirmar y decir exactamente qué cuenta falta.
+    const missingTributeAccounts = findMissingTributeAccounts([
+      ...invoice.perceptions
+        .filter((p) => Number(p.amount) > 0)
+        .map((p) => ({
+          label: `percepción ${p.type} sufrida`,
+          accountId: perceptionAccountId(p.type, {
+            IVA: settings?.perceptionIvaSufferedAccountId,
+            IIBB: settings?.perceptionIibbSufferedAccountId,
+            MUNICIPAL: settings?.perceptionMunicipalSufferedAccountId,
+          }),
+        })),
+      ...(Number(invoice.internalTaxes) > 0
+        ? [
+            {
+              label: 'impuestos internos',
+              accountId: settings?.internalTaxesAccountId,
+            },
+          ]
+        : []),
+    ]);
+
+    if (missingTributeAccounts.length > 0) {
+      throw new Error(buildMissingTributeAccountsMessage(missingTributeAccounts));
+    }
 
     if (settings?.requireCostCenter) {
       const missing = findLinesMissingCostCenter(

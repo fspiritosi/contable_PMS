@@ -69,6 +69,15 @@ export async function EditPurchaseInvoice({ invoiceId }: EditPurchaseInvoiceProp
         percentage: Number(a.percentage),
       })),
     })),
+    // Percepciones e impuestos internos ya cargados (TSK-644). Los importes
+    // vuelven al formulario como texto, igual que el resto de los montos.
+    perceptions: invoice.perceptions.map((p) => ({
+      type: p.type,
+      jurisdiction: p.jurisdiction ?? '',
+      baseAmount: p.baseAmount.toFixed(2),
+      amount: p.amount.toFixed(2),
+    })),
+    internalTaxes: invoice.internalTaxes > 0 ? invoice.internalTaxes.toFixed(2) : '',
   };
 
   return (

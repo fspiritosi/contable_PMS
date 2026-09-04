@@ -13,6 +13,7 @@ import { _InvoiceLinkedDocuments } from './components/_InvoiceLinkedDocuments';
 import { _LinkInvoiceToProjection } from './components/_LinkInvoiceToProjection';
 import { _InvoicePDFButton } from './components/_InvoicePDFButton';
 import { formatCurrency } from '@/shared/utils/formatters';
+import { perceptionLabel } from '@/modules/commercial/shared/perceptions';
 
 type Invoice = Awaited<ReturnType<typeof getInvoiceById>>;
 
@@ -256,12 +257,25 @@ export async function InvoiceDetail({ id }: InvoiceDetailProps) {
                 ${Number(invoice.vatAmount).toLocaleString('es-AR', { minimumFractionDigits: 2 })}
               </span>
             </div>
-            {Number(invoice.otherTaxes) > 0 && (
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Otros Impuestos:</span>
+            {/* Desglose de tributos, uno por percepción más los impuestos
+                internos, en vez del agregado sin explicación (TSK-644) */}
+            {invoice.perceptions.map((perception) => (
+              <div className="flex justify-between text-sm" key={perception.id}>
+                <span className="text-muted-foreground">{perceptionLabel(perception)}:</span>
                 <span className="font-mono">
                   $
-                  {Number(invoice.otherTaxes).toLocaleString('es-AR', {
+                  {Number(perception.amount).toLocaleString('es-AR', {
+                    minimumFractionDigits: 2,
+                  })}
+                </span>
+              </div>
+            ))}
+            {Number(invoice.internalTaxes) > 0 && (
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Impuestos Internos:</span>
+                <span className="font-mono">
+                  $
+                  {Number(invoice.internalTaxes).toLocaleString('es-AR', {
                     minimumFractionDigits: 2,
                   })}
                 </span>

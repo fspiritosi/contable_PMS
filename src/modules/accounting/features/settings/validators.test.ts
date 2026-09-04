@@ -71,11 +71,13 @@ describe('commercialIntegrationSchema', () => {
     expect(result.data?.partnerContributionsAccountId).toBe(CUENTA);
   });
 
-  it('cubre las 23 cuentas configurables', () => {
+  // 23 + las 7 de percepciones e impuestos internos (TSK-644): percepción
+  // IVA/IIBB/Municipal cobrada y sufrida, más impuestos internos.
+  it('cubre las 30 cuentas configurables', () => {
     const cuentas = Object.keys(commercialIntegrationSchema.shape).filter((key) =>
       key.endsWith('AccountId')
     );
-    expect(cuentas).toHaveLength(23);
+    expect(cuentas).toHaveLength(30);
   });
 });
 

@@ -34,6 +34,7 @@ import { prisma } from '@/shared/lib/prisma';
 import { logger } from '@/shared/lib/logger';
 import { isCreditNote } from '@/modules/commercial/shared/voucher-utils';
 import { expandByCostCenter } from '@/modules/commercial/shared/cost-center';
+import { buildMissingTributeAccountsMessage } from '@/modules/commercial/shared/perceptions';
 
 // Tipo para el cliente de transacción de Prisma
 type PrismaTransactionClient = Omit<
@@ -116,10 +117,12 @@ function getPerceptionAccountId(
     collected: {
       IVA: settings.perceptionIvaCollectedAccountId,
       IIBB: settings.perceptionIibbCollectedAccountId,
+      MUNICIPAL: settings.perceptionMunicipalCollectedAccountId,
     },
     suffered: {
       IVA: settings.perceptionIvaSufferedAccountId,
       IIBB: settings.perceptionIibbSufferedAccountId,
+      MUNICIPAL: settings.perceptionMunicipalSufferedAccountId,
     },
   };
   return map[role]?.[type] ?? null;
@@ -293,6 +296,7 @@ export async function createJournalEntryForSalesInvoice(
             product: { select: { defaultIncomeAccountId: true, defaultCostCenterId: true } },
           },
         },
+        internalTaxes: true,
         perceptions: { select: { type: true, amount: true, jurisdiction: true } },
       },
     });
@@ -384,10 +388,13 @@ export async function createJournalEntryForSalesInvoice(
       if (percAmount <= 0) continue;
       const accountId = getPerceptionAccountId(settings, perc.type, 'collected');
       if (!accountId) {
-        logger.warn('No se encontró cuenta de percepción cobrada', {
-          data: { invoiceId, type: perc.type },
-        });
-        continue;
+        // Ver nota en el asiento de compra: saltear la percepción dejaba el
+        // asiento descuadrado y la factura confirmada sin asiento (TSK-644).
+        throw new Error(
+          buildMissingTributeAccountsMessage([
+            `percepción ${perc.type} cobrada`,
+          ])
+        );
       }
       const jurisdLabel = perc.jurisdiction ? ` ${perc.jurisdiction}` : '';
       lines.push({
@@ -395,6 +402,23 @@ export async function createJournalEntryForSalesInvoice(
         debit: isNC ? percAmount : 0,
         credit: isNC ? 0 : percAmount,
         description: `Perc. ${perc.type}${jurisdLabel} - ${invoice.fullNumber}`,
+      });
+    }
+
+    // Impuestos internos (TSK-644). Ver la nota equivalente en el asiento de
+    // compra: sin esta línea el asiento no cierra contra el total.
+    const internalTaxes = parseFloat(invoice.internalTaxes.toString());
+    if (internalTaxes > 0) {
+      if (!settings.internalTaxesAccountId) {
+        throw new Error(
+          buildMissingTributeAccountsMessage(['impuestos internos'])
+        );
+      }
+      lines.push({
+        accountId: settings.internalTaxesAccountId,
+        debit: isNC ? internalTaxes : 0,
+        credit: isNC ? 0 : internalTaxes,
+        description: `Impuestos internos - ${invoice.fullNumber}`,
       });
     }
 
@@ -447,6 +471,7 @@ export async function createJournalEntryForPurchaseInvoice(
             product: { select: { defaultExpenseAccountId: true, defaultCostCenterId: true } },
           },
         },
+        internalTaxes: true,
         perceptions: { select: { type: true, amount: true, jurisdiction: true } },
       },
     });
@@ -528,10 +553,15 @@ export async function createJournalEntryForPurchaseInvoice(
       if (percAmount <= 0) continue;
       const accountId = getPerceptionAccountId(settings, perc.type, 'suffered');
       if (!accountId) {
-        logger.warn('No se encontró cuenta de percepción sufrida', {
-          data: { invoiceId, type: perc.type },
-        });
-        continue;
+        // Antes se salteaba con un `warn`: el asiento salía descuadrado —el
+        // total ya incluía la percepción— y moría en `validateBalance`, dentro
+        // de un `catch` que lo degradaba a warn otra vez. La factura terminaba
+        // confirmada sin asiento y nadie se enteraba (TSK-644).
+        throw new Error(
+          buildMissingTributeAccountsMessage([
+            `percepción ${perc.type} sufrida`,
+          ])
+        );
       }
       const jurisdLabel = perc.jurisdiction ? ` ${perc.jurisdiction}` : '';
       lines.push({
@@ -542,7 +572,26 @@ export async function createJournalEntryForPurchaseInvoice(
       });
     }
 
-    // Cuentas por pagar (total incluye percepciones)
+    // Impuestos internos (TSK-644). Sin esta línea, un comprobante con
+    // impuestos internos —los que ya traía la importación AFIP en
+    // `otherTaxes`— generaba un asiento descuadrado que `validateBalance`
+    // rechazaba, y la factura quedaba confirmada sin asiento.
+    const internalTaxes = parseFloat(invoice.internalTaxes.toString());
+    if (internalTaxes > 0) {
+      if (!settings.internalTaxesAccountId) {
+        throw new Error(
+          buildMissingTributeAccountsMessage(['impuestos internos'])
+        );
+      }
+      lines.push({
+        accountId: settings.internalTaxesAccountId,
+        debit: isNC ? 0 : internalTaxes,
+        credit: isNC ? internalTaxes : 0,
+        description: `Impuestos internos - ${invoice.fullNumber}`,
+      });
+    }
+
+    // Cuentas por pagar (total incluye percepciones e impuestos internos)
     lines.push({
       accountId: settings.payablesAccountId,
       debit: isNC ? total : 0,

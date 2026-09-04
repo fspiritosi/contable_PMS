@@ -6,6 +6,14 @@ import type { InvoicePDFData } from './types';
 import type { PdfTemplateConfig } from '@/shared/utils/pdf-themes';
 import { FALLBACK_THEME_CONFIG } from '@/shared/utils/pdf-themes';
 import { customerTaxConditionLabels } from '@/shared/utils/mappers';
+import { perceptionLabel } from '@/modules/commercial/shared/perceptions';
+
+/**
+ * Un `Decimal` de Prisma tal como llega acá: lo único que se le hace es
+ * `Number()`. El resto de este archivo usa `any` para lo mismo, pero los campos
+ * nuevos no suman deuda (regla "NO :any" del CLAUDE.md).
+ */
+type DecimalLike = number | string | { toString(): string };
 import { VOUCHER_TYPE_LABELS } from '../../features/invoices/shared/validators';
 
 // Tipo inferido de getInvoiceById
@@ -19,6 +27,12 @@ type InvoiceData = {
   subtotal: any;
   vatAmount: any;
   otherTaxes: any;
+  internalTaxes: DecimalLike;
+  perceptions?: Array<{
+    type: 'IVA' | 'IIBB' | 'MUNICIPAL';
+    jurisdiction: string | null;
+    amount: DecimalLike;
+  }>;
   total: any;
   notes: string | null;
   cae: string | null;
@@ -195,6 +209,11 @@ export function mapInvoiceDataForPDF(
       subtotal: Number(invoice.subtotal),
       vatAmount: Number(invoice.vatAmount),
       otherTaxes: Number(invoice.otherTaxes),
+      internalTaxes: Number(invoice.internalTaxes),
+      perceptions: (invoice.perceptions ?? []).map((p) => ({
+        label: perceptionLabel(p),
+        amount: Number(p.amount),
+      })),
       total: Number(invoice.total),
       vatByRate: invoiceType === 'A' ? groupVATByRate(invoice.lines) : undefined,
       totalBeforeDiscount: invoice.totalBeforeDiscount ? Number(invoice.totalBeforeDiscount) : undefined,

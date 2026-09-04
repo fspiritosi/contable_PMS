@@ -22,6 +22,14 @@ import {
   effectiveAccountType,
   findLinesMissingCostCenter,
 } from '@/modules/commercial/shared/cost-center';
+import {
+  buildMissingTributeAccountsMessage,
+  calculateOtherTaxes,
+  findMissingTributeAccounts,
+  parseInternalTaxes,
+  perceptionAccountId,
+  toPerceptionRecords,
+} from '@/modules/commercial/shared/perceptions';
 
 // Obtener todas las facturas de venta
 export async function getInvoices() {
@@ -269,6 +277,17 @@ export async function getInvoiceById(id: string) {
             status: true,
           },
         },
+        // Percepciones del comprobante (TSK-644)
+        perceptions: {
+          select: {
+            id: true,
+            type: true,
+            jurisdiction: true,
+            rate: true,
+            baseAmount: true,
+            amount: true,
+          },
+        },
         company: {
           select: {
             name: true,
@@ -347,8 +366,15 @@ export async function getInvoiceById(id: string) {
       ...invoice,
       subtotal: Number(invoice.subtotal),
       vatAmount: Number(invoice.vatAmount),
+      internalTaxes: Number(invoice.internalTaxes),
       otherTaxes: Number(invoice.otherTaxes),
       total: Number(invoice.total),
+      perceptions: invoice.perceptions.map((p) => ({
+        ...p,
+        rate: Number(p.rate),
+        baseAmount: Number(p.baseAmount),
+        amount: Number(p.amount),
+      })),
       globalDiscountPercent: invoice.globalDiscountPercent ? Number(invoice.globalDiscountPercent) : null,
       globalDiscountAmount: invoice.globalDiscountAmount ? Number(invoice.globalDiscountAmount) : null,
       totalBeforeDiscount: Number(invoice.totalBeforeDiscount),
@@ -728,7 +754,15 @@ export async function createInvoice(data: unknown) {
       globalDiscount,
     );
 
-    const invoiceTotal = invoiceSubtotal + invoiceVatAmount;
+    // Percepciones e impuestos internos (TSK-644). `otherTaxes` es el agregado
+    // que AFIP llama "Otros Tributos" e incluye las percepciones: es el valor
+    // que la emisión electrónica informa como `ImpTrib`, y debe cuadrar con la
+    // suma de los tributos que se le declaran.
+    const perceptionsData = toPerceptionRecords(validatedData.perceptions ?? []);
+    const internalTaxes = parseInternalTaxes(validatedData.internalTaxes);
+    const otherTaxes = calculateOtherTaxes(perceptionsData, internalTaxes);
+
+    const invoiceTotal = invoiceSubtotal + invoiceVatAmount + otherTaxes;
     const totalBeforeDiscount = sumLineSubtotals;
     const discountTotal = totalLineDiscounts + globalDiscount;
 
@@ -750,7 +784,8 @@ export async function createInvoice(data: unknown) {
           netNonTaxed: new Prisma.Decimal(0),
           netExempt: new Prisma.Decimal(0),
           vatAmount: new Prisma.Decimal(invoiceVatAmount),
-          otherTaxes: new Prisma.Decimal(0),
+          internalTaxes: new Prisma.Decimal(internalTaxes),
+          otherTaxes: new Prisma.Decimal(otherTaxes),
           total: new Prisma.Decimal(invoiceTotal),
           globalDiscountPercent: validatedData.globalDiscountPercent != null ? new Prisma.Decimal(validatedData.globalDiscountPercent) : null,
           globalDiscountAmount: validatedData.globalDiscountAmount != null ? new Prisma.Decimal(validatedData.globalDiscountAmount) : null,
@@ -763,6 +798,9 @@ export async function createInvoice(data: unknown) {
           createdBy: userId,
           lines: {
             create: linesData,
+          },
+          perceptions: {
+            create: perceptionsData,
           },
         },
         include: {
@@ -834,6 +872,7 @@ export async function confirmInvoice(id: string) {
             costCenterAllocations: true,
           },
         },
+        perceptions: { select: { type: true, amount: true } },
       },
     });
 
@@ -850,8 +889,41 @@ export async function confirmInvoice(id: string) {
         // cuenta propia nunca exigia reparto aunque el asiento lo imputara
         // igual a `salesAccountId`, que es de resultado.
         salesAccount: { select: { type: true } },
+        // Cuentas de los tributos del comprobante (TSK-644)
+        internalTaxesAccountId: true,
+        perceptionIvaCollectedAccountId: true,
+        perceptionIibbCollectedAccountId: true,
+        perceptionMunicipalCollectedAccountId: true,
       },
     });
+
+    // Tributos sin cuenta contable configurada (TSK-644). Ver la nota
+    // equivalente en `confirmPurchaseInvoice`: se comprueba antes de abrir la
+    // transacción para no dejar la factura confirmada y sin asiento.
+    const missingTributeAccounts = findMissingTributeAccounts([
+      ...invoice.perceptions
+        .filter((p) => Number(p.amount) > 0)
+        .map((p) => ({
+          label: `percepción ${p.type} cobrada`,
+          accountId: perceptionAccountId(p.type, {
+            IVA: settings?.perceptionIvaCollectedAccountId,
+            IIBB: settings?.perceptionIibbCollectedAccountId,
+            MUNICIPAL: settings?.perceptionMunicipalCollectedAccountId,
+          }),
+        })),
+      ...(Number(invoice.internalTaxes) > 0
+        ? [
+            {
+              label: 'impuestos internos',
+              accountId: settings?.internalTaxesAccountId,
+            },
+          ]
+        : []),
+    ]);
+
+    if (missingTributeAccounts.length > 0) {
+      throw new Error(buildMissingTributeAccountsMessage(missingTributeAccounts));
+    }
 
     if (settings?.requireCostCenter) {
       const missing = findLinesMissingCostCenter(
@@ -1188,7 +1260,12 @@ export async function updateInvoice(id: string, data: unknown) {
       globalDiscount,
     );
 
-    const invoiceTotal = invoiceSubtotal + invoiceVatAmount;
+    // Ver nota en createInvoice sobre la semántica de `otherTaxes`.
+    const perceptionsData = toPerceptionRecords(validatedData.perceptions ?? []);
+    const internalTaxes = parseInternalTaxes(validatedData.internalTaxes);
+    const otherTaxes = calculateOtherTaxes(perceptionsData, internalTaxes);
+
+    const invoiceTotal = invoiceSubtotal + invoiceVatAmount + otherTaxes;
     const totalBeforeDiscount = sumLineSubtotals;
     const discountTotal = totalLineDiscounts + globalDiscount;
 
@@ -1196,6 +1273,10 @@ export async function updateInvoice(id: string, data: unknown) {
       // Eliminar líneas existentes: el cascade también borra su reparto por
       // centro de costo (SalesInvoiceLineCostCenter.onDelete: Cascade).
       await tx.salesInvoiceLine.deleteMany({ where: { invoiceId: id } });
+
+      // Las percepciones se reemplazan enteras, no se reconcilian fila por
+      // fila (TSK-644).
+      await tx.salesInvoicePerception.deleteMany({ where: { invoiceId: id } });
 
       return tx.salesInvoice.update({
         where: { id },
@@ -1209,6 +1290,8 @@ export async function updateInvoice(id: string, data: unknown) {
           netNonTaxed: new Prisma.Decimal(0),
           netExempt: new Prisma.Decimal(0),
           vatAmount: new Prisma.Decimal(invoiceVatAmount),
+          internalTaxes: new Prisma.Decimal(internalTaxes),
+          otherTaxes: new Prisma.Decimal(otherTaxes),
           total: new Prisma.Decimal(invoiceTotal),
           globalDiscountPercent: validatedData.globalDiscountPercent != null ? new Prisma.Decimal(validatedData.globalDiscountPercent) : null,
           globalDiscountAmount: validatedData.globalDiscountAmount != null ? new Prisma.Decimal(validatedData.globalDiscountAmount) : null,
@@ -1217,6 +1300,7 @@ export async function updateInvoice(id: string, data: unknown) {
           notes: validatedData.notes,
           internalNotes: validatedData.internalNotes,
           lines: { create: linesData },
+          perceptions: { create: perceptionsData },
         },
         include: { lines: true, customer: true, pointOfSale: true },
       });

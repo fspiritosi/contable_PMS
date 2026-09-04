@@ -42,6 +42,7 @@ export async function generateLibroIVADigital(
         netNonTaxed: true,
         netExempt: true,
         vatAmount: true,
+        internalTaxes: true,
         otherTaxes: true,
         pointOfSale: { select: { number: true } },
         customer: { select: { name: true, taxId: true, taxCondition: true } },
@@ -62,6 +63,12 @@ export async function generateLibroIVADigital(
 
       const percIva = inv.perceptions
         .filter((p) => p.type === 'IVA')
+        .reduce((s, p) => s + Number(p.amount), 0);
+      const percIIBB = inv.perceptions
+        .filter((p) => p.type === 'IIBB')
+        .reduce((s, p) => s + Number(p.amount), 0);
+      const percMunicipal = inv.perceptions
+        .filter((p) => p.type === 'MUNICIPAL')
         .reduce((s, p) => s + Number(p.amount), 0);
 
       const ivaByRate = new Map<number, { neto: number; iva: number }>();
@@ -87,16 +94,20 @@ export async function generateLibroIVADigital(
         importeNoGravado: Number(inv.netNonTaxed),
         importeExento: Number(inv.netExempt),
         importePercepciones: percIva,
-        importeImpuestosInternos: 0,
+        importeImpuestosInternos: Number(inv.internalTaxes),
         importeIVA: Number(inv.vatAmount),
         moneda: 'PES',
         tipoCambio: 1,
         cantidadAlicuotas: ivaByRate.size || 1,
         codigoOperacion: ' ',
-        importePercepcionesIIBB: 0,
-        importePercepcionesMunicipales: 0,
+        importePercepcionesIIBB: percIIBB,
+        importePercepcionesMunicipales: percMunicipal,
         importeCredFiscal: 0,
-        otrosTributos: Number(inv.otherTaxes),
+        // Cada tributo ya viaja en su campo propio del diseño de registro
+        // (percepciones de IVA, IIBB y municipales, impuestos internos), así
+        // que este campo residual queda en cero: informar acá `otherTaxes`
+        // —que es la suma de todos ellos (TSK-644)— los contaría dos veces.
+        otrosTributos: 0,
       };
 
       ventasCabecera.push(formatVentasCabecera(cabecera));
@@ -145,6 +156,7 @@ export async function generateLibroIVADigital(
         netNonTaxed: true,
         netExempt: true,
         vatAmount: true,
+        internalTaxes: true,
         otherTaxes: true,
         supplier: { select: { businessName: true, tradeName: true, taxId: true } },
         lines: { select: { lineType: true, vatRate: true, vatAmount: true, subtotal: true } },
@@ -167,6 +179,9 @@ export async function generateLibroIVADigital(
         .reduce((s, p) => s + Number(p.amount), 0);
       const percIIBB = inv.perceptions
         .filter((p) => p.type === 'IIBB')
+        .reduce((s, p) => s + Number(p.amount), 0);
+      const percMunicipal = inv.perceptions
+        .filter((p) => p.type === 'MUNICIPAL')
         .reduce((s, p) => s + Number(p.amount), 0);
 
       const ivaByRate = new Map<number, { neto: number; iva: number }>();
@@ -195,16 +210,17 @@ export async function generateLibroIVADigital(
         importeNoGravado: Number(inv.netNonTaxed),
         importeExento: Number(inv.netExempt),
         importePercepciones: percIva,
-        importeImpuestosInternos: 0,
+        importeImpuestosInternos: Number(inv.internalTaxes),
         importeIVA: Number(inv.vatAmount),
         moneda: 'PES',
         tipoCambio: 1,
         cantidadAlicuotas: ivaByRate.size || 1,
         codigoOperacion: ' ',
         importePercepcionesIIBB: percIIBB,
-        importePercepcionesMunicipales: 0,
+        importePercepcionesMunicipales: percMunicipal,
         importeCredFiscal: Number(inv.vatAmount) + percIva,
-        otrosTributos: Number(inv.otherTaxes),
+        // Ver la nota equivalente en la cabecera de ventas (TSK-644).
+        otrosTributos: 0,
       };
 
       comprasCabecera.push(formatComprasCabecera(cabecera));

@@ -397,6 +397,11 @@ export async function importPurchaseInvoicesFromAFIP(
             netNonTaxed,
             netExempt,
             vatAmount,
+            // AFIP no discrimina el desglose: todo "otros tributos" entra como
+            // impuestos internos para que el asiento pueda cerrar contra el
+            // total. Si el usuario después identifica parte como percepción,
+            // la edición lo descuenta de acá (TSK-644).
+            internalTaxes: otherTaxes,
             otherTaxes,
             total,
             status: 'DRAFT',

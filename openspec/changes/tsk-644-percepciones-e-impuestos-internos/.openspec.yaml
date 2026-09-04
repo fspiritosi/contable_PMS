@@ -1,0 +1,5 @@
+schema: spec-driven
+created: 2026-09-03
+goal: Permitir cargar percepciones (IVA/IIBB/Municipal) e impuestos internos en
+  facturas de compra y venta, con impacto correcto en totales, asiento contable,
+  libros fiscales y ARCA

@@ -670,6 +670,87 @@ export function _CommercialGuide() {
         </CardContent>
       </Card>
 
+      {/* Percepciones e Impuestos Internos (TSK-644) */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Receipt className="h-5 w-5" />
+            Percepciones e Impuestos Internos
+          </CardTitle>
+          <CardDescription>
+            Tributos que el comprobante discrimina además del IVA
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p>
+            Muchas facturas traen, además del IVA, percepciones (de IVA, de
+            Ingresos Brutos o municipales) e impuestos internos. Se cargan en la
+            sección <strong>Percepciones e impuestos internos</strong>, tanto en
+            facturas de compra como de venta, y forman parte del total del
+            comprobante.
+          </p>
+
+          <p>
+            <strong>Cargar una percepción:</strong>
+          </p>
+          <ol className="list-decimal pl-6 space-y-2 text-muted-foreground">
+            <li>
+              Hacé clic en <strong>Agregar percepción</strong>.
+            </li>
+            <li>
+              Elegí el <strong>tipo</strong>: Percepción IVA, IIBB o Municipal.
+            </li>
+            <li>
+              Si corresponde, escribí la <strong>jurisdicción</strong> (por
+              ejemplo, NQN para Neuquén). Es la que después aparece en el
+              detalle, el PDF y el asiento contable.
+            </li>
+            <li>
+              Completá la <strong>base imponible</strong> —viene sugerida con el
+              neto gravado, cambiala si tu régimen calcula sobre otra base— y el{' '}
+              <strong>monto</strong> que figura en el comprobante.
+            </li>
+            <li>
+              La <strong>alícuota</strong> se calcula sola a partir de esos dos
+              datos: no hace falta cargarla, y sirve para contrastar contra el
+              comprobante del proveedor.
+            </li>
+          </ol>
+
+          <p>
+            <strong>Impuestos internos:</strong> se cargan como un único monto al
+            pie de la sección, tal como los imprime el comprobante.
+          </p>
+
+          <p className="text-sm text-muted-foreground">
+            A medida que cargás, el panel de <strong>Totales</strong> muestra el
+            renglón <strong>Otros tributos</strong> —la suma de las percepciones
+            más los impuestos internos— y actualiza el total. Ese total es el que
+            se usa para el saldo con el proveedor o el cliente.
+          </p>
+
+          <Alert>
+            <Info className="h-4 w-4" />
+            <AlertDescription>
+              Para confirmar una factura con percepciones o impuestos internos,
+              esos tributos necesitan su cuenta contable configurada en{' '}
+              <strong>Contabilidad → Configuración</strong> (secciones
+              Percepciones Cobradas, Percepciones Sufridas e Impuestos Internos).
+              Si falta alguna, el sistema no deja confirmar y te dice cuál
+              cargar: así no queda una factura confirmada sin su asiento.
+            </AlertDescription>
+          </Alert>
+
+          <p className="text-sm text-muted-foreground">
+            En el detalle de la factura y en el PDF, cada percepción aparece como
+            un renglón propio con su tipo y jurisdicción, y los impuestos
+            internos en el suyo. En el Libro IVA, las percepciones van en la
+            columna <strong>Perc.</strong> y los impuestos internos en{' '}
+            <strong>Imp. Int.</strong>
+          </p>
+        </CardContent>
+      </Card>
+
       {/* Remitos de Recepción */}
       <Card>
         <CardHeader>

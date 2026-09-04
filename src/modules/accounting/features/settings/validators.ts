@@ -35,6 +35,16 @@ export const commercialIntegrationSchema = z.object({
   withholdingGananciasSufferedAccountId: accountField,
   withholdingIibbSufferedAccountId: accountField,
   withholdingSussSufferedAccountId: accountField,
+  // Cuentas de Percepciones e Impuestos Internos (TSK-644). Las de percepción
+  // ya existían en el modelo y el asiento las usaba, pero nunca se habían
+  // expuesto acá, así que no había forma de configurarlas.
+  perceptionIvaCollectedAccountId: accountField,
+  perceptionIibbCollectedAccountId: accountField,
+  perceptionMunicipalCollectedAccountId: accountField,
+  perceptionIvaSufferedAccountId: accountField,
+  perceptionIibbSufferedAccountId: accountField,
+  perceptionMunicipalSufferedAccountId: accountField,
+  internalTaxesAccountId: accountField,
   // Cuentas de Activos Fijos
   fixedAssetAccountId: accountField,
   accumulatedDepreciationAccountId: accountField,

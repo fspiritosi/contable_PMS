@@ -176,6 +176,47 @@ const SECTIONS: SectionDef[] = [
     ],
   },
   {
+    title: 'Percepciones Cobradas (por Depositar)',
+    description:
+      'Cuentas de Pasivo donde se registran las percepciones que la empresa cobra a sus clientes',
+    fields: [
+      { name: 'perceptionIvaCollectedAccountId', label: 'Perc. IVA Cobrada', types: ['LIABILITY'] },
+      { name: 'perceptionIibbCollectedAccountId', label: 'Perc. IIBB Cobrada', types: ['LIABILITY'] },
+      {
+        name: 'perceptionMunicipalCollectedAccountId',
+        label: 'Perc. Municipal Cobrada',
+        types: ['LIABILITY'],
+      },
+    ],
+  },
+  {
+    title: 'Percepciones Sufridas (Crédito Fiscal)',
+    description:
+      'Cuentas de Activo donde se registran las percepciones que los proveedores aplican a la empresa',
+    fields: [
+      { name: 'perceptionIvaSufferedAccountId', label: 'Perc. IVA Sufrida', types: ['ASSET'] },
+      { name: 'perceptionIibbSufferedAccountId', label: 'Perc. IIBB Sufrida', types: ['ASSET'] },
+      {
+        name: 'perceptionMunicipalSufferedAccountId',
+        label: 'Perc. Municipal Sufrida',
+        types: ['ASSET'],
+      },
+    ],
+  },
+  {
+    title: 'Impuestos Internos',
+    description:
+      'Cuenta donde se imputan los impuestos internos que discrimina el comprobante',
+    fields: [
+      {
+        name: 'internalTaxesAccountId',
+        label: 'Impuestos Internos',
+        types: ['EXPENSE', 'LIABILITY'],
+        help: 'En compras suele ser una cuenta de resultado (mayor costo); en ventas, un pasivo a depositar',
+      },
+    ],
+  },
+  {
     title: 'Cuentas de Activos Fijos',
     fields: [
       { name: 'fixedAssetAccountId', label: 'Bienes de Uso', types: ['ASSET'] },

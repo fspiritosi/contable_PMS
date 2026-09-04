@@ -46,6 +46,8 @@ import {
   replicateAllocations,
 } from '@/modules/commercial/shared/cost-center';
 import { _CostCenterAllocationField } from '@/modules/commercial/shared/components/_CostCenterAllocationField';
+import { _PerceptionsField } from '@/modules/commercial/shared/components/_PerceptionsField';
+import { calculateOtherTaxes } from '@/modules/commercial/shared/perceptions';
 import { z } from 'zod';
 import moment from 'moment';
 import { useEffect, useRef, useState } from 'react';
@@ -562,6 +564,7 @@ export function InvoiceForm({ customers, pointsOfSale, products, costCenters, de
     globalDiscount: 0,
     subtotal: 0,
     vatAmount: 0,
+    otherTaxes: 0,
     total: 0,
   });
 
@@ -586,6 +589,8 @@ export function InvoiceForm({ customers, pointsOfSale, products, costCenters, de
       notes: '',
       internalNotes: '',
       lines: [],
+      perceptions: [],
+      internalTaxes: '',
     },
   });
 
@@ -665,70 +670,79 @@ export function InvoiceForm({ customers, pointsOfSale, products, costCenters, de
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fromQuoteId]);
 
-  // Recalcular totales cuando cambien las líneas o descuentos globales
+  // Recalcular totales cuando cambien líneas, descuentos globales o tributos.
+  //
+  // La condición ya no exige `value.lines` (TSK-644): agregar una percepción o
+  // tocar el impuesto interno también mueve el total, y mirando solo las líneas
+  // el panel quedaba desactualizado hasta el siguiente tipeo en una línea.
   useEffect(() => {
     const subscription = form.watch((value) => {
-      if (value.lines) {
-        let subtotalBeforeDiscount = 0;
-        let totalLineDiscounts = 0;
-        let vatAmount = 0;
+      let subtotalBeforeDiscount = 0;
+      let totalLineDiscounts = 0;
+      let vatAmount = 0;
 
-        // Calcular subtotales por línea con descuentos
-        const lineDetails = value.lines.map((line) => {
-          const qty = parseFloat(line?.quantity ?? '0');
-          const price = parseFloat(line?.unitPrice ?? '0');
-          const vat = parseFloat(line?.vatRate ?? '0');
-          const dtoPercent = parseFloat(line?.discountPercent ?? '0');
-          const dtoAmount = parseFloat(line?.discountAmount ?? '0');
+      // Calcular subtotales por línea con descuentos
+      const lineDetails = (value.lines ?? []).map((line) => {
+        const qty = parseFloat(line?.quantity ?? '0');
+        const price = parseFloat(line?.unitPrice ?? '0');
+        const vat = parseFloat(line?.vatRate ?? '0');
+        const dtoPercent = parseFloat(line?.discountPercent ?? '0');
+        const dtoAmount = parseFloat(line?.discountAmount ?? '0');
 
-          const baseAmount = isNaN(qty) || isNaN(price) ? 0 : Math.round(qty * price * 100) / 100;
+        const baseAmount = isNaN(qty) || isNaN(price) ? 0 : Math.round(qty * price * 100) / 100;
 
-          let discountValue = 0;
-          if (!isNaN(dtoPercent) && dtoPercent > 0) {
-            discountValue = Math.round(baseAmount * (dtoPercent / 100) * 100) / 100;
-          } else if (!isNaN(dtoAmount) && dtoAmount > 0) {
-            discountValue = Math.round(Math.min(dtoAmount, baseAmount) * 100) / 100;
-          }
-
-          const lineSubtotal = Math.round((baseAmount - discountValue) * 100) / 100;
-
-          subtotalBeforeDiscount += baseAmount;
-          totalLineDiscounts += discountValue;
-
-          return { lineSubtotal, vat: isNaN(vat) ? 0 : vat };
-        });
-
-        const sumLineSubtotals = Math.round(lineDetails.reduce((s, l) => s + l.lineSubtotal, 0) * 100) / 100;
-
-        // Descuento global
-        const globalDtoPercent = parseFloat(value.globalDiscountPercent ?? '0');
-        const globalDtoAmount = parseFloat(value.globalDiscountAmount ?? '0');
-        let globalDiscount = 0;
-        if (!isNaN(globalDtoPercent) && globalDtoPercent > 0) {
-          globalDiscount = Math.round(sumLineSubtotals * (globalDtoPercent / 100) * 100) / 100;
-        } else if (!isNaN(globalDtoAmount) && globalDtoAmount > 0) {
-          globalDiscount = Math.round(Math.min(globalDtoAmount, sumLineSubtotals) * 100) / 100;
+        let discountValue = 0;
+        if (!isNaN(dtoPercent) && dtoPercent > 0) {
+          discountValue = Math.round(baseAmount * (dtoPercent / 100) * 100) / 100;
+        } else if (!isNaN(dtoAmount) && dtoAmount > 0) {
+          discountValue = Math.round(Math.min(dtoAmount, baseAmount) * 100) / 100;
         }
 
-        // Distribuir descuento global proporcionalmente para calcular IVA
-        lineDetails.forEach((line) => {
-          const weight = sumLineSubtotals > 0 ? line.lineSubtotal / sumLineSubtotals : 0;
-          const lineGlobalDiscount = globalDiscount * weight;
-          const adjustedSubtotal = Math.max(line.lineSubtotal - lineGlobalDiscount, 0);
-          vatAmount += adjustedSubtotal * (line.vat / 100);
-        });
+        const lineSubtotal = Math.round((baseAmount - discountValue) * 100) / 100;
 
-        const subtotal = Math.round((sumLineSubtotals - globalDiscount) * 100) / 100;
+        subtotalBeforeDiscount += baseAmount;
+        totalLineDiscounts += discountValue;
 
-        setTotals({
-          subtotalBeforeDiscount: Math.round(subtotalBeforeDiscount * 100) / 100,
-          lineDiscounts: Math.round(totalLineDiscounts * 100) / 100,
-          globalDiscount: Math.round(globalDiscount * 100) / 100,
-          subtotal: Math.round(subtotal * 100) / 100,
-          vatAmount: Math.round(vatAmount * 100) / 100,
-          total: Math.round((subtotal + vatAmount) * 100) / 100,
-        });
+        return { lineSubtotal, vat: isNaN(vat) ? 0 : vat };
+      });
+
+      const sumLineSubtotals = Math.round(lineDetails.reduce((s, l) => s + l.lineSubtotal, 0) * 100) / 100;
+
+      // Descuento global
+      const globalDtoPercent = parseFloat(value.globalDiscountPercent ?? '0');
+      const globalDtoAmount = parseFloat(value.globalDiscountAmount ?? '0');
+      let globalDiscount = 0;
+      if (!isNaN(globalDtoPercent) && globalDtoPercent > 0) {
+        globalDiscount = Math.round(sumLineSubtotals * (globalDtoPercent / 100) * 100) / 100;
+      } else if (!isNaN(globalDtoAmount) && globalDtoAmount > 0) {
+        globalDiscount = Math.round(Math.min(globalDtoAmount, sumLineSubtotals) * 100) / 100;
       }
+
+      // Distribuir descuento global proporcionalmente para calcular IVA
+      lineDetails.forEach((line) => {
+        const weight = sumLineSubtotals > 0 ? line.lineSubtotal / sumLineSubtotals : 0;
+        const lineGlobalDiscount = globalDiscount * weight;
+        const adjustedSubtotal = Math.max(line.lineSubtotal - lineGlobalDiscount, 0);
+        vatAmount += adjustedSubtotal * (line.vat / 100);
+      });
+
+      const subtotal = Math.round((sumLineSubtotals - globalDiscount) * 100) / 100;
+
+      // Percepciones e impuestos internos (TSK-644)
+      const otherTaxes = calculateOtherTaxes(
+        (value.perceptions ?? []) as { amount: string }[],
+        value.internalTaxes
+      );
+
+      setTotals({
+        subtotalBeforeDiscount: Math.round(subtotalBeforeDiscount * 100) / 100,
+        lineDiscounts: Math.round(totalLineDiscounts * 100) / 100,
+        globalDiscount: Math.round(globalDiscount * 100) / 100,
+        subtotal: Math.round(subtotal * 100) / 100,
+        vatAmount: Math.round(vatAmount * 100) / 100,
+        otherTaxes,
+        total: Math.round((subtotal + vatAmount + otherTaxes) * 100) / 100,
+      });
     });
 
     return () => subscription.unsubscribe();
@@ -1219,6 +1233,15 @@ export function InvoiceForm({ customers, pointsOfSale, products, costCenters, de
           </Card>
         )}
 
+        {/* Percepciones e impuestos internos (TSK-644) */}
+        <Card className="p-6">
+          <_PerceptionsField
+            name="perceptions"
+            internalTaxesName="internalTaxes"
+            suggestedBase={totals.subtotal}
+          />
+        </Card>
+
         {/* Totales */}
         {fields.length > 0 && (
           <Card className="p-6">
@@ -1252,6 +1275,12 @@ export function InvoiceForm({ customers, pointsOfSale, products, costCenters, de
                 <span>IVA:</span>
                 <span className="font-mono">{formatCurrency(totals.vatAmount)}</span>
               </div>
+              {totals.otherTaxes > 0 && (
+                <div className="flex justify-between">
+                  <span>Otros tributos:</span>
+                  <span className="font-mono">{formatCurrency(totals.otherTaxes)}</span>
+                </div>
+              )}
               <Separator />
               <div className="flex justify-between text-lg font-semibold">
                 <span>Total:</span>
