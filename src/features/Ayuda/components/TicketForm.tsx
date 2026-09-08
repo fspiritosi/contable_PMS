@@ -14,29 +14,26 @@ import { Input } from '@/shared/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select';
 import { Textarea } from '@/shared/components/ui/textarea';
 import { zodResolver } from '@hookform/resolvers/zod';
-import {
-  AlignLeft,
-  Flame,
-  Loader2,
-  MessageSquarePlus,
-  Paperclip,
-  Send,
-  Tag,
-  Type,
-} from 'lucide-react';
+import { Loader2, MessageSquarePlus, Send } from 'lucide-react';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { z } from 'zod';
-import { CATEGORIES, type CategorySlug } from '../constants/categories';
+import {
+  CATEGORIES,
+  CATEGORY_BY_SLUG,
+  CATEGORY_SLUGS,
+  type CategoryDef,
+  type CategorySlug,
+} from '../constants/categories';
 import { useCreateTicket } from '../hooks/useCreateTicket';
 import { useUploadAttachment } from '../hooks/useUploadAttachment';
 import { TicketAttachmentInput } from './TicketAttachmentInput';
 import { TicketPrioritySelect } from './TicketPrioritySelect';
 
-const CATEGORY_SLUGS = CATEGORIES.map((c) => c.slug) as [CategorySlug, ...CategorySlug[]];
-
 const formSchema = z.object({
+  // Derivado de `CATEGORIES`, nunca escrito a mano: la lista la personaliza
+  // cada app cliente con las secciones de su sidebar.
   category: z.enum(CATEGORY_SLUGS),
   priority: z.enum(['low', 'medium', 'high', 'critical']),
   title: z.string().trim().min(3, 'Mínimo 3 caracteres').max(200, 'Máximo 200 caracteres'),
@@ -49,14 +46,31 @@ const formSchema = z.object({
 
 type FormValues = z.infer<typeof formSchema>;
 
-const LABEL_CLASS = 'flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground';
+/**
+ * Los labels van sin ícono a propósito.
+ *
+ * Un pictograma por campo suma seis glifos de 14px en una columna de 380px sin
+ * agregar información: «Categoría» ya dice categoría. Sacarlos deja que se lea
+ * la jerarquía del formulario en vez de una grilla de adornos.
+ *
+ * 11px es el mismo tamaño que usan los micro-encabezados del resto del módulo
+ * («Recorrido del ticket», «Lo que reportaste»): mismo rol, misma tipografía.
+ */
+const LABEL_CLASS = 'text-[11px] font-semibold uppercase tracking-wide text-muted-foreground';
+
+const CATEGORY_PLACEHOLDER = 'Elegí una categoría';
 
 export function TicketForm() {
   const createTicket = useCreateTicket();
   const uploadAttachment = useUploadAttachment();
   const [files, setFiles] = useState<File[]>([]);
 
-  const form = useForm<FormValues>({
+  // Los tres genéricos y no sólo el primero: `zodResolver` devuelve un
+  // `Resolver<entrada, contexto, salida>` y con un único genérico el de salida
+  // queda sin resolver, así que `form.control` deja de tipar y cada
+  // `<FormField control={...}>` rompe el chequeo. El schema no transforma
+  // nada, por eso entrada y salida son el mismo `FormValues`.
+  const form = useForm<FormValues, unknown, FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       category: 'otro' as CategorySlug,
@@ -100,57 +114,101 @@ export function TicketForm() {
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="relative">
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0 opacity-[0.035] [background-image:radial-gradient(circle_at_1px_1px,currentColor_1px,transparent_0)] [background-size:18px_18px]"
-        />
-
-        <CardHeader className="border-b relative">
-          <CardTitle className="flex items-center gap-2">
-            <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/15">
-              <MessageSquarePlus className="h-4 w-4" />
+      {/* Se fue la trama de puntos que cubría la tarjeta: al 3,5% de opacidad
+          no se veía en ninguna pantalla, y lo único que hacía era obligar a
+          `relative` a las tres secciones para no quedar tapadas. La textura
+          decorativa es además el reflejo más rápido para que un panel se lea
+          como plantilla. */}
+      <form onSubmit={form.handleSubmit(onSubmit)}>
+        {/* `[.border-b]:pb-3.5` pisa el `pb-6` que la Card aplica sola cuando el
+            encabezado lleva divisor: 24px abajo dejaban este encabezado más
+            alto que el de la columna de la izquierda. */}
+        <CardHeader className="gap-1 border-b px-4 pt-3.5 [.border-b]:pb-3.5">
+          <CardTitle className="flex items-center gap-2 text-sm">
+            <span className="inline-flex size-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary ring-1 ring-inset ring-primary/20">
+              <MessageSquarePlus aria-hidden className="size-3.5" />
             </span>
             Reportar un problema
           </CardTitle>
-          <CardDescription>Contanos qué pasó y vamos a ocuparnos.</CardDescription>
+          <CardDescription className="text-xs">
+            Contanos qué pasó y vamos a ocuparnos.
+          </CardDescription>
         </CardHeader>
 
-        <CardContent className="relative grid gap-5 pt-6">
+        <CardContent className="grid gap-5 px-4 py-5">
           {/* Clasificación */}
           <div className="grid gap-4 sm:grid-cols-2">
             <FormField
               control={form.control}
               name="category"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className={LABEL_CLASS}>
-                    <Tag className="h-3.5 w-3.5" />
-                    Categoría
-                  </FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Elegí una categoría" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {CATEGORIES.map((c) => {
-                        const Icon = c.icon;
-                        return (
-                          <SelectItem key={c.slug} value={c.slug}>
-                            <span className="flex items-center gap-2">
-                              <Icon className="h-4 w-4" />
-                              {c.label}
-                            </span>
-                          </SelectItem>
-                        );
-                      })}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
+              render={({ field }) => {
+                /**
+                 * El label del trigger se resuelve ACÁ y baja como children del
+                 * `SelectValue`, en vez de dejar que lo derive la primitiva.
+                 *
+                 * Por qué: el módulo se instala en apps que no usan la misma
+                 * librería de primitivas. Radix portalea el contenido del
+                 * `<SelectItem>` elegido dentro del trigger, así que «Otro»
+                 * aparecía solo, de rebote. Base UI no hace eso: imprime el
+                 * value crudo salvo que le pases el catálogo por prop, y este
+                 * mismo formulario mostraba «otro» en minúscula. TypeScript no
+                 * ve la diferencia — las dos tipan igual y compilan en cero —
+                 * así que el bug sólo se detecta mirando la pantalla. Con
+                 * children explícitos gana lo que decimos nosotros en las dos.
+                 *
+                 * El placeholder queda cubierto por las dos vías a propósito:
+                 * la prop `placeholder` es la que mira Radix cuando no hay
+                 * valor, y el fallback de los children es la única que mira
+                 * Base UI (donde children siempre gana).
+                 *
+                 * `CATEGORY_BY_SLUG[...]` puede venir vacío: cada app cliente
+                 * reemplaza `CATEGORIES` por las secciones de su sidebar, y un
+                 * ticket viejo puede traer un slug que ya no está en la lista.
+                 * En ese caso cae al placeholder en vez de romper el render.
+                 */
+                const selected: CategoryDef | undefined = CATEGORY_BY_SLUG[field.value];
+                const SelectedIcon = selected?.icon;
+
+                return (
+                  <FormItem>
+                    <FormLabel className={LABEL_CLASS}>Categoría</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting}>
+                      <FormControl>
+                        {/* `w-full` porque el trigger de Base UI arranca en
+                            `w-fit`: sin esto el control se encoge al ancho del
+                            label y cambia de tamaño en cada selección, en vez
+                            de ocupar su columna de la grilla. */}
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder={CATEGORY_PLACEHOLDER}>
+                            {selected && SelectedIcon ? (
+                              <span className="flex min-w-0 items-center gap-2">
+                                <SelectedIcon aria-hidden className="h-4 w-4 shrink-0" />
+                                <span className="truncate">{selected.label}</span>
+                              </span>
+                            ) : (
+                              CATEGORY_PLACEHOLDER
+                            )}
+                          </SelectValue>
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {CATEGORIES.map((c) => {
+                          const Icon = c.icon;
+                          return (
+                            <SelectItem key={c.slug} value={c.slug}>
+                              <span className="flex items-center gap-2">
+                                <Icon aria-hidden className="h-4 w-4" />
+                                {c.label}
+                              </span>
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                );
+              }}
             />
 
             <FormField
@@ -158,10 +216,7 @@ export function TicketForm() {
               name="priority"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className={LABEL_CLASS}>
-                    <Flame className="h-3.5 w-3.5" />
-                    Prioridad
-                  </FormLabel>
+                  <FormLabel className={LABEL_CLASS}>Prioridad</FormLabel>
                   <FormControl>
                     <TicketPrioritySelect
                       value={field.value}
@@ -181,10 +236,7 @@ export function TicketForm() {
             name="title"
             render={({ field }) => (
               <FormItem>
-                <FormLabel className={LABEL_CLASS}>
-                  <Type className="h-3.5 w-3.5" />
-                  Asunto
-                </FormLabel>
+                <FormLabel className={LABEL_CLASS}>Asunto</FormLabel>
                 <FormControl>
                   <Input placeholder="Resumí en una línea qué te pasa" {...field} disabled={isSubmitting} />
                 </FormControl>
@@ -200,10 +252,7 @@ export function TicketForm() {
             render={({ field }) => (
               <FormItem>
                 <div className="flex items-center justify-between">
-                  <FormLabel className={LABEL_CLASS}>
-                    <AlignLeft className="h-3.5 w-3.5" />
-                    Descripción
-                  </FormLabel>
+                  <FormLabel className={LABEL_CLASS}>Descripción</FormLabel>
                   <span
                     className={`text-[11px] tabular-nums ${
                       descriptionLen > 4500 ? 'text-amber-600' : 'text-muted-foreground'
@@ -227,19 +276,16 @@ export function TicketForm() {
           />
 
           {/* Adjuntos en su propio "panel" sutilmente diferenciado */}
-          <div className="rounded-lg border border-dashed bg-muted/20 p-3 space-y-3">
+          <div className="space-y-2.5 rounded-lg border bg-muted/30 p-3">
             <div className="flex items-center justify-between gap-2">
-              <span className={LABEL_CLASS}>
-                <Paperclip className="h-3.5 w-3.5" />
-                Adjuntos
-              </span>
+              <span className={LABEL_CLASS}>Adjuntos</span>
               <span className="text-[11px] text-muted-foreground">opcional</span>
             </div>
             <TicketAttachmentInput files={files} onChange={setFiles} disabled={isSubmitting} />
           </div>
         </CardContent>
 
-        <CardFooter className="border-t mt-2 pt-4 justify-end relative">
+        <CardFooter className="justify-end border-t px-4 py-3.5 [.border-t]:pt-3.5">
           <Button type="submit" disabled={isSubmitting} className="gap-2">
             {isSubmitting ? (
               <Loader2 className="h-4 w-4 animate-spin" />

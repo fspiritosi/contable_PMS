@@ -22,6 +22,9 @@ export function useCreateComment(ticketId: number, authorEmail: string) {
         author_email: authorEmail,
         body: body.trim(),
         is_internal: false,
+        // El portal no deja adjuntar archivos al comentar, y el comentario real
+        // que devuelve el backend tampoco va a traer ninguno.
+        attachments: null,
         created_at: new Date().toISOString(),
       };
       queryClient.setQueryData<Comment[]>(key, [...previous, optimistic]);

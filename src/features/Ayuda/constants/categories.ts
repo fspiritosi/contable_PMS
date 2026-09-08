@@ -1,36 +1,27 @@
 import {
   Building2,
+  Calendar,
   ClipboardList,
   FileText,
+  HandHelping,
   LayoutDashboard,
   MoreHorizontal,
-  Package,
-  Settings,
-  ShoppingCart,
-  Ticket,
   Truck,
   Users,
-  Wallet,
   Wrench,
   type LucideIcon,
 } from 'lucide-react';
 
-// Las categorías reflejan los ítems de primer nivel del sidebar
-// (src/shared/components/layout/_AppSidebar.tsx): navegación Principal,
-// Configuración y secundaria. Mantener sincronizado con el sidebar.
 export type CategorySlug =
   | 'dashboard'
+  | 'empresa'
   | 'empleados'
   | 'equipos'
-  | 'documentos'
-  | 'contabilidad'
   | 'comercial'
-  | 'almacenes'
+  | 'documentacion'
   | 'operaciones'
   | 'mantenimiento'
-  | 'empresa'
-  | 'sistema'
-  | 'soporte'
+  | 'formularios'
   | 'otro';
 
 export interface CategoryDef {
@@ -41,17 +32,25 @@ export interface CategoryDef {
 
 export const CATEGORIES: CategoryDef[] = [
   { slug: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { slug: 'empresa', label: 'Empresa', icon: Building2 },
   { slug: 'empleados', label: 'Empleados', icon: Users },
   { slug: 'equipos', label: 'Equipos', icon: Truck },
-  { slug: 'documentos', label: 'Documentos', icon: FileText },
-  { slug: 'contabilidad', label: 'Contabilidad', icon: Wallet },
-  { slug: 'comercial', label: 'Comercial', icon: ShoppingCart },
-  { slug: 'almacenes', label: 'Almacenes', icon: Package },
-  { slug: 'operaciones', label: 'Operaciones', icon: ClipboardList },
+  { slug: 'comercial', label: 'Comercial', icon: HandHelping },
+  { slug: 'documentacion', label: 'Documentación', icon: FileText },
+  { slug: 'operaciones', label: 'Operaciones', icon: Calendar },
   { slug: 'mantenimiento', label: 'Mantenimiento', icon: Wrench },
-  { slug: 'empresa', label: 'Empresa', icon: Building2 },
+  { slug: 'formularios', label: 'Formularios', icon: ClipboardList },
   { slug: 'otro', label: 'Otro', icon: MoreHorizontal },
 ];
+
+/**
+ * Los slugs como tupla, para que el schema del formulario salga de ACÁ y no de
+ * una lista escrita a mano. Cada app cliente reemplaza `CATEGORIES` por las
+ * secciones de su propio sidebar: con el enum duplicado en `TicketForm`, el
+ * `<Select>` ofrecía las categorías del cliente y la validación las rechazaba
+ * por no estar en la lista del template.
+ */
+export const CATEGORY_SLUGS = CATEGORIES.map((c) => c.slug) as [CategorySlug, ...CategorySlug[]];
 
 export const CATEGORY_BY_SLUG: Record<CategorySlug, CategoryDef> = Object.fromEntries(
   CATEGORIES.map((c) => [c.slug, c])

@@ -17,6 +17,9 @@ const notifLogger = new Logger('features/Ayuda/notifications');
 // se pueden omitir del fetch de comments para acotar llamadas a la API.
 const RESOLVED_STATUS_SLUGS = new Set(['resolved', 'done', 'closed', 'cancelled']);
 
+/** Cuántos tickets como mucho se consultan por comentarios nuevos en una carga. */
+const UNREAD_COMMENT_FETCH_LIMIT = 25;
+
 export async function createSupportTicket(input: CreateSupportTicketInput): Promise<Ticket> {
   const reporter = await getReporterEmail();
   if (!reporter) {
@@ -70,7 +73,10 @@ export async function getMySupportTickets(): Promise<Ticket[]> {
   if (!reporter) return [];
 
   try {
-    return (await taskAppClient.listTicketsByReporter(reporter.email)).tickets;
+    // Techo explicito: la pantalla arma las tres pestañas sobre esta lista, y
+    // sin limite un reporter con años de historial se la trae entera. 200 es
+    // el máximo que acepta el backend.
+    return (await taskAppClient.listTicketsByReporter(reporter.email, { limit: 200 })).tickets;
   } catch (error) {
     logger.error('Error listando tickets propios', { data: { error } });
     return [];
@@ -215,13 +221,22 @@ async function enrichWithUnread(
   // de los actualizados, y de todos los que NO están resueltos (donde una
   // respuesta de agente es esperable). Los resueltos se omiten para acotar
   // llamadas a la API.
-  const ticketsNeedingComments = tickets.filter((t) => {
-    const view = viewsMap.get(t.id);
-    if (!view) return true;
-    if (new Date(t.updated_at) > view.lastSeenAt) return true;
-    const slug = t.status?.slug;
-    return !slug || !RESOLVED_STATUS_SLUGS.has(slug);
-  });
+  const ticketsNeedingComments = tickets
+    .filter((t) => {
+      const view = viewsMap.get(t.id);
+      if (!view) return true;
+      if (new Date(t.updated_at) > view.lastSeenAt) return true;
+      const slug = t.status?.slug;
+      return !slug || !RESOLVED_STATUS_SLUGS.has(slug);
+    })
+    // Techo al fan-out. La lista viene ordenada por más reciente primero, así
+    // que el corte deja afuera lo más viejo. Sin esto, un reporter con
+    // historial largo dispara una llamada HTTP por ticket en cada carga de la
+    // pantalla (la paginación las acotaba antes; las tres pestañas ya no).
+    // Lo que se pierde en los tickets recortados es sólo la marca de "te
+    // respondieron": el cambio de estado se sigue detectando, porque sale de
+    // la view y no de los comentarios.
+    .slice(0, UNREAD_COMMENT_FETCH_LIMIT);
 
   // Fetch comments en paralelo con failure aislado
   const commentsByTicket = new Map<number, Awaited<ReturnType<typeof listSupportTicketComments>>>();

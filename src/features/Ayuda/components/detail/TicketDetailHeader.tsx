@@ -19,7 +19,7 @@ export function TicketDetailHeader({ ticket }: Props) {
       <SheetTitle className="text-lg leading-snug">{cleanTitle}</SheetTitle>
       <div className="mt-2 flex flex-wrap items-center gap-2">
         {categoryLabel && <TicketCategoryBadge label={categoryLabel} />}
-        <TicketStatusBadge slug={ticket.status?.slug} name={ticket.status?.name} />
+        <TicketStatusBadge slug={ticket.status?.slug} />
         <TicketPriorityBadge slug={ticket.priority} />
         {ticket.estimated_hours != null && (
           <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">

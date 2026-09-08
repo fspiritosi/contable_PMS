@@ -1,4 +1,6 @@
 import type { Ticket } from '@/shared/lib/taskapp/types';
+import { canDecide } from '../../constants/ticket-copy';
+import { TicketResolutionPanel } from '../TicketResolutionPanel';
 import { TicketAttachmentsList } from './TicketAttachmentsList';
 import { TicketCommentsThread } from './TicketCommentsThread';
 
@@ -15,6 +17,15 @@ export function TicketDetailBody({ ticket, currentUserEmail, currentUserName }: 
 
   return (
     <div className="space-y-6 p-6">
+      {/* Arriba de todo cuando hay algo que decidir: el aprobador entra al
+          ticket por acá y no por el listado propio, así que si el bloque de
+          resolución viviera sólo en la tarjeta él nunca lo vería. */}
+      {canDecide(ticket) && (
+        <section aria-label="Resolución">
+          <TicketResolutionPanel ticket={ticket} canAct />
+        </section>
+      )}
+
       {ticket.description && (
         <section>
           <h4 className="mb-2 text-sm font-medium text-muted-foreground">Descripción</h4>

@@ -3,12 +3,19 @@ import { Wrench } from 'lucide-react';
 import moment from 'moment';
 import 'moment/locale/es';
 import type { Comment } from '@/shared/lib/taskapp/types';
+import { TicketAttachmentsList } from './TicketAttachmentsList';
 
 interface Props {
   comment: Comment;
   currentUserEmail: string;
   currentUserName: string;
 }
+
+/**
+ * Caso "el comentario no trae archivos", que es el común. Vive afuera del
+ * componente a propósito: un `[]` literal sería un array nuevo en cada render.
+ */
+const NO_ATTACHMENTS: string[] = [];
 
 function initialsFromName(name: string): string {
   const trimmed = name.trim();
@@ -28,6 +35,13 @@ export function TicketCommentItem({ comment, currentUserEmail, currentUserName }
   const displayName = isMine ? currentUserName : 'Soporte';
   const isOptimistic = comment.id < 0;
   const myInitials = initialsFromName(currentUserName);
+  // El backend manda `null` cuando el comentario no tiene archivos (slice nil
+  // de Go), así que no alcanza con mirar el largo del array.
+  const attachments = comment.attachments ?? NO_ATTACHMENTS;
+  // Un comentario puede llegar sin texto y sólo con archivos (pasa con los que
+  // el backend copia al hilo desde una solicitud de reapertura). Sin esta
+  // guarda quedaría un <p> vacío ocupando una línea adentro de la burbuja.
+  const hasBody = comment.body.trim().length > 0;
 
   return (
     <div className={`flex gap-2 ${isMine ? 'flex-row-reverse' : ''}`}>
@@ -50,7 +64,19 @@ export function TicketCommentItem({ comment, currentUserEmail, currentUserName }
             isMine ? 'bg-primary/10 text-foreground' : 'bg-muted text-foreground'
           } ${isOptimistic ? 'opacity-60' : ''}`}
         >
-          <p className="whitespace-pre-wrap">{comment.body}</p>
+          {hasBody ? <p className="whitespace-pre-wrap text-pretty">{comment.body}</p> : null}
+          {/* Los adjuntos van ADENTRO de la burbuja, debajo del texto: son
+              parte de ESE mensaje, no del ticket. Colgados afuera se leerían
+              como un bloque hermano, que es justo la confusión por la que una
+              captura enviada en el hilo parecía haberse perdido.
+
+              Todo el bloque —incluida su separación— es condicional: un
+              comentario sin archivos no deja margen ni título colgando. */}
+          {attachments.length > 0 ? (
+            <div className={hasBody ? 'mt-2' : ''}>
+              <TicketAttachmentsList urls={attachments} />
+            </div>
+          ) : null}
         </div>
         <div
           className={`flex items-center gap-2 text-[11px] text-muted-foreground ${isMine ? 'justify-end' : ''}`}

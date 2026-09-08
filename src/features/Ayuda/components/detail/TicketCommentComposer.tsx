@@ -11,8 +11,7 @@ import { useCreateComment } from '../../hooks/useCreateComment';
 import { useUploadAttachment } from '../../hooks/useUploadAttachment';
 import { ticketDetailKey } from '../../hooks/useTicketDetail';
 
-const MAX_BYTES = 10 * 1024 * 1024; // 10 MB
-const ACCEPTED_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'application/pdf'];
+const MAX_BYTES = 20 * 1024 * 1024; // 20 MB
 
 interface Props {
   ticketId: number;
@@ -50,12 +49,8 @@ export function TicketCommentComposer({ ticketId, currentUserEmail }: Props) {
     if (!files || files.length === 0) return;
     const next: PendingFile[] = [];
     for (const file of Array.from(files)) {
-      if (!ACCEPTED_TYPES.includes(file.type)) {
-        toast.error(`"${file.name}": formato no soportado`);
-        continue;
-      }
       if (file.size > MAX_BYTES) {
-        toast.error(`"${file.name}": supera los 10 MB`);
+        toast.error(`"${file.name}": supera los 20 MB`);
         continue;
       }
       next.push({
@@ -177,7 +172,6 @@ export function TicketCommentComposer({ ticketId, currentUserEmail }: Props) {
       <input
         ref={inputRef}
         type="file"
-        accept={ACCEPTED_TYPES.join(',')}
         multiple
         className="hidden"
         onChange={(e) => handleFiles(e.target.files)}

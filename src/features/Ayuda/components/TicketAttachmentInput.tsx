@@ -6,7 +6,7 @@ import { useRef } from 'react';
 import { toast } from 'sonner';
 
 const MAX_FILES = 3;
-const MAX_BYTES = 10 * 1024 * 1024;
+const MAX_BYTES = 20 * 1024 * 1024;
 
 interface Props {
   files: File[];
@@ -34,20 +34,14 @@ export function TicketAttachmentInput({ files, onChange, disabled }: Props) {
 
     const accepted: File[] = [];
     let oversize = 0;
-    let invalid = 0;
     for (const f of picked) {
       if (f.size > MAX_BYTES) {
         oversize += 1;
         continue;
       }
-      if (!(f.type.startsWith('image/') || f.type === 'application/pdf')) {
-        invalid += 1;
-        continue;
-      }
       accepted.push(f);
     }
-    if (oversize > 0) toast.warning(`Ignoramos ${oversize} archivo(s) que superan 10 MB.`);
-    if (invalid > 0) toast.warning(`Ignoramos ${invalid} archivo(s) con formato no permitido.`);
+    if (oversize > 0) toast.warning(`Ignoramos ${oversize} archivo(s) que superan 20 MB.`);
 
     const merged = [...files, ...accepted].slice(0, MAX_FILES);
     if (files.length + accepted.length > MAX_FILES) {
@@ -77,13 +71,12 @@ export function TicketAttachmentInput({ files, onChange, disabled }: Props) {
           Adjuntar archivo
         </Button>
         <span className="text-xs text-muted-foreground">
-          {files.length}/{MAX_FILES} · máx. 10 MB · imagen o PDF
+          {files.length}/{MAX_FILES} · máx. 20 MB
         </span>
         <input
           ref={inputRef}
           type="file"
           multiple
-          accept="image/*,application/pdf"
           className="hidden"
           onChange={handlePick}
           disabled={disabled}

@@ -7,8 +7,7 @@ import { getReporterEmail } from './getReporterEmail';
 
 const logger = new Logger('features/Ayuda/support-attachments');
 
-const MAX_BYTES = 10 * 1024 * 1024; // 10 MB
-const ALLOWED_TYPES = /^(image\/.+|application\/pdf)$/;
+const MAX_BYTES = 20 * 1024 * 1024; // 20 MB
 
 export async function uploadSupportTicketAttachment(formData: FormData): Promise<{ key: string }> {
   const reporter = await getReporterEmail();
@@ -23,10 +22,7 @@ export async function uploadSupportTicketAttachment(formData: FormData): Promise
     throw new Error('El archivo está vacío');
   }
   if (raw.size > MAX_BYTES) {
-    throw new Error('El archivo supera los 10 MB');
-  }
-  if (!ALLOWED_TYPES.test(raw.type)) {
-    throw new Error('Formato no permitido. Solo imagen o PDF.');
+    throw new Error('El archivo supera los 20 MB');
   }
 
   // ticket_id es opcional: cuando se envia desde el composer de un ticket
