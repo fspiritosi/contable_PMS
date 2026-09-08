@@ -313,6 +313,9 @@ model Account {
   disabledFromFiscalYear   FiscalYear?        @relation("AccountDisabledFrom", fields: [disabledFromFiscalYearId], references: [id], onDelete: SetNull)
   adjustableByInflation    Boolean            @default(false) @map("adjustable_by_inflation")
   requiresAuxiliary        AuxiliaryType?     @map("requires_auxiliary")
+  // TSK-618: marca de Bien de Uso. Se propaga en cascada al subárbol desde el
+  // rubro, y se puede destildar una cuenta puntual (ej. Amortizaciones Acumuladas).
+  isFixedAsset             Boolean            @default(false) @map("is_fixed_asset")
   createdAt                DateTime           @default(now()) @map("created_at")
   updatedAt                DateTime           @updatedAt @map("updated_at")
   company                  Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)

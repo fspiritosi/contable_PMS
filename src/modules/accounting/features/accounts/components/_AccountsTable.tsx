@@ -133,6 +133,13 @@ export function _AccountsTable({
             {hasChildren && (
               <span className="ml-2 text-xs text-muted-foreground">(sumatoria)</span>
             )}
+            {/* TSK-618: marca de Bien de Uso. `title` en vez de Tooltip para no
+                meter un provider en una tabla que renderiza cientos de filas. */}
+            {account.isFixedAsset && (
+              <Badge variant="outline" className="ml-2" title="Bien de Uso">
+                BU
+              </Badge>
+            )}
           </td>
           <td>{getAccountTypeLabel(account.type)}</td>
           <td>{getAccountNatureLabel(account.nature)}</td>

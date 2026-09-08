@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { MODEL_CHART_OF_ACCOUNTS } from './model-chart-of-accounts';
+import { isModelFixedAssetCode } from './model-fixed-assets';
 import { getParentCode } from '../../../shared/utils/account-code';
 
 describe('MODEL_CHART_OF_ACCOUNTS', () => {
@@ -50,5 +51,38 @@ describe('MODEL_CHART_OF_ACCOUNTS', () => {
 
   it('no hay códigos duplicados', () => {
     expect(byCode.size).toBe(MODEL_CHART_OF_ACCOUNTS.length);
+  });
+});
+
+describe('semilla de Bien de Uso en el plan modelo (TSK-618)', () => {
+  const marcadas = MODEL_CHART_OF_ACCOUNTS.filter((account) =>
+    isModelFixedAssetCode(account.code)
+  );
+
+  it('marca exactamente las 31 cuentas del rubro 1.2.2', () => {
+    expect(marcadas).toHaveLength(31);
+    expect(marcadas.every((account) => account.code.startsWith('1.2.2/'))).toBe(true);
+  });
+
+  it('incluye el rubro BIENES DE USO y sus Amortizaciones Acumuladas', () => {
+    // La cascada del ABM marca el rubro entero; destildar las regularizadoras
+    // es una decisión del usuario, no del dataset.
+    const codigos = marcadas.map((account) => account.code);
+    expect(codigos).toContain('1.2.2/00/00');
+    expect(codigos).toContain('1.2.2/01/03');
+  });
+
+  it('no marca ninguna cuenta de otro rubro', () => {
+    const noMarcadas = MODEL_CHART_OF_ACCOUNTS.filter(
+      (account) => !isModelFixedAssetCode(account.code)
+    );
+    expect(noMarcadas.some((account) => account.code.startsWith('1.2.2'))).toBe(false);
+    expect(isModelFixedAssetCode('1.2.1/00/00')).toBe(false);
+    expect(isModelFixedAssetCode('1.2.3/00/00')).toBe(false);
+  });
+
+  it('no se confunde con un código que solo comparte el prefijo textual', () => {
+    // Sin la barra, un hipotético 1.2.20 entraría por accidente.
+    expect(isModelFixedAssetCode('1.2.20/00/00')).toBe(false);
   });
 });

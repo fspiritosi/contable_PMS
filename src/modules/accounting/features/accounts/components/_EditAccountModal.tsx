@@ -24,12 +24,29 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/shared/components/ui/select';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/shared/components/ui/alert-dialog';
 import { AccountCombobox } from '@/shared/components/common/AccountCombobox';
+import { Switch } from '@/shared/components/ui/switch';
 import { Textarea } from '@/shared/components/ui/textarea';
+import { usePermissions } from '@/shared/hooks/usePermissions';
 
 import { accountSchema, type CreateAccountInput, type AccountWithChildren } from '../../../shared/types';
 import { updateAccount, getAccounts } from '../actions.server';
 import { useState, useEffect } from 'react';
+
+/** Cantidad de cuentas que cuelgan de esta (todo el subárbol, no solo las hijas directas). */
+function countDescendants(account: AccountWithChildren): number {
+  return account.children.reduce((total, child) => total + 1 + countDescendants(child), 0);
+}
 
 interface EditAccountModalProps {
   account: AccountWithChildren;
@@ -44,6 +61,11 @@ export function _EditAccountModal({ account, companyId, onClose }: EditAccountMo
     Array<{ id: string; code: string; name: string; type: AccountType }>
   >([]);
   const isSummatory = account.children.length > 0;
+  const { hasPermission } = usePermissions();
+  const canUpdate = hasPermission('accounting.accounts', 'update');
+  const descendantCount = countDescendants(account);
+  // TSK-618: datos en espera de confirmación de la cascada de Bien de Uso.
+  const [pendingCascadeData, setPendingCascadeData] = useState<CreateAccountInput | null>(null);
 
   const form = useForm<CreateAccountInput>({
     resolver: zodResolver(accountSchema),
@@ -54,6 +76,7 @@ export function _EditAccountModal({ account, companyId, onClose }: EditAccountMo
       nature: account.nature,
       description: account.description || undefined,
       parentId: account.parentId || undefined,
+      isFixedAsset: account.isFixedAsset,
     },
   });
 
@@ -80,18 +103,33 @@ export function _EditAccountModal({ account, companyId, onClose }: EditAccountMo
     loadAccounts();
   }, [companyId, account]);
 
-  const handleSubmit = async (data: CreateAccountInput) => {
+  const saveAccount = async (data: CreateAccountInput) => {
     setIsLoading(true);
     try {
-      await updateAccount(companyId, account.id, data);
-      toast.success('Cuenta actualizada correctamente');
+      const result = await updateAccount(companyId, account.id, data);
+      toast.success(
+        result.fixedAssetCascade.applied && result.fixedAssetCascade.affectedAccountIds.length > 0
+          ? `Cuenta actualizada. La marca de Bien de Uso se aplicó a ${result.fixedAssetCascade.affectedAccountIds.length} cuenta(s) del rubro.`
+          : 'Cuenta actualizada correctamente'
+      );
       router.refresh();
       onClose();
     } catch (error) {
-      toast.error('Error al actualizar la cuenta');
+      toast.error(error instanceof Error ? error.message : 'Error al actualizar la cuenta');
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleSubmit = async (data: CreateAccountInput) => {
+    // TSK-618: mover el tilde en una cuenta con hijas reescribe todo el rubro,
+    // incluidas las excepciones destildadas a mano. Se avisa antes de guardar.
+    const fixedAssetChanged = (data.isFixedAsset ?? false) !== account.isFixedAsset;
+    if (fixedAssetChanged && descendantCount > 0) {
+      setPendingCascadeData(data);
+      return;
+    }
+    await saveAccount(data);
   };
 
   const accountTypeOptions = [
@@ -241,6 +279,24 @@ export function _EditAccountModal({ account, companyId, onClose }: EditAccountMo
             </p>
           </div>
 
+          {canUpdate && (
+            <div className="flex items-start justify-between gap-4 rounded-md border p-3">
+              <div className="space-y-1">
+                <Label htmlFor="isFixedAsset">Bien de Uso</Label>
+                <p className="text-xs text-muted-foreground">
+                  Marcá las cuentas del rubro Bienes de Uso. Al cargar una factura de compra
+                  imputada a ellas, el sistema va a sugerir adjuntar el comprobante.
+                </p>
+              </div>
+              <Switch
+                id="isFixedAsset"
+                checked={form.watch('isFixedAsset') ?? false}
+                onCheckedChange={(checked) => form.setValue('isFixedAsset', checked)}
+                disabled={isLoading}
+              />
+            </div>
+          )}
+
           <div className="space-y-2">
             <Label htmlFor="description">Descripción</Label>
             <Textarea
@@ -265,6 +321,51 @@ export function _EditAccountModal({ account, companyId, onClose }: EditAccountMo
             </Button>
           </div>
         </form>
+
+        {pendingCascadeData && (
+          <AlertDialog open onOpenChange={(open) => !open && setPendingCascadeData(null)}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>
+                  {pendingCascadeData.isFixedAsset
+                    ? 'Aplicar «Bien de Uso» a todo el rubro'
+                    : 'Quitar «Bien de Uso» de todo el rubro'}
+                </AlertDialogTitle>
+                <AlertDialogDescription asChild>
+                  <div className="space-y-2 text-sm text-muted-foreground">
+                    <p>
+                      «{account.code} — {account.name}» tiene {descendantCount} cuenta(s)
+                      debajo.
+                    </p>
+                    <p>
+                      Al guardar, la marca de Bien de Uso se{' '}
+                      {pendingCascadeData.isFixedAsset ? 'aplica' : 'quita'} en todas ellas,
+                      incluidas las que hayas ajustado a mano (por ejemplo, las Amortizaciones
+                      Acumuladas). Después vas a poder volver a cambiarlas una por una.
+                    </p>
+                  </div>
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={isLoading}>Cancelar</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={(e) => {
+                    e.preventDefault();
+                    const data = pendingCascadeData;
+                    setPendingCascadeData(null);
+                    saveAccount(data);
+                  }}
+                  disabled={isLoading}
+                >
+                  {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {pendingCascadeData.isFixedAsset
+                    ? 'Aplicar a todo el rubro'
+                    : 'Quitar de todo el rubro'}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
       </DialogContent>
     </Dialog>
   );
