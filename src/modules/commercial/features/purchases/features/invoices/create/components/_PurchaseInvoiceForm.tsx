@@ -31,6 +31,7 @@ import {
 } from '@/modules/commercial/shared/cost-center';
 import { _CostCenterAllocationField } from '@/modules/commercial/shared/components/_CostCenterAllocationField';
 import { _PerceptionsField } from '@/modules/commercial/shared/components/_PerceptionsField';
+import { _FixedAssetAttachmentNotice } from '@/modules/commercial/shared/components/_FixedAssetAttachmentNotice';
 import { calculateOtherTaxes } from '@/modules/commercial/shared/perceptions';
 import { Textarea } from '@/shared/components/ui/textarea';
 import { Plus, Trash2, Loader2 } from 'lucide-react';
@@ -165,6 +166,8 @@ interface PurchaseInvoiceFormProps {
   costCenters: CostCenterSelectItem[];
   /** Cuenta de compras por defecto de la empresa (TSK-583, revisión final). */
   defaultAccountType?: string | null;
+  /** TSK-618: si esa misma cuenta está marcada como Bien de Uso. */
+  defaultAccountIsFixedAsset?: boolean;
   mode?: 'create' | 'edit';
   invoiceId?: string;
   defaultValues?: Partial<PurchaseInvoiceFormInput>;
@@ -175,6 +178,7 @@ export function _PurchaseInvoiceForm({
   products,
   costCenters,
   defaultAccountType = null,
+  defaultAccountIsFixedAsset = false,
   mode = 'create',
   invoiceId,
   defaultValues: initialValues,
@@ -939,6 +943,14 @@ export function _PurchaseInvoiceForm({
             </div>
           </Card>
         )}
+
+        {/* Sugerencia de adjuntar el comprobante en compras de bienes de uso
+            (TSK-618). No bloquea el guardado: el adjunto se sube desde el
+            detalle, que es adonde redirige el formulario al guardar. */}
+        <_FixedAssetAttachmentNotice
+          products={products}
+          defaultAccountIsFixedAsset={defaultAccountIsFixedAsset}
+        />
 
         {/* Botones de Acción */}
         <div className="flex justify-end gap-4">

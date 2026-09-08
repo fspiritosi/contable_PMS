@@ -1,11 +1,11 @@
 import Link from 'next/link';
-import { getPurchaseInvoiceById } from '../list/actions.server';
+import { getPurchaseInvoiceById, getPurchasesDefaultAccount } from '../list/actions.server';
 import { PermissionGuard } from '@/shared/components/common/PermissionGuard';
 import { Button } from '@/shared/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/card';
 import { Badge } from '@/shared/components/ui/badge';
 import { Alert, AlertDescription } from '@/shared/components/ui/alert';
-import { PackageCheck, PackageMinus, PackageSearch } from 'lucide-react';
+import { PackageCheck, PackageMinus, PackageSearch, Paperclip } from 'lucide-react';
 import { BackButton } from '@/shared/components/common/BackButton';
 import moment from 'moment';
 import { PURCHASE_INVOICE_STATUS_LABELS, VOUCHER_TYPE_LABELS } from '../shared/validators';
@@ -20,13 +20,39 @@ import { _PayPurchaseInvoiceButton } from './components/_PayPurchaseInvoiceButto
 import { calculatePurchaseInvoiceBalance } from '@/modules/commercial/shared/purchase-invoice-balance';
 import { formatCurrency } from '@/shared/utils/formatters';
 import { perceptionLabel } from '@/modules/commercial/shared/perceptions';
+import {
+  FIXED_ASSET_ATTACHMENT_PENDING,
+  effectiveIsFixedAsset,
+  findFixedAssetLines,
+} from '@/modules/commercial/shared/fixed-asset';
 
 interface Props {
   invoiceId: string;
 }
 
 export async function PurchaseInvoiceDetail({ invoiceId }: Props) {
-  const invoice = await getPurchaseInvoiceById(invoiceId);
+  // TSK-618: la cuenta de compras por defecto se pide en paralelo porque el
+  // aviso tiene que aplicar exactamente la misma regla que el formulario de
+  // carga: una linea sin item (o con un item sin cuenta de egresos) se imputa a
+  // esa cuenta, asi que su marca de Bien de Uso tambien cuenta.
+  const [invoice, defaultAccount] = await Promise.all([
+    getPurchaseInvoiceById(invoiceId),
+    getPurchasesDefaultAccount(),
+  ]);
+
+  // Misma funcion pura que el formulario (`_FixedAssetAttachmentNotice`).
+  const fixedAssetLines = findFixedAssetLines(
+    invoice.lines.map((line) => ({
+      description: line.description,
+      isFixedAsset: effectiveIsFixedAsset(
+        line.product?.defaultExpenseAccount?.isFixedAsset,
+        defaultAccount.isFixedAsset
+      ),
+    }))
+  );
+
+  /** Hay bienes de uso y todavia no subieron el comprobante. */
+  const suggestAttachment = fixedAssetLines.length > 0 && !invoice.documentUrl;
 
   const balance = calculatePurchaseInvoiceBalance({
     voucherType: invoice.voucherType,
@@ -142,6 +168,22 @@ export async function PurchaseInvoiceDetail({ invoiceId }: Props) {
             <span className="text-green-800 dark:text-green-200">
               Recepción completa. Todos los ítems fueron recibidos en el almacén.
             </span>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* TSK-618: sugerencia de adjuntar el comprobante de los bienes de uso.
+          Se va sola: `_DocumentAttachment` hace `router.refresh()` al subir. */}
+      {suggestAttachment && (
+        <Alert className="border-amber-500/50 bg-amber-50 dark:bg-amber-950/20">
+          <Paperclip className="h-4 w-4 text-amber-600" />
+          <AlertDescription className="flex items-center justify-between">
+            <span className="text-amber-800 dark:text-amber-200">
+              {FIXED_ASSET_ATTACHMENT_PENDING}
+            </span>
+            <Button variant="outline" size="sm" asChild className="ml-4 shrink-0">
+              <a href="#documento-adjunto">Adjuntar comprobante</a>
+            </Button>
           </AlertDescription>
         </Alert>
       )}
@@ -454,16 +496,18 @@ export async function PurchaseInvoiceDetail({ invoiceId }: Props) {
             </CardContent>
           </Card>
 
-          {/* Documento Adjunto */}
-          <_DocumentAttachment
-            documentType="purchase-invoice"
-            documentId={invoice.id}
-            companyId={invoice.companyId}
-            companyName={invoice.company.name}
-            documentNumber={invoice.fullNumber}
-            hasDocument={!!invoice.documentUrl}
-            documentUrl={invoice.documentUrl}
-          />
+          {/* Documento Adjunto — destino del ancla del aviso de bienes de uso (TSK-618) */}
+          <div id="documento-adjunto" className="scroll-mt-24">
+            <_DocumentAttachment
+              documentType="purchase-invoice"
+              documentId={invoice.id}
+              companyId={invoice.companyId}
+              companyName={invoice.company.name}
+              documentNumber={invoice.fullNumber}
+              hasDocument={!!invoice.documentUrl}
+              documentUrl={invoice.documentUrl}
+            />
+          </div>
         </div>
       </div>
     </div>

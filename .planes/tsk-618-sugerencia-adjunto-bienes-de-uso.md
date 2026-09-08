@@ -1,7 +1,7 @@
 # TSK-618: Sugerencia de adjuntar la factura en compras de Bienes de Uso
 
 **Fecha de inicio:** 2026-09-08
-**Estado:** Implementación en progreso (Fase 4 de 9 completada)
+**Estado:** Implementación en progreso (Fase 6 de 9 completada)
 
 ---
 
@@ -623,39 +623,39 @@ mostrar hasta que exista una cuenta marcada.
 - **Objetivo:** que al imputar una línea a una cuenta marcada como Bien de Uso aparezca el cartel
   sugiriendo adjuntar el comprobante, sin frenar ni condicionar el guardado.
 - **Tareas:**
-  - [ ] `getProductsForSelect` (`purchases/features/invoices/list/actions.server.ts:596-645`):
+  - [x] `getProductsForSelect` (`purchases/features/invoices/list/actions.server.ts:596-645`):
         ampliar `defaultExpenseAccount: { select: { type: true } }` a
         `{ select: { type: true, isFixedAsset: true } }` y agregar al mapeo
         `defaultExpenseAccountIsFixedAsset: p.defaultExpenseAccount?.isFixedAsset ?? false`, al lado
         del `defaultExpenseAccountType` que ya existe. `ProductSelectItem` se infiere del retorno
         (línea 1757), así que el tipo se actualiza solo. Mantener intactos los `Number()` de
         `costPrice` y `vatRate` (regla 9).
-  - [ ] `getPurchasesDefaultAccountType` (líneas 582-594): convertirla en
+  - [x] `getPurchasesDefaultAccountType` (líneas 582-594): convertirla en
         `getPurchasesDefaultAccount()`, que devuelve `{ type: string | null; isFixedAsset: boolean }`
         leyendo `purchasesAccount: { select: { type: true, isFixedAsset: true } }`. Conserva su
         `checkPermission('commercial.purchases', 'view')`.
-  - [ ] `CreatePurchaseInvoice.tsx` (líneas 10-16) y `EditPurchaseInvoice.tsx` (líneas 19-26): usar la
+  - [x] `CreatePurchaseInvoice.tsx` (líneas 10-16) y `EditPurchaseInvoice.tsx` (líneas 19-26): usar la
         action nueva en el `Promise.all` y pasar al formulario `defaultAccountType={cuenta.type}`
         —la prop de TSK-583 no cambia de forma, así que `_LineCostCenterField` queda igual— más una
         prop nueva `defaultAccountIsFixedAsset={cuenta.isFixedAsset}`.
-  - [ ] Crear el componente cliente `_FixedAssetAttachmentNotice.tsx` en
+  - [x] Crear el componente cliente `_FixedAssetAttachmentNotice.tsx` en
         `src/modules/commercial/shared/components/` (no dentro de `_PurchaseInvoiceForm.tsx`, que ya
         tiene 959 líneas — riesgo 8). Recibe `form`, `products` y `defaultAccountIsFixedAsset`;
         observa las líneas con `useWatch` (mismo mecanismo que `_LineCostCenterField`,
         `_PurchaseInvoiceForm.tsx:88-158`), resuelve cada línea con `effectiveIsFixedAsset` y
         `findFixedAssetLines` de la fase 2, y devuelve `null` si no hay ninguna.
-  - [ ] Cuando hay alguna, renderiza un `Alert` ámbar con ícono `Paperclip` de `lucide-react`,
+  - [x] Cuando hay alguna, renderiza un `Alert` ámbar con ícono `Paperclip` de `lucide-react`,
         siguiendo los tokens de color de los avisos que ya conviven en el detalle
         (`PurchaseInvoiceDetail.tsx:103-146`, incluida la variante dark), con el texto acordado con
         la clienta: *"Esta factura incluye bienes de uso. Sería ideal que cargues el escaneo o la
         imagen del comprobante: vas a poder adjuntarlo al guardar, desde el detalle de la factura."*
         Nombrar las líneas involucradas con `buildFixedAssetSuggestionMessage`.
-  - [ ] Montarlo en `_PurchaseInvoiceForm.tsx` una sola vez, encima del bloque de botones de acción.
-  - [ ] **Verificar que no bloquea nada:** el aviso no entra en `purchaseInvoiceFormSchema`
+  - [x] Montarlo en `_PurchaseInvoiceForm.tsx` una sola vez, encima del bloque de botones de acción.
+  - [x] **Verificar que no bloquea nada:** el aviso no entra en `purchaseInvoiceFormSchema`
         (`shared/validators.ts`), ni en `zodResolver`, ni en `handleInvalid`
         (`_PurchaseInvoiceForm.tsx:400-414`), ni en `createPurchaseInvoice` /
         `updatePurchaseInvoice` / `confirmPurchaseInvoice`. Es solo presentación (decisión 2 de 1.7).
-  - [ ] No se agrega ningún campo de archivo al formulario ni se toca el flujo de guardado ni el
+  - [x] No se agrega ningún campo de archivo al formulario ni se toca el flujo de guardado ni el
         `router.push('/dashboard/commercial/purchases/${result.id}')` de las líneas 385 y 390, que es
         justamente lo que deja al usuario en la pantalla con el dropzone.
 - **Archivos:**
@@ -673,19 +673,19 @@ mostrar hasta que exista una cuenta marcada.
 - **Objetivo:** que la factura ya guardada con líneas de Bien de Uso recuerde que falta el
   comprobante, justo en la pantalla donde se puede subir.
 - **Tareas:**
-  - [ ] `getPurchaseInvoiceById` (`list/actions.server.ts:258-...`): en el `include` de
+  - [x] `getPurchaseInvoiceById` (`list/actions.server.ts:258-...`): en el `include` de
         `lines.product` (líneas 273-281) agregar
         `defaultExpenseAccount: { select: { isFixedAsset: true } }`. No agrega Decimals nuevos, así
         que el bloque de conversión a `Number()` de las líneas (líneas ~463-478) queda igual.
-  - [ ] `PurchaseInvoiceDetail.tsx`: calcular en el Server Component
+  - [x] `PurchaseInvoiceDetail.tsx`: calcular en el Server Component
         `const fixedAssetLines = findFixedAssetLines(...)` con la función de la fase 2, y renderizar
         un `Alert` ámbar cuando `fixedAssetLines.length > 0 && !invoice.documentUrl`, en el mismo
         bloque donde ya viven los tres avisos de recepción (líneas 103-146), con idéntico estilo y
         variante dark.
-  - [ ] El `Alert` incluye un `Button variant="outline" size="sm"` que ancla a la tarjeta
+  - [x] El `Alert` incluye un `Button variant="outline" size="sm"` que ancla a la tarjeta
         "Documento Adjunto" (`PurchaseInvoiceDetail.tsx:456-465`), a la que hay que darle un `id`
         para poder apuntarle.
-  - [ ] El aviso desaparece solo: `_DocumentAttachment` ya hace `router.refresh()` tras subir, con
+  - [x] El aviso desaparece solo: `_DocumentAttachment` ya hace `router.refresh()` tras subir, con
         lo cual `documentUrl` pasa a estar cargado y la condición deja de cumplirse.
 - **Archivos:**
   - Modificar: `src/modules/commercial/features/purchases/features/invoices/list/actions.server.ts`
@@ -2108,6 +2108,50 @@ cuenta de capitalización del asiento de alta de equipos
   - Qué cubren los 49 tests: la plantilla vacía **real** (se genera con `generateAccountsTemplate()` y se relee del buffer) resuelve "Bien de Uso" en la 7; el export nuevo, en la 8 sin confundirse con "Estado"; **el export anterior a TSK-618 —el caso crítico— deja la marca en `null`, lee `Activa`/`Inactiva` como lo que son, valida las dos filas sin error y da `false`**; la plantilla vieja de 6 columnas cae en las posiciones históricas; columnas reordenadas se resuelven igual; "Código" no se confunde con "Código Padre"; una fila 1 con datos en vez de encabezados cae a legacy. `parseSiNoCell` se probó con 11 valores verdaderos, 12 falsos y 5 inválidos. `validateAccountRow`, con la columna ausente, con `Sí`/`No`/vacío, con basura y con los cuatro errores clásicos. Y cuatro tests de round-trip completo que leen todas las filas de una hoja armada con cada uno de los tres formatos.
   - `npm run check-types`: **227 errores, exactamente la misma línea base preexistente** de las fases 1 a 3. Ninguno menciona `account-columns`, `excel-template` ni `import-export.server`.
   - `npx eslint` sobre `accounts/lib/`: **1 error y 2 advertencias, las tres preexistentes** y verificadas contra la línea base con `git stash` (el `@ts-ignore` del `xlsx.load` y los dos imports de enums sin usar de `excel-template.ts`). Los dos archivos nuevos no aportan ninguna. Cero `:any`, cero `console.*`.
+
+### Fase 5: Aviso no bloqueante en el formulario de carga de la factura de compra
+- **Estado:** Completada
+- **Archivos modificados:**
+  - `src/modules/commercial/shared/components/_FixedAssetAttachmentNotice.tsx` (nuevo, 97 líneas) - componente cliente que lee las líneas del `FormProvider` con `useWatch({ name })`, resuelve cada una con `effectiveIsFixedAsset` (fase 2) dentro de un `useMemo` con dependencias en `lines`, `products` y `defaultAccountIsFixedAsset` (diseño 3.7.4), filtra con `findFixedAssetLines` y devuelve `null` si no hay ninguna. Renderiza el `Alert` ámbar con `Paperclip`, `FIXED_ASSET_ATTACHMENT_SUGGESTION` y, en una segunda línea más chica, `buildFixedAssetSuggestionMessage`. **No recibe el objeto `form`**: las props son `products`, `defaultAccountIsFixedAsset` y `name` opcional, tal como fija el diseño 3.4.4, así que no importa nada del feature de compras.
+  - `.../invoices/list/actions.server.ts`:
+    - `getPurchasesDefaultAccountType()` → **`getPurchasesDefaultAccount(): Promise<PurchasesDefaultAccount>`**, con la interfaz `{ type: string | null; isFixedAsset: boolean }` exportada, el `select` ampliado a `purchasesAccount: { select: { type: true, isFixedAsset: true } }` y el mismo `checkPermission('commercial.purchases', 'view', { redirect: true })` de antes.
+    - `getProductsForSelect`: `defaultExpenseAccount: { select: { type: true, isFixedAsset: true } }` y mapeo nuevo `defaultExpenseAccountIsFixedAsset: p.defaultExpenseAccount?.isFixedAsset ?? null`, al lado del `defaultExpenseAccountType` que ya estaba. Los `Number(p.costPrice)` y `Number(p.vatRate)` quedaron intactos (regla 9). `ProductSelectItem` se infiere del retorno, así que el tipo se actualizó solo.
+  - `.../invoices/create/CreatePurchaseInvoice.tsx` y `.../invoices/edit/EditPurchaseInvoice.tsx` - la action nueva en el `Promise.all` (la variable pasó de `defaultAccountType` a `defaultAccount`), y las dos props al formulario: `defaultAccountType={defaultAccount.type}` (**misma forma que antes**) y `defaultAccountIsFixedAsset={defaultAccount.isFixedAsset}`.
+  - `.../invoices/create/components/_PurchaseInvoiceForm.tsx` - solo tres cosas: el import del componente nuevo, la prop `defaultAccountIsFixedAsset?: boolean` (con default `false`) en `PurchaseInvoiceFormProps`, y el montaje **una sola vez** entre la tarjeta de Totales y el bloque de botones de acción. Ni una línea de lógica nueva adentro del archivo de 959 líneas (riesgo 8).
+- **Notas:**
+  - **Los tres call sites de TSK-583 quedaron verificados.** `grep` confirma que solo existían dos llamadores (`CreatePurchaseInvoice.tsx` y `EditPurchaseInvoice.tsx`) más la definición. En los dos, `_PurchaseInvoiceForm` sigue recibiendo `defaultAccountType` como `string | null`, así que `_LineCostCenterField` no se tocó y el campo de centro de costo sigue apareciendo en las líneas de gasto. No quedó ninguna referencia viva a `getPurchasesDefaultAccountType` (solo la mención en el comentario que documenta el reemplazo).
+  - **`?? null` y no `?? false`** en `defaultExpenseAccountIsFixedAsset`, con el comentario puesto al lado del mapeo: `null` = "el ítem no tiene cuenta de egresos y cae en la de la empresa", `false` = "tiene cuenta y no es Bien de Uso". El test de la fase 2 que blinda esa distinción sigue en verde.
+  - **El aviso no bloquea nada**, tal como manda la decisión 2 de 1.7: no entra en `purchaseInvoiceFormSchema`, ni en el `zodResolver`, ni en `handleInvalid`, ni en `createPurchaseInvoice` / `updatePurchaseInvoice` / `confirmPurchaseInvoice`. Es un componente de presentación que devuelve `null` o un `Alert`.
+  - **No se agregó ningún campo de archivo** al formulario ni se tocó el flujo de guardado ni el `router.push('/dashboard/commercial/purchases/${result.id}')` que deja al usuario en la pantalla del dropzone.
+  - Al vivir en `commercial/shared/components/`, el mismo aviso funciona en alta, en edición y en NC/ND de compra, que usan el mismo formulario, sin código extra (1.2.7).
+  - Única concesión de tipado, la que anticipa el diseño 3.7.5: `useWatch({ name })` desde el contexto devuelve un valor sin tipar y se acota con `as WatchedLine[] | undefined` sobre la interfaz local `{ productId?: string; description?: string }`. Es un `as` a un tipo concreto, no un `:any`.
+  - **Sin desvíos respecto del diseño.** No se tocó nada de las fases 6 a 9: el detalle de la factura, la documentación y el PDF quedan intactos.
+- **Verificación:**
+  - `npm run test`: **`Test Files 25 passed (25)` / `Tests 328 passed (328)`** — la misma línea base de la fase 4, sin regresiones. La fase 5 es superficie de UI y actions; sus tests (integración de `getProductsForSelect` y del guardado con línea de BU) están planificados para la fase 7.
+  - `npm run check-types`: **227 errores, exactamente la línea base preexistente** de las fases 1 a 4 (zod v4 / react-hook-form / tanstack-table). Ninguno menciona `_FixedAssetAttachmentNotice`, `_PurchaseInvoiceForm`, `CreatePurchaseInvoice`, `EditPurchaseInvoice` ni `invoices/list/actions.server`.
+  - `npx eslint` sobre los cinco archivos: el componente nuevo sale limpio; los 2 errores y 3 advertencias que aparecen son preexistentes (comillas sin escapar en la línea 761 de `_PurchaseInvoiceForm.tsx`, `useCallback` y `redirect` sin usar). Cero `:any`, cero `console.*`.
+
+### Fase 6: Aviso persistente en el detalle mientras no haya adjunto
+- **Estado:** Completada
+- **Archivos modificados:**
+  - `.../invoices/list/actions.server.ts` - en el `include` de `lines.product` de `getPurchaseInvoiceById` se agregó `defaultExpenseAccount: { select: { isFixedAsset: true } }`. Es un booleano, así que **no agrega ningún Decimal** y el bloque de conversión a `Number()` de las líneas quedó exactamente igual: el `...line` ya arrastra el `product` completo con el flag adentro (regla 9 respetada por construcción).
+  - `.../invoices/detail/PurchaseInvoiceDetail.tsx`:
+    - `const invoice = await getPurchaseInvoiceById(invoiceId)` pasó a **`const [invoice, defaultAccount] = await Promise.all([getPurchaseInvoiceById(invoiceId), getPurchasesDefaultAccount()])`**, el mismo patrón de `CreatePurchaseInvoice`/`EditPurchaseInvoice`. Las dos actions ya exigen `commercial.purchases` → `view` con `redirect`, así que el paralelo no abre ningún camino sin permiso.
+    - `fixedAssetLines` se calcula en el Server Component con las **mismas funciones puras de la fase 2** que usa el formulario: `findFixedAssetLines` sobre `invoice.lines.map(...)` resolviendo cada línea con `effectiveIsFixedAsset(line.product?.defaultExpenseAccount?.isFixedAsset, defaultAccount.isFixedAsset)`.
+    - `suggestAttachment = fixedAssetLines.length > 0 && !invoice.documentUrl` gobierna un `Alert` ámbar (`border-amber-500/50 bg-amber-50 dark:bg-amber-950/20`, ícono `Paperclip`), montado **después** de los tres avisos de recepción y con el mismo layout `flex items-center justify-between` de ellos. Texto: la constante `FIXED_ASSET_ATTACHMENT_PENDING` de `commercial/shared/fixed-asset.ts`, sin redactar nada nuevo.
+    - Botón `variant="outline" size="sm"` con `asChild` sobre `<a href="#documento-adjunto">Adjuntar comprobante</a>`.
+    - La tarjeta de `_DocumentAttachment` quedó envuelta en `<div id="documento-adjunto" className="scroll-mt-24">` para que el ancla tenga destino y no quede pegada al borde superior al saltar.
+- **Notas:**
+  - **Desvío deliberado respecto de la planificación de 2.1, previsto por el diseño 3.4.5/3.3:** la planificación resolvía el criterio mirando solo la cuenta del ítem. Se implementó como manda el diseño, con `getPurchasesDefaultAccount()` en paralelo, para que el detalle aplique **literalmente la misma regla que el formulario**. Sin eso, una línea sin ítem (o con un ítem sin "Cuenta de Egresos") avisaba en la carga y no avisaba en el detalle, o al revés, según cómo estuviera marcada la cuenta de compras por defecto de la empresa.
+  - **Líneas sin ítem:** `line.product` es `null`, con lo cual `line.product?.defaultExpenseAccount?.isFixedAsset` da `undefined` y `effectiveIsFixedAsset` cae en `defaultAccount.isFixedAsset`. Es exactamente el mismo camino que toma el asiento en `createJournalEntryForPurchaseInvoice`, que imputa esas líneas a `purchasesAccountId`. El `?? null` de `getProductsForSelect` y el `?.` de acá conservan la distinción entre "no tiene cuenta" (cae al default) y "tiene cuenta y no es BU" (`false`, no avisa).
+  - **El aviso se va solo**, sin estado en cliente: `_DocumentAttachment` hace `router.refresh()` después de subir, el Server Component se vuelve a renderizar con `documentUrl` cargado y `suggestAttachment` pasa a `false`.
+  - Una factura **sin** líneas de Bien de Uso no muestra el aviso nunca, tenga o no adjunto; una **con** líneas de BU y adjunto tampoco.
+  - No se tocó `_DocumentAttachment` (vive en `commercial/shared/components/` y lo usan otros documentos): el `id` y el `scroll-mt-24` van en el envoltorio del detalle, no adentro del componente compartido.
+  - **No se tocó nada de las fases 7 a 9.**
+- **Verificación:**
+  - `npm run test`: **`Test Files 25 passed (25)` / `Tests 328 passed (328)`** — la misma línea base de la fase 5, sin regresiones.
+  - `npm run check-types`: **227 errores, exactamente la línea base preexistente**. El único que menciona `PurchaseInvoiceDetail.tsx` (el `calculatePurchaseInvoiceBalance` con `creditNoteApplicationsReceived`) se verificó como **preexistente** con un `git stash`: antes aparecía en la línea 35 y ahora en la 61, corrido por las líneas que agregó esta fase. Ninguno menciona `invoices/list/actions.server`.
+  - `npx eslint` sobre los dos archivos modificados: **salida vacía**, cero errores y cero advertencias. Cero `:any`, cero `console.*`.
 
 ## 5. Verificación
 _Pendiente - ejecutar `/verificar tsk-618-sugerencia-adjunto-bienes-de-uso`_

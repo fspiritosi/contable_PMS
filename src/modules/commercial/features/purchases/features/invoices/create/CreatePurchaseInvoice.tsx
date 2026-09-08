@@ -2,17 +2,17 @@ import {
   getSuppliersForSelect,
   getProductsForSelect,
   getCostCentersForSelect,
-  getPurchasesDefaultAccountType,
+  getPurchasesDefaultAccount,
 } from '../list/actions.server';
 import { _PurchaseInvoiceForm } from './components/_PurchaseInvoiceForm';
 import { PermissionGuard } from '@/shared/components/common/PermissionGuard';
 
 export async function CreatePurchaseInvoice() {
-  const [suppliers, products, costCenters, defaultAccountType] = await Promise.all([
+  const [suppliers, products, costCenters, defaultAccount] = await Promise.all([
     getSuppliersForSelect(),
     getProductsForSelect(),
     getCostCentersForSelect(),
-    getPurchasesDefaultAccountType(),
+    getPurchasesDefaultAccount(),
   ]);
 
   return (
@@ -29,7 +29,8 @@ export async function CreatePurchaseInvoice() {
           suppliers={suppliers}
           products={products}
           costCenters={costCenters}
-          defaultAccountType={defaultAccountType}
+          defaultAccountType={defaultAccount.type}
+          defaultAccountIsFixedAsset={defaultAccount.isFixedAsset}
         />
       </div>
     </PermissionGuard>
