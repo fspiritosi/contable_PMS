@@ -3,7 +3,7 @@ import {
   getProductsForSelect,
   getPurchaseInvoiceById,
   getCostCentersForSelect,
-  getPurchasesDefaultAccountType,
+  getPurchasesDefaultAccount,
 } from '../list/actions.server';
 import { _PurchaseInvoiceForm } from '../create/components/_PurchaseInvoiceForm';
 import { redirect } from 'next/navigation';
@@ -17,12 +17,12 @@ interface EditPurchaseInvoiceProps {
 
 export async function EditPurchaseInvoice({ invoiceId }: EditPurchaseInvoiceProps) {
   // Cargar datos en paralelo
-  const [suppliers, products, invoice, costCenters, defaultAccountType] = await Promise.all([
+  const [suppliers, products, invoice, costCenters, defaultAccount] = await Promise.all([
     getSuppliersForSelect(),
     getProductsForSelect(),
     getPurchaseInvoiceById(invoiceId),
     getCostCentersForSelect(),
-    getPurchasesDefaultAccountType(),
+    getPurchasesDefaultAccount(),
   ]);
 
   // Validar que la factura esté en estado DRAFT
@@ -102,7 +102,8 @@ export async function EditPurchaseInvoice({ invoiceId }: EditPurchaseInvoiceProp
           suppliers={suppliers}
           products={products}
           costCenters={costCenters}
-          defaultAccountType={defaultAccountType}
+          defaultAccountType={defaultAccount.type}
+          defaultAccountIsFixedAsset={defaultAccount.isFixedAsset}
           mode="edit"
           invoiceId={invoiceId}
           defaultValues={defaultValues}

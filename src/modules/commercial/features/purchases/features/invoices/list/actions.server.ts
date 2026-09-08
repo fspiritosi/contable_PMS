@@ -277,6 +277,9 @@ export async function getPurchaseInvoiceById(id: string) {
                 name: true,
                 unitOfMeasure: true,
                 trackStock: true,
+                // TSK-618: marca de Bien de Uso de la cuenta de egresos del item,
+                // para el aviso de adjuntar el comprobante en el detalle.
+                defaultExpenseAccount: { select: { isFixedAsset: true } },
               },
             },
             // Reparto por centro de costo de la linea (TSK-583).
@@ -569,17 +572,33 @@ export async function getCostCentersForSelect() {
   });
 }
 
+/** Cuenta de compras por defecto de la empresa, con lo que necesita el formulario. */
+export interface PurchasesDefaultAccount {
+  /** Tipo de la cuenta (`AccountType` de Prisma), o `null` si no hay configuración. */
+  type: string | null;
+  /** TSK-618: si esa cuenta está marcada como Bien de Uso. */
+  isFixedAsset: boolean;
+}
+
 /**
- * Tipo de la cuenta de compras por defecto de la empresa (TSK-583, hallazgo
- * de revisión final).
+ * Cuenta de compras por defecto de la empresa (TSK-583, hallazgo de revisión
+ * final; ampliada en TSK-618).
  *
  * El formulario decide si una línea admite/exige centro de costo mirando la
  * cuenta del ítem — pero cuando el ítem no tiene una propia, el asiento
  * (`createJournalEntryForPurchaseInvoice`) igual la imputa a esta cuenta.
  * Sin este dato en el formulario, un ítem sin cuenta propia nunca mostraba
  * el campo aunque el asiento lo imputara a una cuenta de resultado.
+ *
+ * TSK-618 suma la marca de Bien de Uso de esa misma cuenta, por el mismo
+ * motivo: una línea sin ítem (o con un ítem sin cuenta de egresos) se imputa
+ * acá, así que el aviso de adjuntar el comprobante tiene que mirarla también.
+ *
+ * Reemplaza a `getPurchasesDefaultAccountType`, que devolvía solo el `type`.
+ * Los llamadores siguen pasando `defaultAccountType={defaultAccount.type}`, con
+ * la misma forma (`string | null`), así que `_LineCostCenterField` no cambia.
  */
-export async function getPurchasesDefaultAccountType() {
+export async function getPurchasesDefaultAccount(): Promise<PurchasesDefaultAccount> {
   await checkPermission('commercial.purchases', 'view', { redirect: true });
 
   const companyId = await getActiveCompanyId();
@@ -587,10 +606,13 @@ export async function getPurchasesDefaultAccountType() {
 
   const settings = await prisma.accountingSettings.findUnique({
     where: { companyId },
-    select: { purchasesAccount: { select: { type: true } } },
+    select: { purchasesAccount: { select: { type: true, isFixedAsset: true } } },
   });
 
-  return settings?.purchasesAccount?.type ?? null;
+  return {
+    type: settings?.purchasesAccount?.type ?? null,
+    isFixedAsset: settings?.purchasesAccount?.isFixedAsset ?? false,
+  };
 }
 
 export async function getProductsForSelect() {
@@ -617,8 +639,9 @@ export async function getProductsForSelect() {
         vatRate: true,
         trackStock: true,
         defaultCostCenterId: true,
-        // El tipo de la cuenta decide si la linea admite centro de costo (TSK-583).
-        defaultExpenseAccount: { select: { type: true } },
+        // El tipo de la cuenta decide si la linea admite centro de costo (TSK-583);
+        // la marca decide si se sugiere adjuntar el comprobante (TSK-618).
+        defaultExpenseAccount: { select: { type: true, isFixedAsset: true } },
         productSuppliers: {
           select: { supplierId: true, supplierCode: true, supplierPrice: true },
         },
@@ -631,6 +654,11 @@ export async function getProductsForSelect() {
       costPrice: Number(p.costPrice),
       vatRate: Number(p.vatRate),
       defaultExpenseAccountType: p.defaultExpenseAccount?.type ?? null,
+      // `?? null`, NO `?? false`: un ítem SIN cuenta de egresos tiene que caer
+      // en la cuenta por defecto de la empresa, igual que hace
+      // `defaultExpenseAccountType`. Con `?? false` volvería el falso negativo
+      // que TSK-583 tuvo que corregir (TSK-618).
+      defaultExpenseAccountIsFixedAsset: p.defaultExpenseAccount?.isFixedAsset ?? null,
       supplierIds: p.productSuppliers.map((ps) => ps.supplierId),
       productSuppliers: p.productSuppliers.map((ps) => ({
         supplierId: ps.supplierId,

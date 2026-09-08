@@ -25,6 +25,7 @@ import {
   SelectValue,
 } from '@/shared/components/ui/select';
 import { AccountCombobox } from '@/shared/components/common/AccountCombobox';
+import { Switch } from '@/shared/components/ui/switch';
 import { Textarea } from '@/shared/components/ui/textarea';
 
 import { accountSchema, type CreateAccountInput } from '../../../shared/types';
@@ -41,7 +42,7 @@ export function _CreateAccountModal({ companyId, onClose }: CreateAccountModalPr
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [accounts, setAccounts] = useState<
-    Array<{ id: string; code: string; name: string; type: AccountType }>
+    Array<{ id: string; code: string; name: string; type: AccountType; isFixedAsset: boolean }>
   >([]);
 
   const form = useForm<CreateAccountInput>({
@@ -59,6 +60,16 @@ export function _CreateAccountModal({ companyId, onClose }: CreateAccountModalPr
     };
     loadAccounts();
   }, [companyId]);
+
+  // TSK-618: al elegir la cuenta padre, el tilde de Bien de Uso se sincroniza
+  // con el valor del rubro. El servidor hace lo mismo por su cuenta (por si el
+  // campo no llega), pero mostrarlo acá deja destildar la excepción en el acto
+  // — el caso de crear una Amortización Acumulada bajo un rubro marcado.
+  const parentId = form.watch('parentId');
+  useEffect(() => {
+    const parent = accounts.find((account) => account.id === parentId);
+    form.setValue('isFixedAsset', parent?.isFixedAsset ?? false);
+  }, [parentId, accounts, form]);
 
   const handleSubmit = async (data: CreateAccountInput) => {
     setIsLoading(true);
@@ -229,6 +240,22 @@ export function _CreateAccountModal({ companyId, onClose }: CreateAccountModalPr
               (recibe movimientos); al asignarle una hija, el padre pasa a ser de
               sumatoria.
             </p>
+          </div>
+
+          <div className="flex items-start justify-between gap-4 rounded-md border p-3">
+            <div className="space-y-1">
+              <Label htmlFor="isFixedAsset">Bien de Uso</Label>
+              <p className="text-xs text-muted-foreground">
+                Marcá las cuentas del rubro Bienes de Uso. Al cargar una factura de compra
+                imputada a ellas, el sistema va a sugerir adjuntar el comprobante.
+              </p>
+            </div>
+            <Switch
+              id="isFixedAsset"
+              checked={form.watch('isFixedAsset') ?? false}
+              onCheckedChange={(checked) => form.setValue('isFixedAsset', checked)}
+              disabled={isLoading}
+            />
           </div>
 
           <div className="space-y-2">

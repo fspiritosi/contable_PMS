@@ -5,8 +5,14 @@ import { prisma } from '@/shared/lib/prisma';
 import { logger } from '@/shared/lib/logger';
 import { checkPermission } from '@/shared/lib/permissions';
 import type { AccountType } from '@/generated/prisma/enums';
+import type { Account } from '@/generated/prisma/client';
 import { buildImputableAccountsWhere } from '@/shared/lib/accounts/imputable-accounts';
 import { revalidateAccountingRoutes, getAccountRollupBalances } from '../../shared/utils';
+import {
+  collectSubtreeIds,
+  resolveFixedAssetCascade,
+  type FixedAssetCascadeReason,
+} from '../../shared/utils/account-subtree';
 import { type CreateAccountInput } from '../../shared/types';
 import {
   validateAccountCode,
@@ -22,6 +28,7 @@ import {
 } from '../../shared/utils/account-code';
 import { getCurrentFiscalYear, getNextFiscalYear } from '../../shared/utils/fiscal-year';
 import { MODEL_CHART_OF_ACCOUNTS } from './data/model-chart-of-accounts';
+import { isModelFixedAssetCode } from './data/model-fixed-assets';
 import { randomUUID } from 'crypto';
 
 /**
@@ -75,6 +82,19 @@ export async function createAccount(params: { companyId: string, input: CreateAc
 
     // La cuenta nace hoja (imputable); si tiene padre, el padre deja de ser hoja.
     const account = await prisma.$transaction(async (tx) => {
+      // TSK-618: la cuenta nueva HEREDA la marca de Bien de Uso del padre. Sin
+      // esto, una hija creada después de tildar el rubro queda desalineada en
+      // silencio. Un valor explícito en el input gana: el modal deja destildar
+      // la hija en el mismo alta (el caso de una Amortización Acumulada).
+      let inheritedIsFixedAsset = false;
+      if (input.parentId) {
+        const parent = await tx.account.findUnique({
+          where: { id: input.parentId },
+          select: { isFixedAsset: true },
+        });
+        inheritedIsFixedAsset = parent?.isFixedAsset ?? false;
+      }
+
       const created = await tx.account.create({
         data: {
           code: normalizedCode,
@@ -85,6 +105,7 @@ export async function createAccount(params: { companyId: string, input: CreateAc
           parentId: input.parentId,
           companyId: companyId,
           isLeaf: true,
+          isFixedAsset: input.isFixedAsset ?? inheritedIsFixedAsset,
         },
       });
 
@@ -98,7 +119,9 @@ export async function createAccount(params: { companyId: string, input: CreateAc
       return created;
     });
 
-    logger.info('Cuenta contable creada', { data: { accountId: account.id, userId } });
+    logger.info('Cuenta contable creada', {
+      data: { accountId: account.id, userId, isFixedAsset: account.isFixedAsset },
+    });
     revalidateAccountingRoutes(companyId);
 
     return account;
@@ -109,9 +132,35 @@ export async function createAccount(params: { companyId: string, input: CreateAc
 }
 
 /**
- * Actualiza una cuenta contable existente
+ * Alcance real de la cascada de la marca de Bien de Uso en un guardado (TSK-618).
  */
-export async function updateAccount(companyId: string, accountId: string, input: Partial<CreateAccountInput>) {
+export interface FixedAssetCascadeResult {
+  applied: boolean;
+  /** Valor propagado. Irrelevante si `applied` es false. */
+  value: boolean;
+  reason: FixedAssetCascadeReason | null;
+  /** Descendientes reescritos (NO incluye la cuenta editada). */
+  affectedAccountIds: string[];
+}
+
+export type UpdateAccountResult = Account & {
+  fixedAssetCascade: FixedAssetCascadeResult;
+};
+
+/**
+ * Actualiza una cuenta contable existente.
+ *
+ * TSK-618: propaga la marca de Bien de Uso al subárbol, pero **solo cuando el
+ * valor cambia** (ver `resolveFixedAssetCascade`). Si se propagara en cada
+ * guardado, editar el nombre del rubro pisaría las excepciones destildadas a
+ * mano —típicamente las Amortizaciones Acumuladas, que cuelgan del rubro pero
+ * son regularizadoras— y el síntoma aparecería recién en producción.
+ */
+export async function updateAccount(
+  companyId: string,
+  accountId: string,
+  input: Partial<CreateAccountInput>
+): Promise<UpdateAccountResult> {
   const userId = await getCurrentUserId();
   if (!userId) throw new Error('No autenticado');
   await checkPermission('accounting.accounts', 'update', { redirect: true });
@@ -154,12 +203,44 @@ export async function updateAccount(companyId: string, accountId: string, input:
     const parentChanged =
       input.parentId !== undefined && input.parentId !== account.parentId;
 
+    // TSK-618: valor de Bien de Uso del padre nuevo, solo si hace falta.
+    let newParentIsFixedAsset: boolean | null = null;
+    if (parentChanged && input.parentId) {
+      const newParent = await prisma.account.findUnique({
+        where: { id: input.parentId },
+        select: { isFixedAsset: true },
+      });
+      newParentIsFixedAsset = newParent?.isFixedAsset ?? null;
+    }
+
+    // ¿Hay cascada? Decisión pura, testeada sin base.
+    const cascade = resolveFixedAssetCascade({
+      current: account.isFixedAsset,
+      input: input.isFixedAsset,
+      parentChanged,
+      newParentIsFixedAsset,
+    });
+
+    // El subárbol solo se lee cuando hay algo que propagar: una edición común
+    // de nombre o descripción NO dispara el findMany de todas las cuentas.
+    let descendantIds: string[] = [];
+    if (cascade) {
+      const allAccounts = await prisma.account.findMany({
+        where: { companyId },
+        select: { id: true, parentId: true },
+      });
+      descendantIds = collectSubtreeIds(allAccounts, accountId).filter((id) => id !== accountId);
+    }
+
     const updatedAccount = await prisma.$transaction(async (tx) => {
       const updated = await tx.account.update({
         where: { id: accountId },
         data: {
           ...input,
           ...(normalizedCode ? { code: normalizedCode } : {}),
+          // La cascada por cambio de padre pisa lo que haya mandado el
+          // formulario: al mover una cuenta de rubro, manda el rubro nuevo.
+          ...(cascade ? { isFixedAsset: cascade.value } : {}),
         },
       });
 
@@ -176,13 +257,39 @@ export async function updateAccount(companyId: string, accountId: string, input:
         }
       }
 
+      // Un solo updateMany para todo el subárbol: nada de N updates en un for.
+      // El `companyId` en el where es defensa en profundidad: los ids ya salen
+      // de un findMany filtrado por empresa.
+      if (cascade && descendantIds.length > 0) {
+        await tx.account.updateMany({
+          where: { id: { in: descendantIds }, companyId },
+          data: { isFixedAsset: cascade.value },
+        });
+      }
+
       return updated;
     });
 
-    logger.info('Cuenta contable actualizada', { data: { accountId, userId } });
+    logger.info('Cuenta contable actualizada', {
+      data: {
+        accountId,
+        userId,
+        isFixedAsset: updatedAccount.isFixedAsset,
+        cascadeReason: cascade?.reason ?? null,
+        affected: cascade ? descendantIds.length : 0,
+      },
+    });
     revalidateAccountingRoutes(companyId);
 
-    return updatedAccount;
+    return {
+      ...updatedAccount,
+      fixedAssetCascade: {
+        applied: cascade !== null,
+        value: cascade?.value ?? updatedAccount.isFixedAsset,
+        reason: cascade?.reason ?? null,
+        affectedAccountIds: cascade ? descendantIds : [],
+      },
+    };
   } catch (error) {
     logger.error('Error al actualizar cuenta contable', { data: { error, accountId, userId } });
     throw error;
@@ -390,28 +497,14 @@ export async function disableAccount(
     }
 
     // Todas las cuentas de la empresa para recorrer el subárbol.
+    // El recorrido (raíz primero + descendientes) vive en `collectSubtreeIds`,
+    // el mismo helper puro que usa la cascada de Bien de Uso (TSK-618). Mismo
+    // algoritmo y mismo orden que el DFS que estaba inline acá.
     const allAccounts = await prisma.account.findMany({
       where: { companyId },
       select: { id: true, parentId: true },
     });
-    const childrenByParent = new Map<string, string[]>();
-    for (const acc of allAccounts) {
-      if (acc.parentId) {
-        const list = childrenByParent.get(acc.parentId) ?? [];
-        list.push(acc.id);
-        childrenByParent.set(acc.parentId, list);
-      }
-    }
-
-    // BFS/DFS: raíz + todos los descendientes.
-    const affectedAccountIds: string[] = [];
-    const stack = [accountId];
-    while (stack.length > 0) {
-      const id = stack.pop()!;
-      affectedAccountIds.push(id);
-      const children = childrenByParent.get(id);
-      if (children) stack.push(...children);
-    }
+    const affectedAccountIds = collectSubtreeIds(allAccounts, accountId);
 
     // Saldos con roll-up (cubre hojas y sumatorias) — ya en number.
     const rollup = await getAccountRollupBalances(companyId);
@@ -526,6 +619,10 @@ export async function loadModelChartOfAccounts(companyId: string): Promise<{ cre
         nature: natureForType(account.type),
         isLeaf: account.isLeaf,
         parentId,
+        // TSK-618: el rubro Bienes de Uso (1.2.2) nace marcado, para que una
+        // empresa nueva tenga la sugerencia de adjunto funcionando sin
+        // configurar nada. Sigue siendo editable desde el ABM.
+        isFixedAsset: isModelFixedAssetCode(account.code),
       };
     }).sort((a, b) => a.code.localeCompare(b.code));
 

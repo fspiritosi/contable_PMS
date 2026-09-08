@@ -7,6 +7,13 @@ import { checkPermission } from '@/shared/lib/permissions';
 import ExcelJS from 'exceljs';
 import { AccountType, AccountNature } from '@/generated/prisma/enums';
 import { generateAccountsTemplate } from './excel-template';
+import {
+  ACCOUNT_EXPORT_HEADERS,
+  parseSiNoCell,
+  readAccountRow,
+  resolveAccountColumnIndexes,
+  validateAccountRow,
+} from './account-columns';
 import { validateAccountCodeFormat, AccountCodeFormatError } from '../../../shared/utils/account-code';
 
 /**
@@ -58,6 +65,9 @@ export async function exportAccountsToExcel(companyId: string) {
           },
         },
         isActive: true,
+        // TSK-618: la marca de Bien de Uso viaja en el export para que el
+        // round-trip (exportar → reimportar) no la borre en silencio.
+        isFixedAsset: true,
       },
       orderBy: { code: 'asc' },
     });
@@ -68,16 +78,9 @@ export async function exportAccountsToExcel(companyId: string) {
 
     const worksheet = workbook.addWorksheet('Plan de Cuentas');
 
-    // Encabezados
-    const headers = [
-      'Código',
-      'Nombre',
-      'Tipo',
-      'Naturaleza',
-      'Descripción',
-      'Código Padre',
-      'Estado',
-    ];
+    // Encabezados. Se toman del módulo compartido: el importador resuelve las
+    // columnas por NOMBRE, así que ambos lados tienen que leer la misma lista.
+    const headers: string[] = [...ACCOUNT_EXPORT_HEADERS];
 
     const headerRow = worksheet.getRow(1);
     headers.forEach((header, index) => {
@@ -110,6 +113,7 @@ export async function exportAccountsToExcel(companyId: string) {
       row.getCell(5).value = account.description || '';
       row.getCell(6).value = account.parent?.code || '';
       row.getCell(7).value = account.isActive ? 'Activa' : 'Inactiva';
+      row.getCell(8).value = account.isFixedAsset ? 'Sí' : 'No';
       row.height = 20;
     });
 
@@ -121,6 +125,7 @@ export async function exportAccountsToExcel(companyId: string) {
     worksheet.getColumn(5).width = 40;
     worksheet.getColumn(6).width = 15;
     worksheet.getColumn(7).width = 12;
+    worksheet.getColumn(8).width = 12; // Bien de Uso (TSK-618)
 
     // Agregar filtros
     worksheet.autoFilter = {
@@ -143,44 +148,6 @@ export async function exportAccountsToExcel(companyId: string) {
     logger.error('Error al exportar plan de cuentas', { data: { error, companyId, userId } });
     throw error;
   }
-}
-
-/**
- * Valida los datos de una cuenta antes de importar
- */
-function validateAccountRow(row: {
-  code: string;
-  name: string;
-  type: string;
-  nature: string;
-  description?: string;
-  parentCode?: string;
-}): { valid: boolean; errors: string[] } {
-  const errors: string[] = [];
-
-  // Validar código
-  if (!row.code || row.code.trim() === '') {
-    errors.push('El código es obligatorio');
-  }
-
-  // Validar nombre
-  if (!row.name || row.name.trim() === '') {
-    errors.push('El nombre es obligatorio');
-  }
-
-  // Validar tipo
-  const validTypes: string[] = Object.values(AccountType);
-  if (!validTypes.includes(row.type)) {
-    errors.push(`Tipo inválido. Debe ser uno de: ${validTypes.join(', ')}`);
-  }
-
-  // Validar naturaleza
-  const validNatures: string[] = Object.values(AccountNature);
-  if (!validNatures.includes(row.nature)) {
-    errors.push(`Naturaleza inválida. Debe ser uno de: ${validNatures.join(', ')}`);
-  }
-
-  return { valid: errors.length === 0, errors };
 }
 
 /**
@@ -209,32 +176,27 @@ export async function importAccountsFromExcel(companyId: string, fileBuffer: num
       nature: AccountNature;
       description?: string;
       parentCode?: string;
+      /** TSK-618: valor literal de la columna "Bien de Uso" de esa fila. */
+      isFixedAsset: boolean;
     }> = [];
 
     const errors: Array<{ row: number; errors: string[] }> = [];
+
+    // TSK-618: las columnas se resuelven por NOMBRE de encabezado, no por
+    // posición. La plantilla vacía tiene 6 columnas, el export viejo 7 (con
+    // "Estado" en la 7) y el export nuevo 8: leer por índice fijo haría que un
+    // export anterior a este ticket metiera "Activa" en "Bien de Uso" y
+    // rompiera todas las filas del archivo.
+    const columns = resolveAccountColumnIndexes(worksheet.getRow(1));
 
     // Leer filas (saltando el encabezado)
     worksheet.eachRow((row, rowNumber) => {
       if (rowNumber === 1) return; // Saltar encabezado
 
-      const code = row.getCell(1).value?.toString().trim();
-      const name = row.getCell(2).value?.toString().trim();
-      const type = row.getCell(3).value?.toString().trim();
-      const nature = row.getCell(4).value?.toString().trim();
-      const description = row.getCell(5).value?.toString().trim();
-      const parentCode = row.getCell(6).value?.toString().trim();
+      const rowData = readAccountRow(row, columns);
 
       // Saltar filas vacías
-      if (!code && !name) return;
-
-      const rowData = {
-        code: code || '',
-        name: name || '',
-        type: type || '',
-        nature: nature || '',
-        description,
-        parentCode,
-      };
+      if (!rowData.code && !rowData.name) return;
 
       // Validar fila
       const validation = validateAccountRow(rowData);
@@ -270,6 +232,9 @@ export async function importAccountsFromExcel(companyId: string, fileBuffer: num
         nature: rowData.nature as AccountNature,
         description: rowData.description || undefined,
         parentCode: normalizedParentCode,
+        // Ya validado arriba: si el texto fuera inválido, la fila no llega acá.
+        // Archivo sin la columna (anterior a TSK-618) → `false`.
+        isFixedAsset: parseSiNoCell(rowData.isFixedAssetRaw) ?? false,
       });
     });
 
@@ -375,6 +340,10 @@ export async function importAccountsFromExcel(companyId: string, fileBuffer: num
               description: accountData.description,
               parentId,
               isLeaf: true,
+              // TSK-618: el archivo es la fuente de verdad de esta corrida. NO
+              // se hereda del padre ni se dispara la cascada del ABM: pisaría
+              // las excepciones que el usuario escribió a mano en el Excel.
+              isFixedAsset: accountData.isFixedAsset,
             },
           });
 

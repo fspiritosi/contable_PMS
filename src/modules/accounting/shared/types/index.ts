@@ -9,6 +9,15 @@ export const accountSchema = z.object({
   nature: z.nativeEnum(AccountNature),
   description: z.string().optional(),
   parentId: z.string().uuid().optional(),
+  /**
+   * Marca de Bien de Uso (TSK-618). `optional()` a propósito: `undefined` es lo
+   * que distingue "el formulario no mandó el flag" de "el usuario lo apagó".
+   * Sin esa distinción la cascada de `updateAccount` no puede saber si cambió,
+   * y pisaría las excepciones destildadas a mano (las Amortizaciones
+   * Acumuladas del rubro). Cuando no viene, `createAccount` hereda el valor del
+   * padre y `updateAccount` no propaga nada.
+   */
+  isFixedAsset: z.boolean().optional(),
 });
 
 export type CreateAccountInput = z.infer<typeof accountSchema>;
@@ -79,6 +88,8 @@ export interface AccountWithChildren {
   description?: string | null;
   isActive: boolean;
   isLeaf: boolean;
+  /** Marca de Bien de Uso (TSK-618), propagada en cascada desde el rubro. */
+  isFixedAsset: boolean;
   disabledFrom?: Date | null;
   disabledFromFiscalYearId?: string | null;
   parentId?: string | null;

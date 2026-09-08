@@ -7,6 +7,7 @@
 
 import ExcelJS from 'exceljs';
 import { AccountType, AccountNature } from '@/generated/prisma/enums';
+import { ACCOUNT_TEMPLATE_HEADERS } from './account-columns';
 
 /** Colores del tema */
 const THEME = {
@@ -33,15 +34,9 @@ export async function generateAccountsTemplate(): Promise<Buffer> {
     views: [{ state: 'frozen', ySplit: 1 }],
   });
 
-  // Encabezados
-  const headers = [
-    'Código',
-    'Nombre',
-    'Tipo',
-    'Naturaleza',
-    'Descripción (Opcional)',
-    'Código Padre (Opcional)',
-  ];
+  // Encabezados. Se toman del módulo compartido para que el importador —que
+  // resuelve las columnas por nombre— y la plantilla no se puedan desalinear.
+  const headers: string[] = [...ACCOUNT_TEMPLATE_HEADERS];
 
   const headerRow = dataSheet.getRow(1);
   headers.forEach((header, index) => {
@@ -77,6 +72,7 @@ export async function generateAccountsTemplate(): Promise<Buffer> {
   dataSheet.getColumn(4).width = 15; // Naturaleza
   dataSheet.getColumn(5).width = 40; // Descripción
   dataSheet.getColumn(6).width = 15; // Código Padre
+  dataSheet.getColumn(7).width = 15; // Bien de Uso (TSK-618)
 
   // Nota: Las validaciones de datos se pueden agregar manualmente en Excel
   // o implementar con fórmulas personalizadas si es necesario
@@ -148,6 +144,15 @@ export async function generateAccountsTemplate(): Promise<Buffer> {
         'Revise la hoja "Ejemplo" para ver cuentas de muestra',
       ],
     },
+    {
+      title: '6. Bien de Uso',
+      points: [
+        'Escriba "Sí" en las cuentas del rubro Bienes de Uso (inmuebles, rodados, maquinarias…)',
+        'Deje vacío o escriba "No" en el resto',
+        'Al cargar una factura de compra imputada a una de esas cuentas, el sistema sugiere adjuntar el comprobante escaneado',
+        'La importación toma el valor de cada fila tal cual: no se hereda de la cuenta padre',
+      ],
+    },
   ];
 
   instructions.forEach((section) => {
@@ -209,20 +214,24 @@ export async function generateAccountsTemplate(): Promise<Buffer> {
 
   // Datos de ejemplo
   const exampleData = [
-    ['1', 'ACTIVO', 'ASSET', 'DEBIT', 'Bienes y derechos de la empresa', ''],
-    ['1.1', 'ACTIVO CORRIENTE', 'ASSET', 'DEBIT', 'Activos liquidables en el corto plazo', '1'],
-    ['1.1.1', 'CAJA Y BANCOS', 'ASSET', 'DEBIT', 'Disponibilidades', '1.1'],
-    ['1.1.1.01', 'Caja General', 'ASSET', 'DEBIT', 'Efectivo en caja', '1.1.1'],
-    ['1.1.1.02', 'Banco Nación - CC', 'ASSET', 'DEBIT', 'Cuenta corriente Banco Nación', '1.1.1'],
-    ['2', 'PASIVO', 'LIABILITY', 'CREDIT', 'Obligaciones de la empresa', ''],
-    ['2.1', 'PASIVO CORRIENTE', 'LIABILITY', 'CREDIT', 'Deudas a corto plazo', '2'],
-    ['2.1.1', 'PROVEEDORES', 'LIABILITY', 'CREDIT', 'Cuentas por pagar a proveedores', '2.1'],
-    ['3', 'PATRIMONIO NETO', 'EQUITY', 'CREDIT', 'Capital y resultados', ''],
-    ['3.1', 'CAPITAL', 'EQUITY', 'CREDIT', 'Aportes de los socios', '3'],
-    ['4', 'INGRESOS', 'INCOME', 'CREDIT', 'Ventas y otros ingresos', ''],
-    ['4.1', 'VENTAS', 'INCOME', 'CREDIT', 'Ingresos por ventas', '4'],
-    ['5', 'GASTOS', 'EXPENSE', 'DEBIT', 'Costos operativos', ''],
-    ['5.1', 'GASTOS ADMINISTRATIVOS', 'EXPENSE', 'DEBIT', 'Gastos de administración', '5'],
+    ['1', 'ACTIVO', 'ASSET', 'DEBIT', 'Bienes y derechos de la empresa', '', 'No'],
+    ['1.1', 'ACTIVO CORRIENTE', 'ASSET', 'DEBIT', 'Activos liquidables en el corto plazo', '1', 'No'],
+    ['1.1.1', 'CAJA Y BANCOS', 'ASSET', 'DEBIT', 'Disponibilidades', '1.1', 'No'],
+    ['1.1.1.01', 'Caja General', 'ASSET', 'DEBIT', 'Efectivo en caja', '1.1.1', 'No'],
+    ['1.1.1.02', 'Banco Nación - CC', 'ASSET', 'DEBIT', 'Cuenta corriente Banco Nación', '1.1.1', 'No'],
+    ['1.2', 'ACTIVO NO CORRIENTE', 'ASSET', 'DEBIT', 'Activos de largo plazo', '1', 'No'],
+    // TSK-618: el rubro de bienes de uso y una de sus cuentas, con la marca en "Sí".
+    ['1.2.2', 'BIENES DE USO', 'ASSET', 'DEBIT', 'Inmuebles, rodados, maquinarias', '1.2', 'Sí'],
+    ['1.2.2.01', 'Rodados', 'ASSET', 'DEBIT', 'Vehículos de la empresa', '1.2.2', 'Sí'],
+    ['2', 'PASIVO', 'LIABILITY', 'CREDIT', 'Obligaciones de la empresa', '', 'No'],
+    ['2.1', 'PASIVO CORRIENTE', 'LIABILITY', 'CREDIT', 'Deudas a corto plazo', '2', 'No'],
+    ['2.1.1', 'PROVEEDORES', 'LIABILITY', 'CREDIT', 'Cuentas por pagar a proveedores', '2.1', 'No'],
+    ['3', 'PATRIMONIO NETO', 'EQUITY', 'CREDIT', 'Capital y resultados', '', 'No'],
+    ['3.1', 'CAPITAL', 'EQUITY', 'CREDIT', 'Aportes de los socios', '3', 'No'],
+    ['4', 'INGRESOS', 'INCOME', 'CREDIT', 'Ventas y otros ingresos', '', 'No'],
+    ['4.1', 'VENTAS', 'INCOME', 'CREDIT', 'Ingresos por ventas', '4', 'No'],
+    ['5', 'GASTOS', 'EXPENSE', 'DEBIT', 'Costos operativos', '', 'No'],
+    ['5.1', 'GASTOS ADMINISTRATIVOS', 'EXPENSE', 'DEBIT', 'Gastos de administración', '5', 'No'],
   ];
 
   exampleData.forEach((rowData, index) => {
@@ -247,6 +256,7 @@ export async function generateAccountsTemplate(): Promise<Buffer> {
   exampleSheet.getColumn(4).width = 15;
   exampleSheet.getColumn(5).width = 40;
   exampleSheet.getColumn(6).width = 15;
+  exampleSheet.getColumn(7).width = 15; // Bien de Uso (TSK-618)
 
   // Generar buffer
   return Buffer.from(await workbook.xlsx.writeBuffer());
