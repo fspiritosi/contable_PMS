@@ -74,7 +74,7 @@ export function ApproverAllTickets({ onSelect }: Props) {
           }`}
         >
         {tickets.map((ticket) => {
-          const status = statusFor(ticket.status?.slug, ticket.status?.name);
+          const status = statusFor(ticket.status?.slug);
           const { cleanTitle, categoryLabel } = parseCategoryFromTitle(ticket.title);
           const reporterLabel =
             ticket.reporter_name && ticket.reporter_name.trim() !== ''

@@ -64,7 +64,11 @@ export function TicketAttachmentsList({ urls }: Props) {
                 ) : (
                   <FileText className="h-3 w-3 shrink-0" />
                 )}
-                <span className="truncate">{name}</span>
+                {/* `min-w-0` o el nombre no puede achicarse por debajo de su
+                    contenido y desborda la celda en vez de truncarse. Se nota
+                    sobre todo dentro de una burbuja de comentario, que es mucho
+                    mas angosta que la columna del ticket. */}
+                <span className="min-w-0 truncate">{name}</span>
               </div>
             </a>
           );

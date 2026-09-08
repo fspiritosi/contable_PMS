@@ -1,7 +1,14 @@
 import 'server-only';
 import { Logger } from '@/lib/logger';
 import { TaskAppError } from './errors';
-import type { Comment, CreateCommentRequest, CreateTicketRequest, Ticket, UploadResult } from './types';
+import type {
+  Comment,
+  CreateCommentRequest,
+  CreateTicketRequest,
+  Ticket,
+  TicketTimeline,
+  UploadResult,
+} from './types';
 
 const logger = new Logger('shared/lib/taskapp');
 
@@ -190,6 +197,21 @@ export const taskAppClient = {
       method: 'POST',
       body: JSON.stringify({ reporter_email: reporterEmail, keys }),
     }),
+
+  // El "sí, quedó resuelto". Cierra el ticket dejando constancia de quién
+  // verificó y cuándo. Es la contraparte de requestTicketReopen: sin ella el
+  // cliente sólo podía quejarse y un resuelto quedaba flotando para siempre.
+  confirmTicket: (ticketId: number, reporterEmail: string) =>
+    request<Ticket>(`/tickets/${ticketId}/confirm`, {
+      method: 'POST',
+      body: JSON.stringify({ reporter_email: reporterEmail }),
+    }),
+
+  // Recorrido del ticket, ya filtrado a los hitos que el cliente puede ver.
+  // Se pide aparte del ticket porque la tarjeta sólo lo muestra al abrirla:
+  // traerlo en el listado sería una consulta de eventos por fila.
+  getTicketTimeline: (ticketId: number) =>
+    request<TicketTimeline>(`/tickets/${ticketId}/timeline`),
 
   requestTicketReopen: (
     ticketId: number,

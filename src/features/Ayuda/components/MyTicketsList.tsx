@@ -1,89 +1,122 @@
 'use client';
 
-import { useRef } from 'react';
+import { Button } from '@/shared/components/ui/button';
+import { useState } from 'react';
 import type { TicketWithUnread } from '@/shared/lib/taskapp/types';
 import { MyTicketsListSkeleton } from '../fallback/MyTicketsListSkeleton';
-import { MY_TICKETS_PAGE_SIZE } from '../hooks/useMyTicketsPage';
+import type { TicketBucket } from '../constants/ticket-copy';
 import { EmptyTicketsState } from './EmptyTicketsState';
-import { PageFetchBar, PaginationNav } from './PaginationNav';
 import { TicketCard } from './TicketCard';
 
+/** Cuántas tarjetas se muestran de entrada en cada pestaña. */
+const PAGE_SIZE = 5;
+
 interface Props {
-  /** Tickets de la página actual (paginados server-side, más recientes primero). */
   tickets: TicketWithUnread[];
-  /** Total de tickets sin paginar (para la navegación). */
-  total: number;
-  page: number;
-  onPageChange: (page: number) => void;
-  activeTicketId: number | null;
-  onSelect: (id: number) => void;
-  /** Primera carga sin datos: muestra el skeleton dedicado. */
+  bucket: TicketBucket;
+  /** Tickets del usuario en TODAS las pestañas: distingue "no hay acá" de "no hay nada". */
+  totalTickets: number;
+  onOpenDetail: (id: number) => void;
+  canAct: boolean;
   isLoading?: boolean;
-  /** Página nueva en viaje (keepPreviousData): atenúa la saliente + barra. */
-  isPageTransition?: boolean;
+  /** Falló la carga: se muestra el error con su acción de recuperación. */
+  error?: boolean;
+  onRetry?: () => void;
+  /** Abre el formulario de reporte desde el estado vacío inicial. */
+  onReport?: () => void;
 }
 
 export function MyTicketsList({
   tickets,
-  total,
-  page,
-  onPageChange,
-  activeTicketId,
-  onSelect,
+  bucket,
+  totalTickets,
+  onOpenDetail,
+  canAct,
   isLoading,
-  isPageTransition = false,
+  error,
+  onRetry,
+  onReport,
 }: Props) {
-  const listRef = useRef<HTMLDivElement | null>(null);
+  const [visible, setVisible] = useState(PAGE_SIZE);
 
-  if (isLoading) return <MyTicketsListSkeleton />;
-  if (total === 0) return <EmptyTicketsState />;
-
-  const showPagination = total > MY_TICKETS_PAGE_SIZE;
-
-  function goTo(next: number) {
-    onPageChange(next);
-    listRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+  // Al cambiar de pestaña se vuelve al tope: si no, entrar a "Cerrados"
+  // después de haber expandido "En curso" arranca mostrando 20 tarjetas.
+  // Se ajusta durante el render y no en un efecto: asi la lista nunca llega a
+  // pintarse expandida para volver a cortarse en el frame siguiente (y el
+  // React Compiler marca set-state-in-effect como error).
+  const [prevBucket, setPrevBucket] = useState(bucket);
+  if (prevBucket !== bucket) {
+    setPrevBucket(bucket);
+    setVisible(PAGE_SIZE);
   }
 
-  return (
-    <div className="flex h-full flex-col gap-3">
-      <PageFetchBar active={isPageTransition} />
+  if (isLoading) return <MyTicketsListSkeleton />;
 
+  // El error ocupa la misma caja que ocuparía la lista: si colapsa, el panel
+  // se encoge de golpe y la pantalla salta.
+  if (error) {
+    return (
       <div
-        ref={listRef}
-        // px-1 da espacio para la sombra del hover sin chocar con el scrollbar.
-        // pb-3 evita que la última card aparezca pegada al borde inferior del Card padre.
-        // En desktop la card padre fija la altura: la lista llena el espacio y
-        // scrollea internamente (lg:flex-1). En mobile cae al tope de 70vh.
-        // Durante la transición de página la lista saliente queda atenuada y
-        // sin interacción hasta que llega la nueva (sin parpadeo ni skeleton).
-        className={`flex flex-col gap-3 max-h-[70vh] overflow-y-auto px-1 pb-3 lg:max-h-none lg:flex-1 lg:min-h-0 transition-[opacity,filter] duration-200 ${
-          isPageTransition ? 'pointer-events-none opacity-50 saturate-50' : ''
-        }`}
-        aria-busy={isPageTransition}
+        role="alert"
+        className="flex min-h-[220px] flex-col items-center justify-center gap-3 px-4 py-10 text-center"
       >
-        {/* key={page}: la página entrante se monta con su animación de entrada. */}
-        <div key={page} className="flex flex-col gap-3 animate-in fade-in-25 duration-300">
-          {tickets.map((t) => (
-            <TicketCard
-              key={t.id}
-              ticket={t}
-              onClick={onSelect}
-              isActive={activeTicketId === t.id}
-            />
-          ))}
-        </div>
+        <p className="text-sm font-semibold">No se pudieron cargar tus tickets</p>
+        <p className="max-w-[42ch] text-pretty text-sm leading-relaxed text-muted-foreground">
+          Revisá tu conexión y probá de nuevo. Si sigue pasando, avisanos por otro canal.
+        </p>
+        {onRetry && (
+          <Button type="button" variant="outline" size="sm" onClick={onRetry}>
+            Reintentar
+          </Button>
+        )}
       </div>
+    );
+  }
 
-      {showPagination && (
-        <PaginationNav
-          page={page}
-          total={total}
-          pageSize={MY_TICKETS_PAGE_SIZE}
-          onPageChange={goTo}
-          isFetching={isPageTransition}
-          className="mt-auto shrink-0 border-t pt-3"
-        />
+  if (tickets.length === 0) {
+    // Sin un solo ticket en toda su historia, «Estás al día» no le dice nada a
+    // nadie: nunca hubo algo que revisar. Ese es el único momento en que la
+    // pantalla puede explicarse sola y ofrecer la acción que corresponde.
+    return totalTickets === 0 ? (
+      <EmptyTicketsState onReport={onReport} />
+    ) : (
+      <EmptyTicketsState bucket={bucket} />
+    );
+  }
+
+  const shown = tickets.slice(0, visible);
+  const remaining = tickets.length - shown.length;
+
+  return (
+    <div className="flex flex-col gap-3">
+      <ul className="flex flex-col gap-3">
+        {shown.map((ticket, i) => (
+          <li key={ticket.id}>
+            <TicketCard
+              ticket={ticket}
+              onOpenDetail={onOpenDetail}
+              canAct={canAct}
+              // Sólo el primero de "Para revisar" nace abierto: es el que pide
+              // una respuesta y el que el cliente vino a atender. Abrirlos
+              // todos convierte la pestaña en un muro y ninguno destaca.
+              defaultOpen={bucket === 'review' && i === 0}
+            />
+          </li>
+        ))}
+      </ul>
+
+      {remaining > 0 && (
+        // Ancho completo y en tono secundario: es el pie de la lista, no una
+        // acción que compita con las de cada ticket.
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="w-full text-xs font-medium text-muted-foreground hover:text-foreground"
+          onClick={() => setVisible((v) => v + PAGE_SIZE)}
+        >
+          Ver {remaining === 1 ? '1 ticket más' : `${remaining} tickets más`}
+        </Button>
       )}
     </div>
   );

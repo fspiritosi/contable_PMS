@@ -15,14 +15,14 @@ export const STATUS_BY_SLUG: Record<string, StatusDef> = {
     tintClass: 'from-blue-500/10',
   },
   pendiente_aprobacion: {
-    label: 'Pendiente de aprobación',
+    label: 'Esperando tu aprobación',
     badgeClass: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
     borderClass: 'border-l-yellow-500',
     dotClass: 'bg-yellow-500',
     tintClass: 'from-yellow-500/10',
   },
   aprobado_cliente: {
-    label: 'Aprobado',
+    label: 'Aprobado por vos',
     badgeClass: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
     borderClass: 'border-l-green-500',
     dotClass: 'bg-green-500',
@@ -36,7 +36,7 @@ export const STATUS_BY_SLUG: Record<string, StatusDef> = {
     tintClass: 'from-amber-500/10',
   },
   blocked: {
-    label: 'Bloqueado',
+    label: 'Frenado',
     badgeClass: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
     borderClass: 'border-l-red-500',
     dotClass: 'bg-red-500',
@@ -50,7 +50,7 @@ export const STATUS_BY_SLUG: Record<string, StatusDef> = {
     tintClass: 'from-violet-500/10',
   },
   valued: {
-    label: 'Valuado',
+    label: 'Valorizado',
     badgeClass: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200',
     borderClass: 'border-l-orange-500',
     dotClass: 'bg-orange-500',
@@ -93,13 +93,26 @@ export const STATUS_BY_SLUG: Record<string, StatusDef> = {
   },
 };
 
-export function statusFor(slug: string | undefined, fallbackName?: string): StatusDef {
+/**
+ * Estado que se muestra cuando el slug no está en la tabla.
+ *
+ * NO cae al nombre crudo del estado a propósito. Los estados son datos
+ * editables desde Admin: el día que el equipo crea "Revisión en Dev" o
+ * "Esperando QA", el fallback anterior se lo mostraba al cliente tal cual, con
+ * la jerga interna incluida. El backend ya reemplaza los estados internos por
+ * la última parada visible antes de responder; esto es la segunda red, para
+ * que ni un slug inesperado ni un backend viejo puedan filtrar un nombre
+ * interno.
+ */
+const UNKNOWN_STATUS: StatusDef = {
+  label: 'En curso',
+  badgeClass: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200',
+  borderClass: 'border-l-amber-500',
+  dotClass: 'bg-amber-500',
+  tintClass: 'from-amber-500/10',
+};
+
+export function statusFor(slug: string | undefined): StatusDef {
   if (slug && STATUS_BY_SLUG[slug]) return STATUS_BY_SLUG[slug];
-  return {
-    label: fallbackName ?? slug ?? 'Desconocido',
-    badgeClass: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200',
-    borderClass: 'border-l-slate-400',
-    dotClass: 'bg-slate-400',
-    tintClass: 'from-slate-400/10',
-  };
+  return UNKNOWN_STATUS;
 }

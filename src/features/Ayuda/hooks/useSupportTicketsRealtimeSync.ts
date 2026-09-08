@@ -5,6 +5,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { MY_TICKETS_WITH_UNREAD_QUERY_KEY } from './useMyTicketsWithUnread';
 import { MY_TICKETS_PAGE_QUERY_KEY } from './useMyTicketsPage';
 import { APPROVER_TICKETS_QUERY_KEY } from './useApproverTickets';
+import { TICKET_TIMELINE_QUERY_KEY } from './useTicketTimeline';
 import type { TaskAppRealtimeEvent } from '@/shared/lib/taskapp/types';
 import { Logger } from '@/lib/logger';
 
@@ -34,6 +35,9 @@ export function useSupportTicketsRealtimeSync() {
           queryClient.invalidateQueries({ queryKey: MY_TICKETS_WITH_UNREAD_QUERY_KEY });
           queryClient.invalidateQueries({ queryKey: MY_TICKETS_PAGE_QUERY_KEY });
           queryClient.invalidateQueries({ queryKey: APPROVER_TICKETS_QUERY_KEY });
+          // El recorrido gana un hito con cada cambio de estado: sin esto, la
+          // tarjeta abierta seguiría mostrando el timeline viejo por 5 minutos.
+          queryClient.invalidateQueries({ queryKey: TICKET_TIMELINE_QUERY_KEY });
         }
       } catch (error) {
         logger.warn('Failed to parse SSE event', { data: { error } });

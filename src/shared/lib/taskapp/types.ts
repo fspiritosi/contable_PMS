@@ -27,6 +27,22 @@ export interface Ticket {
   approver_email: string | null;
   estimated_hours: number | null;
   attachments: string[];
+  /**
+   * "Qué hicimos", redactado para el cliente por quien resolvió. Opcional: un
+   * ticket trivial puede resolverse sin cargarlo y la tarjeta se arma igual.
+   * NO es `completion_summary` — ese es la nota técnica interna (rutas de
+   * archivos, hashes de commit) y la API pública no lo expone.
+   */
+  client_summary: string | null;
+  /**
+   * "Qué mirar para confirmarlo": una línea por cosa a comprobar. También lo
+   * escribe soporte al resolver, porque el que sabe qué se tocó es quien lo
+   * arregló — no se le pide al cliente cuando reporta.
+   */
+  verification_steps: string | null;
+  /** Cuándo y quién verificó el arreglo del lado del cliente. */
+  client_confirmed_at: string | null;
+  client_confirmed_by: string | null;
   created_at: string;
   updated_at: string;
   resolved_at: string | null;
@@ -44,6 +60,18 @@ export interface Comment {
   author_email: string | null;
   body: string;
   is_internal: boolean;
+  /**
+   * URLs ya firmadas de los archivos del comentario: el backend reemplaza las
+   * storage keys por URLs firmadas antes de responder, igual que hace con las
+   * del ticket. Llega `null` cuando el comentario no tiene ninguno (slice nil
+   * de Go), así que siempre hay que defenderse con `?? []`.
+   *
+   * No es lo mismo que `Ticket.attachments`: estos pertenecen a UN mensaje del
+   * hilo. Ahí van a parar, por ejemplo, las capturas de una solicitud de
+   * reapertura, que el backend copia al comentario porque los campos
+   * `reopen_*` se limpian cuando la reapertura se resuelve.
+   */
+  attachments: string[] | null;
   created_at: string;
 }
 
@@ -80,3 +108,21 @@ export interface TicketUnreadState {
 export type TicketWithUnread = Ticket & {
   unread: TicketUnreadState;
 };
+
+/**
+ * Una parada del recorrido del ticket tal como se la cuenta al cliente. Viene
+ * ya filtrada por el backend: los estados internos del equipo ("Revisión en
+ * Dev" y compañía) no llegan hasta acá.
+ */
+export interface TicketMilestone {
+  /** Slug del estado, o "received" para el alta. */
+  key: string;
+  label: string;
+  color?: string;
+  at: string;
+}
+
+export interface TicketTimeline {
+  ticket_id: number;
+  milestones: TicketMilestone[];
+}
