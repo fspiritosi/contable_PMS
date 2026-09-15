@@ -30,10 +30,10 @@
       "hash": "772acfdc75df2a154f0f50f7d7a35f3aca5e64ef4f6da554c7fb109885671ac8"
     },
     "src/features/Ayuda/components/HelpCenter.tsx": {
-      "hash": "1363f88e34d87982bf004fbfdd1f36099713978fe08e340c819fb539585ca004"
+      "hash": "8df7dd80779b4c30bbb6a7daeb413e4ddb1e08de3bbffebaca78a5002ed1b291"
     },
     "src/features/Ayuda/components/MyTicketsList.tsx": {
-      "hash": "a9d9e182c12299883ae422cb7a32c096e2a3f0a73311264efd7338a0bf783704"
+      "hash": "1b3575062a55c10b890db279562907e04ac7e0f3a903782c7af24322f3413576"
     },
     "src/features/Ayuda/components/PaginationNav.tsx": {
       "hash": "319432fa44b2c74db1433d7bd885ddd9ca1779a3d20b82f9300a58fc0fca7315"
@@ -249,16 +249,13 @@
       "hash": "ddd0c52a5d3e0514cad24b1c0614e73ef48ec68af9ae52c2972a1be553c9e9a6"
     },
     "src\\features\\Ayuda\\components\\HelpCenter.tsx": {
-      "hash": "5f1fa5585211c02e37ecd19cb2dd09a0b0b9fafbb242a5727dc675e74ebeb7cf"
+      "hash": "8df7dd80779b4c30bbb6a7daeb413e4ddb1e08de3bbffebaca78a5002ed1b291"
     },
     "src\\features\\Ayuda\\components\\MyTicketsList.tsx": {
-      "hash": "7e9a5a51f6d0b81e26b91f6cff0ed2bcfef3506d479f7b7bfb6d8ef5b18fed3f"
+      "hash": "1b3575062a55c10b890db279562907e04ac7e0f3a903782c7af24322f3413576"
     },
     "src\\features\\Ayuda\\components\\PaginationNav.tsx": {
       "hash": "5c4ca25b105d0807b36595b2195a9821db96b324ca7cc4e87e1d6ccf19f0fad1"
-    },
-    "src\\features\\Ayuda\\components\\PendingBanner.tsx": {
-      "hash": "6628edc763f191b5436045792718568c33a1579926cec325da236be5a8538d0a"
     },
     "src\\features\\Ayuda\\components\\SupportTicketsRealtimeProvider.tsx": {
       "hash": "88df108dedeb6ba35d25c2a5d44f012fcdd4dc780ff667f890751632bd66ff0e"

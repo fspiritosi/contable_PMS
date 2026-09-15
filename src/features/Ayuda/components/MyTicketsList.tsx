@@ -84,7 +84,10 @@ export function MyTicketsList({
     );
   }
 
-  const shown = tickets.slice(0, visible);
+  // "Para revisar" no se corta: son los tickets que esperan una respuesta del
+  // cliente, y esconder uno detrás de "Ver más" es esconder justo lo que vino
+  // a atender. Las otras pestañas son historial y sí se paginan.
+  const shown = bucket === 'review' ? tickets : tickets.slice(0, visible);
   const remaining = tickets.length - shown.length;
 
   return (
