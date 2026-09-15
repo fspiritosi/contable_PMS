@@ -5,6 +5,7 @@ import type {
   Comment,
   CreateCommentRequest,
   CreateTicketRequest,
+  ProposeCloseRequest,
   Ticket,
   TicketTimeline,
   UploadResult,
@@ -205,6 +206,16 @@ export const taskAppClient = {
     request<Ticket>(`/tickets/${ticketId}/confirm`, {
       method: 'POST',
       body: JSON.stringify({ reporter_email: reporterEmail }),
+    }),
+
+  // "Esto ya se puede cerrar", pedido desde un ticket en curso. A diferencia de
+  // confirmTicket NO cierra nada: deja una propuesta que el equipo acepta o
+  // rechaza. `reason` se omite del body si viene vacío, para que el backend no
+  // tenga que distinguir "" de "sin motivo".
+  proposeTicketClose: (ticketId: number, body: ProposeCloseRequest) =>
+    request<Ticket>(`/tickets/${ticketId}/propose-close`, {
+      method: 'POST',
+      body: JSON.stringify(body.reason ? body : { reporter_email: body.reporter_email, target: body.target }),
     }),
 
   // Recorrido del ticket, ya filtrado a los hitos que el cliente puede ver.

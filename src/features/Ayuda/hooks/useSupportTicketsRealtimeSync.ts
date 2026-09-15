@@ -6,6 +6,7 @@ import { MY_TICKETS_WITH_UNREAD_QUERY_KEY } from './useMyTicketsWithUnread';
 import { MY_TICKETS_PAGE_QUERY_KEY } from './useMyTicketsPage';
 import { APPROVER_TICKETS_QUERY_KEY } from './useApproverTickets';
 import { TICKET_TIMELINE_QUERY_KEY } from './useTicketTimeline';
+import { TICKET_DETAIL_QUERY_PREFIX } from './useTicketDetail';
 import type { TaskAppRealtimeEvent } from '@/shared/lib/taskapp/types';
 import { Logger } from '@/lib/logger';
 
@@ -38,6 +39,13 @@ export function useSupportTicketsRealtimeSync() {
           // El recorrido gana un hito con cada cambio de estado: sin esto, la
           // tarjeta abierta seguiría mostrando el timeline viejo por 5 minutos.
           queryClient.invalidateQueries({ queryKey: TICKET_TIMELINE_QUERY_KEY });
+          // El Sheet de detalle lee de su propia query y no de la lista: sin
+          // esto, con el detalle abierto no se ve que el equipo aceptó o
+          // rechazó una propuesta de cierre (ni una reapertura, ni un estado
+          // nuevo) hasta cerrarlo y volver a abrirlo. Por prefijo, porque el
+          // evento no dice qué ticket cambió y sólo refetchea el que está
+          // montado.
+          queryClient.invalidateQueries({ queryKey: TICKET_DETAIL_QUERY_PREFIX });
         }
       } catch (error) {
         logger.warn('Failed to parse SSE event', { data: { error } });

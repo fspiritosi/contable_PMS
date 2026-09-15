@@ -17,6 +17,8 @@ import { canDecide, copyFor, demandFor } from '../constants/ticket-copy';
 import { statusFor } from '../constants/ticket-status';
 import { useMarkTicketAsReadMutation } from '../hooks/useMarkTicketAsReadMutation';
 import { useTicketTimeline } from '../hooks/useTicketTimeline';
+import { ProposeCloseAction } from './ProposeCloseAction';
+import { closeProposalNoticeId, TicketCloseProposalNotice } from './TicketCloseProposalNotice';
 import { TicketPriorityBadge } from './TicketPriorityBadge';
 import { TicketResolutionPanel } from './TicketResolutionPanel';
 import { TicketTimeline } from './TicketTimeline';
@@ -148,6 +150,10 @@ export function TicketCard({ ticket, onOpenDetail, canAct, defaultOpen = false }
               </section>
             )}
 
+            {/* Propuesta de cierre pendiente o rechazada. Va antes de las
+                acciones: es lo último que pasó con el ticket. */}
+            <TicketCloseProposalNotice ticket={ticket} variant="card" />
+
             {decidable && <TicketResolutionPanel ticket={ticket} canAct={canAct} />}
 
             {/* Aprobar o rechazar un presupuesto necesita ver las horas y el
@@ -172,6 +178,16 @@ export function TicketCard({ ticket, onOpenDetail, canAct, defaultOpen = false }
                 <MessageSquare aria-hidden className="h-3.5 w-3.5" />
                 Ver la conversación del TKT-{ticket.id}
               </button>
+              {/* En el pie y en tono apagado: es la salida para un ticket que
+                  dejó de hacer falta, no algo que se le pida a cada ticket en
+                  curso. Sólo aparece si el ticket la admite. */}
+              {canAct && (
+                <ProposeCloseAction
+                  ticket={ticket}
+                  variant="link"
+                  focusTargetId={closeProposalNoticeId(ticket.id, 'card')}
+                />
+              )}
               {attachmentCount > 0 && (
                 <span className="inline-flex items-center gap-1.5 text-muted-foreground">
                   <Paperclip aria-hidden className="h-3.5 w-3.5" />
