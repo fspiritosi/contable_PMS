@@ -4,7 +4,9 @@ import { useQuery } from '@tanstack/react-query';
 import type { Ticket } from '@/shared/lib/taskapp/types';
 import { getSupportTicketById } from '../actions/support-tickets';
 
-export const ticketDetailKey = (id: number) => ['ayuda', 'ticket', id] as const;
+/** Prefijo de todos los detalles: el realtime invalida por acá porque sus eventos no traen el id. */
+export const TICKET_DETAIL_QUERY_PREFIX = ['ayuda', 'ticket'] as const;
+export const ticketDetailKey = (id: number) => [...TICKET_DETAIL_QUERY_PREFIX, id] as const;
 
 export function useTicketDetail(id: number | null, initialData?: Ticket | null) {
   return useQuery({

@@ -7,6 +7,7 @@ import { useEffect } from 'react';
 import { TicketDetailSheetSkeleton } from '../../fallback/TicketDetailSheetSkeleton';
 import { useMarkTicketAsReadMutation } from '../../hooks/useMarkTicketAsReadMutation';
 import { useTicketDetail } from '../../hooks/useTicketDetail';
+import { TicketCloseProposalNotice } from '../TicketCloseProposalNotice';
 import { TicketApprovalBanner } from './TicketApprovalBanner';
 import { TicketDetailBody } from './TicketDetailBody';
 import { TicketDetailHeader } from './TicketDetailHeader';
@@ -55,6 +56,7 @@ export default function TicketDetailSheet({
               <TicketDetailHeader ticket={ticket} />
               <TicketApprovalBanner ticket={ticket} currentUserEmail={currentUserEmail} />
               <TicketReopenRequestBanner ticket={ticket} currentUserEmail={currentUserEmail} />
+              <TicketCloseProposalNotice ticket={ticket} variant="sheet" />
             </div>
             <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
               <TicketDetailBody

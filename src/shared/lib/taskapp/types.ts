@@ -52,6 +52,32 @@ export interface Ticket {
   reopen_reason: string | null;
   reopen_attachments: string[];
   reopen_requested_at: string | null;
+  /**
+   * Propuesta de cierre hecha desde el portal ("ya está resuelto" / "ya no lo
+   * necesito"). NO cambia el estado: el equipo la acepta o la rechaza, y hasta
+   * entonces el ticket sigue en curso. Todos nullable porque un backend sin la
+   * feature no los manda y el módulo tiene que seguir andando.
+   */
+  close_proposal_status?: 'pending' | null;
+  close_proposal_target?: CloseProposalTarget | null;
+  close_proposal_reason?: string | null;
+  close_proposal_requested_at?: string | null;
+  /**
+   * El último rechazo. Queda guardado aunque después se vuelva a proponer:
+   * mientras haya una propuesta pendiente manda esa, no el rechazo viejo.
+   */
+  close_proposal_declined_at?: string | null;
+  close_proposal_declined_reason?: string | null;
+}
+
+/** Cómo propone cerrar el cliente: como resuelto o como cancelado. */
+export type CloseProposalTarget = 'resolved' | 'cancelled';
+
+export interface ProposeCloseRequest {
+  reporter_email: string;
+  target: CloseProposalTarget;
+  /** Obligatorio para cancelar, opcional para resolver. */
+  reason?: string;
 }
 
 export interface Comment {

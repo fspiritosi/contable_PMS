@@ -109,6 +109,21 @@ export function copyFor(ticket: Ticket): StatusCopy {
     };
   }
 
+  // Lo mismo con una propuesta de cierre: ya se dijo lo que había que decir y
+  // ahora responde el equipo. `demand: 'none'` es lo que la deja en "En curso"
+  // — mandarla a "Para revisar" sería pedirle al cliente algo que ya hizo.
+  // Impersonal ("la propuesta", no "tu propuesta") porque la puede estar
+  // leyendo el aprobador sobre un ticket que propuso quien lo reportó.
+  if (ticket.close_proposal_status === 'pending') {
+    return {
+      message:
+        ticket.close_proposal_target === 'cancelled'
+          ? 'Recibimos el pedido de cancelarlo. El equipo lo revisa y te avisamos; mientras tanto sigue en curso.'
+          : 'Recibimos la propuesta de darlo por resuelto. El equipo la revisa y te avisamos; mientras tanto sigue en curso.',
+      demand: 'none',
+    };
+  }
+
   // Confirmado por el cliente: aunque el estado siga diciendo "Resuelto"
   // (porque la instalación no tiene el estado "Cerrado"), ya no hay nada
   // pendiente de su parte.
@@ -116,8 +131,38 @@ export function copyFor(ticket: Ticket): StatusCopy {
     return COPY_BY_SLUG.closed;
   }
 
+  // El rechazo sólo se cuenta mientras el ticket siga en curso. Los campos del
+  // último rechazo quedan guardados para siempre; si el ticket después se
+  // resuelve o se cancela, lo que importa es eso y no una propuesta vieja.
+  // El motivo NO va en esta línea: puede tener mil caracteres y saltos de
+  // línea, así que se muestra entero en el aviso de la tarjeta y del detalle.
+  const statusCopy = statusCopyFor(ticket);
+  if (ticket.close_proposal_declined_at && isInProgress(ticket, statusCopy)) {
+    return {
+      message: 'El equipo revisó la propuesta de cierre y va a seguir con el ticket.',
+      demand: 'none',
+    };
+  }
+
+  return statusCopy;
+}
+
+/** Sólo la tabla por estado, sin los flags que le ganan en `copyFor`. */
+function statusCopyFor(ticket: Ticket): StatusCopy {
   const slug = ticket.status?.slug;
   return (slug && COPY_BY_SLUG[slug]) || FALLBACK_COPY;
+}
+
+/**
+ * "En curso" mirando sólo el estado: ni cerrado ni esperando algo del cliente.
+ * Recibe el copy ya resuelto y NO llama a `copyFor`/`bucketFor`, porque
+ * `copyFor` lo usa por adentro y la vuelta sería una recursión infinita.
+ */
+function isInProgress(ticket: Ticket, statusCopy: StatusCopy): boolean {
+  const slug = ticket.status?.slug;
+  if (ticket.client_confirmed_at) return false;
+  if (slug && CLOSED_SLUGS.has(slug)) return false;
+  return statusCopy.demand === 'none';
 }
 
 /** Qué necesitamos del cliente en este ticket, si es que necesitamos algo. */
@@ -143,8 +188,56 @@ export function canDecide(ticket: Ticket): boolean {
     !!slug &&
     RESOLVED_SLUGS.has(slug) &&
     !ticket.client_confirmed_at &&
-    ticket.reopen_status !== 'pending'
+    ticket.reopen_status !== 'pending' &&
+    ticket.close_proposal_status !== 'pending'
   );
+}
+
+/** Largo del motivo de una propuesta de cierre. El backend valida lo mismo. */
+export const CLOSE_REASON_MIN = 10;
+export const CLOSE_REASON_MAX = 1000;
+
+/**
+ * "Proponer cierre" existe sólo en tickets en curso.
+ *
+ * Se apoya en la misma definición de "en curso" que arma las pestañas, en vez
+ * de repetir una lista de slugs: dos definiciones terminan divergiendo. Eso
+ * deja afuera, sin nombrarlos, a los resueltos (ya tienen su propia salida en
+ * TicketResolutionPanel), a los cerrados y a los que esperan aprobación de
+ * presupuesto (ahí la salida es rechazarlo).
+ *
+ * Una propuesta pendiente también mantiene el ticket en "En curso", así que se
+ * excluye aparte: proponer dos veces lo mismo sólo le suma ruido al equipo.
+ * Una reapertura pendiente, por lo mismo: el cliente ya dijo lo contrario.
+ */
+export function canProposeClose(ticket: Ticket): boolean {
+  return (
+    ticket.close_proposal_status !== 'pending' &&
+    ticket.reopen_status !== 'pending' &&
+    isInProgress(ticket, statusCopyFor(ticket))
+  );
+}
+
+/**
+ * Validación del motivo, compartida entre el diálogo y la server action. Vive
+ * acá (y no duplicada en cada lado) para que el mensaje que ve el cliente al
+ * escribir sea exactamente el mismo que devolvería el servidor.
+ *
+ * Cancelar exige motivo: sin él, el equipo no sabe si dejó de hacer falta o si
+ * el cliente se cansó de esperar, que son dos conversaciones distintas. Para
+ * "ya está resuelto" el motivo es un extra: el hecho ya lo dice todo.
+ */
+export function closeReasonError(target: 'resolved' | 'cancelled', reason: string): string | null {
+  const length = reason.trim().length;
+  if (length > CLOSE_REASON_MAX) {
+    return `Acortalo un poco: puede tener hasta ${CLOSE_REASON_MAX} caracteres.`;
+  }
+  if (target === 'cancelled' && length < CLOSE_REASON_MIN) {
+    return length === 0
+      ? 'Contanos por qué ya no lo necesitás.'
+      : `Escribí al menos ${CLOSE_REASON_MIN} caracteres.`;
+  }
+  return null;
 }
 
 /**
