@@ -7,17 +7,11 @@ import dynamic from 'next/dynamic';
 import { useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Ticket, TicketWithUnread } from '@/shared/lib/taskapp/types';
-import {
-  BUCKET_LABEL,
-  bucketFor,
-  demandFor,
-  type TicketBucket,
-} from '../constants/ticket-copy';
+import { BUCKET_LABEL, bucketFor, type TicketBucket } from '../constants/ticket-copy';
 import { useMyTicketsWithUnread } from '../hooks/useMyTicketsWithUnread';
 import { ApproverAllTickets } from './ApproverAllTickets';
 import { ApproverInbox } from './ApproverInbox';
 import { MyTicketsList } from './MyTicketsList';
-import { PendingBanner } from './PendingBanner';
 import { Tabs, TabsList, TabsPanel, TabsTrigger } from './Tabs';
 
 
@@ -96,25 +90,16 @@ export function HelpCenter({
   // null = el usuario todavia no eligio pestaña; manda la derivada de los datos.
   const [pickedTab, setPickedTab] = useState<TicketBucket | null>(null);
 
-  // Una sola pasada por la lista para las tres pestañas y los dos contadores
-  // del banner. Con un filter por pestaña se recorría cuatro veces por render.
-  const { byBucket, confirmCount, approveCount } = useMemo(() => {
+  // Una sola pasada por la lista para las tres pestañas. Con un filter por
+  // pestaña se recorría tres veces por render.
+  const byBucket = useMemo(() => {
     const groups: Record<TicketBucket, TicketWithUnread[]> = {
       review: [],
       active: [],
       closed: [],
     };
-    let confirm = 0;
-    let approve = 0;
-
-    for (const ticket of tickets) {
-      groups[bucketFor(ticket)].push(ticket);
-      const demand = demandFor(ticket);
-      if (demand === 'confirm') confirm += 1;
-      else if (demand === 'approve') approve += 1;
-    }
-
-    return { byBucket: groups, confirmCount: confirm, approveCount: approve };
+    for (const ticket of tickets) groups[bucketFor(ticket)].push(ticket);
+    return groups;
   }, [tickets]);
 
   // Si no hay nada para revisar, abrir en esa pestaña es mostrar un vacío: la
@@ -241,12 +226,12 @@ export function HelpCenter({
         </div>
       </header>
 
-      <PendingBanner
-        confirmCount={confirmCount}
-        approveCount={approveCount}
-        onGo={() => setTab('review')}
-      />
-
+      {/* Sin aviso de pendientes arriba de la lista, a propósito (#691). Decía
+          lo mismo por tercera vez: el badge del sidebar ya trae al cliente
+          hasta acá, la pantalla abre en "Para revisar" cuando hay pendientes y
+          el contador de esa pestaña dice cuántos son. Su botón "Ver ahora"
+          seleccionaba la pestaña que ya estaba abierta, así que no hacía nada
+          visible y se reportó como roto. */}
       <ApproverInbox onSelect={handleSelect} />
 
       {/* El panel de reporte no escala con la pantalla: tiene un ancho propio
