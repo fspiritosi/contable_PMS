@@ -42,8 +42,12 @@ export function _MemberIdentity({
         <AvatarFallback>{initials}</AvatarFallback>
       </Avatar>
       <div className="flex flex-col">
-        <span className="font-medium">{fullName}</span>
-        <span className="text-sm text-muted-foreground">{email}</span>
+        <span className="font-medium" title={fullName}>
+          {fullName}
+        </span>
+        <span className="text-sm text-muted-foreground" title={email}>
+          {email}
+        </span>
       </div>
     </div>
   );

@@ -1,7 +1,7 @@
 'use client';
 
-import Link from 'next/link';
 import { ArrowRight, Shield, Users } from 'lucide-react';
+import Link from 'next/link';
 
 import { Badge } from '@/shared/components/ui/badge';
 import { Button } from '@/shared/components/ui/button';
@@ -22,9 +22,7 @@ function formatActiveCount(count: number): string {
 }
 
 function formatInactiveCount(count: number): string {
-  return count === 1
-    ? '+1 inactivo conserva este rol'
-    : `+${count} inactivos conservan este rol`;
+  return count === 1 ? '+1 inactivo conserva este rol' : `+${count} inactivos conservan este rol`;
 }
 
 /**
@@ -54,7 +52,7 @@ export function _RoleMembersPopover({ role, canViewUsers }: RoleMembersPopoverPr
         </Button>
       </PopoverTrigger>
 
-      <PopoverContent align="start" collisionPadding={16} className="w-72 p-0">
+      <PopoverContent align="start" collisionPadding={16} className="w-80 p-0">
         <div className="border-b px-3 py-2">
           <p className="text-sm font-medium">Usuarios con el rol {role.name}</p>
           <p className="text-xs text-muted-foreground">{formatActiveCount(activeMembers.length)}</p>
@@ -77,7 +75,10 @@ export function _RoleMembersPopover({ role, canViewUsers }: RoleMembersPopoverPr
                   className="min-w-0 flex-1 [&>div]:min-w-0 [&>div>span]:truncate"
                 />
                 {member.isOwner && (
-                  <Badge variant="default" className="shrink-0 bg-amber-500 hover:bg-amber-500">
+                  <Badge
+                    variant="default"
+                    className="shrink-0 bg-amber-500 px-1.5 text-[10px] hover:bg-amber-500"
+                  >
                     <Shield className="mr-1 h-3 w-3" />
                     Propietario
                   </Badge>

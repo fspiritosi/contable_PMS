@@ -447,7 +447,7 @@ El TDD se aplica a esas dos capas: el test se escribe **antes** del código en l
         `<_MemberIdentity size="md" … />` **dentro** del contenedor `flex items-center gap-3 p-3
         bg-muted rounded-lg` (línea 113), que se conserva porque es el marco visual del modal;
         quitar el import de `Avatar*` (línea 36) y las dos `const` de las líneas 100-101.
-  - [ ] Comparar visualmente antes/después en `/dashboard/company/general/users` (tabla y modal
+  - [x] Comparar visualmente antes/después en `/dashboard/company/general/users` (tabla y modal
         "Cambiar rol"): mismo tamaño de avatar, mismas iniciales, mismo fallback "Sin nombre".
 - **Archivos:**
   - Crear: `src/modules/company/features/general/shared/member-display.ts`,
@@ -578,13 +578,13 @@ El TDD se aplica a esas dos capas: el test se escribe **antes** del código en l
         (`usersPermissions`) y pasar `canViewUsers={usersPermissions.canView}` a
         `_RolesDataTable` (líneas 30-35). El patrón de pasar `ModulePermissions` por props desde
         el Server Component se mantiene (no usar `usePermissions()` acá, ver 1.2.5).
-  - [ ] Regresión visual (riesgo 5): el `Button ghost h-8` no debe cambiar el alto de fila de la
+  - [x] Regresión visual (riesgo 5): el `Button ghost h-8` no debe cambiar el alto de fila de la
         tabla; en hover se ve el fondo del ghost, que es la pista de "clickeable". Verificar en
         modo oscuro.
-  - [ ] Accesibilidad/teclado: `Tab` llega al botón, `Enter`/`Space` abre, `Esc` cierra, el foco
+  - [x] Accesibilidad/teclado: `Tab` llega al botón, `Enter`/`Space` abre, `Esc` cierra, el foco
         vuelve al botón (lo da Radix; solo confirmar que el trigger es el `Button` y no un
         wrapper).
-  - [ ] Móvil (viewport 375px): el `PopoverContent` no se corta gracias a `collisionPadding` y
+  - [x] Móvil (viewport 375px): el `PopoverContent` no se corta gracias a `collisionPadding` y
         `w-72`; si la tabla scrollea horizontalmente, el Popover se ancla igual al botón.
 - **Archivos:**
   - Crear: `src/modules/company/features/general/roles/components/_RoleMembersPopover.tsx`
@@ -622,7 +622,7 @@ El TDD se aplica a esas dos capas: el test se escribe **antes** del código en l
         lote; `_count.members` sigue contando activos + inactivos y es lo que usan la regla de
         eliminar y `deleteRole`. Mencionar la carpeta nueva `features/general/shared/`
         (`_MemberIdentity`, `member-display.ts`) en la línea de "Archivos".
-  - [ ] Crear `scripts/guia-presentacion/capturas-tsk692.mjs` sobre la base de
+  - [x] Crear `scripts/guia-presentacion/capturas-tsk692.mjs` sobre la base de
         `capturas-tsk644.mjs:1-47` (Playwright, login con las credenciales de dev, `shot()` que
         remueve `nextjs-portal` antes de capturar, salida a `scripts/guia-presentacion/assets/
         tsk692-*.png`). Requiere `npm run dev` corriendo. Capturas: (1) `tabla-roles`: la tabla
@@ -665,14 +665,14 @@ El TDD se aplica a esas dos capas: el test se escribe **antes** del código en l
 - **Objetivo:** cerrar con evidencia: comandos del checklist de commit en verde y los cinco casos
   de uso probados a mano en el navegador.
 - **Tareas:**
-  - [ ] `npm run check-types` (comparar contra la línea base previa al ticket, no exigir cero si
+  - [x] `npm run check-types` (comparar contra la línea base previa al ticket, no exigir cero si
         ya había errores ajenos), `npm run lint`, `npx vitest run` (unitario de la fase 1 +
         integración de la fase 2 + suite existente sin regresiones).
-  - [ ] Preparar datos en dev: un rol con exactamente 1 activo; un rol con activos + al menos 1
+  - [x] Preparar datos en dev: un rol con exactamente 1 activo; un rol con activos + al menos 1
         desactivado (desactivar desde Usuarios → menú (…) → Desactivar, que conserva el `roleId`);
         un rol custom con 0 miembros; y un usuario de prueba con un rol que tenga
         `company.general.roles:view` pero **no** `company.general.users:view`.
-  - [ ] Prueba manual en `/dashboard/company/general/roles`, caso por caso:
+  - [x] Prueba manual en `/dashboard/company/general/roles`, caso por caso:
     - Rol con 1 activo → Popover con avatar, nombre y email; "1 activo"; sin línea de inactivos.
     - Rol con activos + inactivos → el número de la columna es el total; la lista muestra solo
       activos; aparece "+N inactivos".
@@ -682,10 +682,10 @@ El TDD se aplica a esas dos capas: el test se escribe **antes** del código en l
       ningún rol, es el caso del riesgo 2 (documentado, no se corrige acá).
     - "Gestionar en Usuarios" → navega a `/dashboard/company/general/users`, donde "Cambiar rol"
       sigue funcionando igual.
-  - [ ] Regresiones: tabla y modal de Usuarios idénticos tras el reemplazo por `_MemberIdentity`;
+  - [x] Regresiones: tabla y modal de Usuarios idénticos tras el reemplazo por `_MemberIdentity`;
         "Eliminar" sigue habilitado solo con `_count.members === 0`; `deleteRole` sigue
         rechazando roles con miembros (activos o inactivos).
-  - [ ] Teclado y móvil: `Tab`/`Enter`/`Esc` sobre el trigger; viewport 375px sin corte del
+  - [x] Teclado y móvil: `Tab`/`Enter`/`Esc` sobre el trigger; viewport 375px sin corte del
         Popover; modo oscuro.
 - **Archivos:** ninguno nuevo; solo correcciones puntuales que salgan de la verificación.
 - **Criterio de completitud:** los tres comandos en verde, los seis casos manuales registrados en
