@@ -1,7 +1,7 @@
 'use client';
 
 import type { ColumnDef } from '@tanstack/react-table';
-import { MoreHorizontal, Shield, Edit, Trash2, Users } from 'lucide-react';
+import { MoreHorizontal, Shield, Edit, Trash2 } from 'lucide-react';
 
 import { Button } from '@/shared/components/ui/button';
 import {
@@ -16,14 +16,22 @@ import { DataTableColumnHeader } from '@/shared/components/common/DataTable';
 import type { ModulePermissions } from '@/shared/lib/permissions';
 
 import type { RoleListItem } from './actions.server';
+import { _RoleMembersPopover } from './components/_RoleMembersPopover';
 
 interface GetColumnsProps {
   onEdit: (roleId: string) => void;
   onDelete: (role: RoleListItem) => void;
   permissions: ModulePermissions;
+  /** Permiso `company.general.users:view`: muestra el link "Gestionar en Usuarios" en el Popover. */
+  canViewUsers: boolean;
 }
 
-export function getColumns({ onEdit, onDelete, permissions }: GetColumnsProps): ColumnDef<RoleListItem>[] {
+export function getColumns({
+  onEdit,
+  onDelete,
+  permissions,
+  canViewUsers,
+}: GetColumnsProps): ColumnDef<RoleListItem>[] {
   const { canUpdate, canDelete } = permissions;
   const hasAnyAction = canUpdate || canDelete;
 
@@ -89,15 +97,9 @@ export function getColumns({ onEdit, onDelete, permissions }: GetColumnsProps): 
       accessorKey: 'members',
       meta: { title: 'Usuarios' },
       header: ({ column }) => <DataTableColumnHeader column={column} title="Usuarios" />,
-      cell: ({ row }) => {
-        const count = row.original._count.members;
-        return (
-          <div className="flex items-center gap-1 text-muted-foreground">
-            <Users className="h-4 w-4" />
-            <span>{count}</span>
-          </div>
-        );
-      },
+      cell: ({ row }) => (
+        <_RoleMembersPopover role={row.original} canViewUsers={canViewUsers} />
+      ),
       enableSorting: false,
     },
   ];

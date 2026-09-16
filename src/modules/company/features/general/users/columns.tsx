@@ -13,10 +13,10 @@ import {
   DropdownMenuTrigger,
 } from '@/shared/components/ui/dropdown-menu';
 import { Badge } from '@/shared/components/ui/badge';
-import { Avatar, AvatarFallback, AvatarImage } from '@/shared/components/ui/avatar';
 import { DataTableColumnHeader } from '@/shared/components/common/DataTable';
 import type { ModulePermissions } from '@/shared/lib/permissions';
 
+import { _MemberIdentity } from '../shared/_MemberIdentity';
 import type { CompanyMemberListItem } from './actions.server';
 
 interface GetColumnsProps {
@@ -42,20 +42,15 @@ export function getColumns({
       header: ({ column }) => <DataTableColumnHeader column={column} title="Usuario" />,
       cell: ({ row }) => {
         const member = row.original;
-        const fullName = `${member.firstName} ${member.lastName}`.trim() || 'Sin nombre';
-        const initials = `${member.firstName?.[0] ?? ''}${member.lastName?.[0] ?? ''}`.toUpperCase() || '?';
 
         return (
-          <div className="flex items-center gap-3">
-            <Avatar className="h-8 w-8">
-              <AvatarImage src={member.imageUrl ?? undefined} alt={fullName} />
-              <AvatarFallback>{initials}</AvatarFallback>
-            </Avatar>
-            <div className="flex flex-col">
-              <span className="font-medium">{fullName}</span>
-              <span className="text-sm text-muted-foreground">{member.email}</span>
-            </div>
-          </div>
+          <_MemberIdentity
+            size="sm"
+            firstName={member.firstName}
+            lastName={member.lastName}
+            email={member.email}
+            imageUrl={member.imageUrl}
+          />
         );
       },
       enableSorting: false,
