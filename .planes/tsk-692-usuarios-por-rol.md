@@ -3,7 +3,7 @@
 **Fecha de inicio:** 2026-09-16
 **Ticket:** [692] "[Empresa] Podría ver quién tiene qué rol?"
 **Reportante:** Elizabeth Perez (eperez@perezmarzo.com.ar)
-**Estado:** Implementación completada
+**Estado:** Verificación completada
 
 ---
 
@@ -962,7 +962,34 @@ _Pendiente - ejecutar `/disenar tsk-692-usuarios-por-rol`_
 
 ### Fase 5: Verificación final
 
-**Estado:** Pendiente
+**Estado:** Completada (2026-09-16, antes de la Fase 4 para que el PDF tuviera capturas reales)
+
+- Dev server en `:3010` con `NEXT_PUBLIC_APP_URL=http://localhost:3010` por variable de entorno (el
+  `:3000` lo ocupa otro proyecto y `auth-client.ts` usa esa URL; sin el override el login falla con
+  "Failed to fetch").
+- Datos en dev sembrados con un script temporal (`initializeCompanyRbac` + 5 usuarios `@demo.local`):
+  Administrador 1 activo + 1 inactivo, Contador 2 + 1, Desarrollador 0, Propietario 1 (owner, que
+  estaba sin `roleId`).
+- Ajuste surgido de la prueba: con el badge Propietario el nombre y el email quedaban truncados en
+  `w-72`; el popover pasó a `w-80`, el badge se compactó y `_MemberIdentity` expone `title`
+  (commit `f737dbc`).
 
 ## 5. Verificación
-_Pendiente - ejecutar `/verificar tsk-692-usuarios-por-rol`_
+
+| Caso | Resultado |
+|---|---|
+| Rol con activos + inactivos (Administrador, Contador) | Lista de activos, "+1 inactivo conserva este rol", link Gestionar en Usuarios |
+| Rol con owner (Propietario) | Badge ámbar Propietario, nombre y email legibles |
+| Rol con 0 usuarios (Desarrollador) | Botón deshabilitado, no abre |
+| Teclado | `Tab` llega al trigger, `Enter` abre, `Tab` llega al link, `Esc` cierra y devuelve el foco al trigger |
+| Alto de fila | 49px con botón vs 48.5px deshabilitado: sin regresión |
+| Móvil 375px | Popover de 320px dentro del viewport (x=39..359), `collisionPadding` funciona |
+| Tabla y modal de Usuarios | Idénticos tras `_MemberIdentity` (captura `tsk692-06`) |
+| `npx vitest run` | 27 archivos / 342 tests en verde (14 nuevos) |
+| `npm run check-types` | 227 errores = línea base, ninguno en archivos tocados |
+| `npx eslint` sobre lo tocado | Limpio (1 error y 2 warnings preexistentes en `audit/` y `_RolesDataTable.tsx`, fuera del cambio) |
+
+No probado: usuario sin `company.general.users:view` (no hay un segundo usuario con sesión en dev). La
+rama es un `canViewUsers &&` directo, sin lógica adicional.
+
+Capturas: `scripts/guia-presentacion/assets/tsk692-*.png`. Script: `capturas-tsk692.mjs [baseUrl]`.
