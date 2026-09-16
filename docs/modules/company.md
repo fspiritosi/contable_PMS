@@ -34,14 +34,34 @@ Configuracion de la empresa activa: usuarios, roles, auditoria y 15+ catalogos.
 ## Roles
 
 **Ruta:** `/company/general/roles`
-**Archivos:** `features/general/roles/`
+**Archivos:** `features/general/roles/`, `features/general/shared/` (`_MemberIdentity.tsx`,
+`member-display.ts`: avatar + nombre + email reutilizados por Usuarios y por el popover de Roles)
 
 ### Funcionalidades
 
-- Lista paginada de roles con conteo de miembros
+- Lista paginada de roles con conteo de miembros. El contador de la columna **Usuarios** es un
+  Popover (`components/_RoleMembersPopover.tsx`) que lista los miembros **activos** del rol
+  (avatar, nombre, email, badge "Propietario" si `isOwner`), avisa cuantos inactivos conservan el
+  rol ("+N inactivos conservan este rol") y ofrece el link "Gestionar en Usuarios" solo si el
+  usuario tiene `company.general.users:view` (`RolesList.tsx` lo resuelve con
+  `getModulePermissions` y lo pasa como `canViewUsers`). Con 0 miembros el trigger queda
+  deshabilitado; con 0 activos y N inactivos abre y muestra "Ningun usuario activo tiene este rol".
 - Crear rol con permisos (matriz modulo x accion)
 - Editar permisos (reemplaza todos atomicamente)
 - Eliminar rol (solo si no tiene miembros asignados)
+
+### Nota tecnica: miembros por rol (TSK-692)
+
+- `getRolesPaginated` selecciona `members` con `where: { isActive: true }` (orden `isOwner desc,
+  createdAt asc`) y los enriquece con **un unico** `prisma.user.findMany` en lote para toda la
+  pagina (email, nombre, apellido, avatar; fallback `'Sin email'`). Cada rol devuelve `members` e
+  `inactiveMembersCount = _count.members - members.length`. Tipos exportados: `RoleListItem`,
+  `RoleMember`.
+- `_count.members` **no cambio**: sigue contando activos + inactivos. Es el numero que muestra la
+  columna y el que usan la regla de "Eliminar" en `columns.tsx` (`_count.members === 0`) y
+  `deleteRole`. Un miembro desactivado conserva su `roleId`, por eso el rol no se puede borrar
+  aunque el popover no lo liste.
+- El popover no hace fetch: todos los datos vienen en la fila (`role`).
 
 ### Roles del Sistema
 

@@ -76,6 +76,14 @@ export async function getRolesPaginated(searchParams: DataTableSearchParams) {
               },
             },
           },
+          // Solo miembros activos: es lo que lista la pantalla de Usuarios.
+          members: {
+            where: { isActive: true },
+            orderBy: [{ isOwner: 'desc' }, { createdAt: 'asc' }],
+            select: { id: true, userId: true, isOwner: true },
+          },
+          // Total SIN filtrar (activos + inactivos): lo usan la regla de
+          // eliminar en columns.tsx y deleteRole. No cambiar la semántica.
           _count: {
             select: { members: true },
           },
@@ -84,7 +92,40 @@ export async function getRolesPaginated(searchParams: DataTableSearchParams) {
       prisma.companyRole.count({ where }),
     ]);
 
-    return { data: roles, total };
+    // Enriquecer con datos de usuarios (un solo batch para toda la página).
+    // CompanyMember.userId no tiene relación Prisma con User.
+    const userIds = [...new Set(roles.flatMap((role) => role.members.map((m) => m.userId)))];
+    const users =
+      userIds.length > 0
+        ? await prisma.user.findMany({
+            where: { id: { in: userIds } },
+            select: {
+              id: true,
+              email: true,
+              firstName: true,
+              lastName: true,
+              imageUrl: true,
+            },
+          })
+        : [];
+    const userMap = new Map(users.map((u) => [u.id, u]));
+
+    const enrichedRoles = roles.map((role) => ({
+      ...role,
+      members: role.members.map((member) => {
+        const u = userMap.get(member.userId);
+        return {
+          ...member,
+          email: u?.email ?? 'Sin email',
+          firstName: u?.firstName ?? '',
+          lastName: u?.lastName ?? '',
+          imageUrl: u?.imageUrl ?? null,
+        };
+      }),
+      inactiveMembersCount: role._count.members - role.members.length,
+    }));
+
+    return { data: enrichedRoles, total };
   } catch (error) {
     logger.error('Error al obtener roles', { data: { error, companyId } });
     throw new Error('Error al obtener roles');
@@ -537,6 +578,7 @@ export async function deleteRole(roleId: string) {
 // ============================================
 
 export type RoleListItem = Awaited<ReturnType<typeof getRolesPaginated>>['data'][number];
+export type RoleMember = RoleListItem['members'][number];
 export type Role = Awaited<ReturnType<typeof getRoleById>>;
 export type SystemAction = Awaited<ReturnType<typeof getSystemActions>>[number];
 export type PermissionsConfig = Awaited<ReturnType<typeof getPermissionsConfig>>;

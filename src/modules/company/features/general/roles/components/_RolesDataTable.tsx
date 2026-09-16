@@ -34,6 +34,7 @@ interface Props {
   totalRows: number;
   searchParams: DataTableSearchParams;
   permissions: ModulePermissions;
+  canViewUsers: boolean;
 }
 
 export function _RolesDataTable({
@@ -41,6 +42,7 @@ export function _RolesDataTable({
   totalRows,
   searchParams,
   permissions,
+  canViewUsers,
 }: Props) {
   const router = useRouter();
   const [deletingRole, setDeletingRole] = useState<RoleListItem | null>(null);
@@ -68,8 +70,9 @@ export function _RolesDataTable({
         onEdit: handleEdit,
         onDelete: setDeletingRole,
         permissions,
+        canViewUsers,
       }),
-    [permissions]
+    [permissions, canViewUsers]
   );
 
   return (

@@ -10,9 +10,10 @@ interface Props {
 }
 
 export async function RolesList({ searchParams }: Props) {
-  const [rolesResult, permissions] = await Promise.all([
+  const [rolesResult, permissions, usersPermissions] = await Promise.all([
     getRolesPaginated(searchParams),
     getModulePermissions('company.general.roles'),
+    getModulePermissions('company.general.users'),
   ]);
 
   return (
@@ -32,6 +33,7 @@ export async function RolesList({ searchParams }: Props) {
           totalRows={rolesResult.total}
           searchParams={searchParams}
           permissions={permissions}
+          canViewUsers={usersPermissions.canView}
         />
       </div>
     </PermissionGuard>

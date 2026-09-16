@@ -63,7 +63,10 @@ export function _CompanyGuide() {
           </ol>
           <p className="text-sm text-muted-foreground mt-2">
             Puedes <strong>cambiar el rol</strong> de un usuario o{' '}
-            <strong>desactivarlo</strong> en cualquier momento.
+            <strong>desactivarlo</strong> en cualquier momento desde el menú
+            (…) de su fila → <strong>Cambiar rol</strong> o{' '}
+            <strong>Desactivar</strong>. Un usuario desactivado deja de poder
+            entrar, pero conserva el rol que tenía asignado.
           </p>
         </CardContent>
       </Card>
@@ -133,6 +136,41 @@ export function _CompanyGuide() {
               Roles personalizados con permisos granulares
             </li>
           </ul>
+
+          <p className="mt-3">
+            <strong>Ver quién tiene cada rol:</strong>
+          </p>
+          <ol className="list-decimal pl-6 space-y-2 text-muted-foreground">
+            <li>
+              Ve a <strong>Empresa → Roles</strong>
+            </li>
+            <li>
+              Haz clic en el <strong>número</strong> de la columna{' '}
+              <strong>Usuarios</strong> del rol que quieras revisar
+            </li>
+            <li>
+              Se abre la lista de usuarios activos con ese rol, con su nombre y
+              email. El propietario de la empresa aparece marcado como{' '}
+              <strong>Propietario</strong>
+            </li>
+            <li>
+              Si al pie dice <strong>&quot;+N inactivos conservan este
+              rol&quot;</strong>, son usuarios desactivados que todavía tienen
+              ese rol asignado. Por eso el número de la columna puede ser mayor
+              que la cantidad de personas en la lista
+            </li>
+            <li>
+              Si alguien quedó en el rol equivocado, usa el link{' '}
+              <strong>Gestionar en Usuarios</strong>: te lleva a{' '}
+              <strong>Empresa → Usuarios</strong>, donde desde el menú (…) de la
+              fila eliges <strong>Cambiar rol</strong>
+            </li>
+          </ol>
+          <p className="text-sm text-muted-foreground">
+            Si un rol no tiene ningún usuario asignado, el número aparece en gris
+            y no se puede hacer clic. El link <strong>Gestionar en Usuarios</strong>{' '}
+            solo se muestra si tienes permiso para ver la pantalla de Usuarios.
+          </p>
         </CardContent>
       </Card>
 

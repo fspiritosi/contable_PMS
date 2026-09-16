@@ -33,8 +33,8 @@ import {
   SelectValue,
 } from '@/shared/components/ui/select';
 import { Badge } from '@/shared/components/ui/badge';
-import { Avatar, AvatarFallback, AvatarImage } from '@/shared/components/ui/avatar';
 
+import { _MemberIdentity } from '../../shared/_MemberIdentity';
 import { updateMemberRole, type CompanyMemberListItem, type AvailableRole } from '../actions.server';
 
 const editRoleSchema = z.object({
@@ -97,9 +97,6 @@ export function _EditUserRoleModal({
 
   if (!member) return null;
 
-  const fullName = `${member.firstName} ${member.lastName}`.trim() || 'Sin nombre';
-  const initials = `${member.firstName?.[0] ?? ''}${member.lastName?.[0] ?? ''}`.toUpperCase() || '?';
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[425px]">
@@ -112,14 +109,13 @@ export function _EditUserRoleModal({
 
         {/* Info del usuario */}
         <div className="flex items-center gap-3 p-3 bg-muted rounded-lg">
-          <Avatar className="h-10 w-10">
-            <AvatarImage src={member.imageUrl ?? undefined} alt={fullName} />
-            <AvatarFallback>{initials}</AvatarFallback>
-          </Avatar>
-          <div>
-            <p className="font-medium">{fullName}</p>
-            <p className="text-sm text-muted-foreground">{member.email}</p>
-          </div>
+          <_MemberIdentity
+            size="md"
+            firstName={member.firstName}
+            lastName={member.lastName}
+            email={member.email}
+            imageUrl={member.imageUrl}
+          />
         </div>
 
         <Form {...form}>
