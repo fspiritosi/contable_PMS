@@ -1,0 +1,489 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>TSK-692 — Ver qué usuarios tienen cada rol</title>
+<style>
+  @page {
+    size: A4;
+    margin: 0;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #1f2430;
+    font-size: 13px;
+    line-height: 1.55;
+    background: #ffffff;
+  }
+
+  .page {
+    padding: 4mm 2mm;
+  }
+
+  header.cover {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    text-align: left;
+    padding: 10mm 2mm 8mm 2mm;
+    border-bottom: 3px solid #2f6f4f;
+    margin-bottom: 10mm;
+  }
+
+  .eyebrow {
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 11px;
+    font-weight: 700;
+    color: #2f6f4f;
+    margin-bottom: 6px;
+  }
+
+  h1 {
+    font-size: 26px;
+    margin: 0 0 8px 0;
+    color: #14251c;
+  }
+
+  .subtitle {
+    font-size: 14px;
+    color: #4b5563;
+    margin: 0;
+  }
+
+  section {
+    margin-bottom: 9mm;
+    page-break-inside: avoid;
+  }
+
+  section.allow-break {
+    page-break-inside: auto;
+  }
+
+  section:last-of-type { margin-bottom: 2mm; }
+
+  h2 {
+    font-size: 16px;
+    color: #14251c;
+    border-left: 4px solid #2f6f4f;
+    padding-left: 8px;
+    margin: 0 0 6mm 0;
+  }
+
+  .quote {
+    background: #f4f7f5;
+    border-left: 4px solid #2f6f4f;
+    padding: 10px 14px;
+    font-style: italic;
+    color: #2b3a33;
+    margin: 0 0 6px 0;
+  }
+
+  .quote cite {
+    display: block;
+    font-style: normal;
+    font-size: 11.5px;
+    color: #6b7280;
+    margin-top: 6px;
+  }
+
+  .before-after {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    page-break-inside: avoid;
+  }
+
+  .card {
+    border: 1px solid #e2e5e0;
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+
+  .card.before { background: #fbf7f2; border-color: #ecd9bd; }
+  .card.after { background: #f2f8f4; border-color: #bfe0cb; }
+
+  .card h3 {
+    margin: 0 0 6px 0;
+    font-size: 12.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .card.before h3 { color: #9a6a1f; }
+  .card.after h3 { color: #226240; }
+
+  .card p { margin: 0; }
+
+  ol.steps {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    counter-reset: step;
+  }
+
+  ol.steps > li {
+    counter-increment: step;
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+    page-break-inside: avoid;
+  }
+
+  ol.steps > li::before {
+    content: counter(step);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    border-radius: 50%;
+    background: #2f6f4f;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .step-body { flex: 1; }
+
+  .step-body strong { color: #14251c; }
+
+  figure {
+    margin: 8px 0 0 0;
+    page-break-inside: avoid;
+  }
+
+  figure img {
+    max-width: 100%;
+    border: 1px solid #d9dce0;
+    border-radius: 6px;
+    display: block;
+  }
+
+  figure.small img { max-width: 320px; }
+
+  figure.phone img { max-width: 160px; }
+
+  figcaption {
+    font-size: 11px;
+    color: #6b7280;
+    margin-top: 4px;
+  }
+
+  .callout {
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin: 0 0 8px 0;
+    page-break-inside: avoid;
+  }
+
+  .callout.config {
+    background: #f2f6fb;
+    border: 1px solid #cddaeb;
+  }
+
+  .callout.warning {
+    background: #fdf5ec;
+    border: 1px solid #efd6a8;
+  }
+
+  .callout h3 {
+    margin: 0 0 4px 0;
+    font-size: 13px;
+  }
+
+  .callout p { margin: 0 0 6px 0; }
+  .callout p:last-child { margin-bottom: 0; }
+
+  ul.plain {
+    margin: 4px 0 0 0;
+    padding-left: 18px;
+  }
+
+  ul.plain li { margin-bottom: 4px; }
+
+  .no-change-list {
+    display: grid;
+    gap: 6px;
+  }
+
+  .no-change-item {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+  }
+
+  .check {
+    color: #2f6f4f;
+    font-weight: 700;
+  }
+
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8mm;
+    align-items: start;
+  }
+
+  .side-by-side {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8mm;
+    align-items: start;
+    page-break-inside: avoid;
+  }
+
+  .side-by-side figure { margin-top: 0; }
+
+  .ui-text {
+    font-style: italic;
+    color: #374151;
+  }
+
+  footer.doc-footer {
+    text-align: center;
+    color: #9ca3af;
+    font-size: 10.5px;
+    margin-top: 2mm;
+  }
+</style>
+
+</head>
+<body>
+
+<div class="page">
+
+  <header class="cover">
+    <div class="eyebrow">Ticket 692 · Empresa</div>
+    <h1>Ver qué usuarios tienen cada rol</h1>
+    <p class="subtitle">Guía de presentación — qué pedías, qué cambió y cómo usarlo</p>
+  </header>
+
+  <section>
+    <h2>1. Qué pedías</h2>
+    <p>Estabas en <strong>Empresa → Roles</strong> y viste que la columna Usuarios te decía
+    cuántas personas tenía cada rol, pero no quiénes eran:</p>
+    <div class="quote">
+      "Sería bueno ver quién me quedó en un rol, para ver si no le pifié."
+      <cite>— Elizabeth Pérez</cite>
+    </div>
+    <p>El pedido tiene dos partes, y la segunda explica la primera: <strong>ver</strong> qué
+    persona quedó en cada rol, y si alguien está en el equivocado, poder
+    <strong>corregirlo</strong> sin tener que ir a buscarlo a ciegas.</p>
+    <figure>
+      <img src="assets/tsk692-00-antes-ticket.png" alt="Pantalla de Roles antes del cambio: la columna Usuarios muestra un número gris, y el 1 del rol Propietario está rodeado en rojo" />
+      <figcaption>La captura que adjuntaste al ticket. El "1" rodeado en rojo era solo un número:
+      no se podía hacer clic, no mostraba nada al pasar el mouse, y el menú (…) tampoco llevaba a
+      ningún lado.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <h2>2. Qué cambió en pantalla</h2>
+    <div class="before-after">
+      <div class="card before">
+        <h3>Antes</h3>
+        <p>La columna Usuarios era un contador fijo. Para saber quién tenía un rol había que ir a
+        <strong>Empresa → Usuarios</strong> y recorrer la lista mirando la columna Rol, persona
+        por persona.</p>
+      </div>
+      <div class="card after">
+        <h3>Ahora</h3>
+        <p>El número se puede <strong>hacer clic</strong>. Se abre una ventanita con la lista de
+        quiénes tienen ese rol, con nombre y email, y un link directo a Usuarios para cambiar el
+        rol de quien haga falta.</p>
+      </div>
+    </div>
+    <figure>
+      <img src="assets/tsk692-02-tabla-con-popover-recorte.png" alt="Tabla de Roles con la ventana abierta sobre el rol Administrador: Elizabeth Pérez como único usuario activo, el aviso +1 inactivo conserva este rol y el link Gestionar en Usuarios" />
+      <figcaption>La misma pantalla de Roles, con la lista del rol Administrador abierta. Todo lo
+      demás (columnas, búsqueda, botón Nuevo Rol, menú de acciones) sigue igual.</figcaption>
+    </figure>
+  </section>
+
+  <section class="allow-break">
+    <h2>3. Cómo se usa, paso a paso</h2>
+    <ol class="steps">
+      <li>
+        <div class="step-body">
+          <strong>Entrá a Empresa → Roles.</strong> Es la misma pantalla de siempre.
+        </div>
+      </li>
+      <li>
+        <div class="step-body">
+          <strong>Hacé clic en el número de la columna Usuarios</strong> del rol que quieras
+          revisar. Al pasar el mouse por encima, el número se resalta para mostrar que es un
+          botón.
+        </div>
+      </li>
+      <li>
+        <div class="step-body">
+          <strong>Mirá la lista.</strong> Arriba dice <span class="ui-text">"Usuarios con el rol
+          …"</span> y cuántos usuarios activos son. Cada persona aparece con su inicial o foto,
+          nombre y email.
+          <div class="side-by-side" style="margin-top:8px">
+            <figure class="small">
+              <img src="assets/tsk692-popover-contador.png" alt="Ventana del rol Contador: 2 usuarios activos, Lucía Fernández y Juan Ríos, más el aviso +1 inactivo conserva este rol" />
+              <figcaption>Rol Contador: dos usuarios activos y una persona desactivada que
+              todavía tiene el rol (ver punto 4).</figcaption>
+            </figure>
+            <figure class="small">
+              <img src="assets/tsk692-popover-propietario.png" alt="Ventana del rol Propietario: 1 usuario activo con la etiqueta Propietario" />
+              <figcaption>Rol Propietario: la dueña de la empresa aparece con la etiqueta
+              naranja <span class="ui-text">Propietario</span>, la misma que en Usuarios.</figcaption>
+            </figure>
+          </div>
+        </div>
+      </li>
+      <li>
+        <div class="step-body">
+          <strong>Si alguien está en el rol equivocado, hacé clic en
+          <span class="ui-text">"Gestionar en Usuarios"</span>.</strong> Te lleva a
+          <strong>Empresa → Usuarios</strong>, que es donde siempre se cambió el rol: en la fila
+          de la persona, menú (…) → <strong>Cambiar rol</strong>.
+          <figure>
+            <img src="assets/tsk692-06-tabla-usuarios.png" alt="Pantalla de Usuarios con la columna Rol: Juan Ríos y Lucía Fernández como Contador, Elizabeth Pérez como Administrador y Fabricio Spiritosi como Propietario" />
+            <figcaption>La pantalla de Usuarios adonde lleva el link. Acá se corrige el rol; al
+            volver a Roles, la lista ya lo refleja.</figcaption>
+          </figure>
+        </div>
+      </li>
+      <li>
+        <div class="step-body">
+          <strong>Para cerrar la lista</strong>, hacé clic afuera o apretá <strong>Esc</strong>.
+        </div>
+      </li>
+    </ol>
+  </section>
+
+  <section class="allow-break">
+    <h2>4. Detalles que conviene saber</h2>
+
+    <div class="callout config">
+      <h3>El número cuenta a todos; la lista muestra solo a los activos</h3>
+      <p>Cuando desactivás a un usuario, deja de poder entrar al sistema pero
+      <strong>conserva el rol que tenía</strong>. Por eso el número de la columna puede ser mayor
+      que la cantidad de personas en la lista: la diferencia son los desactivados.</p>
+      <p>En ese caso, al pie de la lista aparece la línea <span class="ui-text">"+1 inactivo
+      conserva este rol"</span> (o <span class="ui-text">"+N inactivos conservan este
+      rol"</span>). No los mostramos con nombre porque tampoco aparecen en la pantalla de
+      Usuarios; el aviso está para que el número te cierre.</p>
+      <p>Si un rol solo tiene desactivados, la lista dice <span class="ui-text">"Ningún usuario
+      activo tiene este rol"</span> y abajo el aviso de inactivos.</p>
+    </div>
+
+    <div class="callout config">
+      <h3>Un rol sin nadie no abre nada</h3>
+      <p>Si el rol tiene 0 usuarios, el número queda en gris y no se puede hacer clic: no hay nada
+      para mostrar. Es el mismo caso en que el rol se puede eliminar desde el menú (…).</p>
+      <figure>
+        <img src="assets/tsk692-05-rol-sin-usuarios.png" alt="Fila del rol Desarrollador con 0 usuarios y el contador en gris, deshabilitado" />
+        <figcaption>Un rol con 0 usuarios: el contador se ve, pero no responde al clic.</figcaption>
+      </figure>
+    </div>
+
+    <div class="callout config">
+      <h3>La etiqueta Propietario</h3>
+      <p>El dueño de la empresa aparece siempre primero en la lista, con la misma etiqueta naranja
+      <span class="ui-text">Propietario</span> que ya ves en la pantalla de Usuarios. Es un
+      recordatorio de que a esa persona no se le puede cambiar el rol ni desactivarla.</p>
+    </div>
+
+    <div class="callout config">
+      <h3>Quién ve el link "Gestionar en Usuarios"</h3>
+      <p>Cualquier usuario que pueda ver la pantalla de Roles puede abrir la lista. Pero el link
+      <span class="ui-text">"Gestionar en Usuarios"</span> solo aparece si esa persona además
+      tiene permiso para ver la pantalla de Usuarios. Si un rol puede ver Roles pero no Usuarios,
+      ve la lista completa sin el link, que igual no le serviría.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>5. También en el celular</h2>
+    <div class="two-col">
+      <div>
+        <p>La lista funciona igual desde el teléfono. La ventana se acomoda dentro de la pantalla
+        sin cortarse, y si un email es largo se recorta con puntos suspensivos en lugar de
+        desbordar.</p>
+        <p>Se cierra tocando afuera, igual que en la computadora.</p>
+      </div>
+      <figure class="phone">
+        <img src="assets/tsk692-07-movil-recorte.png" alt="Pantalla de Roles en un celular con la lista del rol Administrador abierta" />
+        <figcaption>La pantalla de Roles en un celular, con la lista abierta.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section>
+    <h2>6. Qué no cambió</h2>
+    <div class="no-change-list">
+      <div class="no-change-item">
+        <span class="check">✓</span>
+        <span>El <strong>número de la columna</strong> sigue contando a todos los que tienen el
+        rol, activos e inactivos, igual que antes.</span>
+      </div>
+      <div class="no-change-item">
+        <span class="check">✓</span>
+        <span><strong>Cambiar el rol</strong> de una persona se sigue haciendo en Usuarios. La
+        lista nueva te muestra a quién y te lleva hasta ahí; no cambia roles por sí sola.</span>
+      </div>
+      <div class="no-change-item">
+        <span class="check">✓</span>
+        <span>Los <strong>roles del sistema</strong> (Propietario, Administrador, Desarrollador)
+        siguen sin poder editarse ni eliminarse, y un rol con usuarios sigue sin poder
+        borrarse.</span>
+      </div>
+      <div class="no-change-item">
+        <span class="check">✓</span>
+        <span>No hace falta <strong>configurar nada</strong>. Solo permisos: ver Roles para abrir
+        la lista, ver Usuarios para el link.</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="allow-break">
+    <h2>7. Dos cosas para revisar en tu empresa</h2>
+    <p>Mirando la captura que adjuntaste al ticket, hay dos detalles que no son parte de este
+    cambio pero que ahora podés revisar vos misma con la lista nueva.</p>
+
+    <div class="callout warning">
+      <h3>⚠ Tenés dos roles llamados "Administrador"</h3>
+      <p>En tu pantalla de Roles aparece <strong>Administrador</strong> dos veces. El de arriba,
+      con la etiqueta <span class="ui-text">Sistema</span> y 298 permisos, es el que viene con
+      PMS. El de abajo, con la descripción "Administra todo" y <strong>0 permisos</strong>, lo
+      creaste vos en algún momento.</p>
+      <p>El problema es ese cero: <strong>cualquier persona asignada a ese rol no puede hacer
+      nada</strong> en el sistema. Es exactamente el "le pifié" que motivó el ticket.</p>
+      <p>Cómo arreglarlo: hacé clic en el número de la columna Usuarios de ese rol para ver quién
+      está. Desde <span class="ui-text">"Gestionar en Usuarios"</span>, cambiale el rol a cada
+      persona al <strong>Administrador del sistema</strong> (o al rol que corresponda). Cuando el
+      rol vacío quede en 0, eliminalo desde el menú (…) para que no vuelva a confundir.</p>
+    </div>
+
+    <div class="callout warning">
+      <h3>⚠ Si el rol Propietario muestra 0 usuarios</h3>
+      <p>En tu captura el rol Propietario muestra 1, así que en tu empresa esto está bien. Lo
+      anotamos por si lo ves en otra empresa: las empresas creadas en las primeras versiones de
+      PMS pueden tener a su dueño <strong>sin rol asignado</strong>, y entonces el rol Propietario
+      aparece con 0 aunque el propietario exista.</p>
+      <p>No afecta lo que esa persona puede hacer: el propietario tiene acceso total siempre, con
+      o sin rol. Es solo el número el que engaña. Como al propietario no se le puede cambiar el
+      rol desde Usuarios (a propósito, para que nadie lo deje sin acceso), <strong>no tenés que
+      hacer nada</strong>: si lo ves, avisanos y lo corregimos nosotros; la corrección de fondo,
+      para que no vuelva a pasar en empresas nuevas, va en otro ticket.</p>
+    </div>
+  </section>
+
+  <footer class="doc-footer">
+    TSK-692 — Ver qué usuarios tienen cada rol · Empresa → Roles
+  </footer>
+
+</div>
+
+</body>
+</html>

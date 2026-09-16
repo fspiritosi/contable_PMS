@@ -3,7 +3,7 @@
 **Fecha de inicio:** 2026-09-16
 **Ticket:** [692] "[Empresa] Podría ver quién tiene qué rol?"
 **Reportante:** Elizabeth Perez (eperez@perezmarzo.com.ar)
-**Estado:** Implementación en progreso (Fase 3 de 5 completada)
+**Estado:** Implementación completada
 
 ---
 
@@ -603,7 +603,7 @@ El TDD se aplica a esas dos capas: el test se escribe **antes** del código en l
   cliente (memoria `guia-presentacion-cliente-por-ticket`), aprovechando el PDF para avisarle a
   la clienta las dos observaciones que no se corrigen en este ticket.
 - **Tareas:**
-  - [ ] `src/modules/help/features/guide/components/_CompanyGuide.tsx`, card "Roles y Permisos"
+  - [x] `src/modules/help/features/guide/components/_CompanyGuide.tsx`, card "Roles y Permisos"
         (líneas 71-137): después de la lista "Roles del sistema" (líneas 122-135) agregar un
         bloque `<p className="mt-3"><strong>Ver quién tiene cada rol:</strong></p>` + `<ol>` con:
         (1) Ve a **Empresa → Roles**; (2) haz clic en el **número** de la columna **Usuarios**;
@@ -613,7 +613,7 @@ El TDD se aplica a esas dos capas: el test se escribe **antes** del código en l
         Usuarios** → menú (…) → **Cambiar rol**. Nota final: el link solo aparece si tienes
         permiso para ver Usuarios. Mismo tono y componentes (`<ol className="list-decimal pl-6
         space-y-2 text-muted-foreground">`) que el resto del archivo.
-  - [ ] `docs/modules/company.md`, sección "Roles" → "Funcionalidades" (líneas 38-43): cambiar la
+  - [x] `docs/modules/company.md`, sección "Roles" → "Funcionalidades" (líneas 38-43): cambiar la
         viñeta "Lista paginada de roles con conteo de miembros" por una que describa que el
         conteo abre un Popover con los usuarios **activos** (avatar, nombre, email, badge
         Propietario), aviso de inactivos y link a Usuarios condicionado a
@@ -633,7 +633,7 @@ El TDD se aplica a esas dos capas: el test se escribe **antes** del código en l
         (4) `usuarios-cambiar-rol`: la pantalla Usuarios con el modal "Cambiar rol" abierto, que
         es adonde lleva el link. La captura "antes" es la del propio ticket (la clienta rodeó el
         "1"), así que no hace falta volver a `main` para tomarla.
-  - [ ] Crear `scripts/guia-presentacion/tsk-692.html` copiando la estructura y estilos de
+  - [x] Crear `scripts/guia-presentacion/tsk-692.html` copiando la estructura y estilos de
         `tsk-644.html` (cover con `eyebrow` "Ticket 692 · Empresa", secciones numeradas):
         1. **Qué pedías** (cita textual: "Sería bueno ver quién me quedó en un rol, para ver si no
         le pifié"); 2. **Qué cambió en pantalla** (antes/después: el "1" gris vs. el Popover);
@@ -646,7 +646,7 @@ El TDD se aplica a esas dos capas: el test se escribe **antes** del código en l
         quién está, moverlo desde Usuarios al Administrador de sistema y borrar el vacío;
         (b) si la propietaria no aparece en el rol Propietario es porque su alta no le asignó rol
         (riesgo 2): no afecta sus permisos, y se corrige en otro ticket.
-  - [ ] Generar el PDF: `node scripts/guia-presentacion/generar-pdf.mjs
+  - [x] Generar el PDF: `node scripts/guia-presentacion/generar-pdf.mjs
         scripts/guia-presentacion/tsk-692.html docs/presentaciones/TSK-692-usuarios-por-rol.pdf`
         (el destino sigue la convención de `docs/presentaciones/TSK-583-…pdf`, `TSK-585-…pdf`,
         `TSK-621-…pdf`).
@@ -903,7 +903,62 @@ _Pendiente - ejecutar `/disenar tsk-692-usuarios-por-rol`_
 
 ### Fase 4: Documentación (guía in-app, docs del desarrollador y guía de presentación PDF)
 
-**Estado:** Pendiente
+**Estado:** Completada
+
+**Archivos modificados:**
+
+- `src/modules/help/features/guide/components/_CompanyGuide.tsx`: en la card "Roles y Permisos",
+  después de "Roles del sistema", bloque **"Ver quién tiene cada rol:"** con `<ol>` de 5 pasos
+  (Empresa → Roles; clic en el número de Usuarios; lista de activos con badge Propietario; qué
+  significa "+N inactivos conservan este rol"; link "Gestionar en Usuarios" → menú (…) → Cambiar
+  rol) y nota final (0 usuarios = número gris sin clic; el link solo con permiso de Usuarios). En
+  la card "Gestión de Usuarios" se amplió la línea de "cambiar el rol / desactivar" con el camino
+  exacto (menú (…) de la fila) y la aclaración de que un desactivado conserva su rol.
+- `docs/modules/company.md`, sección Roles: "Archivos" suma `features/general/shared/`
+  (`_MemberIdentity.tsx`, `member-display.ts`); la viñeta del conteo describe el Popover
+  (`_RoleMembersPopover`), el filtro de activos, el aviso de inactivos, el link condicionado a
+  `company.general.users:view` vía `canViewUsers`, y los dos estados (0 miembros → deshabilitado;
+  0 activos + N inactivos → abre con "Ningun usuario activo tiene este rol"). Nueva subsección
+  "Nota tecnica: miembros por rol (TSK-692)" con `getRolesPaginated` (`isActive`, lote único de
+  `prisma.user.findMany`, `inactiveMembersCount`, tipos `RoleListItem`/`RoleMember`) y por qué
+  `_count.members` no cambia (columna, regla de Eliminar, `deleteRole`).
+- `scripts/guia-presentacion/tsk-692.html` (nuevo): estructura y estilos copiados de `tsk-644.html`
+  (cover con eyebrow "Ticket 692 · Empresa"). Secciones: 1. Qué pedías (cita + captura del ticket);
+  2. Qué cambió en pantalla (antes/después + captura principal con el Popover); 3. Cómo se usa,
+  paso a paso (5 pasos; capturas de Contador con inactivo, Propietario con badge, y la tabla de
+  Usuarios); 4. Detalles que conviene saber (número vs. lista e inactivos, rol con 0 no abre,
+  badge Propietario, quién ve el link); 5. También en el celular (captura 375px); 6. Qué no cambió;
+  7. Dos cosas para revisar en tu empresa (rol "Administrador" custom con 0 permisos → ver quién
+  está, moverlo al Administrador del sistema, borrar el vacío; rol Propietario en 0 → no afecta
+  permisos, se corrige de nuestro lado). Textos de UI tomados literalmente de
+  `_RoleMembersPopover.tsx`.
+- `scripts/guia-presentacion/assets/tsk692-00-antes-ticket.png` (nuevo): la captura del ticket,
+  copiada del scratchpad. `tsk692-02-tabla-con-popover-recorte.png` y `tsk692-07-movil-recorte.png`
+  (nuevos): recortes con ImageMagick del espacio en blanco inferior de las capturas 02 y 07; los
+  originales quedan intactos.
+- `docs/presentaciones/TSK-692-usuarios-por-rol.pdf` (nuevo): 4 páginas A4, 275 KB, generado con
+  `node scripts/guia-presentacion/generar-pdf.mjs scripts/guia-presentacion/tsk-692.html
+  docs/presentaciones/TSK-692-usuarios-por-rol.pdf`.
+
+**Notas:**
+
+- Desvío respecto del plan en la sección 7 (b) del PDF: el plan y la consigna decían "asignarle
+  Propietario desde Usuarios", pero `updateMemberRole` (`users/actions.server.ts:579-581`) rechaza
+  cambiar el rol de un `isOwner`. El PDF dice en cambio que no tiene que hacer nada, que avise y lo
+  corregimos nosotros, y que el bootstrap se arregla en otro ticket (seguimiento 2.4.4). Además,
+  en la captura del ticket el rol Propietario muestra 1, así que el aviso se redactó como "por si
+  lo ves en otra empresa".
+- La sección 4 del plan ("Qué configuración hace falta: ninguna") se fusionó como cuarta viñeta de
+  "Qué no cambió" para no dedicarle una sección a decir "nada"; la sección "Detalles que conviene
+  saber" (decisiones de UI de la Fase 3) y "También en el celular" no estaban en el plan original y
+  se agregaron porque las capturas ya existían.
+- Paginación: `section.allow-break` en las secciones 3, 4 y 7 y `page-break-inside: avoid` en
+  `.callout` para que ningún callout se parta; la captura móvil se limitó a 160px de ancho para
+  cerrar en 4 páginas sin dejar el pie solo en una quinta.
+- `docs/architecture/project-structure.md` no se tocó: su plantilla ya lista un `shared/` genérico
+  por módulo y `features/general/shared/` no tenía un lugar natural sin forzarlo.
+- Verificación: `npx eslint …/_CompanyGuide.tsx` → sin avisos; `npm run check-types` → 227 errores
+  (misma línea base, ninguno nuevo).
 
 ### Fase 5: Verificación final
 
