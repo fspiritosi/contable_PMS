@@ -3,7 +3,7 @@
 **Fecha de inicio:** 2026-09-18
 **Tickets:** [717] "Cada socio tiene una cuenta contable propia" · [724-d] "Cuentas de Aportes de Socios" · resuelve [413] (4ª reapertura) y [706] (crítica)
 **Reportante:** Elizabeth Perez (eperez@perezmarzo.com.ar) vía 413/706
-**Estado:** Implementación completada
+**Estado:** Verificación completada
 
 ---
 
@@ -1030,19 +1030,19 @@ mismo molde de `fund-movement-lines.integration.test.ts`. En esas fases el test 
 - **Objetivo:** cerrar con evidencia: comandos del checklist en verde y los casos de uso probados
   a mano en el navegador con datos reales de dev.
 - **Tareas:**
-  - [ ] `npm run check-types` (línea base: **227** errores preexistentes; ninguno nuevo en
+  - [x] `npm run check-types` (línea base: **227** errores preexistentes; ninguno nuevo en
         `treasury/features/partners`, `treasury/features/fund-movements`, `accounting/features/
         settings` ni `help/`), `npm run lint`, `npm run test` completo (validators de socios,
         validators de fondos, integración existente e integración nueva; la suite previa sin
         regresiones).
-  - [ ] Preparar datos en dev (empresa "Empresa de Prueba 01 SA", memoria
+  - [x] Preparar datos en dev (empresa "Empresa de Prueba 01 SA", memoria
         `dev-local-capturas-y-login`): en Plan de Cuentas crear dos cuentas hoja bajo `3.1.1/00/00
         CAPITAL SOCIAL` ("Aportes Socia A", "Aportes Socia B", EQUITY) y usar una ASSET existente
         (p. ej. `1.1.4/02/01 Cuenta Part. Socio 1`) para probar el tipo Activo; socios: **Socia
         A** con cuenta EQUITY propia, **Socia C** con cuenta ASSET propia, **Socia B** sin cuenta;
         global configurada; un banco con cuenta contable; un borrador `PARTNER_CONTRIBUTION`
         creado antes de la fase 3 (o insertado por SQL con `partner_id = NULL`).
-  - [ ] Prueba manual, caso por caso:
+  - [x] Prueba manual, caso por caso:
     - Aporte de Socia A → confirma; el asiento tiene "Aportes Socia A" en el Haber y el banco en el
       Debe; el saldo del banco sube.
     - Aporte de Socia C (cuenta ASSET) → confirma; el asiento tiene la cuenta de Activo en el
@@ -1061,9 +1061,9 @@ mismo molde de `fund-movement-lines.integration.test.ts`. En esas fases el test 
       retiros registrados…"; un socio nuevo sin nada se elimina como antes.
     - Mayor de la cuenta "Aportes Socia A": vacío mientras el asiento está en Borrador; aparece al
       Registrarlo (confirma el mensaje de la guía y del PDF).
-  - [ ] Responsive y accesibilidad: form de socio y modal de fondos a 375px (el `AccountCombobox`
+  - [x] Responsive y accesibilidad: form de socio y modal de fondos a 375px (el `AccountCombobox`
         y el aviso no desbordan); modo oscuro en los avisos neutro y naranja.
-  - [ ] Registrar los resultados en la sección 5 del documento, con los comandos y su salida
+  - [x] Registrar los resultados en la sección 5 del documento, con los comandos y su salida
         resumida.
 - **Archivos:** ninguno nuevo; solo correcciones puntuales que salgan de la verificación.
 - **Criterio de completitud:** los tres comandos en verde (con la línea base de `check-types`
@@ -1133,6 +1133,8 @@ retiro, transferencia y gastos bancarios mientras se cambia de dónde sale la cu
 contrapartida) y el esfuerzo en la fase 5.
 
 ### 2.4 Seguimientos fuera de alcance
+
+- **Modal de movimientos de fondos desborda en móvil (375px)**: el `DialogContent` mide 411px con cualquier tipo de movimiento (también en `main`); la X de cerrar queda fuera. Ajeno a este ticket; revisar `sm:max-w-[560px]` vs. el `max-w-[calc(100%-2rem)]` base o el contenido con ancho mínimo.
 
 - **Fecha del asiento un día antes en el listado de Asientos**: `accounting/features/entries/components/_EntriesTable.tsx:243` usa `new Date(entry.date).toLocaleDateString()` sobre un timestamp sin zona; en UTC-3 muestra el día anterior. Corrección: `moment.utc(entry.date).format('DD/MM/YYYY')`. El badge "Manual" en asientos automáticos también es engañoso. Detectado en la verificación de TSK-717.
 
@@ -2578,4 +2580,24 @@ o el import de las constantes devuelve `undefined` y el error es poco legible.
 - **Hallazgo fuera de alcance (agregado a 2.4):** `_EntriesTable.tsx:243` muestra la fecha del asiento con `new Date(entry.date).toLocaleDateString()`; con un timestamp sin zona cae al día anterior en UTC-3 (el aporte del 18/09 se lista como 17/9 aunque la base guarda 2026-09-18). Además viola la regla moment.js. Y el asiento automático se etiqueta "Manual".
 
 ## 5. Verificación
-_Pendiente - ejecutar `/verificar tsk-717-cuenta-contable-por-socio`_
+
+**Fecha:** 2026-09-18 · **Entorno:** dev server `:3010` (`NEXT_PUBLIC_APP_URL` sobreescrita), base `contable-pms-db`, Empresa de Prueba 01 SA · **Script:** `scripts/guia-presentacion/capturas-tsk717.mjs http://localhost:3010`
+
+| Caso | Resultado |
+|---|---|
+| Alta de socia con cuenta `1.1.4/02/01 Cuenta Part. Socio 1` desde el form (`AccountCombobox` con búsqueda) | OK; listado muestra la cuenta; el socio sin cuenta muestra "Por defecto" |
+| Aporte $250.000 a la socia con cuenta propia → `Guardar y Confirmar` | Movimiento Confirmado, asiento nº 13: Banco Santander Debe 250.000 / **Cuenta Part. Socio 1** Haber 250.000 |
+| Aviso modal — socio con cuenta propia | "El asiento se imputará a la cuenta 1.1.4/02/01 - Cuenta Part. Socio 1 de María López." |
+| Aviso modal — socio sin cuenta, con global | "Juan Perez no tiene cuenta de aportes propia: se usará la cuenta por defecto 3.1.1/01/00 - Acciones en Circulación." |
+| Aviso modal — sin cuenta ni global (global vaciada y restaurada por el script) | Aviso naranja con links a Socios y Ajustes contables; "No vas a poder confirmar." |
+| Retiro, cuenta no imputable, socio inexistente, socio borrado entre borrador y confirmación, transferencias/gastos bancarios sin socio | Cubiertos por `fund-movement-partner-account.integration.test.ts` (7 bloques) y `validators.test.ts` |
+| Ajustes contables | Campo renombrado "Cuenta de aportes de socios por defecto" con la ayuda nueva |
+| Móvil 375px — form de socio | `scrollWidth` 375, combo dentro del viewport |
+| Móvil 375px — modal de fondos | El aviso queda dentro (361px). El `DialogContent` mide 411px **también sin el aviso** (medido con el tipo por defecto): desborde preexistente del modal, anotado en 2.4 |
+| `npx vitest run` | 29 archivos / 360 tests en verde |
+| `npm run check-types` | 219 errores (línea base 227; la Fase 2 corrigió 8 previos en `_PartnerForm`), 0 en archivos tocados |
+| `npx eslint` en `partners/`, `fund-movements/`, guías | Limpio (errores preexistentes solo en `bank-movements`, `payment-orders`, `receipts`, no tocados) |
+
+Ajuste surgido de la verificación: el aviso se movió debajo del campo Socio (`6930ec4`).
+
+Capturas: `scripts/guia-presentacion/assets/tsk717-*.png` (01-10 desktop, 11-12 móvil).
