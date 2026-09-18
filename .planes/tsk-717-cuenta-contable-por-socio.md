@@ -3,7 +3,7 @@
 **Fecha de inicio:** 2026-09-18
 **Tickets:** [717] "Cada socio tiene una cuenta contable propia" · [724-d] "Cuentas de Aportes de Socios" · resuelve [413] (4ª reapertura) y [706] (crítica)
 **Reportante:** Elizabeth Perez (eperez@perezmarzo.com.ar) vía 413/706
-**Estado:** Implementación en progreso (Fases 1-4 de 6 completadas)
+**Estado:** Implementación en progreso (Fases 1-4 y 6 completadas; falta documentación)
 
 ---
 
@@ -1133,6 +1133,8 @@ retiro, transferencia y gastos bancarios mientras se cambia de dónde sale la cu
 contrapartida) y el esfuerzo en la fase 5.
 
 ### 2.4 Seguimientos fuera de alcance
+
+- **Fecha del asiento un día antes en el listado de Asientos**: `accounting/features/entries/components/_EntriesTable.tsx:243` usa `new Date(entry.date).toLocaleDateString()` sobre un timestamp sin zona; en UTC-3 muestra el día anterior. Corrección: `moment.utc(entry.date).format('DD/MM/YYYY')`. El badge "Manual" en asientos automáticos también es engañoso. Detectado en la verificación de TSK-717.
 
 Registrados para que no se filtren en este ticket y para abrirlos aparte:
 
@@ -2551,7 +2553,15 @@ o el import de las constantes devuelve `undefined` y el error es poco legible.
 - **Estado:** Pendiente
 
 ### Fase 6: Verificación final
-- **Estado:** Pendiente
+- **Estado:** Completada (2026-09-18, antes de la Fase 5 para que el PDF tenga capturas reales)
+- **Cómo:** dev server en `:3010` con `NEXT_PUBLIC_APP_URL` sobreescrita; script `scripts/guia-presentacion/capturas-tsk717.mjs` que recorre el flujo real (alta de socia con cuenta, listado, modal en sus 3 estados, confirmación, asiento, ajustes) sobre la Empresa de Prueba 01 SA.
+- **Resultados:**
+  - Alta de "María López" con cuenta `1.1.4/02/01 Cuenta Part. Socio 1` desde el form → columna "Cuenta de aportes" la muestra; "Juan Perez" queda "Por defecto".
+  - Aporte de $250.000 confirmado → asiento nº 13: Banco Santander Debe 250.000 / **Cuenta Part. Socio 1** Haber 250.000 (ya no la global).
+  - Aviso del modal en los 3 estados con los textos del diseño; el estado "falta configurar" se probó vaciando la global y restaurándola.
+  - Ajuste de UX surgido de la prueba: el aviso estaba debajo de "Tipo de movimiento"; se movió debajo del campo Socio para que el mensaje quede pegado al dato que describe.
+  - `npx vitest run` 29 archivos / 360 tests; `check-types` 219 (base 227: la Fase 2 corrigió 8 previos); eslint limpio en lo tocado.
+- **Hallazgo fuera de alcance (agregado a 2.4):** `_EntriesTable.tsx:243` muestra la fecha del asiento con `new Date(entry.date).toLocaleDateString()`; con un timestamp sin zona cae al día anterior en UTC-3 (el aporte del 18/09 se lista como 17/9 aunque la base guarda 2026-09-18). Además viola la regla moment.js. Y el asiento automático se etiqueta "Manual".
 
 ## 5. Verificación
 _Pendiente - ejecutar `/verificar tsk-717-cuenta-contable-por-socio`_

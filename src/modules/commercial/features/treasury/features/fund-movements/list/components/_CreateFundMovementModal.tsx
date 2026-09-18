@@ -350,13 +350,6 @@ export function _CreateFundMovementModal({
               </div>
             )}
 
-            {isPartnerMovement && (
-              <_PartnerAccountNotice
-                partner={selectedPartner}
-                defaultAccount={defaultContributionsAccount}
-              />
-            )}
-
             {isBankCharges ? (
               <FormField
                 control={form.control}
@@ -485,6 +478,13 @@ export function _CreateFundMovementModal({
                     <FormMessage />
                   </FormItem>
                 )}
+              />
+            )}
+
+            {isPartnerMovement && (
+              <_PartnerAccountNotice
+                partner={selectedPartner}
+                defaultAccount={defaultContributionsAccount}
               />
             )}
 
