@@ -6,10 +6,15 @@ import {
   CardHeader,
   CardTitle,
 } from '@/shared/components/ui/card';
-import { getAccountingSettings, getActiveAccounts } from './actions.server';
+import {
+  getAccountingSettings,
+  getActiveAccounts,
+  getItemsWithoutAccountCounts,
+} from './actions.server';
 import { _AccountingSettingsForm } from './components/_AccountingSettingsForm';
 import { _CommercialIntegrationForm } from './components/_CommercialIntegrationForm';
 import { _PeriodLockingForm } from './components/_PeriodLockingForm';
+import { ItemsWithoutAccountNotice } from './components/ItemsWithoutAccountNotice';
 
 import { getActiveCompanyId } from '@/shared/lib/company';
 
@@ -22,7 +27,10 @@ async function AccountingSettingsContent({ companyId }: { companyId: string }) {
         .filter(([key, value]) => key.endsWith('AccountId') && typeof value === 'string')
         .map(([, value]) => value as string)
     : [];
-  const accounts = await getActiveAccounts(companyId, configuredAccountIds);
+  const [accounts, itemCounts] = await Promise.all([
+    getActiveAccounts(companyId, configuredAccountIds),
+    getItemsWithoutAccountCounts(companyId), // TSK-721
+  ]);
 
   return (
     <div className="flex flex-1 flex-col gap-4">
@@ -75,6 +83,7 @@ async function AccountingSettingsContent({ companyId }: { companyId: string }) {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          <ItemsWithoutAccountNotice counts={itemCounts} className="mb-6" />
           <_CommercialIntegrationForm
             companyId={companyId}
             accounts={accounts}
