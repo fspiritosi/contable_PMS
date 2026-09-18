@@ -44,6 +44,20 @@ export function formatDate(
 }
 
 /**
+ * Formatea un DateTime que representa un DÍA (sin hora significativa) a DD/MM/YYYY,
+ * leyéndolo en UTC. Es el caso de `journal_entries.date`, `issueDate` de comprobantes
+ * y otros campos que Prisma guarda a medianoche UTC: formatearlos en hora local los
+ * corre al día anterior en UTC-3 (TSK-725).
+ */
+export function formatDateUtc(
+  date: Date | string | null | undefined,
+  fallback = 'No especificada'
+): string {
+  if (!date) return fallback;
+  return moment.utc(date).format('DD/MM/YYYY');
+}
+
+/**
  * Formatea una fecha con hora a DD/MM/YYYY HH:mm
  */
 export function formatDateTime(

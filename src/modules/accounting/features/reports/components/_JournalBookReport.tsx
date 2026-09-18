@@ -12,6 +12,7 @@ import { ChevronRight, ChevronDown, Loader2, Download } from 'lucide-react';
 import moment from 'moment';
 import { exportToExcel, ExcelColumn } from '@/shared/lib/excel-export';
 import { logger } from '@/shared/lib/logger';
+import { formatDateUtc } from '@/shared/utils/formatters';
 
 interface JournalBookReportProps {
   companyId: string;
@@ -67,7 +68,7 @@ export function _JournalBookReport({ companyId }: JournalBookReportProps) {
         key: 'entryDate',
         title: 'Fecha',
         width: 12,
-        formatter: (value) => moment(value as Date).format('DD/MM/YYYY'),
+        formatter: (value) => formatDateUtc(value as Date),
       },
       { key: 'entryDescription', title: 'Descripcion', width: 30 },
       { key: 'accountCode', title: 'Codigo', width: 12 },
@@ -212,7 +213,7 @@ export function _JournalBookReport({ companyId }: JournalBookReportProps) {
                             <span className="ml-2">{entry.number}</span>
                           </div>
                         </td>
-                        <td>{moment(entry.date).format('DD/MM/YYYY')}</td>
+                        <td>{formatDateUtc(entry.date)}</td>
                         <td>{entry.description}</td>
                         <td className={getStatusColor(entry.status)}>
                           {getStatusLabel(entry.status)}
