@@ -40,7 +40,7 @@ El módulo más extenso. Cubre el ciclo completo de ventas (order-to-cash) y com
 
 | Feature | Ruta | Descripción |
 |---------|------|-------------|
-| Productos | `/commercial/products` | CRUD, tipo PRODUCT/SERVICE/COMBO, barcode |
+| Productos | `/commercial/products` | CRUD, tipo PRODUCT/SERVICE/COMBO, barcode. Columna Imputación con badges «Sin ingreso» / «Sin egreso» y facet **Imputación** (`?imputation=noIncome|noExpense`, conteos externos) para encontrar ítems sin cuenta contable (TSK-721) |
 | Categorías | `/commercial/categories` | Árbol jerárquico (parentId) |
 | Listas de Precios | `/commercial/price-lists` | Precios por producto, lista default |
 
@@ -277,6 +277,19 @@ Partner
 **Flujo**: el movimiento se guarda como borrador editable; **Confirmar** actualiza el saldo del
 banco/caja y genera el asiento (2 líneas en aporte/retiro/transferencia, N+1 en gastos bancarios)
 dentro de una única transacción. Confirmado no se edita ni se elimina.
+
+**Gastos bancarios — cuenta por defecto preseleccionada (TSK-718)**: `getFundMovementCatalogs`
+devuelve `defaultBankChargesAccount` (`AccountingSettings.bankChargesAccountId`, "Gastos bancarios
+por defecto", `{ id, code, name } | null`). `_FundMovementLinesField` calcula
+`pickDefaultLineAccount(defaultAccount?.id, accounts)` (`shared/lines-calc.ts`: devuelve el id solo
+si está entre las cuentas que el combo ofrece hoy; si no, `''`) y lo usa como `accountId` inicial de
+cada concepto que se agrega. `_BankChargesDefaultNotice` (debajo de la tabla, siempre visible,
+`role="status"`) anticipa el estado: neutro «Los conceptos nuevos se imputan a `code - name`
+(cuenta de gastos bancarios por defecto). Podés cambiar la cuenta en cada fila.», naranja si la
+cuenta configurada ya no es imputable, o naranja «No hay cuenta de gastos bancarios por defecto:
+elegí la cuenta en cada concepto o configurala en Ajustes contables.» Ninguno bloquea:
+`FundMovementLine.accountId` sigue siendo obligatorio y el asiento usa la cuenta de cada línea, no
+la de configuración. Sircreb y otros conceptos que son activo se eligen a mano.
 
 **Resolución de la cuenta de capital (TSK-717)** — `resolvePartnerCapitalAccount` en
 `fund-movements/list/actions.server.ts`:
@@ -548,8 +561,9 @@ OC con 3 líneas:
 | Stock -qty | Si es NC | Decrementa stock (devolución al proveedor) |
 | OC.invoicedQty | Si está linkeada a OC | Incrementa `invoicedQty` en líneas de OC |
 | OC.invoicingStatus | Si está linkeada a OC | Recalcula: NOT_INVOICED / PARTIALLY / FULLY |
-| Asiento Contable | Siempre | Dr: Compras + IVA CF + percepciones sufridas + imp. internos → Cr: Ctas por Pagar |
+| Asiento Contable | Siempre | Dr: cuenta del ítem (`defaultExpenseAccountId`) o Compras por defecto + IVA CF + percepciones sufridas + imp. internos → Cr: Ctas por Pagar. Si el asiento falla, la confirmación se revierte (TSK-721) |
 | Validación de cuentas de tributos | Si tiene percepciones o imp. internos | Aborta la confirmación si falta alguna cuenta configurada (TSK-644) |
+| Validación de cuentas de línea | Siempre | Aborta si alguna línea no resuelve cuenta (ítem → Compras por defecto; las líneas sin ítem solo pueden usar la por defecto) o la cuenta resuelta no es imputable (TSK-721) |
 | Auto-compensación NC | Si es NC | Aplica NC contra facturas pendientes |
 
 ### Cancelar Factura de Compra
@@ -577,8 +591,13 @@ OC con 3 líneas:
 |--------|-----------|---------|
 | Stock -qty | Si no es ND | Decrementa stock del depósito principal |
 | Stock +qty | Si es NC | Restaura stock (devolución del cliente) |
-| Asiento Contable | Siempre | Dr: Ctas por Cobrar → Cr: Ventas + IVA DF |
+| Asiento Contable | Siempre | Dr: Ctas por Cobrar → Cr: cuenta del ítem (`defaultIncomeAccountId`) o Ventas por defecto + IVA DF. Si el asiento falla, la confirmación se revierte (TSK-721) |
+| Validación de cuentas de línea | Siempre | Aborta si alguna línea no resuelve cuenta (ítem → Ventas por defecto) o la cuenta resuelta no es imputable (TSK-721) |
 | Auto-compensación NC | Si es NC | Aplica NC contra facturas pendientes |
+
+`confirmInvoice` y `confirmPurchaseInvoice` devuelven `ActionResult` (`{ success: true, id }` o
+`{ success: false, error }`) en vez de lanzar; ver
+[Errores de negocio en Server Actions](../conventions/coding-standards.md#errores-de-negocio-en-server-actions).
 
 ### Confirmar Recibo de Cobro
 
@@ -695,23 +714,68 @@ Cada documento comercial confirmado genera un asiento contable automático:
 
 | Documento | Debe | Haber |
 |-----------|------|-------|
-| Factura Venta | Ctas por Cobrar | Ventas + IVA Débito |
-| NC Venta | Ventas + IVA Débito | Ctas por Cobrar |
-| Factura Compra | Compras + IVA Crédito | Ctas por Pagar |
-| NC Compra | Ctas por Pagar | Compras + IVA Crédito |
+| Factura Venta | Ctas por Cobrar | Cuenta de ingresos del ítem (o Ventas por defecto) + IVA Débito |
+| NC Venta | Cuenta de ingresos del ítem (o Ventas por defecto) + IVA Débito | Ctas por Cobrar |
+| Factura Compra | Cuenta de egresos del ítem (o Compras por defecto) + IVA Crédito | Ctas por Pagar |
+| NC Compra | Ctas por Pagar | Cuenta de egresos del ítem (o Compras por defecto) + IVA Crédito |
 | Recibo | Caja/Banco + Ret. Sufridas | Ctas por Cobrar |
 | Orden de Pago | Ctas por Pagar | Caja/Banco + Ret. Emitidas |
 | Gasto | Gastos Operativos | Ctas por Pagar |
 | Mov. Bancario Manual | Según tipo (DEPOSIT/WITHDRAWAL) | Contraparte seleccionada |
 
 **Mapeos de cuentas** (configurados en AccountingSettings):
+- `salesAccount` / `purchasesAccount`: Cuenta de ventas / compras **por defecto** (solo para líneas cuyo ítem no tiene cuenta propia; ver abajo)
 - `receivablesAccount`: Cuentas por Cobrar
 - `payablesAccount`: Cuentas por Pagar
 - `defaultCashAccount`: Cuenta de Caja
 - `defaultBankAccount`: Cuenta de Banco
 - Cuentas de retenciones (emitidas y sufridas)
 
-**Comportamiento ante errores**: La creación del asiento contable es **no-bloqueante**. Si falla o no están configuradas las cuentas, logea warning pero la operación comercial continúa.
+**Comportamiento ante errores**: depende del documento.
+- **Facturas de venta y compra (TSK-721): bloqueante.** El confirm ya no envuelve el asiento en un
+  `try/catch` con `logger.warn`; cualquier error (`BusinessError` por cuenta faltante, IVA sin
+  cuenta, período cerrado, o un fallo inesperado) aborta la transacción, la factura sigue en
+  `DRAFT` sin `journalEntryId` y el usuario ve el mensaje. Antes, la factura quedaba `CONFIRMED`
+  **sin asiento** y nadie se enteraba (`prisma/scripts/diagnose-invoices-without-entry.ts` lista
+  las históricas, solo lectura).
+- **Recibos, órdenes de pago, gastos y movimientos bancarios manuales**: siguen siendo
+  no-bloqueantes (warning y la operación continúa). Pendiente de alinear.
+
+### Cuentas de línea (TSK-721)
+
+La cuenta contable de cada línea de factura la define el **ítem**; la de Ajustes contables es un
+respaldo. Regla: `ítem → por defecto → error que nombra la línea`.
+
+- Ventas: `Product.defaultIncomeAccountId` → `AccountingSettings.salesAccountId` ("Cuenta de
+  ventas por defecto", puede ser `null` si todos los ítems de venta tienen la suya).
+- Compras: `Product.defaultExpenseAccountId` → `AccountingSettings.purchasesAccountId` ("Cuenta
+  de compras por defecto"). Las **líneas sin ítem** (gastos no inventariables, comprobantes
+  importados de AFIP) solo pueden usar la por defecto, así que tiene que estar asignada mientras
+  se carguen compras sin ítem.
+- Helper puro `modules/commercial/shared/line-accounts.ts` (0 imports, 25 tests):
+  `resolveLineAccount`, `findLinesMissingAccount`, `buildMissingLineAccountsMessage`,
+  `findLinesWithUnavailableAccount`, `buildUnavailableLineAccountsMessage`, `formatAccountLabel`.
+  Los textos que ve el usuario viven ahí (mensaje de línea sin cuenta que remite a Ítems →
+  Imputación contable o a Contabilidad → Configuración; mensaje de cuenta dada de baja que
+  distingue si viene del ítem o de la configuración).
+- **Pre-validación en el confirm**, antes de abrir la transacción y después de tributos y centro
+  de costo: (1) `findLinesMissingAccount` → `BusinessError`; (2) `prisma.account.findMany` con
+  `buildImputableAccountsWhere({ companyId })` sobre las cuentas resueltas +
+  `findLinesWithUnavailableAccount` → `BusinessError`. **Sin fallback a la global** cuando la cuenta
+  del ítem está dada de baja: se corrige el ítem.
+- El asiento (`accounting/features/integrations/commercial/index.ts`) repite
+  `findLinesMissingAccount` como defensa en profundidad y resuelve con `resolveLineAccount` por
+  línea. Ver [Módulo Contabilidad](accounting.md#resolucion-de-la-cuenta-de-linea-tsk-721).
+- Los bulk confirm (`bulkConfirmPurchaseInvoices`) reutilizan el mismo camino: las facturas que
+  fallan quedan en `failures[{ fullNumber, message }]` y las demás se confirman.
+- **Visibilidad**: en Ítems, `missingImputations(product)` (`products/shared/imputation-filter.ts`,
+  puro) decide los badges «Sin ingreso» / «Sin egreso» según `usage` y las cuentas; el facet
+  **Imputación** (`noIncome` / `noExpense`) filtra con `buildImputationWhere` en `getProducts` y
+  muestra conteos externos de `getProductFacetCounts`. Contabilidad → Configuración muestra el
+  conteo de ítems activos sin cuenta con enlace a este listado filtrado
+  (`getItemsWithoutAccountCounts`, `ItemsWithoutAccountNotice`). La imputación se corrige por fila
+  (**Imputación contable**) o en masa (**Editar en Lote**, `defaultIncomeAccountId` /
+  `defaultExpenseAccountId`).
 
 ### Reparto por Centro de Costo (TSK-583)
 
@@ -783,6 +847,8 @@ Tanto Recibos como Órdenes de Pago soportan retenciones impositivas:
 - Al vincular con OC: no puede exceder cantidad pendiente por línea
 - Con `AccountingSettings.requireCostCenter` activo: al confirmar, toda línea imputada a
   cuenta de resultado debe tener reparto de centro de costo completo (TSK-583)
+- Al confirmar, toda línea debe resolver cuenta contable (ítem → Compras por defecto) y esa
+  cuenta debe ser imputable; las líneas sin ítem requieren la Compras por defecto (TSK-721)
 
 ### Factura de Venta
 - voucherType válido según reglas AFIP (matriz emisor/receptor)
@@ -791,6 +857,8 @@ Tanto Recibos como Órdenes de Pago soportan retenciones impositivas:
 - No cancelar si PAID o PARTIAL_PAID
 - Con `AccountingSettings.requireCostCenter` activo: al confirmar, toda línea imputada a
   cuenta de resultado debe tener reparto de centro de costo completo (TSK-583)
+- Al confirmar, toda línea debe resolver cuenta contable (ítem → Ventas por defecto) y esa
+  cuenta debe ser imputable (TSK-721)
 
 ### Recibo / Orden de Pago
 - Requiere sesión de caja ABIERTA si paga en efectivo
@@ -867,6 +935,10 @@ Tanto Recibos como Órdenes de Pago soportan retenciones impositivas:
 |---------|-------------|
 | `modules/commercial/shared/voucher-utils.ts` | `isCreditNote()`, `isDebitNote()`, constantes de tipos |
 | `modules/commercial/shared/credit-note-compensation.ts` | Auto-compensación FIFO de NC contra facturas abiertas |
+| `modules/commercial/shared/line-accounts.ts` | Resolución de la cuenta contable de cada línea (ítem → por defecto → error que nombra la línea) y sus mensajes (TSK-721) |
+| `modules/commercial/features/products/shared/imputation-filter.ts` | `missingImputations`, `buildImputationWhere`: badges y facet «Imputación» de ítems sin cuenta (TSK-721) |
+| `modules/commercial/features/treasury/features/fund-movements/shared/lines-calc.ts` | Totales de conceptos de gastos bancarios y `pickDefaultLineAccount` (preselección de la cuenta por defecto, TSK-718) |
+| `shared/lib/action-result.ts` | `ActionResult`, `BusinessError`, `toActionResult`: errores de negocio como dato en Server Actions (TSK-481 / TSK-721) |
 | `modules/commercial/shared/components/_DocumentAttachment.tsx` | UI de adjuntos |
 
 ### Reportes

@@ -3,7 +3,7 @@
 **Fecha de inicio:** 2026-09-18
 **Tickets:** [724-a/b] "Configuración de Cuentas Contables" · [721] "Cuentas Contables de los items" · [718] "Tipo de Movimiento: Gastos Bancarios"
 **Origen:** reunión con Elizabeth Perez del 16-17/09 (tareas internas)
-**Estado:** Implementación en progreso (Fases 1-6 y 8 completadas; falta documentación)
+**Estado:** Verificación completada
 
 ---
 
@@ -1171,7 +1171,7 @@ preexistentes.
   comportamiento**: las facturas con ítems sin cuenta ya no se confirman "en silencio", y cómo
   imputar masivamente antes de que pase.
 - **Tareas:**
-  - [ ] `src/modules/help/features/guide/components/_AccountingGuide.tsx:215-236` (lista de
+  - [x] `src/modules/help/features/guide/components/_AccountingGuide.tsx:215-236` (lista de
         cuentas de Integración Comercial): cambiar `<li>Cuenta de Ventas</li>` y `<li>Cuenta de
         Compras</li>` por "Cuenta de ventas **por defecto** y Cuenta de compras **por defecto**:
         la cuenta de cada factura la define el ítem (Ítems → Imputación contable); estas se
@@ -1182,7 +1182,7 @@ preexistentes.
         movimiento de gastos bancarios)". Agregar una `Alert` después de la lista: "Debajo de
         estas cuentas, la pantalla te muestra cuántos ítems activos todavía no tienen su
         cuenta de ingresos o de egresos, con un enlace al listado filtrado para imputarlos."
-  - [ ] `_CommercialGuide.tsx:145-158` (ítems): en "Cuenta de Egresos" cambiar "en lugar de la
+  - [x] `_CommercialGuide.tsx:145-158` (ítems): en "Cuenta de Egresos" cambiar "en lugar de la
         cuenta de compras general" por "en lugar de la **Cuenta de compras por defecto**"; ídem
         ingresos/ventas. Agregar una `Alert` a continuación: "**Si el ítem no tiene cuenta y no
         hay cuenta por defecto, la factura no se puede confirmar**: el sistema nombra la línea
@@ -1197,12 +1197,12 @@ preexistentes.
         compras por defecto." Actualizar la `Alert` de tributos (`:732-742`) para que cierre con
         "lo mismo pasa con la cuenta de cada línea: así no queda una factura confirmada sin su
         asiento".
-  - [ ] `_TreasuryGuide.tsx:907-913` (paso de conceptos de gastos bancarios): agregar "La cuenta
+  - [x] `_TreasuryGuide.tsx:907-913` (paso de conceptos de gastos bancarios): agregar "La cuenta
         de cada concepto nuevo viene **preseleccionada** con la 'Gastos bancarios por defecto'
         de Ajustes contables (podés cambiarla en cada fila; Sircreb y otros conceptos que son
         activo se eligen a mano). Si no está configurada, el modal te lo avisa y elegís la
         cuenta concepto por concepto, como hasta ahora."
-  - [ ] `docs/modules/accounting.md:185-195` (tabla "Mapeo de Cuentas"): `salesAccountId` →
+  - [x] `docs/modules/accounting.md:185-195` (tabla "Mapeo de Cuentas"): `salesAccountId` →
         "Ventas **por defecto** (solo líneas cuyo ítem no tiene `defaultIncomeAccountId`; puede
         ser null)", `purchasesAccountId` → "Compras **por defecto** (ítems sin
         `defaultExpenseAccountId` y líneas sin ítem; requerida si se cargan compras sin
@@ -1214,7 +1214,7 @@ preexistentes.
         "Resolución de la cuenta de línea (TSK-721)" con la regla `ítem → por defecto → error
         que nombra la línea`, la pre-validación en el confirm, la verificación de
         imputabilidad y el archivo `commercial/shared/line-accounts.ts`.
-  - [ ] `docs/architecture/data-model.md:211-212`: reescribir "Sobrescribe `purchasesAccountId`
+  - [x] `docs/architecture/data-model.md:211-212`: reescribir "Sobrescribe `purchasesAccountId`
         …" como "Cuenta de la línea en el asiento; si es null cae en `purchasesAccountId`
         (por defecto) y si tampoco hay, la confirmación se rechaza nombrando la línea
         (TSK-721). Tipos admitidos EXPENSE|ASSET (TSK-579); se valida imputable al confirmar."
@@ -1223,7 +1223,7 @@ preexistentes.
         fondos y sus conceptos (TSK-585)", una línea: "`bankChargesAccountId` de
         `AccountingSettings` es solo preselección de UI; `FundMovementLine.accountId` sigue NOT
         NULL".
-  - [ ] `docs/modules/commercial.md`: en "Confirmar Factura de Compra" (`:543-553`) agregar la
+  - [x] `docs/modules/commercial.md`: en "Confirmar Factura de Compra" (`:543-553`) agregar la
         fila `| Validación de cuentas de línea | Siempre | Aborta si alguna línea no resuelve
         cuenta (ítem → compras por defecto) o la cuenta no es imputable (TSK-721) |` y cambiar
         "Dr: Compras" por "Dr: cuenta del ítem o Compras por defecto"; ídem en "Confirmar
@@ -1231,7 +1231,7 @@ preexistentes.
         Imputación (sin cuenta de ingreso/egreso), badges por cuenta faltante (TSK-721)". Al
         final del bloque de centros de costo (`:725-741`) agregar el bloque "**Cuentas de
         línea (TSK-721)**" con la regla, los helpers y el cambio del `catch`.
-  - [ ] Crear `scripts/guia-presentacion/capturas-tsk721.mjs` sobre la base de
+  - [x] Crear `scripts/guia-presentacion/capturas-tsk721.mjs` sobre la base de
         `capturas-tsk717.mjs:1-50` (login `EMAIL`/`PASSWORD` de dev, `shot()`, salida
         `assets/tsk721-*.png`, `BASE = process.argv[2]`, `psql` vía `docker exec
         contable-pms-db`). Requiere el dev server en `:3010` (`NEXT_PUBLIC_APP_URL=
@@ -1247,7 +1247,7 @@ preexistentes.
         fondos tipo "Gastos e impuestos bancarios" con un concepto recién agregado con la cuenta
         preseleccionada y el aviso neutro; (7) `07-gastos-bancarios-sin-config`: ídem con el
         aviso naranja (vaciar y restaurar `bank_charges_account_id` por `psql`).
-  - [ ] Crear `scripts/guia-presentacion/tsk-721.html` copiando estructura y estilos de
+  - [x] Crear `scripts/guia-presentacion/tsk-721.html` copiando estructura y estilos de
         `tsk-717.html` (cover con eyebrow "Tickets 721 · 724-a/b · 718 · Contabilidad"):
         1. **Qué pedías** (citas de 724 "se determina por la cuenta contable del ítem, no
         puede ser una para todas las ventas", 721 "si el ítem tiene cuentas… esos son los de
@@ -1270,7 +1270,7 @@ preexistentes.
         cambiar la cuenta de un ítem no modifica facturas ya confirmadas; 7. **Facturas
         anteriores sin asiento**: qué significa, cómo las detectamos (script de la fase 6) y
         que su regeneración se define con el contador en otro ticket.
-  - [ ] Generar el PDF: `node scripts/guia-presentacion/generar-pdf.mjs
+  - [x] Generar el PDF: `node scripts/guia-presentacion/generar-pdf.mjs
         scripts/guia-presentacion/tsk-721.html
         docs/presentaciones/TSK-721-cuentas-por-defecto.pdf`.
 - **Archivos:**
@@ -2929,7 +2929,20 @@ pasa por la global.
   - Comando de prod (memoria `produccion-dokploy-scripts-db`): `sudo docker exec -it $(sudo docker ps -q --filter name=contablemas-contablemas) sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"'` y pegar el SQL del header.
 
 ### Fase 7: Documentación
-- **Estado:** Pendiente
+- **Estado:** Completada (2026-09-18)
+- **Archivos modificados:**
+  - `src/modules/help/features/guide/components/_AccountingGuide.tsx` - Integración Comercial: los `<li>` "Cuenta de Ventas"/"Cuenta de Compras" pasan a un ítem "Cuenta de ventas **por defecto** y Cuenta de compras **por defecto**" (la cuenta la define el ítem; la de ventas puede quedar vacía; la de compras hace falta para líneas sin ítem / AFIP); "Caja y Banco" suma "Gastos bancarios por defecto"; `Alert` nueva "Ítems sin cuenta contable" (conteo arriba de las cuentas, enlace Ver, qué pasa mientras existan, no aparece si es 0).
+  - `_CommercialGuide.tsx` - Ítems: "en lugar de la Cuenta de compras/ventas por defecto"; párrafo de prioridad reescrito ("la cuenta del ítem es la que manda"); `Alert` nueva con el bloqueo al confirmar, el filtro **Imputación**, los badges "Sin ingreso"/"Sin egreso", Editar en Lote e Imputación contable. Facturas de Compra: subsección "Qué revisa el sistema al confirmar" (línea sin cuenta o cuenta dada de baja → mensaje que nombra la línea; líneas sin ítem → compras por defecto) más el párrafo de "antes quedaba confirmada sin asiento, ya no". Estado "Confirmada" de ventas explica ítem → por defecto. `Alert` de tributos cierra con "Lo mismo pasa con la cuenta contable de cada línea y con las cuentas de IVA".
+  - `_TreasuryGuide.tsx` - paso de Conceptos de gastos bancarios: cuenta preseleccionada con "Gastos bancarios por defecto", aviso debajo de la tabla, cambiable por fila, Sircreb a mano, aviso con enlace si no está configurada.
+  - `docs/modules/accounting.md` - tabla de período bloqueado: fila de facturas separada ("la confirmación falla y se revierte", TSK-721) de recibos/OP/gasto (siguen omitiendo con warning); tabla Mapeo de Cuentas con `salesAccountId`/`purchasesAccountId` "por defecto" y fila nueva `bankChargesAccountId` (solo UI); párrafo de labels; subsección nueva "Resolución de la cuenta de línea (TSK-721)" (tabla ítem/por defecto/sin ítem, helper, pre-validación, asiento con guard que lanza, IVA como `BusinessError`, `createJournalEntry → Promise<string>`, sin `catch` que trague, script de diagnóstico) y párrafo de `getItemsWithoutAccountCounts` + `ItemsWithoutAccountNotice`; bullet de Asientos Automáticos enlaza a la subsección.
+  - `docs/modules/commercial.md` - fila de Productos (badges + facet); bloque "Gastos bancarios — cuenta por defecto preseleccionada (TSK-718)" en Socios y Movimientos de Fondos; tablas de Confirmar Factura de Compra/Venta (Dr/Cr con "cuenta del ítem o … por defecto", fila "Validación de cuentas de línea", nota `ActionResult`); tabla de Integración Contable con la cuenta del ítem; "Comportamiento ante errores" partido en facturas (bloqueante) vs recibos/OP/gastos (no-bloqueante, pendiente); subsección "Cuentas de línea (TSK-721)"; Reglas de Validación de compra y venta; Utilidades Compartidas suma `line-accounts.ts`, `imputation-filter.ts`, `lines-calc.ts`, `shared/lib/action-result.ts`.
+  - `docs/architecture/data-model.md` - `defaultExpenseAccountId`/`defaultIncomeAccountId` reescritos (cuenta de la línea; fallback a la global; rechazo nombrando la línea; tipos TSK-579; imputable al confirmar sin fallback); párrafo de agrupación por cuenta actualizado; bullet `bankChargesAccountId` = solo preselección de UI, `FundMovementLine.accountId` sigue NOT NULL; fila `AccountingSettings` con `bankChargesAccountId?`.
+  - `docs/conventions/coding-standards.md` - subsección nueva "Errores de negocio en Server Actions" (`ActionResult`, `BusinessError`, `toActionResult`, ejemplo con `confirmInvoice`, por qué —Next redacta los `throw` en prod, TSK-481—, consumo en el cliente con `try/finally`, dónde ya se usa).
+  - `docs/infrastructure/deployment.md` - subsección "Chequeos post-deploy contra la base": correr el SQL del header de `prisma/scripts/diagnose-invoices-without-entry.ts` vía `psql` en el contenedor de Postgres tras deployar TSK-721; si hay filas, avisar a la clienta y abrir ticket.
+- **Archivos creados:**
+  - `scripts/guia-presentacion/tsk-721.html` (550 líneas; estilos idénticos a `tsk-717.html`; eyebrow "Tickets 724 · 721 · 718 · Contabilidad"; título "La cuenta contable la define el ítem"). Secciones: 1 Qué pediste (citas de 724 a/b, 721 y 718 + qué pasaba), 2 Qué cambió: la cuenta del ítem manda (antes/ahora, captura 02, regla en una línea), 3 Lo importante: las facturas ya no se confirman en silencio (capturas 06 y 07, callout "Qué vas a notar en el día a día"), 4 Cómo saber qué ítems te faltan imputar (capturas 01, 05, 04; imputación individual y en lote), 5 Gastos bancarios (capturas 03 y 08; callouts "Si no configurás la cuenta" y "Es una ayuda, no una regla"), 6 Qué revisar en tu empresa (facturas históricas sin asiento —lo chequeamos al deployar—, compras por defecto asignada, ventas por defecto puede vaciarse tras llevar el conteo a cero, elegir la de gastos bancarios), 7 Qué no cambió. Sin rutas ni nombres de componentes.
+  - `docs/presentaciones/TSK-721-cuentas-por-defecto.pdf` - 6 páginas A4, 639 KB, generado con `generar-pdf.mjs` (cayó al Chrome del sistema, como siempre). Secciones por página: 1 → p.1; 2 y 3 → p.2-4; 4 → p.4; 5 → p.5; 6 y 7 → p.6.
+- **Notas:** `npx eslint` en las tres guías: 0 errores (1 warning `Receipt` sin usar en `_AccountingGuide.tsx`, preexistente en HEAD). `npm run check-types`: 219 = línea base. Desvíos respecto al plan: (a) `capturas-tsk721.mjs` y las capturas ya existían (Fase 8 las tomó antes); son 8 capturas y no las 7 previstas —no hay captura del modal "Editar en Lote" ni del asiento con dos cuentas de ingreso; el lote se explica en texto y el asiento no se muestra—; (b) el orden de secciones del PDF sigue el encargo de la fase (el cambio de comportamiento en la sección 3, antes de la imputación masiva) y no el borrador de 2.1; (c) además de los tres docs previstos se tocaron `docs/conventions/coding-standards.md` (convención de `ActionResult`) y `docs/infrastructure/deployment.md` (chequeo post-deploy), por el ajuste de alcance de 3.7; (d) en `accounting.md` la fila "Confirmar factura/recibo/OP/gasto" se partió en dos porque recibos, OP y gastos siguen envolviendo el asiento en `try/catch` (verificado en `receipts/actions.server.ts:391`); queda anotado como pendiente de alinear; (e) la `Alert` de `_AccountingGuide` quedó arriba del párrafo de centros de costo, después de la lista numerada, y describe que el aviso no aparece con conteos en cero (desvío (1) de la Fase 5).
 
 ### Fase 8: Verificación final
 - **Estado:** Completada (2026-09-18, antes de la Fase 7 para que el PDF tenga capturas reales)
@@ -2954,6 +2967,3 @@ pasa por la global.
 | Script de diagnóstico en dev | «Ninguna. Nada que revisar.»; el SQL del header devuelve lo mismo |
 
 Capturas: `scripts/guia-presentacion/assets/tsk721-01…08.png`.
-
-## 5. Verificación
-_Pendiente - ejecutar `/verificar tsk-721-cuentas-por-defecto-ventas-compras-bancarios`_

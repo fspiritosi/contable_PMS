@@ -23,6 +23,26 @@ Requisitos:
 - `DATABASE_URL` debe estar disponible como variable de entorno en el contenedor.
 - Las migraciones versionadas viven en `prisma/migrations/` (se copian a la imagen).
 
+### Chequeos post-deploy contra la base
+
+La imagen `runner` no incluye `tsx` ni `src/`, asi que los scripts de `prisma/scripts/` no se
+corren dentro del contenedor de la app: se abre `psql` en el contenedor de Postgres y se pega el
+SQL que cada script documenta en su header.
+
+- **Facturas confirmadas sin asiento** (`prisma/scripts/diagnose-invoices-without-entry.ts`,
+  solo lectura). Conviene correrlo despues de deployar TSK-721: hasta ese ticket una factura de
+  venta o compra con una linea sin cuenta contable quedaba `CONFIRMED` con `journal_entry_id IS
+  NULL` en silencio; desde TSK-721 la confirmacion se bloquea, pero las historicas siguen en la
+  base. El header del script trae el SQL (detalle por empresa y fecha, resumen por empresa y
+  tipo, y la consulta de items sin cuenta). Si devuelve filas, se le avisa a la clienta: que hacer
+  con esos comprobantes (regenerar el asiento o asentarlos a mano) es una decision contable y va
+  en un ticket aparte.
+
+```bash
+sudo docker exec -it $(sudo docker ps -q --filter name=contablemas-contablemas) \
+  sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
+```
+
 ---
 
 ## Build de Produccion

@@ -1,0 +1,550 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>TSK-721 — La cuenta contable la define el ítem</title>
+<style>
+  @page {
+    size: A4;
+    margin: 0;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #1f2430;
+    font-size: 13px;
+    line-height: 1.55;
+    background: #ffffff;
+  }
+
+  .page {
+    padding: 4mm 2mm;
+  }
+
+  header.cover {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    text-align: left;
+    padding: 10mm 2mm 8mm 2mm;
+    border-bottom: 3px solid #2f6f4f;
+    margin-bottom: 10mm;
+  }
+
+  .eyebrow {
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 11px;
+    font-weight: 700;
+    color: #2f6f4f;
+    margin-bottom: 6px;
+  }
+
+  h1 {
+    font-size: 26px;
+    margin: 0 0 8px 0;
+    color: #14251c;
+  }
+
+  .subtitle {
+    font-size: 14px;
+    color: #4b5563;
+    margin: 0;
+  }
+
+  section {
+    margin-bottom: 9mm;
+    page-break-inside: avoid;
+  }
+
+  section.allow-break {
+    page-break-inside: auto;
+  }
+
+  section:last-of-type { margin-bottom: 2mm; }
+
+  h2 {
+    font-size: 16px;
+    color: #14251c;
+    border-left: 4px solid #2f6f4f;
+    padding-left: 8px;
+    margin: 0 0 6mm 0;
+  }
+
+  .quote {
+    background: #f4f7f5;
+    border-left: 4px solid #2f6f4f;
+    padding: 10px 14px;
+    font-style: italic;
+    color: #2b3a33;
+    margin: 0 0 6px 0;
+  }
+
+  .quote cite {
+    display: block;
+    font-style: normal;
+    font-size: 11.5px;
+    color: #6b7280;
+    margin-top: 6px;
+  }
+
+  .before-after {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    page-break-inside: avoid;
+  }
+
+  .card {
+    border: 1px solid #e2e5e0;
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+
+  .card.before { background: #fbf7f2; border-color: #ecd9bd; }
+  .card.after { background: #f2f8f4; border-color: #bfe0cb; }
+
+  .card h3 {
+    margin: 0 0 6px 0;
+    font-size: 12.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .card.before h3 { color: #9a6a1f; }
+  .card.after h3 { color: #226240; }
+
+  .card p { margin: 0; }
+
+  ol.steps {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    counter-reset: step;
+  }
+
+  ol.steps > li {
+    counter-increment: step;
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+    page-break-inside: avoid;
+  }
+
+  ol.steps > li::before {
+    content: counter(step);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    border-radius: 50%;
+    background: #2f6f4f;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .step-body { flex: 1; }
+
+  .step-body strong { color: #14251c; }
+
+  figure {
+    margin: 8px 0 0 0;
+    page-break-inside: avoid;
+  }
+
+  figure img {
+    max-width: 100%;
+    border: 1px solid #d9dce0;
+    border-radius: 6px;
+    display: block;
+  }
+
+  figure.small img { max-width: 320px; }
+
+  figure.phone img { max-width: 160px; }
+
+  figure.modal img { max-width: 420px; }
+
+  ol.steps.long > li { page-break-inside: auto; }
+  h2 { page-break-after: avoid; }
+
+  figcaption {
+    font-size: 11px;
+    color: #6b7280;
+    margin-top: 4px;
+  }
+
+  .callout {
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin: 0 0 8px 0;
+    page-break-inside: avoid;
+  }
+
+  .callout.config {
+    background: #f2f6fb;
+    border: 1px solid #cddaeb;
+  }
+
+  .callout.warning {
+    background: #fdf5ec;
+    border: 1px solid #efd6a8;
+  }
+
+  .callout h3 {
+    margin: 0 0 4px 0;
+    font-size: 13px;
+  }
+
+  .callout p { margin: 0 0 6px 0; }
+  .callout p:last-child { margin-bottom: 0; }
+
+  ul.plain {
+    margin: 4px 0 0 0;
+    padding-left: 18px;
+  }
+
+  ul.plain li { margin-bottom: 4px; }
+
+  .no-change-list {
+    display: grid;
+    gap: 6px;
+  }
+
+  .no-change-item {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+  }
+
+  .check {
+    color: #2f6f4f;
+    font-weight: 700;
+  }
+
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8mm;
+    align-items: start;
+  }
+
+  .side-by-side {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8mm;
+    align-items: start;
+    page-break-inside: avoid;
+  }
+
+  .side-by-side figure { margin-top: 0; }
+
+  .ui-text {
+    font-style: italic;
+    color: #374151;
+  }
+
+  footer.doc-footer {
+    text-align: center;
+    color: #9ca3af;
+    font-size: 10.5px;
+    margin-top: 2mm;
+  }
+</style>
+
+</head>
+<body>
+
+
+<div class="page">
+
+  <header class="cover">
+    <div class="eyebrow">Tickets 724 · 721 · 718 · Contabilidad</div>
+    <h1>La cuenta contable la define el ítem</h1>
+    <p class="subtitle">Guía de presentación — qué pediste, qué cambió, y un cambio de comportamiento que conviene leer con calma</p>
+  </header>
+
+  <section>
+    <h2>1. Qué pediste</h2>
+    <p>En la reunión del 16 y 17 de septiembre dejaste tres tareas que, vistas juntas, dicen lo
+    mismo desde tres lados: la cuenta contable de una venta o de una compra no puede ser una sola
+    para toda la empresa, tiene que salir del ítem.</p>
+    <div class="quote">
+      "Cuenta de Ventas ⇒ se determina por la cuenta contable del ítem de venta, no puede ser una
+      para todas las ventas. Cuenta de Compras ⇒ lo mismo que para las ventas."
+      <cite>— Elizabeth Pérez, ticket 724 (a y b), Configuración de Cuentas Contables</cite>
+    </div>
+    <div class="quote">
+      "Si el ítem tiene cuentas contables de ingreso o de egreso, esos son los de asientos
+      contables."
+      <cite>— Elizabeth Pérez, ticket 721, Cuentas Contables de los ítems</cite>
+    </div>
+    <div class="quote">
+      "Tipo de Movimiento: Gastos Bancarios — también se debe configurar la cuenta desde
+      configuración contable."
+      <cite>— Elizabeth Pérez, ticket 718</cite>
+    </div>
+    <p><strong>Qué pasaba.</strong> En Contabilidad → Configuración había dos campos que se
+    llamaban <span class="ui-text">Cuenta de Ventas</span> y <span class="ui-text">Cuenta de
+    Compras</span>, con una ayuda que decía "se usa al confirmar facturas de venta". Leído así,
+    parecía que <em>todas</em> las ventas iban a esa cuenta. En realidad el asiento ya miraba
+    primero la cuenta del ítem; el problema era que la pantalla no lo decía, que el sistema te
+    exigía igual esas cuentas globales, y —esto es lo más importante, lo contamos en el punto 3—
+    que cuando faltaba una cuenta la factura se confirmaba igual <strong>sin generar el
+    asiento</strong> y nadie se enteraba. Para gastos bancarios, además, no había ninguna cuenta
+    por defecto: cada concepto había que imputarlo a mano.</p>
+  </section>
+
+  <section>
+    <h2>2. Qué cambió: la cuenta del ítem manda</h2>
+    <div class="before-after">
+      <div class="card before">
+        <h3>Antes</h3>
+        <p><span class="ui-text">Cuenta de Ventas</span> y <span class="ui-text">Cuenta de
+        Compras</span>, presentadas como si fueran la cuenta de todo. Sin aviso de cuántos ítems
+        no tenían la suya. Si faltaba una cuenta al confirmar, la factura pasaba igual, sin
+        asiento y sin mensaje.</p>
+      </div>
+      <div class="card after">
+        <h3>Ahora</h3>
+        <p><span class="ui-text">Cuenta de ventas por defecto</span> y <span class="ui-text">Cuenta
+        de compras por defecto</span>. La cuenta de cada línea de la factura es la del ítem
+        (su Cuenta de Ingresos o de Egresos); la de configuración se usa <strong>solo</strong> para
+        los ítems que no tienen la suya. Si no hay ninguna de las dos, la factura no se confirma y
+        el sistema te dice qué línea y dónde arreglarlo.</p>
+      </div>
+    </div>
+    <figure>
+      <img src="assets/tsk721-02-ajustes-ventas-compras.png" alt="Sección Cuentas de Resultado de Contabilidad → Configuración: Cuenta de ventas por defecto sin asignar, con la ayuda 'Se usa en las líneas de facturas de venta cuyo ítem no tiene Cuenta de Ingresos propia. Si todos los ítems de venta tienen la suya, puede quedar sin asignar', y Cuenta de compras por defecto con 4.2.1/01/00 - Combustible elegida" />
+      <figcaption>Los dos campos renombrados en Contabilidad → Configuración (datos de
+      demostración). Debajo de cada uno, la ayuda dice exactamente cuándo se usa. La de
+      <strong>ventas</strong> puede quedar sin asignar si todos tus ítems de venta tienen su Cuenta
+      de Ingresos. La de <strong>compras</strong> conviene dejarla asignada: es la única cuenta
+      posible para las líneas de compra que no tienen ítem, como los gastos sueltos o los
+      comprobantes que importás de AFIP.</figcaption>
+    </figure>
+    <p style="margin-top:8px">La regla, en una línea: <strong>ítem → cuenta por defecto → si no hay
+    ninguna, no se confirma</strong>. Y en compras, una línea sin ítem solo puede ir a la cuenta
+    por defecto, porque no hay ítem del que sacar otra.</p>
+  </section>
+
+  <section class="allow-break">
+    <h2>3. Lo importante: las facturas ya no se confirman en silencio</h2>
+    <p>Esto es un <strong>cambio de comportamiento</strong>, no solo un cambio de nombres, y por
+    eso lo separamos.</p>
+    <p><strong>Hasta ahora</strong>, si confirmabas una factura con un ítem sin cuenta contable y la
+    cuenta global estaba vacía, la factura quedaba <span class="ui-text">Confirmada</span>, movía
+    stock y saldo con el cliente o proveedor, pero <strong>no generaba asiento</strong>. No había
+    error ni aviso: el sistema lo anotaba en un registro interno y seguía. Contablemente, esa
+    factura no existía.</p>
+    <p><strong>Desde esta entrega</strong>, esa misma factura <strong>no se confirma</strong>. Queda
+    en Borrador y aparece un mensaje que te nombra la línea y te dice dónde resolverlo: en el
+    ítem (Ítems → Imputación contable) o en la cuenta por defecto (Contabilidad →
+    Configuración). Lo mismo pasa si la cuenta del ítem está dada de baja, si falta la cuenta de
+    IVA o si el período contable está cerrado: o la factura se confirma con su asiento completo, o
+    no se confirma y te dice por qué.</p>
+    <figure>
+      <img src="assets/tsk721-06-confirmar-bloqueado.png" alt="Listado de Facturas de Compra con un mensaje rojo abajo a la derecha: No se puede confirmar el comprobante: la línea «Soporte técnico mensual» no tiene cuenta contable. Asignale una Cuenta de Egresos al ítem (Ítems → Imputación contable) o configurá la 'Cuenta de compras por defecto' en Contabilidad → Configuración. La factura sigue en Borrador." />
+      <figcaption>Una factura de compra de Distribuidora de Combustibles SRL con una línea de
+      <span class="ui-text">Soporte técnico mensual</span>: el ítem no tiene Cuenta de Egresos y la
+      cuenta de compras por defecto estaba vacía. El mensaje nombra la línea y da las dos formas de
+      resolverlo. La factura sigue en <span class="ui-text">Borrador</span>: no se movió nada.</figcaption>
+    </figure>
+    <figure>
+      <img src="assets/tsk721-07-confirmar-ok.png" alt="El mismo listado con la factura ya Confirmada, el mensaje verde 'Factura confirmada correctamente' y el diálogo de Recepción de mercadería" />
+      <figcaption>La misma factura, después de asignar la Cuenta de compras por defecto:
+      <span class="ui-text">Factura confirmada correctamente</span>, con su asiento. (El cuadro de
+      Recepción de mercadería es el de siempre para ítems que controlan stock.)</figcaption>
+    </figure>
+    <div class="callout warning">
+      <h3>Qué vas a notar en el día a día</h3>
+      <p>Es posible que alguna factura que antes "pasaba" ahora se frene al confirmar. <strong>Eso
+      es correcto</strong>: antes pasaba sin asiento. Cuando te aparezca el mensaje, no hay nada
+      roto: leé qué línea nombra, asignale la cuenta al ítem (o completá la cuenta por defecto) y
+      volvé a confirmar. Con la sección siguiente podés adelantarte y dejar los ítems imputados
+      antes de que pase.</p>
+      <p>Si confirmás varias facturas a la vez, las que tienen algún problema quedan afuera con su
+      motivo y las demás se confirman igual, como ya pasaba con los centros de costo.</p>
+    </div>
+  </section>
+
+  <section class="allow-break">
+    <h2>4. Cómo saber qué ítems te faltan imputar</h2>
+    <p>Para que el punto anterior no te sorprenda, agregamos dos lugares donde ver de un vistazo
+    qué ítems todavía no tienen su cuenta.</p>
+    <ol class="steps long">
+      <li>
+        <div class="step-body">
+          <strong>El aviso en Contabilidad → Configuración.</strong> Arriba de las cuentas, un
+          recuadro naranja te dice cuántos ítems activos de venta no tienen Cuenta de Ingresos y
+          cuántos de compra no tienen Cuenta de Egresos. Cada <span class="ui-text">Ver</span> te
+          lleva al listado de Ítems ya filtrado. Si no falta ninguno, el recuadro no aparece.
+          <figure>
+            <img src="assets/tsk721-01-ajustes-aviso-items.png" alt="Aviso naranja: 3 ítems activos de venta sin Cuenta de Ingresos → Ver. 1 ítem activo de compra sin Cuenta de Egresos → Ver. Mientras existan, las facturas de esos ítems se imputan a la cuenta por defecto; sin ella, no se pueden confirmar. Imputalos desde Ítems → seleccionar → Editar en Lote, o uno por uno con Imputación contable." />
+            <figcaption>El aviso con los datos de demostración: tres ítems de venta y uno de compra
+            pendientes. El texto de abajo explica qué pasa mientras existan.</figcaption>
+          </figure>
+        </div>
+      </li>
+      <li>
+        <div class="step-body">
+          <strong>El filtro Imputación en Ítems.</strong> En el listado de Ítems hay un filtro
+          nuevo, <span class="ui-text">Imputación</span>, con dos opciones: <span class="ui-text">Sin
+          cuenta de ingreso</span> y <span class="ui-text">Sin cuenta de egreso</span>, cada una con
+          su cantidad. En la columna Imputación, cada ítem al que le falta algo lleva una etiqueta
+          naranja <span class="ui-text">Sin ingreso</span> o <span class="ui-text">Sin egreso</span>.
+          <figure>
+            <img src="assets/tsk721-05-items-facet-imputacion.png" alt="Listado de Ítems con el filtro Imputación abierto: Sin cuenta de ingreso (3) y Sin cuenta de egreso (1). En la columna Imputación, los ítems muestran etiquetas naranjas Sin ingreso y Sin egreso" />
+            <figcaption>El filtro abierto con sus dos opciones y conteos. Soporte Técnico no tiene
+            ninguna de las dos cuentas; los otros dos sí tienen la de egresos y les falta la de
+            ingresos.</figcaption>
+          </figure>
+          <figure>
+            <img src="assets/tsk721-04-items-sin-egreso.png" alt="Fila del ítem Soporte Técnico, PROD-0002, con las etiquetas Sin ingreso y Sin egreso en la columna Imputación" />
+            <figcaption>Filtrando por "Sin cuenta de egreso" queda solo Soporte Técnico: es el que
+            frenó la factura del punto 3.</figcaption>
+          </figure>
+        </div>
+      </li>
+      <li>
+        <div class="step-body">
+          <strong>Imputar, de a uno o en lote.</strong> Para un ítem, en el menú
+          <strong>(…)</strong> de la fila elegí <span class="ui-text">Imputación contable</span> y
+          asignale la Cuenta de Ingresos, la de Egresos o las dos. Para varios a la vez, marcá los
+          ítems con la casilla de la izquierda y usá <span class="ui-text">Editar en Lote</span>:
+          activá la cuenta que querés asignar, elegila y guardá; se aplica a todos los
+          seleccionados. Lo más práctico es filtrar por "Sin cuenta de ingreso", seleccionar todo lo
+          que va a la misma cuenta y hacerlo de una vez.
+        </div>
+      </li>
+    </ol>
+  </section>
+
+  <section class="allow-break">
+    <h2>5. Gastos bancarios: cuenta por defecto preseleccionada</h2>
+    <p>Lo que pediste en el 718. En Contabilidad → Configuración, dentro de Cuentas de Tesorería,
+    hay un campo nuevo: <span class="ui-text">Gastos bancarios por defecto</span>.</p>
+    <figure>
+      <img src="assets/tsk721-03-ajustes-gastos-bancarios.png" alt="Campo Gastos bancarios por defecto con 4.2.1/03/09 - Gastos Bancarios - Administración elegida, y la ayuda: Se preselecciona en cada concepto de un movimiento 'Gastos e impuestos bancarios'. Podés cambiarla concepto por concepto; los conceptos que son activo (Sircreb) se eligen a mano." />
+      <figcaption>El campo nuevo, con "Gastos Bancarios - Administración" elegida en los datos de
+      demostración.</figcaption>
+    </figure>
+    <p style="margin-top:8px">Una vez configurada, cuando cargás un movimiento de fondos de tipo
+    <span class="ui-text">Gastos e impuestos bancarios</span>, cada concepto que agregás ya
+    <strong>nace con esa cuenta</strong>. Debajo de la tabla de conceptos, un aviso te recuerda cuál
+    es. La podés cambiar en cada fila: si el resumen trae Sircreb, que es un activo (un crédito a
+    tu favor) y no un gasto, ese concepto lo imputás a mano a su cuenta, como hasta ahora.</p>
+    <div class="side-by-side">
+      <figure class="modal">
+        <img src="assets/tsk721-08-gastos-bancarios-preseleccion.png" alt="Modal Nuevo Movimiento de Fondos de tipo Gastos e impuestos bancarios con un concepto recién agregado cuya cuenta ya es 4.2.1/03/09, y el aviso: Los conceptos nuevos se imputan a 4.2.1/03/09 - Gastos Bancarios - Administración (cuenta de gastos bancarios por defecto). Podés cambiar la cuenta en cada fila." />
+        <figcaption>El concepto recién agregado ya tiene la cuenta puesta; solo falta la
+        descripción y el importe. El aviso de abajo dice a qué cuenta van los conceptos
+        nuevos.</figcaption>
+      </figure>
+      <div>
+        <div class="callout config">
+          <h3>Si no configurás la cuenta</h3>
+          <p>Nada se rompe: el mismo aviso se pone naranja, te dice que no hay cuenta por defecto
+          y te deja un link a Ajustes contables. Mientras tanto elegís la cuenta concepto por
+          concepto, exactamente como venías haciendo.</p>
+        </div>
+        <div class="callout config">
+          <h3>Es una ayuda, no una regla</h3>
+          <p>La cuenta por defecto solo <strong>propone</strong>: el asiento sigue usando la cuenta
+          que quedó en cada concepto. Si la cambiás en una fila, esa fila va a la cuenta que
+          elegiste. Cambiar la cuenta por defecto más adelante no toca los movimientos ya
+          cargados.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="allow-break">
+    <h2>6. Qué revisar en tu empresa</h2>
+    <div class="callout warning">
+      <h3>Facturas anteriores que pudieron quedar sin asiento</h3>
+      <p>Por el comportamiento viejo del punto 3, puede haber facturas de venta o de compra que
+      figuran como Confirmadas pero <strong>nunca generaron asiento</strong>. Al poner en marcha
+      esta entrega, nosotros revisamos la base y te avisamos si encontramos alguna, con el listado
+      (número, fecha, tercero e importe). Qué hacer con ellas —generar el asiento con la fecha
+      original, con la fecha de hoy, o asentarlas a mano— es una decisión contable que conviene
+      tomar con tu contador; la resolvemos en un ticket aparte. Si no encontramos ninguna, también
+      te lo decimos.</p>
+    </div>
+    <div class="callout config">
+      <h3>La Cuenta de compras por defecto tiene que quedar asignada</h3>
+      <p>Mientras cargues facturas de compra <strong>sin ítem</strong> (un gasto suelto que tipeás
+      como descripción) o importes comprobantes de <strong>AFIP</strong>, esas líneas no tienen de
+      dónde sacar otra cuenta: usan siempre la de compras por defecto. Si la dejás vacía, esas
+      facturas no se van a poder confirmar. Elegí una cuenta de gastos genérica —"Compras" o la
+      que te indique tu contador— y dejala.</p>
+    </div>
+    <div class="callout config">
+      <h3>La Cuenta de ventas por defecto sí puede quedar vacía</h3>
+      <p>Si querés que todas las ventas vayan estrictamente a la cuenta de cada ítem, primero
+      llevá a cero el aviso de "ítems de venta sin Cuenta de Ingresos" (punto 4) y después vaciá
+      el campo. Si lo vaciás antes, las ventas de esos ítems se van a frenar hasta que los
+      imputes.</p>
+    </div>
+    <div class="callout config">
+      <h3>Elegí la cuenta de gastos bancarios</h3>
+      <p>Para aprovechar el punto 5, entrá a Contabilidad → Configuración → Cuentas de Tesorería y
+      completá <span class="ui-text">Gastos bancarios por defecto</span> con la cuenta de gastos
+      donde imputás comisiones e impuestos bancarios. Es opcional.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>7. Qué no cambió</h2>
+    <div class="no-change-list">
+      <div class="no-change-item">
+        <span class="check">✓</span>
+        <span>Los <strong>asientos ya generados</strong> quedan como están. Cambiar la cuenta de un
+        ítem, o las cuentas por defecto, solo afecta las facturas que confirmes de acá en
+        adelante.</span>
+      </div>
+      <div class="no-change-item">
+        <span class="check">✓</span>
+        <span>Los asientos automáticos siguen naciendo en <span class="ui-text">Borrador</span> en
+        Contabilidad → Asientos y hay que <strong>Registrarlos</strong> para que sumen en el Mayor
+        y el Balance (como te contamos en la guía del ticket 717).</span>
+      </div>
+      <div class="no-change-item">
+        <span class="check">✓</span>
+        <span>Las pantallas de <strong>Ítems</strong> (Imputación contable, Editar en Lote) y de
+        <strong>facturas</strong> son las mismas; solo se agregaron el filtro, las etiquetas y los
+        mensajes.</span>
+      </div>
+      <div class="no-change-item">
+        <span class="check">✓</span>
+        <span>El resto de las cuentas de Contabilidad → Configuración (Cuentas por Cobrar y por
+        Pagar, IVA, retenciones, percepciones, activos fijos) siguen funcionando igual y con el
+        mismo nombre.</span>
+      </div>
+      <div class="no-change-item">
+        <span class="check">✓</span>
+        <span>Los <strong>recibos</strong>, las <strong>órdenes de pago</strong> y los
+        <strong>gastos</strong> no fueron tocados en esta entrega.</span>
+      </div>
+      <div class="no-change-item">
+        <span class="check">✓</span>
+        <span>El gasto bancario <strong>con IVA</strong> se sigue cargando como factura de compra
+        con el banco como proveedor; el movimiento de fondos es para lo que no lleva IVA.</span>
+      </div>
+    </div>
+  </section>
+
+  <footer class="doc-footer">
+    TSK-721 · 724 · 718 — La cuenta contable la define el ítem · Contabilidad → Configuración · Comercial → Ítems · Tesorería → Movimientos de Fondos
+  </footer>
+
+</div>
+
+</body>
+</html>
