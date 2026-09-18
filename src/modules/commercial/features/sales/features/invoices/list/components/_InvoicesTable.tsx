@@ -55,12 +55,16 @@ export function _InvoicesTable({ data, totalRows, searchParams, facetCounts }: P
 
     setIsProcessing(true);
     try {
-      await confirmInvoice(selectedInvoice.id);
+      // El action devuelve `{ success, error }` (TSK-721): el motivo del
+      // rechazo llega tal cual, también en producción.
+      const result = await confirmInvoice(selectedInvoice.id);
+      if (!result.success) {
+        toast.error(result.error);
+        return;
+      }
       toast.success('Factura confirmada y stock descontado correctamente');
       setConfirmDialogOpen(false);
       router.refresh();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Error al confirmar la factura');
     } finally {
       setIsProcessing(false);
     }

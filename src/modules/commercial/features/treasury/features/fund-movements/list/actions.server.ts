@@ -10,6 +10,7 @@ import {
   stateToPrismaParams,
 } from '@/shared/components/common/DataTable/helpers';
 import { buildImputableAccountsWhere } from '@/shared/lib/accounts/imputable-accounts';
+import { ActionResult, BusinessError, toActionResult } from '@/shared/lib/action-result';
 import { getActiveCompanyId } from '@/shared/lib/company';
 import { getCurrentUserId } from '@/shared/lib/current-user';
 import { logger } from '@/shared/lib/logger';
@@ -33,37 +34,11 @@ type PrismaTransactionClient = Omit<
 
 /**
  * Resultado de una mutación. Los errores esperables viajan como dato, no como
- * excepción: en producción Next.js redacta el mensaje de cualquier Error lanzado
- * desde un Server Action y el usuario terminaba viendo "An error occurred in the
- * Server Components render... a digest property is included" (TSK-481).
+ * excepción (TSK-481). `BusinessError` y `toActionResult` viven en
+ * `@/shared/lib/action-result` desde TSK-721, compartidos con la confirmación de
+ * facturas.
  */
-export type FundMovementActionResult =
-  | { success: true; id?: string }
-  | { success: false; error: string };
-
-/**
- * Condición esperable y explicable al usuario (falta configuración, caja sin
- * sesión abierta, movimiento ya confirmado). Se distingue de un fallo real para
- * poder devolver su mensaje tal cual.
- */
-class BusinessError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'BusinessError';
-  }
-}
-
-/** Traduce una excepción al resultado que consume el cliente. */
-function toActionResult(error: unknown, contexto: string): FundMovementActionResult {
-  if (error instanceof BusinessError) {
-    return { success: false, error: error.message };
-  }
-  logger.error(contexto, { data: { error } });
-  return {
-    success: false,
-    error: 'Ocurrió un error inesperado. Volvé a intentar o avisá al equipo si persiste.',
-  };
-}
+export type FundMovementActionResult = ActionResult<{ id?: string }>;
 
 // ============================================================================
 // QUERIES

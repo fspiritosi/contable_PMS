@@ -116,7 +116,13 @@ export function _PurchaseInvoicesTable({ data, totalRows, searchParams, facetCou
 
     try {
       setLoading(invoice.id);
+      // El action devuelve `{ success, error }` (TSK-721): el motivo del
+      // rechazo llega tal cual, también en producción.
       const result = await confirmPurchaseInvoice(invoice.id);
+      if (!result.success) {
+        toast.error(result.error);
+        return;
+      }
       toast.success('Factura confirmada correctamente');
       router.refresh();
 
@@ -126,10 +132,6 @@ export function _PurchaseInvoicesTable({ data, totalRows, searchParams, facetCou
           supplierId: result.supplierId,
         });
       }
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : 'Error al confirmar la factura'
-      );
     } finally {
       setLoading(null);
     }

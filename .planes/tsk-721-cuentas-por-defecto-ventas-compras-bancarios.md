@@ -730,7 +730,7 @@ preexistentes.
   una, cuáles no tienen ninguna, cuáles tienen una cuenta no disponible, y arme los mensajes
   para el usuario nombrando línea, ítem y cuenta.
 - **Tareas:**
-  - [ ] Escribir **primero** `src/modules/commercial/shared/line-accounts.test.ts` (Vitest puro,
+  - [x] Escribir **primero** `src/modules/commercial/shared/line-accounts.test.ts` (Vitest puro,
         estilo `perceptions.test.ts` y `cost-center.test.ts`). Casos:
     - `resolveLineAccount('item', 'global')` → `'item'`; `(null, 'global')` → `'global'`;
       `(undefined, null)` → `null`; `('', 'global')` → `'global'` (cadena vacía cuenta como
@@ -754,7 +754,7 @@ preexistentes.
       contable` o `la "Cuenta de ventas por defecto"` + `Corregila en Contabilidad →
       Configuración`; incluye `no está activa o no es imputable`.
         Debe fallar en rojo porque el módulo no existe.
-  - [ ] Crear `src/modules/commercial/shared/line-accounts.ts` (puro, < 120 líneas, sin Prisma ni
+  - [x] Crear `src/modules/commercial/shared/line-accounts.ts` (puro, < 120 líneas, sin Prisma ni
         imports de módulos). Exportar:
     - `export type LineAccountKind = 'income' | 'expense'`.
     - `export interface LineAccountCheck { description: string; productName: string | null;
@@ -786,7 +786,7 @@ preexistentes.
         Encabezado del archivo con el porqué (TSK-721/724: la cuenta la define el ítem; la
         global es respaldo; nunca imputar en silencio) y referencia a `perceptions.ts:179-193`.
         Test en verde.
-  - [ ] `src/modules/commercial/shared/cost-center.ts:25-42` y `fixed-asset.ts:14-35`: actualizar
+  - [x] `src/modules/commercial/shared/cost-center.ts:25-42` y `fixed-asset.ts:14-35`: actualizar
         los comentarios de `effectiveAccountType`/`effectiveIsFixedAsset`: la cuenta por defecto
         ahora se llama así en pantalla, y una línea sin ninguna cuenta ya **no llega** a
         confirmarse (la pre-validación de `line-accounts.ts` la rechaza antes). Sin cambios de
@@ -805,7 +805,7 @@ preexistentes.
   **antes** de la transacción con un mensaje que nombra línea/ítem/cuenta; y si el asiento
   falla por cualquier otro motivo, la transacción se revierte y el error llega al usuario.
 - **Tareas:**
-  - [ ] **Test de integración de ventas (rojo primero).** Crear
+  - [x] **Test de integración de ventas (rojo primero).** Crear
         `src/modules/commercial/features/sales/features/invoices/list/sales-invoice-line-accounts.integration.test.ts`
         con el andamiaje de `purchase-invoice-tributes.integration.test.ts:22-70` (`dotenv/
         config`, los cuatro `vi.mock`, `describe.skipIf(!dbAvailable)`) y prefijo
@@ -837,7 +837,7 @@ preexistentes.
       Cobrar/)` (antes devolvía `null`); restaurar.
         `afterAll`: `salesInvoice → journalEntry → product → customer → pointOfSale →
         accountingSettings → account → company` y `count` por prefijo.
-  - [ ] **Test de integración de compras (rojo primero).** Crear
+  - [x] **Test de integración de compras (rojo primero).** Crear
         `purchases/features/invoices/list/purchase-invoice-line-accounts.integration.test.ts`,
         mismo andamiaje, prefijo `TSK721-PURC-`, entrando por **`createPurchaseInvoice` +
         `confirmPurchaseInvoice` reales** (molde `purchase-invoice-tributes.integration.test.ts:
@@ -857,7 +857,7 @@ preexistentes.
     - `bulkConfirmPurchaseInvoices([sinCuenta, conCuenta])` con global vacía →
       `confirmedCount: 1`, `failures[0].message` con el nombre de la línea (ya funciona por
       el `try/catch` por factura de `:1538-1547`; el test lo documenta).
-  - [ ] **`confirmInvoice`** (`sales/features/invoices/list/actions.server.ts:842-1140`):
+  - [x] **`confirmInvoice`** (`sales/features/invoices/list/actions.server.ts:842-1140`):
     - En el `include` (`:862-870`) cambiar `defaultIncomeAccount: { select: { type: true } }`
       por `{ select: { id: true, code: true, name: true, type: true } }`; el `product.select`
       ya trae `name`.
@@ -890,7 +890,7 @@ preexistentes.
       "período cerrado" y cualquier otro fallo dejaba la factura confirmada sin asiento.`
     - `getSalesDefaultAccountType` (`:606-628`): actualizar el comentario ("cuenta de ventas
       por defecto").
-  - [ ] **`confirmPurchaseInvoice`** (`purchases/features/invoices/list/actions.server.ts:1220-1520`):
+  - [x] **`confirmPurchaseInvoice`** (`purchases/features/invoices/list/actions.server.ts:1220-1520`):
     - `include` (`:1229-1243`): `defaultExpenseAccount: { select: { id: true, code: true, name:
       true, type: true } }` (el `product` es `include`, ya trae `name`).
     - `select` de settings (`:1258-1272`): `purchasesAccount: { select: { id: true, code: true,
@@ -902,7 +902,7 @@ preexistentes.
       `try/catch`, con el mismo comentario. `bulkConfirmPurchaseInvoices` (`:1523-1570`) no
       cambia: ya captura por factura y devuelve `failures`.
     - `getPurchasesDefaultAccount` (`:583-615`): actualizar el comentario.
-  - [ ] **Asiento** (`accounting/features/integrations/commercial/index.ts`):
+  - [x] **Asiento** (`accounting/features/integrations/commercial/index.ts`):
     - Import (`:35-37`): sumar `resolveLineAccount`, `findLinesMissingAccount`,
       `buildMissingLineAccountsMessage` de `@/modules/commercial/shared/line-accounts`.
     - Venta: `select` de líneas (`:291-298`) suma `description: true` y `product: { select: {
@@ -932,11 +932,11 @@ preexistentes.
       + IVA CF / Haber: Cuentas por Pagar". Agregar la nota: "Las cuentas de línea se
       pre-validan en `confirmInvoice`/`confirmPurchaseInvoice`; los `throw` de acá son defensa
       en profundidad."
-  - [ ] Revisar que `cost-center.integration.test.ts` y `perceptions.integration.test.ts`
+  - [x] Revisar que `cost-center.integration.test.ts` y `perceptions.integration.test.ts`
         siguen en verde: configuran `receivablesAccountId`/`payablesAccountId` y todos sus ítems
         tienen cuenta (`cost-center…:128-161, 194-224`; `perceptions…:140-210`), así que ni el
         guard nuevo ni la pre-validación los afectan. Si alguno rompe, es una regresión real.
-  - [ ] `check-types`: los dos `if (journalEntryId)` eliminados y el cambio a `Promise<string>`
+  - [x] `check-types`: los dos `if (journalEntryId)` eliminados y el cambio a `Promise<string>`
         no deben dejar errores nuevos.
 - **Archivos:**
   - Crear: `sales/features/invoices/list/sales-invoice-line-accounts.integration.test.ts`,
@@ -960,30 +960,30 @@ preexistentes.
   usuario pueda cambiarla, y que el modal avise qué cuenta se va a usar o que falta
   configurarla. Sin cambios en el modelo de líneas ni en `confirmFundMovement`.
 - **Tareas:**
-  - [ ] **Helper puro (TDD).** En `fund-movements/shared/lines-calc.test.ts` agregar
+  - [x] **Helper puro (TDD).** En `fund-movements/shared/lines-calc.test.ts` agregar
         `describe('pickDefaultLineAccount')`: devuelve el id cuando está entre las cuentas
         disponibles; devuelve `''` cuando la cuenta por defecto es `null`; devuelve `''` cuando
         el id no está en las disponibles (dada de baja / no imputable); no depende del orden.
         Rojo primero.
-  - [ ] `fund-movements/shared/lines-calc.ts`: agregar `export function pickDefaultLineAccount(
+  - [x] `fund-movements/shared/lines-calc.ts`: agregar `export function pickDefaultLineAccount(
         defaultAccountId: string | null | undefined, accounts: Array<{ id: string }>): string`
         → `accounts.some((a) => a.id === defaultAccountId) ? defaultAccountId : ''`, con
         comentario (riesgo 1.6-6: preseleccionar un id que el combo no tiene deja el campo
         "vacío" y `assertLineAccounts` lo rechaza con el mensaje genérico). Verde.
-  - [ ] **Catálogo (TDD de integración).** En
+  - [x] **Catálogo (TDD de integración).** En
         `fund-movements/list/fund-movement-lines.integration.test.ts` agregar un `describe('caso
         6: la cuenta de gastos bancarios por defecto llega al formulario (TSK-718)')`: en el
         `beforeAll` del caso, `prisma.accountingSettings.update({ bankChargesAccountId:
         <cuenta EXPENSE del andamiaje> })`; `await getFundMovementCatalogs()` devuelve
         `defaultBankChargesAccount` con `{ id, code, name }` de esa cuenta; con `null` en
         settings devuelve `null`. Rojo primero (el campo no existe en el `return`).
-  - [ ] `fund-movements/list/actions.server.ts:148-151` (`getFundMovementCatalogs`): en el
+  - [x] `fund-movements/list/actions.server.ts:148-151` (`getFundMovementCatalogs`): en el
         `select` de `accountingSettings.findUnique` sumar `bankChargesAccount: { select: { id:
         true, code: true, name: true } }`; en el `return` (`:153-162`) agregar
         `defaultBankChargesAccount: settings?.bankChargesAccount ?? null, // TSK-718`.
         Actualizar el JSDoc (`:120`). Verde. `getFundMovementLineAccounts` (`:180-201`) no
         cambia.
-  - [ ] Propagar la prop: `FundMovementsList.tsx:37` →
+  - [x] Propagar la prop: `FundMovementsList.tsx:37` →
         `defaultBankChargesAccount={catalogs.defaultBankChargesAccount}`;
         `_FundMovementsTable.tsx:36-42` (interface), `:44-53` (destructuring), `:128-136` y
         `:139-147` (los dos modales) → `defaultBankChargesAccount: FundMovementAccountRef | null`;
@@ -991,7 +991,7 @@ preexistentes.
         `<_FundMovementLinesField accounts={lineAccounts}
         defaultAccount={defaultBankChargesAccount} />`. Hacerlo en un solo paso: `check-types`
         acusa en los cuatro archivos.
-  - [ ] Crear `fund-movements/list/components/_BankChargesDefaultNotice.tsx` (Client Component,
+  - [x] Crear `fund-movements/list/components/_BankChargesDefaultNotice.tsx` (Client Component,
         < 60 líneas, molde `_PartnerAccountNotice.tsx:15-22` para clases y `Link` a
         `/dashboard/company/accounting/settings`). Props: `{ defaultAccount:
         FundMovementAccountRef | null; available: boolean }`. Tres estados:
@@ -1004,7 +1004,7 @@ preexistentes.
     - no configurada → naranja informativa: "No hay cuenta de gastos bancarios por defecto:
       elegí la cuenta en cada concepto o configurala en Ajustes contables." **No bloquea**: hoy
       ya se opera sin ella.
-  - [ ] `_FundMovementLinesField.tsx:14-17`: agregar `defaultAccount?: FundMovementAccountRef |
+  - [x] `_FundMovementLinesField.tsx:14-17`: agregar `defaultAccount?: FundMovementAccountRef |
         null` a las props (importar el tipo desde `../actions.server`); en el cuerpo `const
         defaultAccountId = pickDefaultLineAccount(defaultAccount?.id, accounts)`; en el `append`
         (`:51`) → `append({ accountId: defaultAccountId, description: '', amount: '' })`;
@@ -1012,7 +1012,7 @@ preexistentes.
         available={defaultAccountId !== ''} />` debajo del bloque (después del total, `:114-116`,
         y también cuando `fields.length === 0`, para que el aviso se vea antes del primer
         concepto). El archivo queda en ~140 líneas.
-  - [ ] Verificar que al **editar** un borrador BANK_CHARGES el `reset` del modal sigue cargando
+  - [x] Verificar que al **editar** un borrador BANK_CHARGES el `reset` del modal sigue cargando
         las cuentas guardadas (la preselección solo aplica a `append`, no al `reset`), y que
         `validateLines`/`assertLineAccounts`/`confirmFundMovement` no cambian.
 - **Archivos:**
@@ -1036,7 +1036,7 @@ preexistentes.
   listado por "sin cuenta de ingreso" / "sin cuenta de egreso", ver en cada fila cuál falta, e
   imputar en masa con `Editar en Lote` hasta llegar a cero.
 - **Tareas:**
-  - [ ] **Facets y filtro (TDD de integración).** Crear
+  - [x] **Facets y filtro (TDD de integración).** Crear
         `products/features/list/product-imputation-filter.integration.test.ts` (molde
         `price-lists/detail/apply-index.integration.test.ts` para el `skipIf` + los `vi.mock`
         de TSK-644; prefijo `TSK721-PROD-`). `beforeAll`: empresa, una cuenta REVENUE y una
@@ -1047,7 +1047,7 @@ preexistentes.
         cuenta como sin egreso); `getProducts({ filters: { imputation: ['noIncome'] } })` trae
         exactamente `ventaSin` y `ambosSinIngreso`; `['noExpense']` trae `compraSin`;
         `['noIncome','noExpense']` trae los tres (OR). Rojo primero.
-  - [ ] `products/features/list/actions.server.ts`: exportar dos constantes puras (o ponerlas en
+  - [x] `products/features/list/actions.server.ts`: exportar dos constantes puras (o ponerlas en
         `products/shared/imputation-filter.ts` si el archivo crece):
         `INCOME_USAGES = ['SALE', 'PURCHASE_SALE']`, `EXPENSE_USAGES = ['PURCHASE',
         'PURCHASE_SALE']` (tipo `ProductUsage[]` de `@/generated/prisma/enums`) y
@@ -1062,7 +1062,7 @@ preexistentes.
         `prisma.product.count({ where: { companyId, ...missingIncomeWhere } })` /
         `…missingExpenseWhere` al `Promise.all` y devolver `imputation: { noIncome, noExpense
         }`. Verde.
-  - [ ] `products/features/list/components/_ProductsTable.tsx:44-47` (`FacetCounts`): agregar
+  - [x] `products/features/list/components/_ProductsTable.tsx:44-47` (`FacetCounts`): agregar
         `imputation?: Record<string, number>`; en `filterOptions` (`:150-190`), después de
         `stockLevel`, agregar `{ columnId: 'imputation', title: 'Imputación', options: [{ value:
         'noIncome', label: 'Sin cuenta de ingreso' }, { value: 'noExpense', label: 'Sin cuenta de
@@ -1070,7 +1070,7 @@ preexistentes.
         Map(Object.entries(facetCounts.imputation)) : undefined }`. `ProductsList.tsx:21-30` ya
         pasa `facetCounts` completo; no cambia. El `id: 'imputation'` de la columna
         (`columns.tsx:238`) coincide con el `columnId`, así el filtro se ancla a la columna.
-  - [ ] `products/features/list/columns.tsx:237-273` (columna "Imputación"): reemplazar el
+  - [x] `products/features/list/columns.tsx:237-273` (columna "Imputación"): reemplazar el
         `if (!income && !expense)` (`:246`) por una celda que muestre, por cada cuenta que
         **aplica según `usage`** y falta, un badge naranja chico: `Sin ingreso` (si `usage !==
         'PURCHASE'` y `!income`) y `Sin egreso` (si `usage !== 'SALE'` y `!expense`), y las
@@ -1079,14 +1079,14 @@ preexistentes.
         nowrap`. Extraer la lógica "qué falta" a una función pura `missingImputations(product)`
         en `products/shared/imputation-filter.ts` con un `imputation-filter.test.ts` (cuatro
         casos por `usage`), para no engordar `columns.tsx` (341 líneas).
-  - [ ] **Conteo en Ajustes contables.** `accounting/features/settings/actions.server.ts`: nueva
+  - [x] **Conteo en Ajustes contables.** `accounting/features/settings/actions.server.ts`: nueva
         action `getItemsWithoutAccountCounts(companyId)` con `checkPermission(
         'accounting.settings', 'view', { redirect: true })` y dos `prisma.product.count` con
         `{ companyId, status: 'ACTIVE', usage: { in: [...] }, defaultIncomeAccountId: null }` /
         `defaultExpenseAccountId: null` (Prisma directo, **sin importar** de `commercial`, regla
         `module-communication.md`; los literales de `usage` se repiten a propósito). Devuelve
         `{ saleItemsWithoutIncome: number; purchaseItemsWithoutExpense: number }`.
-  - [ ] Crear `accounting/features/settings/components/ItemsWithoutAccountNotice.tsx` (Server
+  - [x] Crear `accounting/features/settings/components/ItemsWithoutAccountNotice.tsx` (Server
         Component, sin `_`, < 70 líneas). Props: `{ counts }`. Si ambos son 0 → una línea neutra
         "Todos los ítems activos tienen su cuenta de ingresos y de egresos. Las cuentas por
         defecto solo se usan en líneas de compra sin ítem." Si no → bloque
@@ -1098,7 +1098,7 @@ preexistentes.
         `/dashboard/commercial/products?imputation=noIncome&status=ACTIVE` (o `noExpense`)
         envuelto en `<PermissionGuard module="commercial.products" action="view" fallback={null}>`
         (`PermissionGuard.tsx:6-32` soporta `fallback`).
-  - [ ] `AccountingSettings.tsx:10-19`: sumar `getItemsWithoutAccountCounts(companyId)` al
+  - [x] `AccountingSettings.tsx:10-19`: sumar `getItemsWithoutAccountCounts(companyId)` al
         `Promise.all` de datos y renderizar `<ItemsWithoutAccountNotice counts={counts} />`
         dentro del `CardContent` de "Integración Comercial" (`:72`), arriba de
         `_CommercialIntegrationForm`, con `mb-6`.
@@ -1124,7 +1124,7 @@ preexistentes.
   el `return null` histórico (riesgo 1.6-2), por empresa, para decidir con la clienta y el
   contador qué hacer (regenerar asientos es otro ticket). No corrige nada.
 - **Tareas:**
-  - [ ] Crear `prisma/scripts/diagnose-invoices-without-entry.ts` con el molde de
+  - [x] Crear `prisma/scripts/diagnose-invoices-without-entry.ts` con el molde de
         `diagnose-fixed-asset-accounts.ts:1-30` (encabezado con contexto, "SOLO LEE", cómo
         correrlo, `import 'dotenv/config'` + `prisma` de `../../src/shared/lib/prisma`). Consulta
         `salesInvoice.findMany` y `purchaseInvoice.findMany` con `where: { status: { notIn:
@@ -1133,7 +1133,7 @@ preexistentes.
         issueDate }]`. Imprime por empresa: conteo y suma de `total` por tipo (venta/compra) y
         el detalle (`fullNumber`, tipo, fecha `moment.utc(...).format('DD/MM/YYYY')`, total,
         estado). Sin `UPDATE`, sin `INSERT`, sin `revalidatePath`.
-  - [ ] En el encabezado del mismo archivo documentar el **SQL equivalente** para producción
+  - [x] En el encabezado del mismo archivo documentar el **SQL equivalente** para producción
         (memoria `produccion-dokploy-scripts-db`: la imagen `runner` no tiene `tsx`):
         ```sql
         SELECT c.name AS empresa, 'venta' AS tipo, s.full_number, s.voucher_type, s.issue_date::date,
@@ -1152,9 +1152,9 @@ preexistentes.
         Verificar los nombres de columnas contra `schema.prisma` (`sales_invoices` `:2879`,
         `purchase_invoices` `:3007`, `journal_entry_id`, `full_number`, `issue_date`,
         `voucher_type`, `companies` `:212`).
-  - [ ] Correr `npx tsx prisma/scripts/diagnose-invoices-without-entry.ts` contra la base de dev
+  - [x] Correr `npx tsx prisma/scripts/diagnose-invoices-without-entry.ts` contra la base de dev
         y anotar en la sección 4 el resultado (aunque sea cero) y los comandos de prod.
-  - [ ] Agregar al encabezado la consulta de ítems sin cuenta del análisis 1.2.3 (`SELECT usage,
+  - [x] Agregar al encabezado la consulta de ítems sin cuenta del análisis 1.2.3 (`SELECT usage,
         count(*) FILTER (WHERE default_income_account_id IS NULL) …`) para correrla en la misma
         sesión de `psql`: es el dato que la clienta necesita antes de vaciar la global.
 - **Archivos:**
@@ -2859,19 +2859,74 @@ pasa por la global.
 - **Notas:** SQL idéntico al esperado en 3.2.1. En producción la migración la aplica solo el `docker-entrypoint.sh` al arrancar; no hay datos que migrar. Vitest settings 10/10; check-types sin errores nuevos (mismo conjunto antes/después).
 
 ### Fase 2: Helper puro de cuentas de línea
-- **Estado:** Pendiente
+- **Estado:** Completada (2026-09-18)
+- **Archivos modificados:**
+  - `src/modules/commercial/shared/line-accounts.test.ts` - creado primero (rojo por módulo inexistente). 25 casos en 6 `describe`: `resolveLineAccount` (ítem/global/null/`''`), `findLinesMissingAccount` (con global ninguna, sin global solo las sin cuenta, línea sin ítem, orden + identidad del objeto con campos extra, lista vacía), `buildMissingLineAccountsMessage` (los dos textos literales de la tabla de 3.3.4, income/expense, `(sin ítem)` solo en la línea sin producto y la frase de aclaración una sola vez, singular/plural), `findLinesWithUnavailableAccount` (`source: 'item'`/`'default'`, no devuelve disponibles ni sin cuenta, orden), `buildUnavailableLineAccountsMessage` (los dos textos literales, ventas por defecto, dos oraciones unidas con espacio) y `formatAccountLabel`.
+  - `src/modules/commercial/shared/line-accounts.ts` - creado, puro (0 imports). Exporta `LineAccountKind`, `LineAccountCheck`, `UnavailableLineAccount<T>`, `UnavailableLineAccountLabel`, `formatAccountLabel`, `resolveLineAccount`, `findLinesMissingAccount<T>`, `buildMissingLineAccountsMessage`, `findLinesWithUnavailableAccount<T>`, `buildUnavailableLineAccountsMessage`, con las firmas y los textos de 3.2.3/3.3.4 tal cual.
+  - `src/modules/commercial/shared/cost-center.ts` - solo el comentario de `effectiveAccountType`: "Cuenta de ventas/compras por defecto" y que una línea sin cuenta ya no llega a confirmarse (la rechaza `line-accounts.ts`).
+  - `src/modules/commercial/shared/fixed-asset.ts` - ídem en el comentario de `effectiveIsFixedAsset`.
+- **Notas:** `npx vitest run src/modules/commercial/shared` 121/121 (7 archivos). ESLint y Prettier limpios en los dos archivos nuevos y en `fixed-asset.ts`; `cost-center.ts` ya tenía un aviso de Prettier previo a esta fase (no se reformateó para no mezclar cambios). `check-types`: 0 errores en estos archivos (los 219 del repo son de la línea base). Único desvío: `line-accounts.ts` tiene 140 líneas, no < 120 — el encabezado, los 4 tipos y los JSDoc del diseño ya suman eso; no se recortó documentación para cumplir el número.
 
 ### Fase 3: Confirmación de ventas y compras
-- **Estado:** Pendiente
+- **Estado:** Completada (2026-09-18)
+- **Archivos modificados:**
+  - `src/modules/commercial/features/sales/features/invoices/list/sales-invoice-line-accounts.integration.test.ts` - creado primero (rojo: 7 de 8 casos). Prefijo `TSK721-SALE-`, mocks con `importOriginal` en permisos, productos `trackStock: false`, facturas con `prisma.salesInvoice.create` en `DRAFT`, cliente aparte para la NC (así la auto-compensación no toca las otras facturas). 8 casos: (1) ítem con cuenta + global vacía → Haber en la del ítem, nada en `Ventas`; (2) ítem sin cuenta + global vacía → `{ success: false, error }` con el texto literal de 3.3.4, sigue `DRAFT` sin asiento; (3) sin cuenta + global → `Ventas`; (4) cuenta del ítem `isActive: false` → texto literal con `code - name`, sin fallback (0 asientos de la factura); (5) NC → Debe en la del ítem, Haber en Cobrar; (6) guard del asiento sin `receivablesAccountId` → `rejects.toThrow(/Cuentas por Cobrar/)`; (7) sin `vatDebitAccountId` → error con `IVA Débito Fiscal 21%`, `DRAFT`; (8) `lockedUntilDate` → `/período está cerrado/` y la transacción se revierte (`DRAFT`, sin `journalEntryId`).
+  - `src/modules/commercial/features/purchases/features/invoices/list/purchase-invoice-line-accounts.integration.test.ts` - creado primero (rojo: 8 de 9). Prefijo `TSK721-PURC-`, entra por `createPurchaseInvoice` + `confirmPurchaseInvoice` + `bulkConfirmPurchaseInvoices` reales. 9 casos: (1) línea sin ítem + global → Debe en `Compras`, `needsReceivingNote: false`; (2) sin ítem + global vacía → texto literal con «(sin ítem)» y la frase final; (3) ítem con cuenta + global vacía → Debe en `Repuestos`; (4) cuenta del ítem dada de baja → literal, sin fallback; (5) global `isLeaf: false` + línea sin ítem → literal `configurada como "Cuenta de compras por defecto"`; (6) bulk `[sinCuenta, conCuenta]` → `confirmedCount: 1`, `failures[0]` con `fullNumber` y el mensaje con «Aceite sin cuenta»; (7) sin `vatCreditAccountId` → `IVA Crédito Fiscal 21%`; (8) período cerrado → legible y revertido; (9) confirmar dos veces → `{ success: false, error: 'Solo se pueden confirmar facturas en estado borrador' }`.
+  - `src/shared/lib/action-result.ts` - creado. `interface ActionFailure { success: false; error: string }`; `type ActionResult<T extends object = Record<never, never>> = ({ success: true } & T) | ActionFailure`; `class BusinessError extends Error` (`name = 'BusinessError'`); `UNEXPECTED_ERROR_MESSAGE`; `toActionResult(error: unknown, contexto: string): ActionFailure` (BusinessError → su mensaje; cualquier otra cosa → `logger.error(contexto, { data: { error } })` + mensaje genérico). Copiado de `fund-movements/list/actions.server.ts:38-66`; **fund-movements no se tocó** (otro agente en paralelo): su migración al helper compartido queda para después.
+  - `src/modules/commercial/features/sales/features/invoices/list/actions.server.ts` - `confirmInvoice(id): Promise<ActionResult<{ id: string }>>`. `include` de `defaultIncomeAccount { id, code, name, type }` y `salesAccount { id, code, name, type }`; bloque "Cuentas de las líneas (TSK-721)" antes de tributos: `findLinesMissingAccount` → `BusinessError(buildMissingLineAccountsMessage(…, 'income'))`, luego `prisma.account.findMany({ where: { ...buildImputableAccountsWhere({ companyId }), id: { in } }, select: { id } })` (sin `types`) + `findLinesWithUnavailableAccount` → `BusinessError(buildUnavailableLineAccountsMessage(…))` con labels `code - name` del ítem o de la global. Son `BusinessError`: factura no encontrada/ya confirmada, tributos sin cuenta, centro de costo faltante, líneas sin cuenta / cuenta no imputable, sin almacén, stock insuficiente. El `try/catch` del asiento se eliminó (llamada directa + `update` + `logger.info`); el `catch` externo hace `logger.warn` si es `BusinessError` y devuelve `toActionResult(error, 'Error al confirmar factura')`. Comentario de `getSalesDefaultAccountType` actualizado.
+  - `src/modules/commercial/features/purchases/features/invoices/list/actions.server.ts` - `confirmPurchaseInvoice(id): Promise<ActionResult<ConfirmPurchaseInvoiceData>>` (`{ id, needsReceivingNote, supplierId }`, interfaz exportada). Mismo bloque de pre-validación con `productName: line.product?.name ?? null`, `kind: 'expense'`, global `purchasesAccount`. `BusinessError`: no encontrada, otra empresa, no `DRAFT`, tributos, centro de costo, líneas sin cuenta / no imputable, sin almacén principal para NC. Asiento sin `try/catch`. `bulkConfirmPurchaseInvoices` deja de usar `try/catch`: lee `result.success` / `result.error` para armar `failures` (misma forma de retorno). Comentario de `getPurchasesDefaultAccount` actualizado.
+  - `src/modules/accounting/features/integrations/commercial/index.ts` - importa `BusinessError` de `@/shared/lib/action-result` y `resolveLineAccount`/`findLinesMissingAccount`/`buildMissingLineAccountsMessage` de `commercial/shared/line-accounts`. `createJournalEntry` → `Promise<string>`; "No se encontró configuración contable" y "período está cerrado" pasan a `BusinessError` (mensajes intactos). Venta y compra → `Promise<string>`: `select` de líneas suma `description` y `product.name`/`default…AccountId`; guard solo por `receivablesAccountId`/`payablesAccountId` con `throw new BusinessError('No se puede generar el asiento: falta configurar "Cuentas por Cobrar/Pagar" en Contabilidad → Configuración.')` (antes `return null`); `findLinesMissingAccount` como defensa en profundidad; `resolveLineAccount(…)!`; IVA DF/CF sin cuenta → `BusinessError(buildMissingTributeAccountsMessage(['IVA Débito/Crédito Fiscal ${rate}%']))` en vez de `warn + continue`; los `throw new Error` de percepciones e impuestos internos de venta/compra pasan a `BusinessError`. Encabezado del archivo actualizado. CMV y el resto de las integraciones no cambian.
+  - `src/modules/commercial/features/sales/features/invoices/list/components/_InvoicesTable.tsx` y `purchases/.../components/_PurchaseInvoicesTable.tsx` - `handleConfirmInvoice`/`handleConfirm` pasan de `try/catch` a `try/finally` con `if (!result.success) { toast.error(result.error); return; }` (mismo patrón que `_CreateFundMovementModal.tsx:255`). El bulk no cambia.
+  - `src/modules/commercial/features/purchases/features/invoices/list/purchase-invoice-tributes.integration.test.ts` - los dos `it` de confirmación pasan de `rejects.toThrow(/impuestos internos/i)` / `await confirmPurchaseInvoice(...)` a leer `result.success`/`result.error`: es exactamente el contrato que cambió, no una regresión.
+- **Notas:** `npx vitest run` completo: 35 archivos, 432 tests en verde (17 nuevos: 8 ventas + 9 compras; los 4 de integración previos —cost-center, perceptions, tributos, fund-movements— siguen verdes). `afterAll` de los dos tests nuevos borra todo por `companyId` y verifica 0 filas por prefijo en `company`, `account` y `product`. ESLint: sin errores nuevos (los 4 `no-explicit-any` de `sales/.../actions.server.ts` son `as any` previos). Prettier: `action-result.ts` y los dos tests nuevos limpios; los 6 archivos existentes ya fallaban `--check` en `HEAD` (no se reformatearon para no mezclar cambios; mis bloques respetan el ancho de 100). `check-types`: 219 errores, ninguno en los archivos tocados (base 219). Desvíos: (a) el diseño decía `throw new Error` y se aplicó el ajuste obligatorio de 3.7 (`ActionResult`); para que "período cerrado", el guard y el IVA lleguen legibles, el `BusinessError` se lanza **desde el asiento** (`accounting/integrations/commercial`, que importa el helper de `shared/lib`), no se remapea por texto en el confirm; (b) `ActionResult<T extends object = Record<never, never>>` en vez de `T = void` porque `{ success: true } & void` no tipa; (c) los consumidores conservan `try/finally` (no `catch`) para resetear el estado de carga, como el modal de TSK-481; (d) 17 casos en vez de 11: se sumaron IVA faltante, período cerrado y "ya confirmada" que pedía el encargo de la fase.
 
 ### Fase 4: Gastos bancarios — cuenta por defecto preseleccionada
-- **Estado:** Pendiente
+- **Estado:** Completada
+- **Fecha:** 2026-09-18
+- **Archivos creados:**
+  - `fund-movements/list/components/_BankChargesDefaultNotice.tsx` (78 líneas, `'use client'`, 3 estados con `role="status"`, `Link` a Ajustes contables).
+- **Archivos modificados** (todos bajo `src/modules/commercial/features/treasury/features/fund-movements/`):
+  - `shared/lines-calc.ts`: `pickDefaultLineAccount(defaultAccountId, accounts): string` (id si está entre `accounts`, `''` en cualquier otro caso).
+  - `shared/lines-calc.test.ts`: `describe('pickDefaultLineAccount…')` con 5 casos (presente → id; `null`/`undefined` → `''`; no disponible → `''`; sin cuentas → `''`; indiferente al orden). Rojo primero, luego verde.
+  - `list/actions.server.ts`: `getFundMovementCatalogs` suma `bankChargesAccount: { select: { id, code, name } }` al `select` de `accountingSettings` y devuelve `defaultBankChargesAccount: settings?.bankChargesAccount ?? null`. JSDoc actualizado. `getFundMovementLineAccounts` y `checkPermission` sin cambios.
+  - `list/fund-movement-lines.integration.test.ts`: caso 6 (con `bankChargesAccountId = commissionAccountId` → `{ id, code, name }`; con `null` → `null`; `afterAll` restaura). Rojo primero (`undefined`), luego verde.
+  - `list/FundMovementsList.tsx`, `list/components/_FundMovementsTable.tsx`, `list/components/_CreateFundMovementModal.tsx`: prop `defaultBankChargesAccount: FundMovementAccountRef | null` propagada hasta `<_FundMovementLinesField accounts defaultAccount />` (los dos modales, alta y edición).
+  - `list/components/_FundMovementLinesField.tsx` (143 líneas): `defaultAccountId = pickDefaultLineAccount(defaultAccount?.id, accounts)`; `append({ accountId: defaultAccountId, … })`; `<_BankChargesDefaultNotice>` siempre visible debajo del bloque (con y sin conceptos). El `reset` en edición no cambia.
+- **Verificación:** `npx vitest run …/fund-movements` → 4 archivos, 71 tests en verde (integración contra `contable-pms-db`). `eslint` limpio y `prettier --check` OK en lo tocado. `check-types`: 0 errores en `fund-movements/` (los 219 restantes son preexistentes en archivos no tocados, p. ej. `_CreatePaymentOrderModal.tsx`).
+- **Desvíos respecto al diseño:** ninguno funcional. El aviso quedó en 78 líneas (el diseño estimaba < 60) por los comentarios de estado y el `settingsLink` compartido. No se tocó `partners/`, `products/`, `sales/`, `purchases/`, `accounting/` ni `commercial/shared/line-accounts*`.
 
 ### Fase 5: Visibilidad — ítems sin cuenta y conteo en Ajustes
-- **Estado:** Pendiente
+- **Estado:** Completada (2026-09-18)
+- **Archivos creados:**
+  - `src/modules/commercial/features/products/shared/imputation-filter.ts` (63 líneas, puro, solo tipos de Prisma): `ImputationFilterValue`, `INCOME_USAGES`, `EXPENSE_USAGES`, `missingIncomeWhere`, `missingExpenseWhere`, `ImputationCheck`, `missingImputations(product)` y `buildImputationWhere(values)` (devuelve `{ OR: [...] }` con las condiciones elegidas o `{}` sin valores; sacado del action para testearlo sin base).
+  - `src/modules/commercial/features/products/shared/imputation-filter.test.ts` - creado primero (rojo por módulo inexistente). 13 casos: `missingImputations` por `usage` (SALE → `['noIncome']`, PURCHASE → `['noExpense']`, PURCHASE_SALE sin nada → ambos, con ambas → `[]`, PURCHASE_SALE solo egreso → `['noIncome']`, PURCHASE con egreso → `[]`), forma literal de los dos `where` y de las constantes, y `buildImputationWhere` (vacío, uno, dos con OR, valor desconocido).
+  - `src/modules/commercial/features/products/features/list/product-imputation-filter.integration.test.ts` - molde `role-members.integration.test.ts` (los cuatro `vi.mock`, permisos con `importOriginal`), prefijo `TSK721-PROD-`, empresa dedicada, `afterAll` con limpieza y verificación. 6 casos contra la base real con los Server Actions reales: facet `{ noIncome: 2, noExpense: 1 }`; `['noIncome']` → `ventaSin` + `ambosSinIngreso`; `['noExpense']` → `compraSin`; los dos → tres (OR, `ambosOk` afuera); sin filtro → 4; `getItemsWithoutAccountCounts(companyId)` = `{ saleItemsWithoutIncome: 2, purchaseItemsWithoutExpense: 1 }` (ata los literales duplicados de `usage`). Rojo primero (5 de 6), luego verde.
+  - `src/modules/accounting/features/settings/components/ItemsWithoutAccountNotice.tsx` (68 líneas, Server Component sin `_`): bloque naranja `role="status"` con una fila por conteo > 0 («**N** ítem(s) activo(s) de venta sin Cuenta de Ingresos → Ver», ídem compra/Egresos) y la aclaración literal de 3.4.2; cada « → Ver» es un `Link` a `/dashboard/commercial/products?imputation=noIncome&status=ACTIVE` (o `noExpense`) dentro de `<PermissionGuard module="commercial.products" action="view" fallback={null}>` (sin permiso, el conteo se ve sin flecha ni enlace).
+- **Archivos modificados:**
+  - `products/features/list/actions.server.ts`: `getProducts` agrega `'imputation'` al `exclude` de `buildFiltersWhere` y suma `...buildImputationWhere(filters['imputation'] ?? [])` al `where` (ahora tipado `Prisma.ProductWhereInput`); `getProductFacetCounts` suma dos `prisma.product.count` con `missingIncomeWhere`/`missingExpenseWhere` y devuelve `imputation: { noIncome, noExpense }` (sin filtrar por status, como `type`/`status`).
+  - `products/features/list/components/_ProductsTable.tsx` (347 → 360): `FacetCounts.imputation?`; facet `{ columnId: 'imputation', title: 'Imputación', options: [noIncome → 'Sin cuenta de ingreso', noExpense → 'Sin cuenta de egreso'], externalCounts }` después de `stockLevel`.
+  - `products/features/list/columns.tsx` (341 → 350): la columna "Imputación" muestra `Ing:`/`Egr:` como antes y, según `missingImputations(product)`, badges naranja «Sin ingreso» / «Sin egreso». El badge «Sin imputar» desaparece. `id`, `meta.title`, `enableSorting: false` y `whitespace-nowrap` intactos.
+  - `accounting/features/settings/actions.server.ts`: `getItemsWithoutAccountCounts(companyId)` con `checkPermission('accounting.settings', 'view', { redirect: true })` y dos `prisma.product.count` (`status: 'ACTIVE'`, `usage: { in: [...] }`, cuenta `null`), Prisma directo sin importar de `commercial`; `export type ItemsWithoutAccountCounts`.
+  - `accounting/features/settings/AccountingSettings.tsx`: `Promise.all([getActiveAccounts(...), getItemsWithoutAccountCounts(companyId)])` y `<ItemsWithoutAccountNotice counts={itemCounts} className="mb-6" />` arriba de `_CommercialIntegrationForm`.
+- **Notas:** `npx vitest run src/modules/commercial/features/products src/modules/accounting/features/settings` 61/61 (7 archivos, la integración corrió contra la base local). ESLint 0 errores en lo tocado (2 avisos `no-unused-vars` previos en `columns.tsx:37` y `_ProductsTable.tsx:67`); Prettier limpio en los archivos nuevos y en los dos de settings (`actions.server.ts`, `columns.tsx` y `_ProductsTable.tsx` de products ya fallaban Prettier antes de esta fase; no se reformatearon). `check-types`: 0 errores en los archivos tocados (los del repo son línea base). Desvíos: (1) con ambos conteos en 0 el componente **no renderiza nada** (pedido del implementador) en lugar del bloque neutro de 3.4.2; (2) el `OR` del filtro se arma en `buildImputationWhere` del helper puro, no inline en el action, para cubrirlo con tests unitarios; (3) el molde real de los `vi.mock` fue `role-members.integration.test.ts` (el `apply-index` citado en 3.7-1 no mockea: replica las queries).
 
 ### Fase 6: Script de diagnóstico
-- **Estado:** Pendiente
+- **Estado:** Completada (2026-09-18)
+- **Archivos modificados:**
+  - `prisma/scripts/diagnose-invoices-without-entry.ts` - creado. Solo lectura (`findMany` en `salesInvoice` y `purchaseInvoice` con `status: { notIn: ['DRAFT','CANCELLED'] }, journalEntryId: null`; sin `UPDATE`/`INSERT`/`revalidatePath`). Lista por empresa y fecha: tipo, empresa, número (+ `voucherType`), fecha `moment.utc` DD/MM/YYYY, tercero (cliente/proveedor), total, status, id; subtotal por empresa y totales por tipo; cierra con la línea de interpretación. Header con contexto, cómo correrlo en dev y el SQL para `psql` en prod (detalle UNION ALL con JOIN a `companies`/`contractors`/`suppliers`, resumen por empresa y tipo, consulta de ítems sin cuenta del análisis 1.2.3, comando `sudo docker exec … psql`).
+- **Notas:**
+  - Salida en dev (`npx tsx prisma/scripts/diagnose-invoices-without-entry.ts`, base `contable-pms-db`):
+    ```
+    --- Facturas confirmadas (no DRAFT / no CANCELLED) SIN asiento contable ---
+    (solo lectura: no se corrige nada)
+
+    Ninguna. Nada que revisar.
+    ```
+    El cero es real: dev tiene 1 compra `CONFIRMED` (con asiento) y 7 `DRAFT`; ventas, ninguna.
+  - SQL del header verificado con `docker exec contable-pms-db psql -U postgres -d contable_pms`: el detalle y el resumen devuelven 0 filas, igual que el script. Ejercitado además dentro de `BEGIN … UPDATE purchase_invoices SET journal_entry_id = NULL … ROLLBACK` para ver una fila real (`COMPRA | Empresa de Prueba 01 SA | 0001-00000001 (FACTURA_A) | 28/08/2026 | Distribuidora de Combustibles SRL | 121000.00 | CONFIRMED`); tras el rollback la base quedó como estaba (0 confirmadas sin asiento).
+  - Desvío respecto al SQL del diseño (3.3.13): en Postgres `sales_invoice_status` y `purchase_invoice_status` son enums distintos y el `UNION ALL` falla ("could not convert type purchase_invoice_status to sales_invoice_status"); el header castea `status::text` en ambos SELECT. El orden es `empresa, fecha, tipo` (el script ordena igual), y el detalle agrega el tercero y el `id` respecto del diseño.
+  - `tsc --noEmit`: sin errores en el script (los 219 restantes son el conjunto preexistente). `git status`: solo el archivo nuevo y este plan.
+  - Comando de prod (memoria `produccion-dokploy-scripts-db`): `sudo docker exec -it $(sudo docker ps -q --filter name=contablemas-contablemas) sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"'` y pegar el SQL del header.
 
 ### Fase 7: Documentación
 - **Estado:** Pendiente

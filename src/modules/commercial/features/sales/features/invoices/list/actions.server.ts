@@ -5,6 +5,8 @@ import { prisma } from '@/shared/lib/prisma';
 import { logger } from '@/shared/lib/logger';
 import { getActiveCompanyId } from '@/shared/lib/company';
 import { checkPermission } from '@/shared/lib/permissions';
+import { buildImputableAccountsWhere } from '@/shared/lib/accounts/imputable-accounts';
+import { BusinessError, toActionResult, type ActionResult } from '@/shared/lib/action-result';
 import { createInvoiceSchema } from '../shared/validators';
 import { revalidatePath } from 'next/cache';
 import { Prisma } from '@/generated/prisma/client';
@@ -30,6 +32,14 @@ import {
   perceptionAccountId,
   toPerceptionRecords,
 } from '@/modules/commercial/shared/perceptions';
+import {
+  buildMissingLineAccountsMessage,
+  buildUnavailableLineAccountsMessage,
+  findLinesMissingAccount,
+  findLinesWithUnavailableAccount,
+  formatAccountLabel,
+  resolveLineAccount,
+} from '@/modules/commercial/shared/line-accounts';
 
 // Obtener todas las facturas de venta
 export async function getInvoices() {
@@ -604,13 +614,14 @@ export async function getSalesCostCentersForSelect() {
 export type SalesCostCenterSelectItem = Awaited<ReturnType<typeof getSalesCostCentersForSelect>>[number];
 
 /**
- * Tipo de la cuenta de ventas por defecto de la empresa (TSK-583, hallazgo
+ * Tipo de la "Cuenta de ventas por defecto" de la empresa (TSK-583, hallazgo
  * de revisión final).
  *
  * El formulario decide si una línea admite/exige centro de costo mirando la
  * cuenta del ítem — pero cuando el ítem no tiene una propia, el asiento
- * (`createJournalEntryForSalesInvoice`) igual la imputa a esta cuenta. Sin
- * este dato en el formulario, un ítem sin cuenta propia nunca mostraba el
+ * (`createJournalEntryForSalesInvoice`) la imputa a esta cuenta por defecto
+ * (TSK-721: si tampoco hay cuenta por defecto, la confirmación se rechaza).
+ * Sin este dato en el formulario, un ítem sin cuenta propia nunca mostraba el
  * campo aunque el asiento lo imputara a una cuenta de resultado.
  */
 export async function getSalesDefaultAccountType() {
@@ -839,7 +850,18 @@ export async function createInvoice(data: unknown) {
 }
 
 // Confirmar factura (cambia estado de DRAFT a CONFIRMED y descuenta stock)
-export async function confirmInvoice(id: string) {
+/**
+ * Confirma una factura de venta: descuenta stock, genera el asiento y la deja
+ * en `CONFIRMED`, todo en una transacción.
+ *
+ * Devuelve `{ success, error }` en vez de lanzar (TSK-721): en producción
+ * Next redacta el mensaje de un `Error` lanzado desde un Server Action, y los
+ * motivos de rechazo (línea sin cuenta, cuenta no imputable, tributo sin
+ * cuenta, período cerrado, stock insuficiente) tienen que llegar al usuario
+ * tal cual. Cualquier fallo que no sea `BusinessError` se loguea y se
+ * devuelve como mensaje genérico.
+ */
+export async function confirmInvoice(id: string): Promise<ActionResult<{ id: string }>> {
   await checkPermission('commercial.invoices', 'approve', { redirect: true });
   const authUserId = await getCurrentUserId();
   if (!authUserId) throw new Error('No autenticado');
@@ -865,8 +887,10 @@ export async function confirmInvoice(id: string) {
                 code: true,
                 name: true,
                 trackStock: true,
-                // El tipo de la cuenta decide si la línea exige centro de costo (TSK-583).
-                defaultIncomeAccount: { select: { type: true } },
+                // El tipo de la cuenta decide si la línea exige centro de costo
+                // (TSK-583); id/code/name para pre-validar la cuenta de la
+                // línea y nombrarla en el mensaje (TSK-721).
+                defaultIncomeAccount: { select: { id: true, code: true, name: true, type: true } },
               },
             },
             costCenterAllocations: true,
@@ -877,18 +901,19 @@ export async function confirmInvoice(id: string) {
     });
 
     if (!invoice) {
-      throw new Error('Factura no encontrada o ya está confirmada');
+      throw new BusinessError('Factura no encontrada o ya está confirmada');
     }
 
     const settings = await prisma.accountingSettings.findUnique({
       where: { companyId },
       select: {
         requireCostCenter: true,
-        // Cuenta que usaria el asiento si el item no tiene una propia
-        // (TSK-583, hallazgo de revision final): sin esto, un item sin
-        // cuenta propia nunca exigia reparto aunque el asiento lo imputara
-        // igual a `salesAccountId`, que es de resultado.
-        salesAccount: { select: { type: true } },
+        // Cuenta de ventas por defecto: la que usa el asiento si el ítem no
+        // tiene una propia (TSK-583, hallazgo de revisión final): sin esto,
+        // un ítem sin cuenta propia nunca exigía reparto aunque el asiento lo
+        // imputara igual a `salesAccountId`, que es de resultado. id/code/
+        // name para la pre-validación de cuentas de línea (TSK-721).
+        salesAccount: { select: { id: true, code: true, name: true, type: true } },
         // Cuentas de los tributos del comprobante (TSK-644)
         internalTaxesAccountId: true,
         perceptionIvaCollectedAccountId: true,
@@ -896,6 +921,61 @@ export async function confirmInvoice(id: string) {
         perceptionMunicipalCollectedAccountId: true,
       },
     });
+
+    // Cuentas de las líneas (TSK-721). La cuenta la define el ítem; la "Cuenta
+    // de ventas por defecto" es el respaldo. Se comprueba ANTES de la
+    // transacción, como los tributos: así el error llega al usuario con el
+    // nombre de la línea en vez de quedar una factura confirmada sin asiento.
+    const defaultSalesAccount = settings?.salesAccount ?? null;
+    const lineChecks = invoice.lines.map((line) => ({
+      description: line.description,
+      productName: line.product.name,
+      itemAccountId: line.product.defaultIncomeAccount?.id ?? null,
+    }));
+
+    const missingLineAccounts = findLinesMissingAccount(lineChecks, defaultSalesAccount?.id);
+    if (missingLineAccounts.length > 0) {
+      throw new BusinessError(buildMissingLineAccountsMessage(missingLineAccounts, 'income'));
+    }
+
+    // La cuenta efectiva tiene que ser imputable HOY (hoja, activa, sin corte
+    // de ejercicio vigente); nunca se cae a la global en silencio. Sin `types`:
+    // la cuenta de un ítem puede ser ASSET (TSK-579).
+    const effectiveAccountIds = [
+      ...new Set(
+        lineChecks
+          .map((l) => resolveLineAccount(l.itemAccountId, defaultSalesAccount?.id))
+          .filter((accountId): accountId is string => accountId !== null)
+      ),
+    ];
+    const imputableAccounts = await prisma.account.findMany({
+      where: { ...buildImputableAccountsWhere({ companyId }), id: { in: effectiveAccountIds } },
+      select: { id: true },
+    });
+    const unavailableLineAccounts = findLinesWithUnavailableAccount(
+      lineChecks,
+      defaultSalesAccount?.id,
+      new Set(imputableAccounts.map((a) => a.id))
+    );
+    if (unavailableLineAccounts.length > 0) {
+      const labels = new Map<string, string>();
+      for (const line of invoice.lines) {
+        const account = line.product.defaultIncomeAccount;
+        if (account) labels.set(account.id, formatAccountLabel(account));
+      }
+      if (defaultSalesAccount) labels.set(defaultSalesAccount.id, formatAccountLabel(defaultSalesAccount));
+
+      throw new BusinessError(
+        buildUnavailableLineAccountsMessage(
+          unavailableLineAccounts.map((u) => ({
+            description: u.line.description,
+            accountLabel: labels.get(u.accountId) ?? u.accountId,
+            source: u.source,
+          })),
+          'income'
+        )
+      );
+    }
 
     // Tributos sin cuenta contable configurada (TSK-644). Ver la nota
     // equivalente en `confirmPurchaseInvoice`: se comprueba antes de abrir la
@@ -922,7 +1002,7 @@ export async function confirmInvoice(id: string) {
     ]);
 
     if (missingTributeAccounts.length > 0) {
-      throw new Error(buildMissingTributeAccountsMessage(missingTributeAccounts));
+      throw new BusinessError(buildMissingTributeAccountsMessage(missingTributeAccounts));
     }
 
     if (settings?.requireCostCenter) {
@@ -941,7 +1021,7 @@ export async function confirmInvoice(id: string) {
       );
 
       if (missing.length > 0) {
-        throw new Error(buildMissingCostCenterMessage(missing));
+        throw new BusinessError(buildMissingCostCenterMessage(missing));
       }
     }
 
@@ -975,7 +1055,7 @@ export async function confirmInvoice(id: string) {
             });
 
             if (!warehouse) {
-              throw new Error('No hay almacenes disponibles para gestionar stock');
+              throw new BusinessError('No hay almacenes disponibles para gestionar stock');
             }
 
             const quantityToHandle = line.quantity;
@@ -1030,7 +1110,7 @@ export async function confirmInvoice(id: string) {
               const currentStock = warehouseStock?.quantity || new Prisma.Decimal(0);
 
               if (currentStock.lessThan(quantityToHandle)) {
-                throw new Error(
+                throw new BusinessError(
                   `Stock insuficiente para ${line.product.name}. Disponible: ${currentStock}, Requerido: ${quantityToHandle}`
                 );
               }
@@ -1074,30 +1154,15 @@ export async function confirmInvoice(id: string) {
         }
       }
 
-      // Crear asiento contable automáticamente
-      try {
-        const journalEntryId = await createJournalEntryForSalesInvoice(id, companyId, tx);
-
-        if (journalEntryId) {
-          // Actualizar factura con referencia al asiento contable
-          await tx.salesInvoice.update({
-            where: { id: id },
-            data: { journalEntryId },
-          });
-
-          logger.info('Asiento contable generado para factura de venta', {
-            data: { invoiceId: id, journalEntryId },
-          });
-        }
-      } catch (error) {
-        // Re-lanzar errores de período bloqueado (el usuario debe saberlo)
-        if (error instanceof Error && error.message.includes('período está cerrado')) {
-          throw error;
-        }
-        logger.warn('No se pudo generar asiento contable para factura de venta', {
-          data: { invoiceId: id, error },
-        });
-      }
+      // Asiento contable. TSK-721: antes solo se relanzaba "período cerrado" y
+      // cualquier otro fallo del asiento se degradaba a warn, dejando la
+      // factura CONFIRMED sin asiento. Ahora cualquier error aborta la
+      // transacción y llega al usuario por el catch externo.
+      const journalEntryId = await createJournalEntryForSalesInvoice(id, companyId, tx);
+      await tx.salesInvoice.update({ where: { id }, data: { journalEntryId } });
+      logger.info('Asiento contable generado para factura de venta', {
+        data: { invoiceId: id, journalEntryId },
+      });
 
       // Auto-compensar NC contra facturas/ND pendientes del mismo cliente
       if (isCreditNote(updatedInvoice.voucherType)) {
@@ -1126,15 +1191,12 @@ export async function confirmInvoice(id: string) {
     revalidatePath('/dashboard/commercial/stock');
     return { success: true, id: result.id };
   } catch (error) {
-    logger.error('Error al confirmar factura', {
-      data: { id, companyId, error },
-    });
-
-    if (error instanceof Error) {
-      throw error;
+    if (error instanceof BusinessError) {
+      logger.warn('Confirmación de factura rechazada', {
+        data: { id, companyId, motivo: error.message },
+      });
     }
-
-    throw new Error('Error al confirmar la factura');
+    return toActionResult(error, 'Error al confirmar factura');
   }
 }
 

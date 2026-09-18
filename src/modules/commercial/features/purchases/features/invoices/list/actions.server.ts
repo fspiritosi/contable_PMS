@@ -18,6 +18,8 @@ import type { Prisma } from '@/generated/prisma/client';
 import { purchaseInvoiceFormSchema, type PurchaseInvoiceFormInput } from '../shared/validators';
 import type { VoucherType } from '@/generated/prisma/enums';
 import { checkPermission } from '@/shared/lib/permissions';
+import { buildImputableAccountsWhere } from '@/shared/lib/accounts/imputable-accounts';
+import { BusinessError, toActionResult, type ActionResult } from '@/shared/lib/action-result';
 import { createJournalEntryForPurchaseInvoice } from '@/modules/accounting/features/integrations/commercial';
 import { isCreditNote, isDebitNote } from '@/modules/commercial/shared/voucher-utils';
 import { applyPurchaseCreditNote } from '@/modules/commercial/shared/credit-note-compensation';
@@ -35,6 +37,14 @@ import {
   perceptionAccountId,
   toPerceptionRecords,
 } from '@/modules/commercial/shared/perceptions';
+import {
+  buildMissingLineAccountsMessage,
+  buildUnavailableLineAccountsMessage,
+  findLinesMissingAccount,
+  findLinesWithUnavailableAccount,
+  formatAccountLabel,
+  resolveLineAccount,
+} from '@/modules/commercial/shared/line-accounts';
 
 // ============================================
 // QUERIES
@@ -581,14 +591,16 @@ export interface PurchasesDefaultAccount {
 }
 
 /**
- * Cuenta de compras por defecto de la empresa (TSK-583, hallazgo de revisión
- * final; ampliada en TSK-618).
+ * "Cuenta de compras por defecto" de la empresa (TSK-583, hallazgo de
+ * revisión final; ampliada en TSK-618).
  *
  * El formulario decide si una línea admite/exige centro de costo mirando la
- * cuenta del ítem — pero cuando el ítem no tiene una propia, el asiento
- * (`createJournalEntryForPurchaseInvoice`) igual la imputa a esta cuenta.
- * Sin este dato en el formulario, un ítem sin cuenta propia nunca mostraba
- * el campo aunque el asiento lo imputara a una cuenta de resultado.
+ * cuenta del ítem — pero cuando el ítem no tiene una propia (o la línea no
+ * tiene ítem), el asiento (`createJournalEntryForPurchaseInvoice`) la imputa
+ * a esta cuenta por defecto (TSK-721: si tampoco está configurada, la
+ * confirmación se rechaza). Sin este dato en el formulario, un ítem sin
+ * cuenta propia nunca mostraba el campo aunque el asiento lo imputara a una
+ * cuenta de resultado.
  *
  * TSK-618 suma la marca de Bien de Uso de esa misma cuenta, por el mismo
  * motivo: una línea sin ítem (o con un ítem sin cuenta de egresos) se imputa
@@ -1214,10 +1226,27 @@ export async function updatePurchaseInvoice(id: string, rawInput: PurchaseInvoic
   }
 }
 
+/** Lo que devuelve `confirmPurchaseInvoice` cuando la factura queda confirmada. */
+export interface ConfirmPurchaseInvoiceData {
+  id: string;
+  /** FC con ítems de stock y sin remito de recepción confirmado: la UI ofrece crearlo. */
+  needsReceivingNote: boolean;
+  supplierId: string;
+}
+
 /**
- * Confirma una factura de compra y actualiza el stock
+ * Confirma una factura de compra y actualiza el stock.
+ *
+ * Devuelve `{ success, error }` en vez de lanzar (TSK-721): en producción
+ * Next redacta el mensaje de un `Error` lanzado desde un Server Action, y los
+ * motivos de rechazo (línea sin cuenta, cuenta no imputable, tributo sin
+ * cuenta, período cerrado, factura ya confirmada) tienen que llegar al usuario
+ * tal cual. Cualquier fallo que no sea `BusinessError` se loguea y se
+ * devuelve como mensaje genérico.
  */
-export async function confirmPurchaseInvoice(id: string) {
+export async function confirmPurchaseInvoice(
+  id: string
+): Promise<ActionResult<ConfirmPurchaseInvoiceData>> {
   await checkPermission('commercial.purchases', 'approve', { redirect: true });
   const userId = await getCurrentUserId();
   if (!userId) throw new Error('No autenticado');
@@ -1233,7 +1262,9 @@ export async function confirmPurchaseInvoice(id: string) {
           include: {
             product: {
               include: {
-                defaultExpenseAccount: { select: { type: true } },
+                // El tipo decide si la línea exige centro de costo (TSK-583);
+                // id/code/name para pre-validar la cuenta y nombrarla (TSK-721).
+                defaultExpenseAccount: { select: { id: true, code: true, name: true, type: true } },
               },
             },
             costCenterAllocations: true,
@@ -1244,15 +1275,15 @@ export async function confirmPurchaseInvoice(id: string) {
     });
 
     if (!invoice) {
-      throw new Error('Factura de compra no encontrada');
+      throw new BusinessError('Factura de compra no encontrada');
     }
 
     if (invoice.companyId !== companyId) {
-      throw new Error('No tienes permiso para confirmar esta factura');
+      throw new BusinessError('No tienes permiso para confirmar esta factura');
     }
 
     if (invoice.status !== 'DRAFT') {
-      throw new Error('Solo se pueden confirmar facturas en estado borrador');
+      throw new BusinessError('Solo se pueden confirmar facturas en estado borrador');
     }
 
     const settings = await prisma.accountingSettings.findUnique({
@@ -1264,13 +1295,74 @@ export async function confirmPurchaseInvoice(id: string) {
         perceptionIvaSufferedAccountId: true,
         perceptionIibbSufferedAccountId: true,
         perceptionMunicipalSufferedAccountId: true,
-        // Cuenta que usaria el asiento si el item no tiene una propia
-        // (TSK-583, hallazgo de revision final): sin esto, un item sin
-        // cuenta propia nunca exigia reparto aunque el asiento lo imputara
-        // igual a `purchasesAccountId`, que es de resultado.
-        purchasesAccount: { select: { type: true } },
+        // Cuenta de compras por defecto: la que usa el asiento si el ítem no
+        // tiene una propia o la línea no tiene ítem (TSK-583, hallazgo de
+        // revisión final): sin esto, un ítem sin cuenta propia nunca exigía
+        // reparto aunque el asiento lo imputara igual a `purchasesAccountId`,
+        // que es de resultado. id/code/name para la pre-validación de cuentas
+        // de línea (TSK-721).
+        purchasesAccount: { select: { id: true, code: true, name: true, type: true } },
       },
     });
+
+    // Cuentas de las líneas (TSK-721). La cuenta la define el ítem; la "Cuenta
+    // de compras por defecto" es el respaldo, y el único camino para las
+    // líneas sin ítem (gastos no inventariables, importación AFIP). Se
+    // comprueba ANTES de la transacción, como los tributos: así el error llega
+    // al usuario con el nombre de la línea en vez de quedar una factura
+    // confirmada sin asiento.
+    const defaultPurchasesAccount = settings?.purchasesAccount ?? null;
+    const lineChecks = invoice.lines.map((line) => ({
+      description: line.description,
+      productName: line.product?.name ?? null, // null = línea sin ítem
+      itemAccountId: line.product?.defaultExpenseAccount?.id ?? null,
+    }));
+
+    const missingLineAccounts = findLinesMissingAccount(lineChecks, defaultPurchasesAccount?.id);
+    if (missingLineAccounts.length > 0) {
+      throw new BusinessError(buildMissingLineAccountsMessage(missingLineAccounts, 'expense'));
+    }
+
+    // La cuenta efectiva tiene que ser imputable HOY (hoja, activa, sin corte
+    // de ejercicio vigente); nunca se cae a la global en silencio. Sin `types`:
+    // la cuenta de un ítem puede ser ASSET (bien de uso, TSK-579/618).
+    const effectiveAccountIds = [
+      ...new Set(
+        lineChecks
+          .map((l) => resolveLineAccount(l.itemAccountId, defaultPurchasesAccount?.id))
+          .filter((accountId): accountId is string => accountId !== null)
+      ),
+    ];
+    const imputableAccounts = await prisma.account.findMany({
+      where: { ...buildImputableAccountsWhere({ companyId }), id: { in: effectiveAccountIds } },
+      select: { id: true },
+    });
+    const unavailableLineAccounts = findLinesWithUnavailableAccount(
+      lineChecks,
+      defaultPurchasesAccount?.id,
+      new Set(imputableAccounts.map((a) => a.id))
+    );
+    if (unavailableLineAccounts.length > 0) {
+      const labels = new Map<string, string>();
+      for (const line of invoice.lines) {
+        const account = line.product?.defaultExpenseAccount;
+        if (account) labels.set(account.id, formatAccountLabel(account));
+      }
+      if (defaultPurchasesAccount) {
+        labels.set(defaultPurchasesAccount.id, formatAccountLabel(defaultPurchasesAccount));
+      }
+
+      throw new BusinessError(
+        buildUnavailableLineAccountsMessage(
+          unavailableLineAccounts.map((u) => ({
+            description: u.line.description,
+            accountLabel: labels.get(u.accountId) ?? u.accountId,
+            source: u.source,
+          })),
+          'expense'
+        )
+      );
+    }
 
     // Tributos sin cuenta contable configurada (TSK-644).
     //
@@ -1300,7 +1392,7 @@ export async function confirmPurchaseInvoice(id: string) {
     ]);
 
     if (missingTributeAccounts.length > 0) {
-      throw new Error(buildMissingTributeAccountsMessage(missingTributeAccounts));
+      throw new BusinessError(buildMissingTributeAccountsMessage(missingTributeAccounts));
     }
 
     if (settings?.requireCostCenter) {
@@ -1319,7 +1411,7 @@ export async function confirmPurchaseInvoice(id: string) {
       );
 
       if (missing.length > 0) {
-        throw new Error(buildMissingCostCenterMessage(missing));
+        throw new BusinessError(buildMissingCostCenterMessage(missing));
       }
     }
 
@@ -1342,7 +1434,7 @@ export async function confirmPurchaseInvoice(id: string) {
       });
 
       if (!mainWarehouse) {
-        throw new Error(
+        throw new BusinessError(
           'No se encontró un almacén principal activo. Configura uno antes de confirmar notas de crédito.'
         );
       }
@@ -1429,30 +1521,15 @@ export async function confirmPurchaseInvoice(id: string) {
         await updatePurchaseOrderInvoicingStatus(tx, invoice.purchaseOrderId);
       }
 
-      // Crear asiento contable automáticamente
-      try {
-        const journalEntryId = await createJournalEntryForPurchaseInvoice(id, companyId, tx);
-
-        if (journalEntryId) {
-          // Actualizar factura con referencia al asiento contable
-          await tx.purchaseInvoice.update({
-            where: { id },
-            data: { journalEntryId },
-          });
-
-          logger.info('Asiento contable generado para factura de compra', {
-            data: { invoiceId: id, journalEntryId },
-          });
-        }
-      } catch (error) {
-        // Re-lanzar errores de período bloqueado (el usuario debe saberlo)
-        if (error instanceof Error && error.message.includes('período está cerrado')) {
-          throw error;
-        }
-        logger.warn('No se pudo generar asiento contable para factura de compra', {
-          data: { invoiceId: id, error },
-        });
-      }
+      // Asiento contable. TSK-721: antes solo se relanzaba "período cerrado" y
+      // cualquier otro fallo del asiento se degradaba a warn, dejando la
+      // factura CONFIRMED sin asiento. Ahora cualquier error aborta la
+      // transacción y llega al usuario por el catch externo.
+      const journalEntryId = await createJournalEntryForPurchaseInvoice(id, companyId, tx);
+      await tx.purchaseInvoice.update({ where: { id }, data: { journalEntryId } });
+      logger.info('Asiento contable generado para factura de compra', {
+        data: { invoiceId: id, journalEntryId },
+      });
 
       // Auto-compensar NC contra facturas/ND pendientes del mismo proveedor
       if (isCreditNote(updatedInvoice.voucherType)) {
@@ -1502,10 +1579,12 @@ export async function confirmPurchaseInvoice(id: string) {
       supplierId: invoice.supplierId,
     };
   } catch (error) {
-    logger.error('Error al confirmar factura de compra', {
-      data: { error, id, companyId, userId },
-    });
-    throw error;
+    if (error instanceof BusinessError) {
+      logger.warn('Confirmación de factura de compra rechazada', {
+        data: { id, companyId, userId, motivo: error.message },
+      });
+    }
+    return toActionResult(error, 'Error al confirmar factura de compra');
   }
 }
 
@@ -1536,14 +1615,13 @@ export async function bulkConfirmPurchaseInvoices(ids: string[]) {
   let confirmedCount = 0;
 
   for (const invoice of confirmables) {
-    try {
-      await confirmPurchaseInvoice(invoice.id);
+    // `confirmPurchaseInvoice` ya traduce cada fallo a `{ success, error }`
+    // (TSK-721): el motivo legible viene por ahí, no por una excepción.
+    const result = await confirmPurchaseInvoice(invoice.id);
+    if (result.success) {
       confirmedCount += 1;
-    } catch (error) {
-      failures.push({
-        fullNumber: invoice.fullNumber,
-        message: error instanceof Error ? error.message : 'Error desconocido',
-      });
+    } else {
+      failures.push({ fullNumber: invoice.fullNumber, message: result.error });
     }
   }
 

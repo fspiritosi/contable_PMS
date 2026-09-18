@@ -214,9 +214,12 @@ describe.skipIf(!dbAvailable)('integración e2e: factura de compra con tributos 
         data: { internalTaxesAccountId: null },
       });
 
-      await expect(confirmPurchaseInvoice(invoiceId)).rejects.toThrow(
-        /impuestos internos/i
-      );
+      // El rechazo viaja como `{ success: false, error }` (TSK-721): antes
+      // era un `throw`, que en producción llegaba redactado al cliente.
+      const result = await confirmPurchaseInvoice(invoiceId);
+      expect(result.success).toBe(false);
+      if (result.success) return;
+      expect(result.error).toMatch(/impuestos internos/i);
 
       // No confirmó ni a medias: sigue en borrador y sin asiento.
       const invoice = await prisma.purchaseInvoice.findUnique({
@@ -233,7 +236,8 @@ describe.skipIf(!dbAvailable)('integración e2e: factura de compra con tributos 
     });
 
     it('con las cuentas configuradas, confirma y genera el asiento balanceado', async () => {
-      await confirmPurchaseInvoice(invoiceId);
+      const result = await confirmPurchaseInvoice(invoiceId);
+      expect(result.success).toBe(true);
 
       const invoice = await prisma.purchaseInvoice.findUnique({
         where: { id: invoiceId },
