@@ -1,9 +1,15 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/card';
+import { PermissionGuard } from '@/shared/components/common/PermissionGuard';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/shared/components/ui/card';
 import { getAccountingSettings, getActiveAccounts } from './actions.server';
 import { _AccountingSettingsForm } from './components/_AccountingSettingsForm';
 import { _CommercialIntegrationForm } from './components/_CommercialIntegrationForm';
 import { _PeriodLockingForm } from './components/_PeriodLockingForm';
-import { PermissionGuard } from '@/shared/components/common/PermissionGuard';
 
 import { getActiveCompanyId } from '@/shared/lib/company';
 
@@ -30,9 +36,7 @@ async function AccountingSettingsContent({ companyId }: { companyId: string }) {
       <Card>
         <CardHeader>
           <CardTitle>Ejercicio Fiscal</CardTitle>
-          <CardDescription>
-            Define el período del ejercicio fiscal
-          </CardDescription>
+          <CardDescription>Define el período del ejercicio fiscal</CardDescription>
         </CardHeader>
         <CardContent>
           <_AccountingSettingsForm
@@ -66,7 +70,8 @@ async function AccountingSettingsContent({ companyId }: { companyId: string }) {
         <CardHeader>
           <CardTitle>Integración Comercial</CardTitle>
           <CardDescription>
-            Configura las cuentas contables por defecto para la generación automática de asientos desde el módulo comercial
+            Configura las cuentas contables por defecto para la generación automática de asientos
+            desde el módulo comercial
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -82,23 +87,28 @@ async function AccountingSettingsContent({ companyId }: { companyId: string }) {
               vatCreditAccountId: settings?.vatCreditAccountId ?? null,
               defaultCashAccountId: settings?.defaultCashAccountId ?? null,
               defaultBankAccountId: settings?.defaultBankAccountId ?? null,
+              bankChargesAccountId: settings?.bankChargesAccountId ?? null, // TSK-718
               expensesAccountId: settings?.expensesAccountId ?? null,
               resultAccountId: settings?.resultAccountId ?? null,
               partnerContributionsAccountId: settings?.partnerContributionsAccountId ?? null,
               withholdingIvaEmittedAccountId: settings?.withholdingIvaEmittedAccountId ?? null,
-              withholdingGananciasEmittedAccountId: settings?.withholdingGananciasEmittedAccountId ?? null,
+              withholdingGananciasEmittedAccountId:
+                settings?.withholdingGananciasEmittedAccountId ?? null,
               withholdingIibbEmittedAccountId: settings?.withholdingIibbEmittedAccountId ?? null,
               withholdingSussEmittedAccountId: settings?.withholdingSussEmittedAccountId ?? null,
               withholdingIvaSufferedAccountId: settings?.withholdingIvaSufferedAccountId ?? null,
-              withholdingGananciasSufferedAccountId: settings?.withholdingGananciasSufferedAccountId ?? null,
+              withholdingGananciasSufferedAccountId:
+                settings?.withholdingGananciasSufferedAccountId ?? null,
               withholdingIibbSufferedAccountId: settings?.withholdingIibbSufferedAccountId ?? null,
               withholdingSussSufferedAccountId: settings?.withholdingSussSufferedAccountId ?? null,
               perceptionIvaCollectedAccountId: settings?.perceptionIvaCollectedAccountId ?? null,
               perceptionIibbCollectedAccountId: settings?.perceptionIibbCollectedAccountId ?? null,
-              perceptionMunicipalCollectedAccountId: settings?.perceptionMunicipalCollectedAccountId ?? null,
+              perceptionMunicipalCollectedAccountId:
+                settings?.perceptionMunicipalCollectedAccountId ?? null,
               perceptionIvaSufferedAccountId: settings?.perceptionIvaSufferedAccountId ?? null,
               perceptionIibbSufferedAccountId: settings?.perceptionIibbSufferedAccountId ?? null,
-              perceptionMunicipalSufferedAccountId: settings?.perceptionMunicipalSufferedAccountId ?? null,
+              perceptionMunicipalSufferedAccountId:
+                settings?.perceptionMunicipalSufferedAccountId ?? null,
               internalTaxesAccountId: settings?.internalTaxesAccountId ?? null,
               fixedAssetAccountId: settings?.fixedAssetAccountId ?? null,
               accumulatedDepreciationAccountId: settings?.accumulatedDepreciationAccountId ?? null,

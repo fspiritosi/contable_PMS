@@ -335,6 +335,7 @@ model Account {
   settingsAsVatCreditAccount       AccountingSettings[]   @relation("VatCreditAccount")
   settingsAsDefaultCashAccount     AccountingSettings[]   @relation("DefaultCashAccount")
   settingsAsDefaultBankAccount     AccountingSettings[]   @relation("DefaultBankAccount")
+  settingsAsBankCharges            AccountingSettings[]   @relation("BankChargesAccount") // TSK-718
   settingsAsExpensesAccount        AccountingSettings[]   @relation("ExpensesAccount")
   settingsAsResultAccount          AccountingSettings[]   @relation("ResultAccount")
   settingsAsPartnerContributions   AccountingSettings[]   @relation("PartnerContributionsAccount")
@@ -524,6 +525,9 @@ model AccountingSettings {
   vatCreditAccountId   String? @map("vat_credit_account_id") @db.Uuid // IVA Crédito Fiscal (compras)
   defaultCashAccountId String? @map("default_cash_account_id") @db.Uuid // Caja por defecto
   defaultBankAccountId String? @map("default_bank_account_id") @db.Uuid // Banco por defecto
+  // TSK-718: cuenta de gastos por defecto que se PRESELECCIONA en cada concepto de un
+  // movimiento "Gastos e impuestos bancarios". Solo UI: el asiento usa FundMovementLine.accountId.
+  bankChargesAccountId String? @map("bank_charges_account_id") @db.Uuid
 
   // Cuenta de gastos operativos (para módulo de gastos)
   expensesAccountId String? @map("expenses_account_id") @db.Uuid // Gastos operativos
@@ -555,6 +559,7 @@ model AccountingSettings {
   vatCreditAccount            Account? @relation("VatCreditAccount", fields: [vatCreditAccountId], references: [id])
   defaultCashAccount          Account? @relation("DefaultCashAccount", fields: [defaultCashAccountId], references: [id])
   defaultBankAccount          Account? @relation("DefaultBankAccount", fields: [defaultBankAccountId], references: [id])
+  bankChargesAccount          Account? @relation("BankChargesAccount", fields: [bankChargesAccountId], references: [id])
   expensesAccount             Account? @relation("ExpensesAccount", fields: [expensesAccountId], references: [id])
   resultAccount               Account? @relation("ResultAccount", fields: [resultAccountId], references: [id])
   partnerContributionsAccount Account? @relation("PartnerContributionsAccount", fields: [partnerContributionsAccountId], references: [id])

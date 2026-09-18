@@ -24,6 +24,8 @@ export const commercialIntegrationSchema = z.object({
   vatCreditAccountId: accountField,
   defaultCashAccountId: accountField,
   defaultBankAccountId: accountField,
+  // TSK-718: se preselecciona en cada concepto de "Gastos e impuestos bancarios".
+  bankChargesAccountId: accountField,
   expensesAccountId: accountField,
   resultAccountId: accountField,
   partnerContributionsAccountId: accountField,
