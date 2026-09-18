@@ -226,7 +226,12 @@ export function _AccountingGuide() {
                   Retenciones (IVA, Ganancias, IIBB, SUSS - emitidas y
                   sufridas)
                 </li>
-                <li>Resultado del Ejercicio y Aportes de Socios</li>
+                <li>
+                  Resultado del Ejercicio y Aportes de Socios{' '}
+                  <strong>por defecto</strong> (cada socio puede tener su propia
+                  cuenta de aportes en Tesorería → Socios; la por defecto se usa
+                  para los que no la tienen)
+                </li>
                 <li>Activos Fijos (bienes de uso, depreciación y bajas)</li>
               </ul>
             </li>

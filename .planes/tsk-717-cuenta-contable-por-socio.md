@@ -3,7 +3,7 @@
 **Fecha de inicio:** 2026-09-18
 **Tickets:** [717] "Cada socio tiene una cuenta contable propia" · [724-d] "Cuentas de Aportes de Socios" · resuelve [413] (4ª reapertura) y [706] (crítica)
 **Reportante:** Elizabeth Perez (eperez@perezmarzo.com.ar) vía 413/706
-**Estado:** Implementación en progreso (Fases 1-4 y 6 completadas; falta documentación)
+**Estado:** Implementación completada
 
 ---
 
@@ -929,7 +929,7 @@ mismo molde de `fund-movement-lines.integration.test.ts`. En esas fases el test 
   riesgo preexistente que más le va a llamar la atención a la clienta: el asiento nace en borrador
   y hay que registrarlo para que el mayor del banco lo sume.
 - **Tareas:**
-  - [ ] `src/modules/help/features/guide/components/_TreasuryGuide.tsx`: agregar `Users` al import
+  - [x] `src/modules/help/features/guide/components/_TreasuryGuide.tsx`: agregar `Users` al import
         de `lucide-react` (`:3-17`) y una **card nueva "Socios"** antes de "Movimientos de Fondos"
         (insertar antes de la línea 757), con la misma estructura `Card/CardHeader/CardTitle/
         CardDescription/CardContent` que las demás. Contenido: qué es un socio en el sistema
@@ -943,7 +943,7 @@ mismo molde de `fund-movement-lines.integration.test.ts`. En esas fases el test 
         'Por defecto'"; `Alert` "Cambiar la cuenta de un socio no modifica los asientos ya
         generados; los nuevos usan la nueva cuenta"; regla de borrado (con aportes, retiros,
         tarjetas o movimientos no se elimina: se desactiva).
-  - [ ] Misma guía, card "Movimientos de Fondos" (`:757-882`): en los tipos (`:782-790`) cambiar
+  - [x] Misma guía, card "Movimientos de Fondos" (`:757-882`): en los tipos (`:782-790`) cambiar
         "contra la cuenta de aportes configurada" por "contra la cuenta de aportes **del socio**
         (o la por defecto si no tiene)", y en retiro agregar "usa la misma cuenta del socio"; en el
         paso 3 (`:816-820`) cambiar "opcionalmente el socio" por "el **socio** (obligatorio en
@@ -956,10 +956,10 @@ mismo molde de `fund-movement-lines.integration.test.ts`. En esas fases el test 
         en estado Borrador en Contabilidad → Asientos. Hasta que lo **Registres**, el Mayor y el
         Balance no lo suman: si el saldo contable del banco 'no cierra', revisá primero los
         asientos en borrador."
-  - [ ] `src/modules/help/features/guide/components/_AccountingGuide.tsx:229`: cambiar
+  - [x] `src/modules/help/features/guide/components/_AccountingGuide.tsx:229`: cambiar
         "Resultado del Ejercicio y Aportes de Socios" por "Resultado del Ejercicio y Aportes de
         Socios por defecto (cada socio puede tener su propia cuenta en Tesorería → Socios)".
-  - [ ] `docs/architecture/data-model.md`: en la tabla de Tesorería (`:346-364`) agregar la fila
+  - [x] `docs/architecture/data-model.md`: en la tabla de Tesorería (`:346-364`) agregar la fila
         `| Partner | Socio de la empresa (titular de tarjetas, cuenta corriente y cuenta de
         aportes) | name, taxId, isActive, contributionsAccountId → Account (TSK-717) |` y
         `| PartnerAccountMovement | Cuenta corriente de tesorería del socio (OWED/REPAYMENT/
@@ -970,7 +970,7 @@ mismo molde de `fund-movement-lines.integration.test.ts`. En esas fases el test 
         settings.partnerContributionsAccountId`; tipos admitidos para la del socio (ASSET,
         LIABILITY, EQUITY imputables) vs. la global (EQUITY); `onDelete: SetNull` y por qué; la
         validación de imputabilidad al confirmar; y que el asiento sigue naciendo `DRAFT`.
-  - [ ] `docs/modules/commercial.md`: agregar la sección `### Socios y Movimientos de Fondos`
+  - [x] `docs/modules/commercial.md`: agregar la sección `### Socios y Movimientos de Fondos`
         después de "Cajas" (`:236-254`, antes de `### Inventario` `:256`) con el árbol
         `Partner ├── contributionsAccountId? └── FundMovement (por partnerId, sin FK)`, el flujo
         DRAFT → CONFIRMED, la resolución de la cuenta, los mensajes de error, y la regla de
@@ -978,7 +978,7 @@ mismo molde de `fund-movement-lines.integration.test.ts`. En esas fases el test 
         `partners/features/list/actions.server.ts` (`getPartnerContributionAccounts`) y
         `fund-movements/list/actions.server.ts` (`confirmFundMovement`,
         `resolvePartnerCapitalAccount`).
-  - [ ] Crear `scripts/guia-presentacion/capturas-tsk717.mjs` sobre la base de
+  - [x] Crear `scripts/guia-presentacion/capturas-tsk717.mjs` sobre la base de
         `capturas-tsk692.mjs:1-47` (login con `EMAIL`/`PASSWORD` de dev, `shot()` que remueve
         `nextjs-portal`, salida a `scripts/guia-presentacion/assets/tsk717-*.png`, `BASE =
         process.argv[2] ?? 'http://localhost:3000'`). Requiere el dev server en `:3010` con
@@ -993,7 +993,7 @@ mismo molde de `fund-movement-lines.integration.test.ts`. En esas fases el test 
         la cuenta de la socia en el Haber y el estado Borrador visible; (6) `06-asiento-registrar`:
         el mismo asiento con el botón/menú Registrar; (7) `07-config-por-defecto`: Ajustes
         contables con el campo renombrado.
-  - [ ] Crear `scripts/guia-presentacion/tsk-717.html` copiando la estructura y estilos de
+  - [x] Crear `scripts/guia-presentacion/tsk-717.html` copiando la estructura y estilos de
         `tsk-692.html` (cover con `eyebrow` "Tickets 413 · 706 · 717 · 724-d · Tesorería",
         secciones numeradas): 1. **Qué pedías** (citas textuales de 413 "poner plata en la cuenta
         bancaria cada socia según su porcentaje… activo contra activo" y 706 "si no no lleno el
@@ -1011,7 +1011,7 @@ mismo molde de `fund-movement-lines.integration.test.ts`. En esas fases el test 
         el asiento es histórico); cambiar la cuenta de una socia no toca asientos anteriores; la
         cuenta corriente del socio (tarjetas) es otra cosa y no suma aportes; 7. **Para revisar en
         tu empresa**: qué socias quedaron "Por defecto" en el listado.
-  - [ ] Generar el PDF: `node scripts/guia-presentacion/generar-pdf.mjs
+  - [x] Generar el PDF: `node scripts/guia-presentacion/generar-pdf.mjs
         scripts/guia-presentacion/tsk-717.html docs/presentaciones/TSK-717-cuenta-por-socio.pdf`
         (convención de `docs/presentaciones/TSK-692-usuarios-por-rol.pdf`).
 - **Archivos:**
@@ -2550,7 +2550,21 @@ o el import de las constantes devuelve `undefined` y el error es poco legible.
 - **Notas:** sin cambios en validators, tests ni actions de settings (solo texto). No había otras menciones al label viejo en `src/`.
 
 ### Fase 5: Documentación
-- **Estado:** Pendiente
+- **Estado:** Completada (2026-09-18)
+- **Archivos modificados:**
+  - `src/modules/help/features/guide/components/_TreasuryGuide.tsx` - import `Users`; card nueva **"Socios"** antes de "Movimientos de Fondos" (qué es un socio, alta paso a paso con el campo "Cuenta contable de aportes (opcional)" y sus tipos Activo/Pasivo/Patrimonio, crear la cuenta antes en Plan de Cuentas, columna "Cuenta de aportes"/"Por defecto", `Alert` de fallback a la por defecto, `Alert` "cambiar la cuenta no modifica asientos", regla de borrado/desactivación). En "Movimientos de Fondos": tipos aporte/retiro contra la cuenta **del socio** (o la por defecto), paso 3 con socio obligatorio y el aviso debajo del campo, `Alert` de configuración reescrita (cuenta del socio o por defecto; aviso naranja; queda en borrador) y `Alert` nueva **"El asiento nace en borrador"** (Registrar en Contabilidad → Asientos; el Mayor y el Balance solo suman registrados).
+  - `src/modules/help/features/guide/components/_AccountingGuide.tsx` - ítem "Resultado del Ejercicio y Aportes de Socios **por defecto**" con la aclaración de la cuenta propia por socio en Tesorería → Socios.
+  - `docs/architecture/data-model.md` - filas `Partner` (con `contributionsAccountId → Account`, relación `PartnerOwnContributionsAccount`, `SetNull`) y `PartnerAccountMovement` en la tabla de Tesorería; `FundMovement.partnerId` "obligatorio en aporte/retiro desde TSK-717, sin FK" + `partnerName`; bloque nuevo **"Cuenta de aportes por socio (TSK-717)"** (regla `partner.contributionsAccountId ?? settings.partnerContributionsAccountId`, Haber/Debe, sin fallback si la propia no es imputable, tipos admitidos vs. global, `SetNull` y por qué, socio obligatorio y `deletePartner`, asiento en `DRAFT`, migración aditiva sin backfill).
+  - `docs/modules/commercial.md` - `partners/` y `fund-movements/` en el árbol de Tesorería; sección nueva **"Socios y Movimientos de Fondos"** (árbol `Partner`/`FundMovement`, flujo DRAFT → CONFIRMED, los 4 casos de `resolvePartnerCapitalAccount` con sus mensajes literales, socio obligatorio en el validator, `_PartnerAccountNotice`/`getFundMovementCatalogs`, `getPartnerContributionAccounts(includeIds?)`, `PARTNER_CONTRIBUTION_ACCOUNT_TYPES`, regla de `deletePartner`); filas "Socios" y "Movimientos de Fondos" en Archivos Clave → Server Actions.
+- **Archivos creados:**
+  - `scripts/guia-presentacion/tsk-717.html` - guía de presentación con la estructura y estilos de `tsk-692.html` (eyebrow "Tickets 413 · 706 · 717 · 724-d · Tesorería"). Secciones: 1. Qué pedías (citas de 413 y 706, qué pasaba); 2. Qué cambió (antes/ahora + asiento nº 13 como captura principal); 3. Cómo se usa paso a paso (asignar cuenta en Socios → cargar el aporte → confirmar y ver el asiento; capturas 01-04, 06-08); 4. Detalles que conviene saber (socio obligatorio, fallback a la por defecto con captura 05, sin cuenta ni por defecto no deja confirmar con captura 09, cuentas de Activo/Pasivo/Patrimonio, cambiar la cuenta no toca lo confirmado); 5. Importante: el asiento nace en Borrador (saldo de tesorería vs. asiento, cómo registrar desde el menú … → Registrar, y la nota "si ves la fecha corrida, ya lo tenemos identificado"); 6. Qué no cambió (transferencias y gastos bancarios, aportes ya confirmados, campo renombrado con captura 10, cuenta corriente del socio).
+  - `docs/presentaciones/TSK-717-cuenta-por-socio.pdf` - generado con `generar-pdf.mjs` (Chrome del sistema como fallback): **7 páginas, 482 KB**, las 10 capturas de `assets/tsk717-*.png`.
+- **Notas:**
+  - Las capturas (`scripts/guia-presentacion/capturas-tsk717.mjs` y `assets/tsk717-01..10.png`) se hicieron en la Fase 6, antes de esta fase; el set real difiere del listado del plan (10 capturas en lugar de 7: se sumaron el form completo, el modal completo, el listado de movimientos y el aviso "por defecto"; no hay captura separada del menú Registrar). El PDF se armó sobre el set real.
+  - El PDF no menciona el badge "Manual" del asiento automático (2.4) y presenta la fecha corrida solo como "ya lo tenemos identificado", según lo acordado.
+  - Ajustes de texto contra la UI real: la pantalla de bancos se llama "Tesorería → Cuentas" en el menú (no "Cuentas Bancarias") y Asientos no tiene filtro por estado, solo ordenamiento por la columna Estado; el PDF lo dice así.
+  - Maquetación: las cuatro capturas del modal van a 420px (`figure.modal`) y los pasos largos pueden partirse entre páginas (`ol.steps.long`), para no dejar páginas casi vacías.
+  - `npx eslint` sobre las dos guías: 0 errores (1 warning preexistente en `_AccountingGuide.tsx`: import `Receipt` sin usar, ajeno a este ticket). `npm run check-types`: 219 errores (línea base de la rama, sin cambios).
 
 ### Fase 6: Verificación final
 - **Estado:** Completada (2026-09-18, antes de la Fase 5 para que el PDF tenga capturas reales)

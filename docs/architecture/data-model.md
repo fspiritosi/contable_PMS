@@ -360,7 +360,9 @@ Reglas:
 | `CashRegister` | Caja registradora |
 | `CashRegisterSession` | Sesion de caja (apertura/cierre) |
 | `CashMovement` | Movimiento de caja |
-| `FundMovement` | Movimiento de fondos (aporte/retiro de socio, transferencia entre cuentas, gastos e impuestos bancarios) | type, status, date, amount (total), fundOutKind/fundOutId/fundOutLabel, fundInKind/fundInId/fundInLabel, partnerId, journalEntryId |
+| `Partner` | Socio de la empresa (titular de tarjetas, cuenta corriente y cuenta de aportes) | name, taxId, isActive, contributionsAccountId → Account (TSK-717, relación `PartnerOwnContributionsAccount`, `onDelete: SetNull`) |
+| `PartnerAccountMovement` | Cuenta corriente de tesorería del socio (OWED/REPAYMENT/ADJUSTMENT): lo que la empresa le debe por gastos pagados con su tarjeta personal. Sin relación con la contabilidad ni con los aportes | partnerId, type, amount |
+| `FundMovement` | Movimiento de fondos (aporte/retiro de socio, transferencia entre cuentas, gastos e impuestos bancarios) | type, status, date, amount (total), fundOutKind/fundOutId/fundOutLabel, fundInKind/fundInId/fundInLabel, partnerId (obligatorio en aporte/retiro desde TSK-717, sin FK), partnerName, journalEntryId |
 | `FundMovementLine` | Concepto de un movimiento de tipo BANK_CHARGES (TSK-585) | movementId, accountId, description, amount (Decimal 15,2), position |
 
 **Enums:**
@@ -391,6 +393,42 @@ Reglas:
   `PARTNER_CONTRIBUTION`, `PARTNER_WITHDRAWAL` y `ACCOUNT_TRANSFER` siguen generando su asiento de
   **2 líneas** de siempre. `createJournalEntryForFundMovement` se generalizó para aceptar N débitos
   contra un crédito sin cambiar el comportamiento de esos tres tipos existentes.
+
+**Cuenta de aportes por socio (TSK-717):**
+- `Partner.contributionsAccountId` (nullable, `@db.Uuid`, índice propio) apunta a la cuenta del
+  plan a la que se imputan los aportes y retiros de ese socio. La relación se llama
+  `PartnerOwnContributionsAccount` porque `AccountingSettings.partnerContributionsAccount` ya usa
+  el nombre `PartnerContributionsAccount`. Inversa: `Account.partners Partner[]`.
+- **Resolución de la cuenta de capital al confirmar** (`resolvePartnerCapitalAccount`, dentro de
+  la transacción de `confirmFundMovement`):
+  `partner.contributionsAccountId ?? settings.partnerContributionsAccountId`. En aporte la cuenta
+  va al **Haber** (contra el banco/caja de destino en el Debe); en retiro va al **Debe** (contra
+  el banco/caja de origen en el Haber).
+- **Sin fallback si la cuenta propia no es imputable.** Si el socio tiene cuenta asignada pero
+  esa cuenta ya no es hoja, está inactiva o tiene corte por ejercicio vigente
+  (`buildImputableAccountsWhere`), la confirmación falla con un `BusinessError` que nombra al
+  socio y a la cuenta. No cae a la global: sería imputar en silencio a otra cuenta, que es lo que
+  motivó los tickets 413/706. Solo cae a la global cuando el socio **no tiene** cuenta propia; si
+  tampoco hay global, error que nombra al socio y dice dónde configurarla.
+- **Tipos admitidos**: la cuenta del socio puede ser `ASSET`, `LIABILITY` o `EQUITY` imputable
+  (`PARTNER_CONTRIBUTION_ACCOUNT_TYPES` en `partners/shared/types.ts`, usada tanto por el combo del
+  form como por la validación al confirmar). La global de `AccountingSettings` sigue siendo solo
+  `EQUITY` y se renombró en la UI a "Cuenta de aportes de socios por defecto".
+- **`onDelete: SetNull`**: mismo criterio que `BankAccount.account` y `CashRegister.account`. La baja
+  de cuentas es soft delete (`isActive: false`), así que la FK casi nunca se dispara; el caso real
+  (cuenta dada de baja pero todavía asignada) lo cubre la validación de imputabilidad al confirmar,
+  y el combo del form preserva la cuenta guardada vía `includeIds` para que se vea qué tiene
+  asignado el socio.
+- **`FundMovement.partnerId` pasa a ser obligatorio** en `PARTNER_CONTRIBUTION` y
+  `PARTNER_WITHDRAWAL` (regla en el `superRefine` del validator, mensaje "Seleccioná el socio").
+  Sigue sin FK a `partners`; `deletePartner` bloquea el borrado de socios con movimientos de fondos
+  (cualquier estado) y la confirmación valida que el socio exista. Un borrador anterior a TSK-717
+  sin socio no se puede confirmar hasta editarlo.
+- **El asiento sigue naciendo en `DRAFT`** (como el resto de las integraciones): el Mayor y el
+  Balance solo suman `POSTED`, así que el desglose por socio aparece en los reportes recién cuando
+  el asiento se registra desde Contabilidad → Asientos.
+- Migración aditiva `20260918153728_tsk_717_partner_contributions_account`: `ADD COLUMN` +
+  `CREATE INDEX` + FK. Sin backfill: los aportes ya confirmados con la global no se reasignan.
 
 ---
 
