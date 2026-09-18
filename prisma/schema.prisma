@@ -324,6 +324,7 @@ model Account {
   contractors              Contractor[] // Relación con clientes/contratistas (para cuentas predeterminadas)
   bankAccounts             BankAccount[] // Relación con cuentas bancarias (para cuentas contables)
   cashRegisters            CashRegister[] // Relación con cajas (para cuentas contables)
+  partners                 Partner[]          @relation("PartnerOwnContributionsAccount") // Socios con cuenta de aportes propia (TSK-717)
 
   // Relaciones inversas para AccountingSettings (many-to-one)
   settingsAsSalesAccount           AccountingSettings[]   @relation("SalesAccount")
@@ -4383,26 +4384,30 @@ model FundMovementLine {
 
 /// Socio de la empresa. Puede ser titular de tarjetas y tener cuenta corriente.
 model Partner {
-  id        String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  companyId String  @map("company_id") @db.Uuid
-  name      String
-  taxId     String? @map("tax_id") // CUIT/CUIL
-  email     String?
-  phone     String?
-  notes     String?
-  isActive  Boolean @default(true) @map("is_active")
+  id                     String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId              String  @map("company_id") @db.Uuid
+  name                   String
+  taxId                  String? @map("tax_id") // CUIT/CUIL
+  email                  String?
+  phone                  String?
+  notes                  String?
+  isActive               Boolean @default(true) @map("is_active")
+  // TSK-717: cuenta contable propia para aportes/retiros; null = usa la por defecto de AccountingSettings
+  contributionsAccountId String? @map("contributions_account_id") @db.Uuid
 
-  company       Company                   @relation(fields: [companyId], references: [id])
-  cards         Card[]
-  movements     PartnerAccountMovement[]
-  installments  PaymentOrderInstallment[]
-  paymentOrders PaymentOrder[]
+  company              Company                   @relation(fields: [companyId], references: [id])
+  contributionsAccount Account?                  @relation("PartnerOwnContributionsAccount", fields: [contributionsAccountId], references: [id], onDelete: SetNull)
+  cards                Card[]
+  movements            PartnerAccountMovement[]
+  installments         PaymentOrderInstallment[]
+  paymentOrders        PaymentOrder[]
 
   createdBy String   @map("created_by")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@index([companyId])
+  @@index([contributionsAccountId])
   @@map("partners")
 }
 
