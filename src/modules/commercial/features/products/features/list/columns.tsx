@@ -237,6 +237,9 @@ export function getColumns({ onEdit, onDelete, onImputation, permissions, showOe
     },
     {
       id: 'imputation',
+      // Los valores del filtro (noIncome / noExpense) salen de este accessor; los
+      // conteos vienen del servidor (facetCounts.imputation).
+      accessorFn: (product) => missingImputations(product),
       meta: { title: 'Imputación' },
       header: ({ column }) => <DataTableColumnHeader column={column} title="Imputación" />,
       enableSorting: false,

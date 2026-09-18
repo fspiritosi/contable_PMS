@@ -3,7 +3,7 @@
 **Fecha de inicio:** 2026-09-18
 **Tickets:** [724-a/b] "Configuración de Cuentas Contables" · [721] "Cuentas Contables de los items" · [718] "Tipo de Movimiento: Gastos Bancarios"
 **Origen:** reunión con Elizabeth Perez del 16-17/09 (tareas internas)
-**Estado:** Implementación en progreso (Fase 1 de 8 completada)
+**Estado:** Implementación en progreso (Fases 1-6 y 8 completadas; falta documentación)
 
 ---
 
@@ -1291,7 +1291,7 @@ preexistentes.
 - **Objetivo:** cerrar con evidencia: comandos del checklist en verde y los casos de uso
   probados a mano en el navegador con datos reales de dev.
 - **Tareas:**
-  - [ ] `npm run check-types` (línea base **219**; ninguno nuevo en `accounting/features/
+  - [x] `npm run check-types` (línea base **219**; ninguno nuevo en `accounting/features/
         settings`, `accounting/features/integrations/commercial`, `commercial/shared`,
         `sales/features/invoices`, `purchases/features/invoices`, `products/features/list`,
         `treasury/features/fund-movements` ni `help/`), `npm run lint`, `npm run test` completo
@@ -1299,7 +1299,7 @@ preexistentes.
         `imputation-filter.test.ts`, los dos tests de integración nuevos de facturas, el de
         facets, el caso 6 de fondos; y sin regresiones en `cost-center`, `perceptions`,
         `purchase-invoice-tributes`, `fund-movement-lines`, `fund-movement-partner-account`).
-  - [ ] Preparar datos en dev (empresa "Empresa de Prueba 01 SA", memoria
+  - [x] Preparar datos en dev (empresa "Empresa de Prueba 01 SA", memoria
         `dev-local-capturas-y-login`): dos cuentas REVENUE hoja ("Ventas repuestos", "Ventas
         servicios") y una EXPENSE hoja ("Gastos bancarios"); ítems de venta **A** (con "Ventas
         repuestos"), **B** (con "Ventas servicios"), **C** (sin cuenta de ingresos), **D** (con
@@ -1307,7 +1307,7 @@ preexistentes.
         compra **E** con cuenta de egresos; un comprobante de compra en borrador con una línea
         sin ítem (formulario, "Ítem: Opcional") o importado de AFIP; cuenta "Gastos
         bancarios" configurada como por defecto; un banco con cuenta contable.
-  - [ ] Prueba manual, caso por caso:
+  - [x] Prueba manual, caso por caso:
     - Venta con A + B y "Cuenta de ventas por defecto" **vacía** → confirma; el asiento tiene
       dos cuentas de ingreso distintas en el Haber.
     - Venta con A + C y global vacía → toast que nombra «C» y dice "Cuenta de ventas por
@@ -1335,10 +1335,10 @@ preexistentes.
       igual que antes; una venta en período bloqueado sigue mostrando "período está cerrado".
     - Script de diagnóstico en dev: corre y lista (o no) facturas sin asiento; anotar el
       resultado.
-  - [ ] Responsive y accesibilidad: Ajustes contables (bloque de conteo) y modal de fondos
+  - [x] Responsive y accesibilidad: Ajustes contables (bloque de conteo) y modal de fondos
         (aviso) a 375px; modo oscuro en los avisos neutro y naranja y en los badges de la
         columna.
-  - [ ] Registrar los resultados en la sección 5 del documento, con los comandos y su salida
+  - [x] Registrar los resultados en la sección 5 del documento, con los comandos y su salida
         resumida, y los comandos de `psql` para el diagnóstico en producción (memoria
         `produccion-dokploy-scripts-db`).
 - **Archivos:** ninguno nuevo; solo correcciones puntuales que salgan de la verificación.
@@ -2932,7 +2932,28 @@ pasa por la global.
 - **Estado:** Pendiente
 
 ### Fase 8: Verificación final
-- **Estado:** Pendiente
+- **Estado:** Completada (2026-09-18, antes de la Fase 7 para que el PDF tenga capturas reales)
+- **Cómo:** dev server `:3010`; script `scripts/guia-presentacion/capturas-tsk721.mjs` (recorre Ajustes, ítems filtrados, confirmación bloqueada/OK y modal de gastos bancarios sobre la Empresa de Prueba 01 SA). Además **build de producción** (`npm run build` + `npm run start -p 3011`) para verificar el transporte del error.
+- **Bug encontrado y corregido durante la verificación:** `/products?imputation=…` daba 500: `DataTableFacetedFilter` llamaba `column.getFacetedUniqueValues()` aunque recibiera `externalCounts`, y la columna `imputation` es de solo display (sin accessor) → TanStack rompía. Fix en el componente compartido (no calcula facets locales si hay conteos externos) + `accessorFn` en la columna.
+- **Dato de dev:** el caso "confirma con cuenta por defecto" requirió apagar temporalmente "Exigir centro de costo" (TSK-583) en la empresa de prueba: la validación de centro de costo también bloquea, y ahora también se ve como toast legible. El script restaura el valor.
+
+## 5. Verificación
+
+| Caso | Resultado |
+|---|---|
+| Ajustes contables | Labels "Cuenta de ventas/compras por defecto" con ayuda; campo "Gastos bancarios por defecto"; aviso "3 ítems activos de venta sin Cuenta de Ingresos → Ver / 1 ítem activo de compra sin Cuenta de Egresos → Ver" |
+| Ítems `?imputation=noExpense&status=ACTIVE` | Lista solo los sin cuenta de egreso; badges "Sin ingreso"/"Sin egreso"; facet "Imputación" con conteos |
+| Compra con ítem sin cuenta y global vacía → Confirmar | Toast: «No se puede confirmar el comprobante: la línea «Soporte técnico mensual» no tiene cuenta contable. Asignale una Cuenta de Egresos al ítem (Ítems → Imputación contable) o configurá la "Cuenta de compras por defecto" en Contabilidad → Configuración.» Factura sigue DRAFT, sin asiento |
+| Misma compra con global configurada → Confirmar | «Factura confirmada correctamente»; CONFIRMED con asiento (usa la global) |
+| **Build de producción** (`next build` + `start`), mismo caso bloqueado | El toast muestra el **mensaje completo** (no el digest "An error occurred in the Server Components render"): el patrón `{ success, error }` funciona en prod |
+| Gastos e impuestos bancarios → Agregar concepto | Cuenta `4.2.1/03/09 - Gastos Bancarios - Administración` preseleccionada; aviso «Los conceptos nuevos se imputan a … Podés cambiar la cuenta en cada fila.» |
+| Venta con ítem sin cuenta, NC, cuenta no imputable, IVA sin cuenta, período cerrado, bulk | Cubiertos por los tests de integración e2e (ventas 8 casos, compras 9) |
+| `npx vitest run` | 35 archivos / 432 tests en verde (56 nuevos en el ticket) |
+| `npm run check-types` | 219 = línea base (mismo conjunto de errores antes y después) |
+| `npx eslint` en lo tocado | Sin errores nuevos (los 4 `as any` de sales y warnings de `no-unused-vars` son preexistentes) |
+| Script de diagnóstico en dev | «Ninguna. Nada que revisar.»; el SQL del header devuelve lo mismo |
+
+Capturas: `scripts/guia-presentacion/assets/tsk721-01…08.png`.
 
 ## 5. Verificación
 _Pendiente - ejecutar `/verificar tsk-721-cuentas-por-defecto-ventas-compras-bancarios`_
