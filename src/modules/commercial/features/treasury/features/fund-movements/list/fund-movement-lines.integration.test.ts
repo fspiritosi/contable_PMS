@@ -86,6 +86,7 @@ import { getCurrentUserId } from '@/shared/lib/current-user';
 import {
   createFundMovement,
   getFundMovementById,
+  getFundMovementCatalogs,
   getFundMovementLineAccounts,
 } from './actions.server';
 
@@ -656,6 +657,43 @@ describe.skipIf(!dbAvailable)('integración: conceptos del movimiento de fondos 
       });
 
       expect(result.success).toBe(true);
+    });
+  });
+
+  describe('caso 6: la cuenta de gastos bancarios por defecto llega al formulario (TSK-718)', () => {
+    // `getFundMovementCatalogs` es lo que `FundMovementsList` pasa al modal;
+    // si no trae la cuenta, el concepto nuevo nace vacío aunque esté configurada.
+    afterAll(async () => {
+      await prisma.accountingSettings.update({
+        where: { companyId },
+        data: { bankChargesAccountId: null },
+      });
+    });
+
+    it('con la cuenta configurada en Ajustes contables, devuelve su id, código y nombre', async () => {
+      await prisma.accountingSettings.update({
+        where: { companyId },
+        data: { bankChargesAccountId: commissionAccountId },
+      });
+
+      const catalogs = await getFundMovementCatalogs();
+
+      expect(catalogs.defaultBankChargesAccount).toEqual({
+        id: commissionAccountId,
+        code: 'T585-COMISION',
+        name: `${PREFIX}Comisiones Bancarias`,
+      });
+    });
+
+    it('sin la cuenta configurada, devuelve null (el concepto nace sin cuenta, como hasta ahora)', async () => {
+      await prisma.accountingSettings.update({
+        where: { companyId },
+        data: { bankChargesAccountId: null },
+      });
+
+      const catalogs = await getFundMovementCatalogs();
+
+      expect(catalogs.defaultBankChargesAccount).toBeNull();
     });
   });
 });

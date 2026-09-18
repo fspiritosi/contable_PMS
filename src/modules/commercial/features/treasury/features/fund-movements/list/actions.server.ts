@@ -118,7 +118,11 @@ export async function getFundMovementById(id: string) {
   };
 }
 
-/** Catálogos para el formulario: bancos, cajas con sesión abierta, socios (con su cuenta de aportes) y cuenta por defecto. */
+/**
+ * Catálogos para el formulario: bancos, cajas con sesión abierta, socios (con
+ * su cuenta de aportes), cuenta de aportes por defecto y cuenta de gastos
+ * bancarios por defecto (TSK-718).
+ */
 export async function getFundMovementCatalogs() {
   await checkPermission('commercial.treasury.fund-movements', 'view', { redirect: true });
   const companyId = await getActiveCompanyId();
@@ -146,7 +150,10 @@ export async function getFundMovementCatalogs() {
     }),
     prisma.accountingSettings.findUnique({
       where: { companyId },
-      select: { partnerContributionsAccount: { select: { id: true, code: true, name: true } } },
+      select: {
+        partnerContributionsAccount: { select: { id: true, code: true, name: true } },
+        bankChargesAccount: { select: { id: true, code: true, name: true } },
+      },
     }),
   ]);
 
@@ -161,6 +168,10 @@ export async function getFundMovementCatalogs() {
     // TSK-717: reemplaza `hasContributionsAccount: boolean`. El modal necesita
     // código y nombre para decir "se usará la cuenta por defecto X".
     defaultContributionsAccount: settings?.partnerContributionsAccount ?? null,
+    // TSK-718: se preselecciona en cada concepto nuevo de "Gastos e impuestos
+    // bancarios" si sigue imputable (lo decide `pickDefaultLineAccount` en el
+    // cliente contra las cuentas que ofrece `getFundMovementLineAccounts`).
+    defaultBankChargesAccount: settings?.bankChargesAccount ?? null,
   };
 }
 

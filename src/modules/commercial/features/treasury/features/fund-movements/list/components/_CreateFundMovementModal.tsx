@@ -68,6 +68,8 @@ interface Props {
   partners: FundMovementPartnerOption[];
   /** Cuenta de aportes por defecto (Ajustes contables); `null` si no está configurada (TSK-717). */
   defaultContributionsAccount: FundMovementAccountRef | null;
+  /** Cuenta de gastos bancarios por defecto (Ajustes contables); `null` si no está configurada (TSK-718). */
+  defaultBankChargesAccount: FundMovementAccountRef | null;
   movement?: FundMovementListItem | null; // presente = modo edición
   onSuccess: () => void;
 }
@@ -83,6 +85,7 @@ export function _CreateFundMovementModal({
   cashRegisters,
   partners,
   defaultContributionsAccount,
+  defaultBankChargesAccount,
   movement,
   onSuccess,
 }: Props) {
@@ -452,7 +455,12 @@ export function _CreateFundMovementModal({
               />
             )}
 
-            {isBankCharges && <_FundMovementLinesField accounts={lineAccounts} />}
+            {isBankCharges && (
+              <_FundMovementLinesField
+                accounts={lineAccounts}
+                defaultAccount={defaultBankChargesAccount}
+              />
+            )}
 
             {isPartnerMovement && (
               <FormField
