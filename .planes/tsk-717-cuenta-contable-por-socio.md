@@ -3,7 +3,7 @@
 **Fecha de inicio:** 2026-09-18
 **Tickets:** [717] "Cada socio tiene una cuenta contable propia" · [724-d] "Cuentas de Aportes de Socios" · resuelve [413] (4ª reapertura) y [706] (crítica)
 **Reportante:** Elizabeth Perez (eperez@perezmarzo.com.ar) vía 413/706
-**Estado:** Implementación en progreso (Fase 1 de 6 completada)
+**Estado:** Implementación en progreso (Fases 1-4 de 6 completadas)
 
 ---
 
@@ -908,12 +908,12 @@ mismo molde de `fund-movement-lines.integration.test.ts`. En esas fases el test 
 - **Objetivo:** que la pantalla de Ajustes contables deje claro que la cuenta global es un
   fallback para socios sin cuenta propia, sin cambios de esquema ni de validators.
 - **Tareas:**
-  - [ ] `src/modules/accounting/features/settings/components/_CommercialIntegrationForm.tsx:140-145`:
+  - [x] `src/modules/accounting/features/settings/components/_CommercialIntegrationForm.tsx:140-145`:
         `label: 'Cuenta de aportes de socios por defecto'`, `help: 'Cuenta de Patrimonio Neto
         usada en los aportes y retiros de los socios que no tienen una cuenta de aportes propia
         (se asigna en Tesorería → Socios). Si todos los socios tienen la suya, este campo puede
         quedar sin asignar.'`. Mantener `types: ['EQUITY']` y `name`.
-  - [ ] Confirmar que `settings/validators.ts:12-29`, `validators.test.ts:40-72`,
+  - [x] Confirmar que `settings/validators.ts:12-29`, `validators.test.ts:40-72`,
         `AccountingSettings.tsx:87` y `actions.server.ts:49` **no** requieren cambios (el nombre
         del campo no cambia). No agregar el contador "N socios con cuenta propia": obligaría a
         `accounting` a consultar `Partner` (módulo `commercial`); queda en 2.4.
@@ -2542,7 +2542,10 @@ o el import de las constantes devuelve `undefined` y el error es poco legible.
   - Verificación manual en el modal (mensaje "Seleccioná el socio", los 4 estados del aviso, links) queda para la Fase 6.
 
 ### Fase 4: Configuración contable — la global pasa a ser "por defecto"
-- **Estado:** Pendiente
+- **Estado:** Completada (2026-09-18)
+- **Archivos modificados:**
+  - `src/modules/accounting/features/settings/components/_CommercialIntegrationForm.tsx` - label "Cuenta de aportes de socios por defecto" y texto de ayuda que remite a Tesorería → Socios. `name` y `types: ['EQUITY']` sin cambios.
+- **Notas:** sin cambios en validators, tests ni actions de settings (solo texto). No había otras menciones al label viejo en `src/`.
 
 ### Fase 5: Documentación
 - **Estado:** Pendiente
