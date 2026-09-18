@@ -1,7 +1,7 @@
 import type { DataTableSearchParams } from '@/shared/components/common/DataTable';
 import { PermissionGuard } from '@/shared/components/common/PermissionGuard';
 import { getModulePermissions } from '@/shared/lib/permissions';
-import { getFundMovements, getFundMovementCatalogs } from './actions.server';
+import { getFundMovementCatalogs, getFundMovements } from './actions.server';
 import { _FundMovementsTable } from './components/_FundMovementsTable';
 
 interface Props {
@@ -21,8 +21,8 @@ export async function FundMovementsList({ searchParams = {} }: Props) {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Movimientos de Fondos</h1>
           <p className="text-muted-foreground">
-            Aportes de socios, retiros, transferencias entre cuentas y gastos e impuestos
-            bancarios. Cada movimiento genera su asiento contable automáticamente.
+            Aportes de socios, retiros, transferencias entre cuentas y gastos e impuestos bancarios.
+            Cada movimiento genera su asiento contable automáticamente.
           </p>
         </div>
 
@@ -34,7 +34,7 @@ export async function FundMovementsList({ searchParams = {} }: Props) {
           banks={catalogs.banks}
           cashRegisters={catalogs.cashRegisters}
           partners={catalogs.partners}
-          hasContributionsAccount={catalogs.hasContributionsAccount}
+          defaultContributionsAccount={catalogs.defaultContributionsAccount}
         />
       </div>
     </PermissionGuard>

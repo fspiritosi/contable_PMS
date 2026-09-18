@@ -1,5 +1,5 @@
-import { z } from 'zod';
 import { PartnerMovementType } from '@/generated/prisma/enums';
+import { z } from 'zod';
 
 export const partnerSchema = z.object({
   name: z.string().min(1, 'El nombre es requerido').max(200),
@@ -8,6 +8,11 @@ export const partnerSchema = z.object({
   phone: z.string().max(50).optional().or(z.literal('')),
   notes: z.string().max(1000).optional().or(z.literal('')),
   isActive: z.boolean().default(true),
+  // TSK-717: cuenta contable propia para aportes/retiros. null/ausente = usa la por
+  // defecto de Ajustes contables. Mismo criterio que `accountId` de caja/banco
+  // (`treasury/shared/validators.ts`). `.nullable()` y no `.or(z.literal(''))`
+  // porque el `AccountCombobox` emite `null` al limpiar.
+  contributionsAccountId: z.string().uuid('Cuenta contable inválida').nullable().optional(),
 });
 
 /**
@@ -30,4 +35,6 @@ export const partnerMovementSchema = z.object({
 });
 
 export type PartnerFormData = z.infer<typeof partnerSchema>;
+/** Valores tal como los maneja el form (antes del `.default(true)` de `isActive`). */
+export type PartnerFormInput = z.input<typeof partnerSchema>;
 export type PartnerMovementFormData = z.infer<typeof partnerMovementSchema>;

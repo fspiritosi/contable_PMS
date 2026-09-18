@@ -87,6 +87,7 @@ describe('parseFundRef', () => {
 
 describe('fundMovementSchema', () => {
   const uuid = '3f2504e0-4f89-11d3-9a0c-0305e82c3301';
+  const uuidSocio = '22222222-2222-4222-8222-222222222222';
   const aporte = {
     type: 'PARTNER_CONTRIBUTION' as const,
     date: '2026-02-20',
@@ -94,11 +95,69 @@ describe('fundMovementSchema', () => {
     description: 'aporte para pagar facturas',
     sourceFund: '',
     destinationFund: `BANK:${uuid}`,
-    partnerId: '',
+    // TSK-717: el socio pasó a ser obligatorio en aporte y retiro, porque
+    // define la cuenta del asiento. Sin un uuid acá, los casos que siguen
+    // fallarían por la razón equivocada.
+    partnerId: uuidSocio,
   };
 
   it('acepta un aporte con banco de destino', () => {
     expect(fundMovementSchema.safeParse(aporte).success).toBe(true);
+  });
+
+  /**
+   * TSK-717: el socio deja de ser informativo. Aporte y retiro lo exigen
+   * (la cuenta del asiento sale de él); transferencia y gastos bancarios no
+   * lo usan y siguen mandando ''.
+   */
+  it('exige el socio en un aporte', () => {
+    const result = fundMovementSchema.safeParse({ ...aporte, partnerId: '' });
+
+    expect(result.success).toBe(false);
+    const issue = result.error?.issues.find((i) => i.path[0] === 'partnerId');
+    expect(issue?.path).toEqual(['partnerId']);
+    expect(issue?.message).toBe('Seleccioná el socio');
+  });
+
+  it('exige el socio en un retiro', () => {
+    const result = fundMovementSchema.safeParse({
+      ...aporte,
+      type: 'PARTNER_WITHDRAWAL',
+      sourceFund: `BANK:${uuid}`,
+      destinationFund: '',
+      partnerId: '',
+    });
+
+    expect(result.success).toBe(false);
+    const issue = result.error?.issues.find((i) => i.path[0] === 'partnerId');
+    expect(issue?.path).toEqual(['partnerId']);
+    expect(issue?.message).toBe('Seleccioná el socio');
+  });
+
+  it('una transferencia no exige socio', () => {
+    const result = fundMovementSchema.safeParse({
+      ...aporte,
+      type: 'ACCOUNT_TRANSFER',
+      sourceFund: `CASH:${uuid}`,
+      destinationFund: `BANK:${uuid}`,
+      partnerId: '',
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('un gasto bancario no exige socio', () => {
+    const result = fundMovementSchema.safeParse({
+      type: 'BANK_CHARGES',
+      date: '2026-02-20',
+      description: 'Gastos bancarios',
+      sourceFund: `BANK:${uuid}`,
+      destinationFund: '',
+      partnerId: '',
+      lines: [{ accountId: uuid, description: 'Comisión', amount: '10' }],
+    });
+
+    expect(result.success).toBe(true);
   });
 
   it('exige el destino en un aporte', () => {
@@ -229,9 +288,9 @@ describe('gastos e impuestos bancarios (TSK-585)', () => {
     // combobox de conceptos (`_FundMovementLinesField`) solo lee el error de
     // raíz de la línea, así que en la UI el usuario sigue viendo únicamente
     // este mensaje.
-    expect(result.error?.issues.some((i) => i.message === 'Elegí la cuenta contable del concepto')).toBe(
-      true
-    );
+    expect(
+      result.error?.issues.some((i) => i.message === 'Elegí la cuenta contable del concepto')
+    ).toBe(true);
   });
 
   /**
@@ -286,7 +345,7 @@ describe('los tipos que ya existían no piden conceptos (regresión TSK-585)', (
     description: 'Aporte del socio',
     sourceFund: '',
     destinationFund: `BANK:${uuidBanco}`,
-    partnerId: '',
+    partnerId: '22222222-2222-4222-8222-222222222222', // obligatorio desde TSK-717
   };
 
   it('un aporte sigue siendo válido sin líneas', () => {

@@ -1,11 +1,10 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { Plus } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
-import { Button } from '@/shared/components/ui/button';
 import { DataTable, type DataTableSearchParams } from '@/shared/components/common/DataTable';
 import {
   AlertDialog,
@@ -17,17 +16,19 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/shared/components/ui/alert-dialog';
+import { Button } from '@/shared/components/ui/button';
 import type { ModulePermissions } from '@/shared/lib/permissions';
 
-import { getColumns } from '../columns';
-import { _CreateFundMovementModal } from './_CreateFundMovementModal';
 import {
   confirmFundMovement,
   deleteFundMovement,
+  type FundMovementAccountRef,
   type FundMovementListItem,
-  type FundOption,
   type FundMovementPartnerOption,
+  type FundOption,
 } from '../actions.server';
+import { getColumns } from '../columns';
+import { _CreateFundMovementModal } from './_CreateFundMovementModal';
 
 interface Props {
   data: FundMovementListItem[];
@@ -37,7 +38,7 @@ interface Props {
   banks: FundOption[];
   cashRegisters: FundOption[];
   partners: FundMovementPartnerOption[];
-  hasContributionsAccount: boolean;
+  defaultContributionsAccount: FundMovementAccountRef | null;
 }
 
 export function _FundMovementsTable({
@@ -48,7 +49,7 @@ export function _FundMovementsTable({
   banks,
   cashRegisters,
   partners,
-  hasContributionsAccount,
+  defaultContributionsAccount,
 }: Props) {
   const router = useRouter();
   const [createOpen, setCreateOpen] = useState(false);
@@ -130,7 +131,7 @@ export function _FundMovementsTable({
         banks={banks}
         cashRegisters={cashRegisters}
         partners={partners}
-        hasContributionsAccount={hasContributionsAccount}
+        defaultContributionsAccount={defaultContributionsAccount}
         onSuccess={refresh}
       />
 
@@ -141,7 +142,7 @@ export function _FundMovementsTable({
         banks={banks}
         cashRegisters={cashRegisters}
         partners={partners}
-        hasContributionsAccount={hasContributionsAccount}
+        defaultContributionsAccount={defaultContributionsAccount}
         movement={editing}
         onSuccess={refresh}
       />

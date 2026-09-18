@@ -2,16 +2,20 @@
 
 import { revalidatePath } from 'next/cache';
 
-import { getCurrentUserId } from '@/shared/lib/current-user';
-import { getActiveCompanyId } from '@/shared/lib/company';
-import { logger } from '@/shared/lib/logger';
-import { prisma } from '@/shared/lib/prisma';
-import { checkPermission } from '@/shared/lib/permissions';
 import { Prisma } from '@/generated/prisma/client';
-import type { DataTableSearchParams } from '@/shared/components/common/DataTable';
-import { parseSearchParams, stateToPrismaParams } from '@/shared/components/common/DataTable/helpers';
 import { filterExpenseAccounts } from '@/modules/commercial/features/products/shared/account-filters';
+import type { DataTableSearchParams } from '@/shared/components/common/DataTable';
+import {
+  parseSearchParams,
+  stateToPrismaParams,
+} from '@/shared/components/common/DataTable/helpers';
 import { buildImputableAccountsWhere } from '@/shared/lib/accounts/imputable-accounts';
+import { getActiveCompanyId } from '@/shared/lib/company';
+import { getCurrentUserId } from '@/shared/lib/current-user';
+import { logger } from '@/shared/lib/logger';
+import { checkPermission } from '@/shared/lib/permissions';
+import { prisma } from '@/shared/lib/prisma';
+import { PARTNER_CONTRIBUTION_ACCOUNT_TYPES } from '../../partners/shared/types';
 import { sumLines } from '../shared/lines-calc';
 import {
   fundMovementSchema,
@@ -114,7 +118,7 @@ export async function getFundMovementById(id: string) {
   };
 }
 
-/** Catálogos para el formulario: bancos, cajas con sesión abierta, socios y estado de config. */
+/** Catálogos para el formulario: bancos, cajas con sesión abierta, socios (con su cuenta de aportes) y cuenta por defecto. */
 export async function getFundMovementCatalogs() {
   await checkPermission('commercial.treasury.fund-movements', 'view', { redirect: true });
   const companyId = await getActiveCompanyId();
@@ -133,20 +137,30 @@ export async function getFundMovementCatalogs() {
     }),
     prisma.partner.findMany({
       where: { companyId, isActive: true },
-      select: { id: true, name: true },
+      select: {
+        id: true,
+        name: true,
+        contributionsAccount: { select: { id: true, code: true, name: true } },
+      },
       orderBy: { name: 'asc' },
     }),
     prisma.accountingSettings.findUnique({
       where: { companyId },
-      select: { partnerContributionsAccountId: true },
+      select: { partnerContributionsAccount: { select: { id: true, code: true, name: true } } },
     }),
   ]);
 
   return {
     banks: banks.map((b) => ({ id: b.id, label: `${b.bankName} - ${b.accountNumber}` })),
     cashRegisters: cashRegisters.map((c) => ({ id: c.id, label: `Caja ${c.name}` })),
-    partners,
-    hasContributionsAccount: Boolean(settings?.partnerContributionsAccountId),
+    partners: partners.map((p) => ({
+      id: p.id,
+      name: p.name,
+      contributionsAccount: p.contributionsAccount,
+    })),
+    // TSK-717: reemplaza `hasContributionsAccount: boolean`. El modal necesita
+    // código y nombre para decir "se usará la cuenta por defecto X".
+    defaultContributionsAccount: settings?.partnerContributionsAccount ?? null,
   };
 }
 
@@ -218,6 +232,110 @@ async function resolveFundRefLabel(
   return { kind: 'CASH', id: ref.id, label: `Caja ${cash.name}` };
 }
 
+/** De dónde salió la cuenta de capital del asiento (para el log y los tests). */
+type CapitalAccountSource = 'partner' | 'default';
+
+interface ResolvedCapitalAccount {
+  accountId: string;
+  source: CapitalAccountSource;
+  partnerName: string;
+}
+
+/**
+ * Cuenta de capital de un aporte o retiro (TSK-717):
+ * `partner.contributionsAccountId ?? settings.partnerContributionsAccountId`.
+ *
+ * Se ejecuta DENTRO de la transacción de `confirmFundMovement`, con el mismo
+ * `tx` que escribe el asiento. Todos los errores son `BusinessError`: viajan
+ * al modal como `{ success: false, error }` y el movimiento queda en DRAFT.
+ *
+ *  1. Sin `partnerId`           → borrador anterior a TSK-717: error, editar y elegir socio.
+ *  2. Socio inexistente         → borrado o de otra empresa: error, elegir otro socio.
+ *                                 No bloquea por `isActive`: el borrador se creó cuando estaba activo.
+ *  3. Cuenta propia asignada    → tiene que ser imputable (hoja, activa, sin corte vigente) y
+ *                                 de tipo ASSET/LIABILITY/EQUITY. Si no lo es → error.
+ *                                 NUNCA cae a la global en este caso: sería imputar en silencio a
+ *                                 otra cuenta, justo lo que la clienta denunció en 413/706.
+ *  4. Sin cuenta propia         → global si existe (`source: 'default'`); si tampoco → error que
+ *                                 nombra al socio y dice dónde configurarla.
+ */
+async function resolvePartnerCapitalAccount(
+  tx: PrismaTransactionClient,
+  companyId: string,
+  partnerId: string | null,
+  defaultAccountId: string | null
+): Promise<ResolvedCapitalAccount> {
+  if (!partnerId) {
+    throw new BusinessError(
+      'Este movimiento no tiene socio asignado. Editá el movimiento y elegí el socio antes de confirmarlo.'
+    );
+  }
+
+  const partner = await tx.partner.findFirst({
+    where: { id: partnerId, companyId },
+    select: {
+      name: true,
+      contributionsAccountId: true,
+      contributionsAccount: { select: { id: true, code: true, name: true } },
+    },
+  });
+  if (!partner) {
+    throw new BusinessError(
+      'El socio del movimiento ya no existe. Editá el movimiento y elegí otro socio.'
+    );
+  }
+
+  // Con la FK `SetNull` nunca hay id sin cuenta, así que alcanza con mirar la relación.
+  if (partner.contributionsAccount) {
+    const { id, code, name } = partner.contributionsAccount;
+    // Imputabilidad con `buildImputableAccountsWhere` y no a mano: incluye el
+    // corte por ejercicio (`disabledFrom`) que `assertLineAccounts` se olvidaba (TSK-585).
+    const imputable = await tx.account.findFirst({
+      where: {
+        ...buildImputableAccountsWhere({ companyId, types: PARTNER_CONTRIBUTION_ACCOUNT_TYPES }),
+        id,
+      },
+      select: { id: true },
+    });
+    if (!imputable) {
+      throw new BusinessError(
+        `La cuenta de aportes "${code} - ${name}" del socio "${partner.name}" no está activa o no es imputable. Corregila en Tesorería → Socios → Editar.`
+      );
+    }
+    return { accountId: id, source: 'partner', partnerName: partner.name };
+  }
+
+  if (!defaultAccountId) {
+    throw new BusinessError(
+      `El socio "${partner.name}" no tiene cuenta de aportes y no hay una cuenta por defecto. Asignale una en Tesorería → Socios → Editar, o configurá la "Cuenta de aportes de socios por defecto" en Ajustes contables.`
+    );
+  }
+  return { accountId: defaultAccountId, source: 'default', partnerName: partner.name };
+}
+
+/**
+ * Nombre del socio para el snapshot `partnerName`. En aporte y retiro el socio
+ * define la cuenta del asiento (TSK-717), así que si el id no es de la empresa
+ * el borrador no se guarda. Transferencia y gastos bancarios no cambian: si
+ * llegara un id suelto, se guarda `null` como hasta ahora.
+ */
+async function resolvePartnerName(
+  data: FundMovementFormInput,
+  companyId: string
+): Promise<string | null> {
+  if (!data.partnerId) return null;
+  const partner = await prisma.partner.findFirst({
+    where: { id: data.partnerId, companyId },
+    select: { name: true },
+  });
+  const isPartnerMovement =
+    data.type === 'PARTNER_CONTRIBUTION' || data.type === 'PARTNER_WITHDRAWAL';
+  if (!partner && isPartnerMovement) {
+    throw new BusinessError('El socio seleccionado no es válido');
+  }
+  return partner?.name ?? null;
+}
+
 /**
  * Aplica un lado del movimiento sobre un banco o caja: registra el movimiento,
  * actualiza el saldo y resuelve la cuenta contable. `direction` 'IN' = entran
@@ -263,7 +381,15 @@ async function applyFundSide(
     const newBalance = direction === 'IN' ? bank.balance.add(amount) : bank.balance.sub(amount);
 
     await tx.bankMovement.create({
-      data: { bankAccountId: bank.id, companyId, type, amount, date, description, createdBy: userId },
+      data: {
+        bankAccountId: bank.id,
+        companyId,
+        type,
+        amount,
+        date,
+        description,
+        createdBy: userId,
+      },
     });
     await tx.bankAccount.update({ where: { id: bank.id }, data: { balance: newBalance } });
 
@@ -347,11 +473,19 @@ async function createJournalEntryForFundMovement(
   // Partida doble: se suma con Decimal y no con floats, para que un asiento
   // válido no se rechace por el arrastre binario de 0.1 + 0.2.
   if (lines.length === 0) {
-    logger.error('Asiento de movimiento de fondos sin líneas', { data: { companyId, description } });
+    logger.error('Asiento de movimiento de fondos sin líneas', {
+      data: { companyId, description },
+    });
     throw new BusinessError('El asiento del movimiento no tiene líneas. Avisá al equipo.');
   }
-  const totalDebe = lines.reduce((t, l) => t.add(new Prisma.Decimal(l.debit)), new Prisma.Decimal(0));
-  const totalHaber = lines.reduce((t, l) => t.add(new Prisma.Decimal(l.credit)), new Prisma.Decimal(0));
+  const totalDebe = lines.reduce(
+    (t, l) => t.add(new Prisma.Decimal(l.debit)),
+    new Prisma.Decimal(0)
+  );
+  const totalHaber = lines.reduce(
+    (t, l) => t.add(new Prisma.Decimal(l.credit)),
+    new Prisma.Decimal(0)
+  );
   if (!totalDebe.equals(totalHaber)) {
     logger.error('Asiento de movimiento de fondos desbalanceado', {
       data: { companyId, description, debe: totalDebe.toString(), haber: totalHaber.toString() },
@@ -391,7 +525,10 @@ async function createJournalEntryForFundMovement(
     select: { id: true, number: true },
   });
 
-  await tx.accountingSettings.update({ where: { companyId }, data: { lastEntryNumber: nextNumber } });
+  await tx.accountingSettings.update({
+    where: { companyId },
+    data: { lastEntryNumber: nextNumber },
+  });
   return entry;
 }
 
@@ -515,15 +652,7 @@ export async function createFundMovement(
     // fundOut = origen (retiro/transferencia); fundIn = destino (aporte/transferencia)
     const fundOut = sourceRef ? await resolveFundRefLabel(sourceRef, companyId) : null;
     const fundIn = destRef ? await resolveFundRefLabel(destRef, companyId) : null;
-
-    let partnerName: string | null = null;
-    if (data.partnerId) {
-      const partner = await prisma.partner.findFirst({
-        where: { id: data.partnerId, companyId },
-        select: { name: true },
-      });
-      partnerName = partner?.name ?? null;
-    }
+    const partnerName = await resolvePartnerName(data, companyId);
 
     const created = await prisma.fundMovement.create({
       data: {
@@ -594,15 +723,7 @@ export async function updateFundMovement(
 
     const fundOut = sourceRef ? await resolveFundRefLabel(sourceRef, companyId) : null;
     const fundIn = destRef ? await resolveFundRefLabel(destRef, companyId) : null;
-
-    let partnerName: string | null = null;
-    if (data.partnerId) {
-      const partner = await prisma.partner.findFirst({
-        where: { id: data.partnerId, companyId },
-        select: { name: true },
-      });
-      partnerName = partner?.name ?? null;
-    }
+    const partnerName = await resolvePartnerName(data, companyId);
 
     // Los conceptos se reemplazan enteros: se borran los anteriores y se
     // recrean con la posición del formulario, en la misma transacción.
@@ -672,15 +793,11 @@ export async function confirmFundMovement(id: string): Promise<FundMovementActio
     });
 
     const isTransfer = movement.type === 'ACCOUNT_TRANSFER';
-    let capitalAccountId: string | null = null;
-    if (movement.type === 'PARTNER_CONTRIBUTION' || movement.type === 'PARTNER_WITHDRAWAL') {
-      capitalAccountId = settings?.partnerContributionsAccountId ?? null;
-      if (!capitalAccountId) {
-        throw new BusinessError(
-          'Configurá la "Cuenta de aportes de socios" en Ajustes contables antes de confirmar aportes o retiros.'
-        );
-      }
-    }
+    // TSK-717: la cuenta del asiento la decide el socio (propia o por defecto)
+    // dentro de la transacción, en `resolvePartnerCapitalAccount`. La global ya
+    // no es condición necesaria para confirmar.
+    const defaultContributionsAccountId = settings?.partnerContributionsAccountId ?? null;
+    let capitalSource: CapitalAccountSource | null = null; // para el log final
 
     const fundSettings: FundSettings = {
       defaultBankAccountId: settings?.defaultBankAccountId ?? null,
@@ -702,34 +819,64 @@ export async function confirmFundMovement(id: string): Promise<FundMovementActio
       const amountNumber = Number(movement.amount);
       /** Las dos líneas clásicas: un débito y un crédito por el total. */
       const parLineas = (debitAccountId: string, creditAccountId: string): JournalLineInput[] => [
-        { accountId: debitAccountId, debit: amountNumber, credit: 0, description: movement.description },
-        { accountId: creditAccountId, debit: 0, credit: amountNumber, description: movement.description },
+        {
+          accountId: debitAccountId,
+          debit: amountNumber,
+          credit: 0,
+          description: movement.description,
+        },
+        {
+          accountId: creditAccountId,
+          debit: 0,
+          credit: amountNumber,
+          description: movement.description,
+        },
       ];
 
       let entryLines: JournalLineInput[];
 
       if (movement.type === 'PARTNER_CONTRIBUTION') {
-        if (!movement.fundInKind || !movement.fundInId) throw new BusinessError('Falta el banco/caja destino');
+        if (!movement.fundInKind || !movement.fundInId)
+          throw new BusinessError('Falta el banco/caja destino');
+        // Antes de `applyFundSide`, para que un socio sin cuenta falle antes de mover saldos.
+        const capital = await resolvePartnerCapitalAccount(
+          tx,
+          companyId,
+          movement.partnerId,
+          defaultContributionsAccountId
+        );
+        capitalSource = capital.source;
         const dest = await applyFundSide(
           tx,
           { kind: movement.fundInKind as FundSourceKind, id: movement.fundInId },
           'IN',
           sideCtx
         );
-        entryLines = parLineas(dest.accountId, capitalAccountId!);
+        // Debe banco/caja · Haber cuenta del socio
+        entryLines = parLineas(dest.accountId, capital.accountId);
       } else if (movement.type === 'PARTNER_WITHDRAWAL') {
-        if (!movement.fundOutKind || !movement.fundOutId) throw new BusinessError('Falta el banco/caja origen');
+        if (!movement.fundOutKind || !movement.fundOutId)
+          throw new BusinessError('Falta el banco/caja origen');
+        const capital = await resolvePartnerCapitalAccount(
+          tx,
+          companyId,
+          movement.partnerId,
+          defaultContributionsAccountId
+        );
+        capitalSource = capital.source;
         const src = await applyFundSide(
           tx,
           { kind: movement.fundOutKind as FundSourceKind, id: movement.fundOutId },
           'OUT',
           sideCtx
         );
-        entryLines = parLineas(capitalAccountId!, src.accountId);
+        // Debe cuenta del socio · Haber banco/caja
+        entryLines = parLineas(capital.accountId, src.accountId);
       } else if (movement.type === 'BANK_CHARGES') {
         // Los fondos salen del banco/caja como en un retiro, pero el asiento
         // lleva un débito por cada concepto y un solo crédito por el total.
-        if (!movement.fundOutKind || !movement.fundOutId) throw new BusinessError('Falta el banco/caja origen');
+        if (!movement.fundOutKind || !movement.fundOutId)
+          throw new BusinessError('Falta el banco/caja origen');
         if (movement.lines.length === 0) {
           throw new BusinessError('El movimiento no tiene conceptos cargados');
         }
@@ -746,11 +893,18 @@ export async function confirmFundMovement(id: string): Promise<FundMovementActio
             credit: 0,
             description: line.description,
           })),
-          { accountId: src.accountId, debit: 0, credit: amountNumber, description: movement.description },
+          {
+            accountId: src.accountId,
+            debit: 0,
+            credit: amountNumber,
+            description: movement.description,
+          },
         ];
       } else if (movement.type === 'ACCOUNT_TRANSFER') {
-        if (!movement.fundOutKind || !movement.fundOutId) throw new BusinessError('Falta el banco/caja origen');
-        if (!movement.fundInKind || !movement.fundInId) throw new BusinessError('Falta el banco/caja destino');
+        if (!movement.fundOutKind || !movement.fundOutId)
+          throw new BusinessError('Falta el banco/caja origen');
+        if (!movement.fundInKind || !movement.fundInId)
+          throw new BusinessError('Falta el banco/caja destino');
         const src = await applyFundSide(
           tx,
           { kind: movement.fundOutKind as FundSourceKind, id: movement.fundOutId },
@@ -796,7 +950,9 @@ export async function confirmFundMovement(id: string): Promise<FundMovementActio
       });
     });
 
-    logger.info('Movimiento de fondos confirmado', { data: { id, companyId } });
+    logger.info('Movimiento de fondos confirmado', {
+      data: { id, companyId, type: movement.type, partnerId: movement.partnerId, capitalSource },
+    });
     revalidatePath('/dashboard/commercial/treasury/fund-movements');
     revalidatePath('/dashboard/commercial/treasury/bank-accounts');
     revalidatePath('/dashboard/commercial/treasury/cash-registers');
@@ -835,6 +991,8 @@ export async function deleteFundMovement(id: string): Promise<FundMovementAction
 export type FundMovementListItem = Awaited<ReturnType<typeof getFundMovements>>['data'][number];
 export type FundMovementRecord = NonNullable<Awaited<ReturnType<typeof getFundMovementById>>>;
 export type FundOption = { id: string; label: string };
+/** Referencia mínima a una cuenta del plan, para mostrar `code - name` (TSK-717). */
+export type FundMovementAccountRef = { id: string; code: string; name: string };
 export type FundMovementPartnerOption = Awaited<
   ReturnType<typeof getFundMovementCatalogs>
 >['partners'][number];

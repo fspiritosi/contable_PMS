@@ -649,25 +649,25 @@ mismo molde de `fund-movement-lines.integration.test.ts`. En esas fases el test 
   (imputable, de Activo, Pasivo o Patrimonio), que se vea en el listado y en el detalle, y que un
   socio con aportes o retiros registrados no se pueda borrar.
 - **Tareas:**
-  - [ ] Escribir **primero**
+  - [x] Escribir **primero**
         `src/modules/commercial/features/treasury/features/partners/shared/validators.test.ts`
         (Vitest puro, sin base; estilo de `fund-movements/shared/validators.test.ts:88-175`).
         Casos sobre `partnerSchema`: (a) acepta un socio solo con `name` y sin
         `contributionsAccountId` (ausente); (b) acepta `contributionsAccountId: null`; (c) acepta
         un uuid válido; (d) rechaza `'abc'` con el mensaje `'Cuenta contable inválida'`; (e) sigue
         rechazando `name` vacío (regresión). Debe fallar en rojo porque el campo todavía no existe.
-  - [ ] `partners/shared/validators.ts:4-11` (`partnerSchema`): agregar
+  - [x] `partners/shared/validators.ts:4-11` (`partnerSchema`): agregar
         `contributionsAccountId: z.string().uuid('Cuenta contable inválida').nullable().optional()`
         (mismo criterio que `accountId` del banco, `treasury/shared/validators.ts:20`). El tipo
         `PartnerFormData` (`:32`) se actualiza solo por inferencia. Test en verde.
-  - [ ] `partners/shared/types.ts:3-15` (`Partner`): agregar `contributionsAccountId: string |
+  - [x] `partners/shared/types.ts:3-15` (`Partner`): agregar `contributionsAccountId: string |
         null`. Declarar `export type PartnerAccountRef = { id: string; code: string; name: string }`
         y `export interface PartnerWithAccount extends Partner { contributionsAccount:
         PartnerAccountRef | null }`; en `PartnerWithBalance` (`:17-20`) cambiar `extends Partner`
         por `extends PartnerWithAccount` para que el listado traiga la cuenta. Es un tipo escrito a
         mano (no inferido), así que **hay que tocarlo** o el `check-types` falla al asignar el
         resultado de Prisma.
-  - [ ] `partners/features/list/actions.server.ts`: nueva action exportada
+  - [x] `partners/features/list/actions.server.ts`: nueva action exportada
         `getPartnerContributionAccounts(includeIds?: string[])`:
         `checkPermission('commercial.treasury.partners', 'view', { redirect: true })` +
         `getActiveCompanyId()`; `where` = `buildImputableAccountsWhere({ companyId, types:
@@ -679,13 +679,13 @@ mismo molde de `fund-movement-lines.integration.test.ts`. En esas fases el test 
         `accounting` (regla de no importar entre módulos). Exportar `export type
         PartnerContributionAccountOption = Awaited<ReturnType<typeof
         getPartnerContributionAccounts>>[number]`.
-  - [ ] `getPartners` (`:95-103`): al `findMany` agregar `include: { contributionsAccount: {
+  - [x] `getPartners` (`:95-103`): al `findMany` agregar `include: { contributionsAccount: {
         select: { id: true, code: true, name: true } } }`; el `map` de `:110-113` ya hace spread,
         así que `PartnerWithBalance` queda completo sin más cambios. Sin `Decimal` nuevos.
-  - [ ] `getPartnerById` (`:154-169`): mismo `include`; cambiar el tipo de retorno a
+  - [x] `getPartnerById` (`:154-169`): mismo `include`; cambiar el tipo de retorno a
         `Promise<PartnerWithAccount | null>`. Lo consumen `PartnerDetail.tsx:14-17` y
         `EditPartner.tsx:11` (ambos siguen compilando porque `PartnerWithAccount extends Partner`).
-  - [ ] `createPartner` (`:185-196`) y `updatePartner` (`:227-237`): agregar
+  - [x] `createPartner` (`:185-196`) y `updatePartner` (`:227-237`): agregar
         `contributionsAccountId: validatedData.contributionsAccountId ?? null` al `data`. Antes de
         escribir, si viene un id, validar con un `prisma.account.findFirst({ where: { id,
         companyId }, select: { id: true } })` que la cuenta sea de la empresa; si no,
@@ -695,13 +695,13 @@ mismo molde de `fund-movement-lines.integration.test.ts`. En esas fases el test 
         imputable en el guardado: el combo ya filtra, y una cuenta que dejó de ser imputable se
         conserva a propósito (`includeIds`); quien la rechaza es la confirmación del asiento
         (fase 3).
-  - [ ] `deletePartner` (`:261-274`): sumar al `findFirst` un conteo aparte
+  - [x] `deletePartner` (`:261-274`): sumar al `findFirst` un conteo aparte
         `prisma.fundMovement.count({ where: { companyId, partnerId: id } })` (no hay FK ni relación
         Prisma entre `FundMovement.partnerId` y `Partner`, `schema.prisma:4346`, así que no entra
         en el `_count`). Si `> 0`: `throw new Error('No se puede eliminar un socio con aportes o
         retiros registrados. Desactivalo desde Editar si ya no opera.')`. Mantener el bloqueo
         existente por `movements`/`cards` (`:270-274`) tal cual.
-  - [ ] Crear
+  - [x] Crear
         `partners/features/create/components/_PartnerAccountField.tsx` (Client Component, < 80
         líneas) para no pasar las 200 líneas en `_PartnerForm.tsx` (hoy 167). Props: `{ control:
         Control<PartnerFormData>; savedAccountId?: string | null }`. Hace `useQuery({ queryKey:
@@ -716,27 +716,27 @@ mismo molde de `fund-movement-lines.integration.test.ts`. En esas fases el test 
         asigna, se usa la cuenta de aportes por defecto de Ajustes contables. Cambiarla no
         modifica los asientos ya generados." Debe funcionar en `page.tsx` server-first: el
         `QueryClientProvider` ya envuelve el dashboard (lo usa `_BankAccountFormModal`).
-  - [ ] `_PartnerForm.tsx`: agregar `contributionsAccountId: null` a los `defaultValues`
+  - [x] `_PartnerForm.tsx`: agregar `contributionsAccountId: null` a los `defaultValues`
         (`:38-46`); agregar prop opcional `savedAccountId?: string | null` a `PartnerFormProps`
         (`:23-28`); insertar `<_PartnerAccountField control={form.control}
         savedAccountId={savedAccountId} />` entre el campo `notes` (`:117-133`) y el switch
         `isActive` (`:135`). Sigue habiendo un solo `Card`.
-  - [ ] `_EditPartnerForm.tsx:35-42` (`defaultValues`): agregar `contributionsAccountId:
+  - [x] `_EditPartnerForm.tsx:35-42` (`defaultValues`): agregar `contributionsAccountId:
         partner.contributionsAccountId ?? null`; pasar `savedAccountId={partner.contributionsAccountId}`
         a `_PartnerForm` (`:44-51`). `_CreatePartnerForm.tsx` no cambia (sin `savedAccountId`).
-  - [ ] `partners/features/list/columns.tsx`: nueva columna entre "Teléfono" (`:106-120`) y
+  - [x] `partners/features/list/columns.tsx`: nueva columna entre "Teléfono" (`:106-120`) y
         "Saldo a favor" (`:121-139`): `accessorKey: 'contributionsAccount'`, `meta: { title:
         'Cuenta de aportes' }`, `enableSorting: false`, celda `code · name` en `font-mono text-xs`
         si existe, o `<span className="text-muted-foreground">Por defecto</span>` si es `null`
         (deja visible a simple vista qué socias siguen cayendo en la global, mitigación del
         contra de la alternativa A). Sin cambios en `_PartnersTable.tsx`.
-  - [ ] `_PartnerDetailContent.tsx:107-142` (card "Datos del Socio"): cambiar la prop a
+  - [x] `_PartnerDetailContent.tsx:107-142` (card "Datos del Socio"): cambiar la prop a
         `partner: PartnerWithAccount` (`:30-32`) y agregar al grid (`:113-130`) el bloque "Cuenta
         contable de aportes" con `code - name` o "Por defecto (Ajustes contables)". Debajo, un
         `<p className="text-xs text-muted-foreground">` con "Cambiar esta cuenta no modifica los
         asientos ya generados" (riesgo 3 del análisis). `PartnerDetail.tsx:32` ya le pasa el
         resultado de `getPartnerById`.
-  - [ ] `_PartnerForm.tsx` conserva menos de 200 líneas; `_PartnerAccountField.tsx` y
+  - [x] `_PartnerForm.tsx` conserva menos de 200 líneas; `_PartnerAccountField.tsx` y
         `_PartnerDetailContent.tsx` también. Verificar con `wc -l`.
 - **Archivos:**
   - Crear: `partners/shared/validators.test.ts`,
@@ -761,7 +761,7 @@ mismo molde de `fund-movement-lines.integration.test.ts`. En esas fases el test 
   (Haber en aporte, Debe en retiro) con fallback a la global, que sin ninguna de las dos la
   confirmación falle nombrando al socio, y que el modal avise de antemano qué cuenta se va a usar.
 - **Tareas:**
-  - [ ] **Validators (TDD).** En `fund-movements/shared/validators.test.ts`: cambiar la fixture
+  - [x] **Validators (TDD).** En `fund-movements/shared/validators.test.ts`: cambiar la fixture
         `aporte` (`:89-98`) a `partnerId: uuid` (si no, `'acepta un aporte con banco de destino'`
         `:100` y `'un aporte sigue siendo válido sin líneas'` `:292` fallan por la razón
         equivocada); agregar en el `describe('fundMovementSchema')` los casos: `'exige el socio en
@@ -769,14 +769,14 @@ mismo molde de `fund-movement-lines.integration.test.ts`. En esas fases el test 
         socio'`), `'exige el socio en un retiro'` (idem con `PARTNER_WITHDRAWAL` y `sourceFund`),
         `'una transferencia no exige socio'` y `'un gasto bancario no exige socio'` (ambos con
         `partnerId: ''` → `success: true`). Rojo primero.
-  - [ ] `fund-movements/shared/validators.ts:77-78`: cambiar el comentario a `// Socio del aporte /
+  - [x] `fund-movements/shared/validators.ts:77-78`: cambiar el comentario a `// Socio del aporte /
         retiro. Obligatorio para esos dos tipos (ver superRefine); define la cuenta del asiento
         (TSK-717)`. El tipo base queda `z.string().uuid().optional().or(z.literal(''))` (los otros
         dos tipos siguen mandando `''`). En el `superRefine`, dentro de las ramas
         `PARTNER_CONTRIBUTION` (`:133-140`) y `PARTNER_WITHDRAWAL` (`:141-148`), agregar `if
         (!data.partnerId) ctx.addIssue({ code: custom, path: ['partnerId'], message: 'Seleccioná
         el socio' })`. **No** tocarlo en `ACCOUNT_TRANSFER` ni `BANK_CHARGES`. Verde.
-  - [ ] **Test de integración existente.** `fund-movements/list/fund-movement-lines.integration.test.ts`:
+  - [x] **Test de integración existente.** `fund-movements/list/fund-movement-lines.integration.test.ts`:
         en el `beforeAll` (`:136-204`) crear un `Partner` con `prisma.partner.create({ data: {
         companyId, name: \`${PREFIX}Socio fundador\`, createdBy: \`${PREFIX}user\` } })`
         (`createdBy` es obligatorio, `schema.prisma:4401`) y guardar `partnerId`; en los casos de
@@ -786,7 +786,7 @@ mismo molde de `fund-movement-lines.integration.test.ts`. En esas fases el test 
         agregar `await prisma.partner.deleteMany({ where: { companyId } })` **después** de
         `fundMovement.deleteMany` y **antes** de `account.deleteMany` (la FK nueva apunta a
         `accounts`). Los casos BANK_CHARGES (`:253`) y transferencia siguen con `partnerId: ''`.
-  - [ ] **Test de integración nuevo (rojo primero).** Crear
+  - [x] **Test de integración nuevo (rojo primero).** Crear
         `fund-movements/list/fund-movement-partner-account.integration.test.ts` con el mismo
         andamiaje (`describe.skipIf(!dbAvailable)`, los cuatro `vi.mock` de `:76-79`, prefijo
         `TSK717-TEST-`, `afterAll` con guarda `if (companyId)` y limpieza en el orden
@@ -813,7 +813,7 @@ mismo molde de `fund-movement-lines.integration.test.ts`. En esas fases el test 
     - Cuenta del socio no imputable: `prisma.account.update({ where: { id: cuentaSociaA }, data:
       { isActive: false } })`, aporte de `sociaA` → `success: false`, `error` nombra a la socia y
       a la cuenta (`code`); restaurar `isActive: true`.
-  - [ ] `fund-movements/list/actions.server.ts`, **`getFundMovementCatalogs` (`:118-151`)**: en
+  - [x] `fund-movements/list/actions.server.ts`, **`getFundMovementCatalogs` (`:118-151`)**: en
         `prisma.partner.findMany` (`:134-138`) agregar al `select` `contributionsAccount: {
         select: { id: true, code: true, name: true } }`; en `accountingSettings.findUnique`
         (`:139-142`) cambiar el `select` a `partnerContributionsAccount: { select: { id: true,
@@ -822,7 +822,7 @@ mismo molde de `fund-movement-lines.integration.test.ts`. En esas fases el test 
         por `defaultContributionsAccount: settings?.partnerContributionsAccount ?? null`. El tipo
         exportado `FundMovementPartnerOption` (`:838-840`) se actualiza solo por inferencia;
         agregar `export type FundMovementAccountRef = { id: string; code: string; name: string }`.
-  - [ ] **`confirmFundMovement` (`:647-807`)**: reemplazar el bloque `:674-683` por una función
+  - [x] **`confirmFundMovement` (`:647-807`)**: reemplazar el bloque `:674-683` por una función
         privada `resolvePartnerCapitalAccount(movement, settings, companyId)` (misma sección
         HELPERS, antes de `applyFundSide`) que, solo para `PARTNER_CONTRIBUTION` y
         `PARTNER_WITHDRAWAL`:
@@ -846,15 +846,15 @@ mismo molde de `fund-movement-lines.integration.test.ts`. En esas fases el test 
         siguen siendo `parLineas(dest.accountId, capitalAccountId)` en aporte y
         `parLineas(capitalAccountId, src.accountId)` en retiro; solo cambia de dónde sale el id.
         Quitar el `!` de `capitalAccountId!` tipando la variable como `string` dentro de la rama.
-  - [ ] `createFundMovement` (`:519-526`) y `updateFundMovement` (`:598-605`): el `findFirst` del
+  - [x] `createFundMovement` (`:519-526`) y `updateFundMovement` (`:598-605`): el `findFirst` del
         socio hoy tolera que no exista (`partnerName = partner?.name ?? null`). Para aporte y
         retiro, si `data.partnerId` viene pero el socio no es de la empresa → `BusinessError('El
         socio seleccionado no es válido')`, para que el borrador no nazca huérfano. Transferencia y
         gastos bancarios no cambian.
-  - [ ] `FundMovementsList.tsx:34-37` y `_FundMovementsTable.tsx:39-40, 50-51, 132-133, 143-144`:
+  - [x] `FundMovementsList.tsx:34-37` y `_FundMovementsTable.tsx:39-40, 50-51, 132-133, 143-144`:
         reemplazar la prop `hasContributionsAccount: boolean` por `defaultContributionsAccount:
         FundMovementAccountRef | null` (importar el tipo desde `../actions.server`).
-  - [ ] Crear `fund-movements/list/components/_PartnerAccountNotice.tsx` (Client Component,
+  - [x] Crear `fund-movements/list/components/_PartnerAccountNotice.tsx` (Client Component,
         < 70 líneas), para no engordar `_CreateFundMovementModal.tsx` (520 líneas, deuda previa).
         Props: `{ partner: FundMovementPartnerOption | undefined; defaultAccount:
         FundMovementAccountRef | null }`. Cuatro estados, reutilizando las clases de la alerta
@@ -870,7 +870,7 @@ mismo molde de `fund-movement-lines.integration.test.ts`. En esas fases el test 
     - sin socio elegido y sin global → naranja: "Para confirmar aportes o retiros hace falta una
       cuenta de aportes: asignala al socio o configurá la por defecto en Ajustes contables." (sin
       socio y con global: no renderiza nada; el campo obligatorio ya lo marca).
-  - [ ] `_CreateFundMovementModal.tsx`: en `Props` (`:61-70`) y la desestructuración (`:78-87`)
+  - [x] `_CreateFundMovementModal.tsx`: en `Props` (`:61-70`) y la desestructuración (`:78-87`)
         reemplazar `hasContributionsAccount` por `defaultContributionsAccount`; reemplazar el
         bloque de alerta `:345-353` por `{isPartnerMovement && <_PartnerAccountNotice
         partner={partners.find((p) => p.id === partnerId)} defaultAccount=
@@ -883,7 +883,7 @@ mismo molde de `fund-movement-lines.integration.test.ts`. En esas fases el test 
         `partnerId`, así una transferencia tampoco arrastra un socio elegido en un tipo anterior
         (hoy solo se limpia para gastos bancarios; el servidor persiste `partnerId` sin mirar el
         tipo).
-  - [ ] Verificar que en el listado la columna "Socio" (`fund-movements/list/columns.tsx:91`)
+  - [x] Verificar que en el listado la columna "Socio" (`fund-movements/list/columns.tsx:91`)
         sigue mostrando `partnerName`; no cambia.
 - **Archivos:**
   - Crear: `fund-movements/list/fund-movement-partner-account.integration.test.ts`,
@@ -2504,10 +2504,42 @@ o el import de las constantes devuelve `undefined` y el error es poco legible.
 - **Notas:** el SQL generado coincide con el esperado en 3.2.1. `npm run check-types` sigue en 227 (línea base). En producción la migración la aplica solo `docker-entrypoint.sh` al arrancar el contenedor (`migrate deploy`); no hay script de datos que correr.
 
 ### Fase 2: Socios — cargar y mostrar la cuenta de aportes
-- **Estado:** Pendiente
+- **Estado:** Completada (2026-09-18)
+- **Archivos modificados:**
+  - `partners/shared/validators.test.ts` - creado (TDD: rojo con 3 de 5 casos antes de tocar el schema, verde después): sin cuenta, `null`, uuid válido, `'abc'` → `'Cuenta contable inválida'` en `path ['contributionsAccountId']`, regresión `name: ''`.
+  - `partners/shared/validators.ts` - `contributionsAccountId: z.string().uuid('Cuenta contable inválida').nullable().optional()`; nuevo `export type PartnerFormInput = z.input<typeof partnerSchema>`.
+  - `partners/shared/types.ts` - `Partner.contributionsAccountId: string | null`; `PartnerAccountRef`, `PartnerWithAccount`; `PartnerWithBalance extends PartnerWithAccount`; `PARTNER_CONTRIBUTION_ACCOUNT_TYPES: AccountType[] = ['ASSET', 'LIABILITY', 'EQUITY']`.
+  - `partners/features/list/actions.server.ts` - `getPartnerContributionAccounts(includeIds?: string[])` + `PartnerContributionAccountOption`, con `buildImputableAccountsWhere` de `@/shared/lib/accounts/imputable-accounts` envuelto en `OR` cuando hay `includeIds`; `include` de `contributionsAccount { id, code, name }` en `getPartners` y `getPartnerById` (retorna `PartnerWithAccount | null`); helper privado `assertAccountBelongsToCompany`; `createPartner`/`updatePartner` guardan `contributionsAccountId` y lo loguean; `deletePartner` suma `prisma.fundMovement.count({ where: { companyId, partnerId: id } })` con el mensaje literal del diseño, después del bloqueo por `movements`/`cards`.
+  - `partners/features/create/components/_PartnerAccountField.tsx` - creado (64 líneas, Client): `useQuery(['partner-contribution-accounts', savedAccountId])` + `AccountCombobox` con label "Cuenta contable de aportes (opcional)", placeholder "Sin asignar", clearLabel "Sin asignar (usar la cuenta por defecto)" y el `FormDescription` literal de 3.4.1.
+  - `partners/features/create/components/_PartnerForm.tsx` - prop `savedAccountId`, default `contributionsAccountId: null`, `<_PartnerAccountField>` entre `notes` e `isActive` (174 líneas).
+  - `partners/features/edit/components/_EditPartnerForm.tsx` - prop `partner: PartnerWithAccount`, `contributionsAccountId` en `defaultValues`, `savedAccountId={partner.contributionsAccountId}`.
+  - `partners/features/list/columns.tsx` - columna "Cuenta de aportes" (`meta.title`, `enableSorting: false`, `code · name` en `font-mono text-xs` o "Por defecto") entre Teléfono y Saldo a favor.
+  - `partners/features/detail/components/_PartnerDetailContent.tsx` - prop `PartnerWithAccount`; bloque "Cuenta contable de aportes" con `code - name` o "Por defecto (Ajustes contables)" y la nota "Cambiar esta cuenta no modifica los asientos ya generados." (188 líneas).
+- **Notas:**
+  - `buildImputableAccountsWhere` no tiene opción `includeIds`: se implementó el `OR` envolvente como dice 3.3.1 (mismo patrón que `getFundMovementLineAccounts`).
+  - Desvío de tipado respecto a 3.4.1: la prop es `control: Control<PartnerFormInput, unknown, PartnerFormData>` y no `Control<PartnerFormData>`. Motivo: `_PartnerForm` usaba `useForm<PartnerFormData>` con `zodResolver` y `isActive.default(true)` desalinea input/output; eso ya generaba 8 errores de `check-types` en el archivo (deuda previa) y el `control` tipado como en el diseño sumaba un noveno. Se quitó el genérico explícito de `useForm` (patrón de `_BankAccountFormModal`) y se tipó el `control` con input/output separados. Resultado: `check-types` baja de 227 a **219** (los 8 previos de `_PartnerForm.tsx` desaparecen); los 18 que quedan bajo `partners/` son de `_PartnerMovementDialog.tsx` y `_PartnerRepaymentDialog.tsx`, no tocados.
+  - `columns.tsx` pasa de 200 a 218 líneas: ya estaba en el límite antes de la columna nueva; es un archivo de definición de columnas, no un componente, y no se refactorizó para no ampliar el alcance.
+  - En `updatePartner` el `findFirst` de `existing` ahora lleva `select: { id: true }` (solo se usa para verificar existencia).
+  - `npx vitest run .../partners`: 5/5 en verde. `npx eslint` sobre los 9 archivos tocados: limpio. Sin `console.*` ni `:any`. No se tocó nada de `fund-movements/`, `_CommercialIntegrationForm.tsx` ni guías (Fases 3-5).
 
 ### Fase 3: Movimientos de fondos — socio obligatorio y asiento por socio
-- **Estado:** Pendiente
+- **Estado:** Completada (2026-09-18)
+- **Archivos modificados:**
+  - `fund-movements/shared/validators.ts` - comentario de `partnerId` y `superRefine`: `'Seleccioná el socio'` en `PARTNER_CONTRIBUTION` y `PARTNER_WITHDRAWAL`; `ACCOUNT_TRANSFER` y `BANK_CHARGES` sin cambios.
+  - `fund-movements/shared/validators.test.ts` - las dos fixtures `aporte` con `partnerId` uuid; 4 casos nuevos (exige socio en aporte/retiro, transferencia y gasto bancario no lo exigen).
+  - `fund-movements/list/actions.server.ts` - `getFundMovementCatalogs` devuelve `partners: {id, name, contributionsAccount}[]` y `defaultContributionsAccount: FundMovementAccountRef | null` (reemplaza `hasContributionsAccount`); helpers privados `resolvePartnerCapitalAccount(tx, companyId, partnerId, defaultAccountId): Promise<{ accountId; source: 'partner' | 'default'; partnerName }>` y `resolvePartnerName(data, companyId)`; `confirmFundMovement` sin la pre-validación de la global, resuelve la cuenta dentro de la transacción antes de `applyFundSide` (aporte = Haber, retiro = Debe) y loguea `capitalSource`; `createFundMovement`/`updateFundMovement` rechazan socio ajeno en aporte/retiro (`'El socio seleccionado no es válido'`); tipo exportado `FundMovementAccountRef`.
+  - `fund-movements/list/fund-movement-lines.integration.test.ts` - `Partner` real sin cuenta en el `beforeAll`, aporte/retiro documentan el fallback a la global; `partner.deleteMany` entre `accountingSettings` y `account`; `partner.count` en la verificación final.
+  - `fund-movements/list/fund-movement-partner-account.integration.test.ts` - creado: 7 `describe` / 9 casos contra la base real (cuenta propia en aporte y retiro, fallback a la global, sin global → error nombrando a la socia, borrador legado sin socio, cuenta propia inactiva sin fallback, socio inexistente al crear y socio borrado antes de confirmar). Prefijo `TSK717-TEST-`, limpieza en el orden fundMovement → journalEntry → bankAccount → accountingSettings → partner → account → company.
+  - `fund-movements/list/components/_PartnerAccountNotice.tsx` - creado (90 líneas): 4 estados con `Info`/`AlertTriangle`, links a `/dashboard/commercial/treasury/partners/{id}/edit` y `/dashboard/company/accounting/settings`.
+  - `fund-movements/list/components/_CreateFundMovementModal.tsx` - prop `defaultContributionsAccount`, `form.watch('partnerId')` + `selectedPartner`, notice en lugar de la alerta fija, campo "Socio *" sin "Sin socio" (constante `NONE` eliminada), limpieza de `partnerId` para todo tipo que no sea de socio. 520 → 516 líneas.
+  - `fund-movements/list/components/_FundMovementsTable.tsx`, `fund-movements/list/FundMovementsList.tsx` - prop `defaultContributionsAccount` en lugar de `hasContributionsAccount`.
+- **Notas:**
+  - TDD: unitarios (2 rojos) e integración nueva (7 rojos) fallaron por la razón correcta antes de tocar producción; después del cambio, `npx vitest run` completo en verde (29 archivos, 360 tests) y 0 filas `TSK717-TEST-%` en la base.
+  - `npx eslint` limpio en `fund-movements/`. `npm run check-types`: ningún error en `fund-movements/`; el total bajó de 227 a 219 durante la corrida en paralelo con la Fase 2 (todos preexistentes, del tipado de `zodResolver` en otros modales).
+  - Desvío respecto a 3.3.9: los tipos permitidos para la cuenta del socio se declaran como constante privada `PARTNER_CAPITAL_ACCOUNT_TYPES` en `fund-movements/list/actions.server.ts` en lugar de importar `PARTNER_CONTRIBUTION_ACCOUNT_TYPES` de `partners/shared/types` (la Fase 2 la estaba creando en paralelo y la consigna fue no depender de código nuevo de `partners/`). Mismo literal `['ASSET', 'LIABILITY', 'EQUITY']`; unificar el import es un cambio de una línea cuando las dos fases estén integradas.
+  - Desvío menor respecto a 3.7: el test nuevo agrega un séptimo bloque (socio inexistente al crear → `'El socio seleccionado no es válido'` sin borrador huérfano; socio borrado entre borrador y confirmación → `'El socio del movimiento ya no existe'`) para cubrir el caso 2 de `resolvePartnerCapitalAccount` y `resolvePartnerName`, que el diseño pedía pero el plan de tests no listaba.
+  - `actions.server.ts` pasa de 841 a 958 líneas (deuda previa): el crecimiento son los docblocks de los dos helpers nuevos; la lógica reemplaza bloques existentes.
+  - Verificación manual en el modal (mensaje "Seleccioná el socio", los 4 estados del aviso, links) queda para la Fase 6.
 
 ### Fase 4: Configuración contable — la global pasa a ser "por defecto"
 - **Estado:** Pendiente

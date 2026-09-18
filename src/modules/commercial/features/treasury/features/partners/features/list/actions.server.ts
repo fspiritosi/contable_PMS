@@ -1,24 +1,27 @@
 'use server';
 
-import { revalidatePath } from 'next/cache';
-import { getCurrentUserId } from '@/shared/lib/current-user';
-import { prisma } from '@/shared/lib/prisma';
-import { logger } from '@/shared/lib/logger';
-import { checkPermission } from '@/shared/lib/permissions';
-import { getActiveCompanyId } from '@/shared/lib/company';
+import type { DataTableSearchParams } from '@/shared/components/common/DataTable';
 import {
   buildFiltersWhere,
   buildTextFiltersWhere,
   parseSearchParams,
   stateToPrismaParams,
 } from '@/shared/components/common/DataTable/helpers';
-import type { DataTableSearchParams } from '@/shared/components/common/DataTable';
-import {
-  partnerSchema,
-  type PartnerFormData,
-} from '../../shared/validators';
-import { PARTNER_MOVEMENT_TYPE_SIGN } from '../../shared/types';
-import type { Partner, PartnerWithBalance } from '../../shared/types';
+import { buildImputableAccountsWhere } from '@/shared/lib/accounts/imputable-accounts';
+import { getActiveCompanyId } from '@/shared/lib/company';
+import { getCurrentUserId } from '@/shared/lib/current-user';
+import { logger } from '@/shared/lib/logger';
+import { checkPermission } from '@/shared/lib/permissions';
+import { prisma } from '@/shared/lib/prisma';
+import { revalidatePath } from 'next/cache';
+import type { Partner, PartnerWithAccount, PartnerWithBalance } from '../../shared/types';
+import { PARTNER_CONTRIBUTION_ACCOUNT_TYPES, PARTNER_MOVEMENT_TYPE_SIGN } from '../../shared/types';
+import { partnerSchema, type PartnerFormData } from '../../shared/validators';
+
+/** Cuenta de aportes tal como viaja al listado, al detalle y al form (TSK-717). */
+const contributionsAccountInclude = {
+  contributionsAccount: { select: { id: true, code: true, name: true } },
+} as const;
 
 /**
  * Calcula el balance (lo que la empresa le debe al socio) para un conjunto de socios.
@@ -98,6 +101,7 @@ export async function getPartners(searchParams: DataTableSearchParams = {}) {
         orderBy: orderBy || [{ isActive: 'desc' }, { name: 'asc' }],
         skip,
         take,
+        include: contributionsAccountInclude,
       }),
       prisma.partner.count({ where }),
     ]);
@@ -142,30 +146,83 @@ export async function getPartnerFacetCounts() {
   });
 
   return {
-    isActive: Object.fromEntries(
-      activeCounts.map((c) => [String(c.isActive), c._count.isActive])
-    ),
+    isActive: Object.fromEntries(activeCounts.map((c) => [String(c.isActive), c._count.isActive])),
   };
 }
 
 /**
+ * Cuentas que un socio puede tener como cuenta de aportes: imputables (hoja,
+ * activa, sin corte de ejercicio vigente) y de tipo Activo, Pasivo o Patrimonio
+ * Neto (TSK-717). `includeIds` preserva la cuenta ya guardada aunque hoy no
+ * cumpla el filtro (dada de baja, con hijas, cortada por ejercicio), para que al
+ * editar el socio el combo la muestre seleccionada en vez de vacía; mismo patrón
+ * que `getFundMovementLineAccounts` en `fund-movements`.
+ *
+ * El `where` imputable ya tiene su propio `OR` por `disabledFrom`, por eso se
+ * envuelve en otro `OR` y no se mezcla. No se importa nada de `accounting`.
+ */
+export async function getPartnerContributionAccounts(includeIds?: string[]) {
+  await checkPermission('commercial.treasury.partners', 'view', { redirect: true });
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  const imputableWhere = buildImputableAccountsWhere({
+    companyId,
+    types: PARTNER_CONTRIBUTION_ACCOUNT_TYPES,
+  });
+  const where =
+    includeIds && includeIds.length > 0
+      ? { OR: [imputableWhere, { companyId, id: { in: includeIds } }] }
+      : imputableWhere;
+
+  return prisma.account.findMany({
+    where,
+    select: { id: true, code: true, name: true },
+    orderBy: { code: 'asc' },
+  });
+}
+
+export type PartnerContributionAccountOption = Awaited<
+  ReturnType<typeof getPartnerContributionAccounts>
+>[number];
+
+/**
  * Obtiene un socio por ID.
  */
-export async function getPartnerById(id: string): Promise<Partner | null> {
+export async function getPartnerById(id: string): Promise<PartnerWithAccount | null> {
   await checkPermission('commercial.treasury.partners', 'view', { redirect: true });
   const companyId = await getActiveCompanyId();
   if (!companyId) throw new Error('No hay empresa activa');
 
   try {
-    const partner = await prisma.partner.findFirst({
+    return await prisma.partner.findFirst({
       where: { id, companyId },
+      include: contributionsAccountInclude,
     });
-
-    return partner;
   } catch (error) {
     logger.error('Error al obtener socio', { data: { error, id } });
     throw new Error('Error al obtener socio');
   }
+}
+
+/**
+ * Verifica que la cuenta elegida sea de la empresa activa (TSK-717). No exige
+ * que sea imputable: el combo ya filtra, y una cuenta que dejó de serlo se
+ * conserva a propósito (`includeIds`); quien la rechaza es la confirmación del
+ * asiento (`resolvePartnerCapitalAccount`). Acá los errores son excepciones:
+ * los forms los muestran con `toast.error(error.message)`.
+ */
+async function assertAccountBelongsToCompany(
+  accountId: string | null | undefined,
+  companyId: string
+): Promise<string | null> {
+  if (!accountId) return null;
+  const account = await prisma.account.findFirst({
+    where: { id: accountId, companyId },
+    select: { id: true },
+  });
+  if (!account) throw new Error('La cuenta contable seleccionada no pertenece a la empresa');
+  return account.id;
 }
 
 /**
@@ -182,6 +239,11 @@ export async function createPartner(data: PartnerFormData): Promise<Partner> {
 
     const validatedData = partnerSchema.parse(data);
 
+    const contributionsAccountId = await assertAccountBelongsToCompany(
+      validatedData.contributionsAccountId,
+      companyId
+    );
+
     const partner = await prisma.partner.create({
       data: {
         companyId,
@@ -191,11 +253,14 @@ export async function createPartner(data: PartnerFormData): Promise<Partner> {
         phone: validatedData.phone || null,
         notes: validatedData.notes || null,
         isActive: validatedData.isActive,
+        contributionsAccountId,
         createdBy: userId,
       },
     });
 
-    logger.info('Socio creado', { data: { partnerId: partner.id, companyId } });
+    logger.info('Socio creado', {
+      data: { partnerId: partner.id, companyId, contributionsAccountId },
+    });
 
     revalidatePath('/dashboard/commercial/treasury/partners');
 
@@ -210,10 +275,7 @@ export async function createPartner(data: PartnerFormData): Promise<Partner> {
 /**
  * Actualiza un socio existente.
  */
-export async function updatePartner(
-  id: string,
-  data: PartnerFormData
-): Promise<Partner> {
+export async function updatePartner(id: string, data: PartnerFormData): Promise<Partner> {
   await checkPermission('commercial.treasury.partners', 'update', { redirect: true });
   try {
     const companyId = await getActiveCompanyId();
@@ -221,8 +283,16 @@ export async function updatePartner(
 
     const validatedData = partnerSchema.parse(data);
 
-    const existing = await prisma.partner.findFirst({ where: { id, companyId } });
+    const existing = await prisma.partner.findFirst({
+      where: { id, companyId },
+      select: { id: true },
+    });
     if (!existing) throw new Error('Socio no encontrado');
+
+    const contributionsAccountId = await assertAccountBelongsToCompany(
+      validatedData.contributionsAccountId,
+      companyId
+    );
 
     const partner = await prisma.partner.update({
       where: { id },
@@ -233,10 +303,14 @@ export async function updatePartner(
         phone: validatedData.phone || null,
         notes: validatedData.notes || null,
         isActive: validatedData.isActive,
+        // null = volver a la cuenta por defecto. No toca asientos ya generados.
+        contributionsAccountId,
       },
     });
 
-    logger.info('Socio actualizado', { data: { partnerId: partner.id, companyId } });
+    logger.info('Socio actualizado', {
+      data: { partnerId: partner.id, companyId, contributionsAccountId },
+    });
 
     revalidatePath('/dashboard/commercial/treasury/partners');
     revalidatePath(`/dashboard/commercial/treasury/partners/${id}`);
@@ -250,7 +324,7 @@ export async function updatePartner(
 }
 
 /**
- * Elimina un socio (solo si no tiene movimientos ni tarjetas asociadas).
+ * Elimina un socio (solo si no tiene movimientos, tarjetas ni aportes/retiros asociados).
  */
 export async function deletePartner(id: string): Promise<void> {
   await checkPermission('commercial.treasury.partners', 'delete', { redirect: true });
@@ -258,18 +332,27 @@ export async function deletePartner(id: string): Promise<void> {
     const companyId = await getActiveCompanyId();
     if (!companyId) throw new Error('No se encontró empresa activa');
 
-    const partner = await prisma.partner.findFirst({
-      where: { id, companyId },
-      include: {
-        _count: { select: { movements: true, cards: true } },
-      },
-    });
+    const [partner, fundMovementsCount] = await Promise.all([
+      prisma.partner.findFirst({
+        where: { id, companyId },
+        include: {
+          _count: { select: { movements: true, cards: true } },
+        },
+      }),
+      // TSK-717: sin FK ni relación Prisma entre FundMovement.partnerId y Partner,
+      // así que no entra en el `_count`. Cuenta cualquier estado, también DRAFT.
+      prisma.fundMovement.count({ where: { companyId, partnerId: id } }),
+    ]);
 
     if (!partner) throw new Error('Socio no encontrado');
 
     if (partner._count.movements > 0 || partner._count.cards > 0) {
+      throw new Error('No se puede eliminar un socio con movimientos o tarjetas asociadas');
+    }
+
+    if (fundMovementsCount > 0) {
       throw new Error(
-        'No se puede eliminar un socio con movimientos o tarjetas asociadas'
+        'No se puede eliminar un socio con aportes o retiros registrados. Desactivalo desde Editar si ya no opera.'
       );
     }
 

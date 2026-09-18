@@ -75,13 +75,19 @@ import type { FundMovementFormInput } from '../shared/validators';
 // comentario de arriba para el porqué de cada uno.
 vi.mock('@/shared/lib/current-user', () => ({ getCurrentUserId: vi.fn() }));
 vi.mock('@/shared/lib/company', () => ({ getActiveCompanyId: vi.fn() }));
-vi.mock('@/shared/lib/permissions', () => ({ checkPermission: vi.fn().mockResolvedValue(undefined) }));
+vi.mock('@/shared/lib/permissions', () => ({
+  checkPermission: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 
 import { getActiveCompanyId } from '@/shared/lib/company';
 import { getCurrentUserId } from '@/shared/lib/current-user';
 // Código real de producción: nada de esto se reimplementa acá.
-import { createFundMovement, getFundMovementById, getFundMovementLineAccounts } from './actions.server';
+import {
+  createFundMovement,
+  getFundMovementById,
+  getFundMovementLineAccounts,
+} from './actions.server';
 
 const PREFIX = 'TSK585-TEST-';
 
@@ -117,7 +123,11 @@ async function fetchEntryLinesForMovement(movementId: string): Promise<JournalLi
     where: { entryId: movement.journalEntryId },
     select: { accountId: true, debit: true, credit: true },
   });
-  return rows.map((r) => ({ accountId: r.accountId, debit: Number(r.debit), credit: Number(r.credit) }));
+  return rows.map((r) => ({
+    accountId: r.accountId,
+    debit: Number(r.debit),
+    credit: Number(r.credit),
+  }));
 }
 
 describe.skipIf(!dbAvailable)('integración: conceptos del movimiento de fondos (TSK-585)', () => {
@@ -132,26 +142,59 @@ describe.skipIf(!dbAvailable)('integración: conceptos del movimiento de fondos 
 
   let bankSourceId: string; // BankAccount de origen (retiro/gasto/transferencia)
   let bankDestId: string; // BankAccount de destino (aporte/transferencia)
+  let partnerId: string; // socio SIN cuenta propia: aporte y retiro caen a la global (TSK-717)
 
   beforeAll(async () => {
-    const company = await prisma.company.create({ data: { name: `${PREFIX}Empresa`, isActive: true } });
+    const company = await prisma.company.create({
+      data: { name: `${PREFIX}Empresa`, isActive: true },
+    });
     companyId = company.id;
 
     const [bankLedger, destLedger, capital, commission, sircreb] = await Promise.all([
       prisma.account.create({
-        data: { companyId, code: 'T585-BANCO1', name: `${PREFIX}Banco Origen`, type: 'ASSET', nature: 'DEBIT' },
+        data: {
+          companyId,
+          code: 'T585-BANCO1',
+          name: `${PREFIX}Banco Origen`,
+          type: 'ASSET',
+          nature: 'DEBIT',
+        },
       }),
       prisma.account.create({
-        data: { companyId, code: 'T585-BANCO2', name: `${PREFIX}Banco Destino`, type: 'ASSET', nature: 'DEBIT' },
+        data: {
+          companyId,
+          code: 'T585-BANCO2',
+          name: `${PREFIX}Banco Destino`,
+          type: 'ASSET',
+          nature: 'DEBIT',
+        },
       }),
       prisma.account.create({
-        data: { companyId, code: 'T585-CAPITAL', name: `${PREFIX}Aportes de Socios`, type: 'EQUITY', nature: 'CREDIT' },
+        data: {
+          companyId,
+          code: 'T585-CAPITAL',
+          name: `${PREFIX}Aportes de Socios`,
+          type: 'EQUITY',
+          nature: 'CREDIT',
+        },
       }),
       prisma.account.create({
-        data: { companyId, code: 'T585-COMISION', name: `${PREFIX}Comisiones Bancarias`, type: 'EXPENSE', nature: 'DEBIT' },
+        data: {
+          companyId,
+          code: 'T585-COMISION',
+          name: `${PREFIX}Comisiones Bancarias`,
+          type: 'EXPENSE',
+          nature: 'DEBIT',
+        },
       }),
       prisma.account.create({
-        data: { companyId, code: 'T585-SIRCREB', name: `${PREFIX}Percepcion Sircreb`, type: 'ASSET', nature: 'DEBIT' },
+        data: {
+          companyId,
+          code: 'T585-SIRCREB',
+          name: `${PREFIX}Percepcion Sircreb`,
+          type: 'ASSET',
+          nature: 'DEBIT',
+        },
       }),
     ]);
     bankLedgerAccountId = bankLedger.id;
@@ -197,6 +240,15 @@ describe.skipIf(!dbAvailable)('integración: conceptos del movimiento de fondos 
       },
     });
 
+    // TSK-717: aporte y retiro exigen socio. Este no tiene cuenta de aportes
+    // propia, así que los dos casos de abajo pasan a documentar el fallback a
+    // la cuenta por defecto (`capitalAccountId`).
+    const partner = await prisma.partner.create({
+      data: { companyId, name: `${PREFIX}Socio fundador`, createdBy: `${PREFIX}user` },
+      select: { id: true },
+    });
+    partnerId = partner.id;
+
     // Único punto donde se aísla la frontera: la empresa activa y el usuario
     // son los de este test, no una sesión real.
     vi.mocked(getActiveCompanyId).mockResolvedValue(companyId);
@@ -220,17 +272,22 @@ describe.skipIf(!dbAvailable)('integración: conceptos del movimiento de fondos 
       await prisma.journalEntry.deleteMany({ where: { companyId } });
       await prisma.bankAccount.deleteMany({ where: { companyId } });
       await prisma.accountingSettings.deleteMany({ where: { companyId } });
+      // El socio antes que las cuentas: `Partner.contributionsAccountId` apunta a `accounts` (TSK-717).
+      await prisma.partner.deleteMany({ where: { companyId } });
       await prisma.account.deleteMany({ where: { companyId } });
       await prisma.company.deleteMany({ where: { id: companyId } });
     }
 
     // Verificación de que no sobrevive ninguna fila de la corrida.
-    const [remainingMovements, remainingAccounts, remainingCompanies] = await Promise.all([
-      prisma.fundMovement.count({ where: { description: { startsWith: PREFIX } } }),
-      prisma.account.count({ where: { name: { startsWith: PREFIX } } }),
-      prisma.company.count({ where: { name: { startsWith: PREFIX } } }),
-    ]);
+    const [remainingMovements, remainingPartners, remainingAccounts, remainingCompanies] =
+      await Promise.all([
+        prisma.fundMovement.count({ where: { description: { startsWith: PREFIX } } }),
+        prisma.partner.count({ where: { name: { startsWith: PREFIX } } }),
+        prisma.account.count({ where: { name: { startsWith: PREFIX } } }),
+        prisma.company.count({ where: { name: { startsWith: PREFIX } } }),
+      ]);
     expect(remainingMovements).toBe(0);
+    expect(remainingPartners).toBe(0);
     expect(remainingAccounts).toBe(0);
     expect(remainingCompanies).toBe(0);
 
@@ -252,8 +309,16 @@ describe.skipIf(!dbAvailable)('integración: conceptos del movimiento de fondos 
         destinationFund: '',
         partnerId: '',
         lines: [
-          { accountId: commissionAccountId, description: `${PREFIX}Comision de mantenimiento`, amount: '302574.16' },
-          { accountId: sircrebAccountId, description: `${PREFIX}Percepcion Sircreb`, amount: '1434154.28' },
+          {
+            accountId: commissionAccountId,
+            description: `${PREFIX}Comision de mantenimiento`,
+            amount: '302574.16',
+          },
+          {
+            accountId: sircrebAccountId,
+            description: `${PREFIX}Percepcion Sircreb`,
+            amount: '1434154.28',
+          },
         ],
       };
 
@@ -311,7 +376,7 @@ describe.skipIf(!dbAvailable)('integración: conceptos del movimiento de fondos 
             description: `${PREFIX}Aporte de socio fundador`,
             sourceFund: '',
             destinationFund: `BANK:${bankDestId}`,
-            partnerId: '',
+            partnerId,
           },
           true
         );
@@ -325,7 +390,7 @@ describe.skipIf(!dbAvailable)('integración: conceptos del movimiento de fondos 
         expect(lines).toHaveLength(2);
       });
 
-      it('debita el banco destino y acredita la cuenta de aportes de socios, por el total', () => {
+      it('debita el banco destino y acredita la cuenta de aportes por defecto (socio sin cuenta propia), por el total', () => {
         const banco = lines.find((l) => l.accountId === destLedgerAccountId);
         const capital = lines.find((l) => l.accountId === capitalAccountId);
         expect(banco).toMatchObject({ debit: amount, credit: 0 });
@@ -346,7 +411,7 @@ describe.skipIf(!dbAvailable)('integración: conceptos del movimiento de fondos 
             description: `${PREFIX}Retiro de socio fundador`,
             sourceFund: `BANK:${bankSourceId}`,
             destinationFund: '',
-            partnerId: '',
+            partnerId,
           },
           true
         );
@@ -360,7 +425,7 @@ describe.skipIf(!dbAvailable)('integración: conceptos del movimiento de fondos 
         expect(lines).toHaveLength(2);
       });
 
-      it('debita la cuenta de aportes de socios y acredita el banco origen, por el total', () => {
+      it('debita la cuenta de aportes por defecto (socio sin cuenta propia) y acredita el banco origen, por el total', () => {
         const capital = lines.find((l) => l.accountId === capitalAccountId);
         const banco = lines.find((l) => l.accountId === bankLedgerAccountId);
         expect(capital).toMatchObject({ debit: amount, credit: 0 });
@@ -461,16 +526,32 @@ describe.skipIf(!dbAvailable)('integración: conceptos del movimiento de fondos 
         destinationFund: '',
         partnerId: '',
         lines: [
-          { accountId: commissionAccountId, description: `${PREFIX}Comision mantenimiento`, amount: '850.30' },
-          { accountId: commissionAccountId, description: `${PREFIX}IVA sobre comision`, amount: '178.56' },
-          { accountId: sircrebAccountId, description: `${PREFIX}Percepcion Sircreb`, amount: '1200.00' },
+          {
+            accountId: commissionAccountId,
+            description: `${PREFIX}Comision mantenimiento`,
+            amount: '850.30',
+          },
+          {
+            accountId: commissionAccountId,
+            description: `${PREFIX}IVA sobre comision`,
+            amount: '178.56',
+          },
+          {
+            accountId: sircrebAccountId,
+            description: `${PREFIX}Percepcion Sircreb`,
+            amount: '1200.00',
+          },
         ],
       });
       expect(result.success).toBe(true);
       if (!result.success) throw new Error(result.error);
 
       const found = await getFundMovementById(result.id!);
-      releidas = found!.lines.map((l) => ({ description: l.description, accountId: l.accountId, amount: l.amount }));
+      releidas = found!.lines.map((l) => ({
+        description: l.description,
+        accountId: l.accountId,
+        amount: l.amount,
+      }));
     });
 
     it('relee los tres conceptos', () => {
@@ -523,7 +604,13 @@ describe.skipIf(!dbAvailable)('integración: conceptos del movimiento de fondos 
         sourceFund: `BANK:${bankSourceId}`,
         destinationFund: '',
         partnerId: '',
-        lines: [{ accountId: disabledAccountId, description: `${PREFIX}Concepto invalido`, amount: '100' }],
+        lines: [
+          {
+            accountId: disabledAccountId,
+            description: `${PREFIX}Concepto invalido`,
+            amount: '100',
+          },
+        ],
       });
 
       expect(result.success).toBe(false);
@@ -551,7 +638,10 @@ describe.skipIf(!dbAvailable)('integración: conceptos del movimiento de fondos 
     });
 
     it('la misma cuenta, sin el corte, sigue siendo aceptada (control: el rechazo es por disabledFrom, no por otra razón)', async () => {
-      await prisma.account.update({ where: { id: disabledAccountId }, data: { disabledFrom: null } });
+      await prisma.account.update({
+        where: { id: disabledAccountId },
+        data: { disabledFrom: null },
+      });
 
       const result = await createFundMovement({
         type: 'BANK_CHARGES',
@@ -560,7 +650,9 @@ describe.skipIf(!dbAvailable)('integración: conceptos del movimiento de fondos 
         sourceFund: `BANK:${bankSourceId}`,
         destinationFund: '',
         partnerId: '',
-        lines: [{ accountId: disabledAccountId, description: `${PREFIX}Concepto valido`, amount: '100' }],
+        lines: [
+          { accountId: disabledAccountId, description: `${PREFIX}Concepto valido`, amount: '100' },
+        ],
       });
 
       expect(result.success).toBe(true);
