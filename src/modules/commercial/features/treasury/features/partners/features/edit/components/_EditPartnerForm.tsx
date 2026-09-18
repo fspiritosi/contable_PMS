@@ -1,16 +1,16 @@
 'use client';
 
-import { useState } from 'react';
+import { logger } from '@/shared/lib/logger';
 import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 import { toast } from 'sonner';
+import type { PartnerWithAccount } from '../../../shared/types';
+import type { PartnerFormData } from '../../../shared/validators';
 import { _PartnerForm } from '../../create/components/_PartnerForm';
 import { updatePartner } from '../../list/actions.server';
-import type { Partner } from '../../../shared/types';
-import type { PartnerFormData } from '../../../shared/validators';
-import { logger } from '@/shared/lib/logger';
 
 interface EditPartnerFormProps {
-  partner: Partner;
+  partner: PartnerWithAccount;
 }
 
 export function _EditPartnerForm({ partner }: EditPartnerFormProps) {
@@ -39,6 +39,7 @@ export function _EditPartnerForm({ partner }: EditPartnerFormProps) {
     phone: partner.phone || '',
     notes: partner.notes || '',
     isActive: partner.isActive,
+    contributionsAccountId: partner.contributionsAccountId ?? null,
   };
 
   return (
@@ -47,6 +48,7 @@ export function _EditPartnerForm({ partner }: EditPartnerFormProps) {
       onSubmit={handleSubmit}
       isSubmitting={isSubmitting}
       submitLabel="Guardar Cambios"
+      savedAccountId={partner.contributionsAccountId}
     />
   );
 }

@@ -1,0 +1,534 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>TSK-717 — Cada socia con su cuenta de aportes</title>
+<style>
+  @page {
+    size: A4;
+    margin: 0;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #1f2430;
+    font-size: 13px;
+    line-height: 1.55;
+    background: #ffffff;
+  }
+
+  .page {
+    padding: 4mm 2mm;
+  }
+
+  header.cover {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    text-align: left;
+    padding: 10mm 2mm 8mm 2mm;
+    border-bottom: 3px solid #2f6f4f;
+    margin-bottom: 10mm;
+  }
+
+  .eyebrow {
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 11px;
+    font-weight: 700;
+    color: #2f6f4f;
+    margin-bottom: 6px;
+  }
+
+  h1 {
+    font-size: 26px;
+    margin: 0 0 8px 0;
+    color: #14251c;
+  }
+
+  .subtitle {
+    font-size: 14px;
+    color: #4b5563;
+    margin: 0;
+  }
+
+  section {
+    margin-bottom: 9mm;
+    page-break-inside: avoid;
+  }
+
+  section.allow-break {
+    page-break-inside: auto;
+  }
+
+  section:last-of-type { margin-bottom: 2mm; }
+
+  h2 {
+    font-size: 16px;
+    color: #14251c;
+    border-left: 4px solid #2f6f4f;
+    padding-left: 8px;
+    margin: 0 0 6mm 0;
+  }
+
+  .quote {
+    background: #f4f7f5;
+    border-left: 4px solid #2f6f4f;
+    padding: 10px 14px;
+    font-style: italic;
+    color: #2b3a33;
+    margin: 0 0 6px 0;
+  }
+
+  .quote cite {
+    display: block;
+    font-style: normal;
+    font-size: 11.5px;
+    color: #6b7280;
+    margin-top: 6px;
+  }
+
+  .before-after {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    page-break-inside: avoid;
+  }
+
+  .card {
+    border: 1px solid #e2e5e0;
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+
+  .card.before { background: #fbf7f2; border-color: #ecd9bd; }
+  .card.after { background: #f2f8f4; border-color: #bfe0cb; }
+
+  .card h3 {
+    margin: 0 0 6px 0;
+    font-size: 12.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .card.before h3 { color: #9a6a1f; }
+  .card.after h3 { color: #226240; }
+
+  .card p { margin: 0; }
+
+  ol.steps {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    counter-reset: step;
+  }
+
+  ol.steps > li {
+    counter-increment: step;
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+    page-break-inside: avoid;
+  }
+
+  ol.steps > li::before {
+    content: counter(step);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    border-radius: 50%;
+    background: #2f6f4f;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .step-body { flex: 1; }
+
+  .step-body strong { color: #14251c; }
+
+  figure {
+    margin: 8px 0 0 0;
+    page-break-inside: avoid;
+  }
+
+  figure img {
+    max-width: 100%;
+    border: 1px solid #d9dce0;
+    border-radius: 6px;
+    display: block;
+  }
+
+  figure.small img { max-width: 320px; }
+
+  figure.phone img { max-width: 160px; }
+
+  figure.modal img { max-width: 420px; }
+
+  ol.steps.long > li { page-break-inside: auto; }
+  h2 { page-break-after: avoid; }
+
+  figcaption {
+    font-size: 11px;
+    color: #6b7280;
+    margin-top: 4px;
+  }
+
+  .callout {
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin: 0 0 8px 0;
+    page-break-inside: avoid;
+  }
+
+  .callout.config {
+    background: #f2f6fb;
+    border: 1px solid #cddaeb;
+  }
+
+  .callout.warning {
+    background: #fdf5ec;
+    border: 1px solid #efd6a8;
+  }
+
+  .callout h3 {
+    margin: 0 0 4px 0;
+    font-size: 13px;
+  }
+
+  .callout p { margin: 0 0 6px 0; }
+  .callout p:last-child { margin-bottom: 0; }
+
+  ul.plain {
+    margin: 4px 0 0 0;
+    padding-left: 18px;
+  }
+
+  ul.plain li { margin-bottom: 4px; }
+
+  .no-change-list {
+    display: grid;
+    gap: 6px;
+  }
+
+  .no-change-item {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+  }
+
+  .check {
+    color: #2f6f4f;
+    font-weight: 700;
+  }
+
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8mm;
+    align-items: start;
+  }
+
+  .side-by-side {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8mm;
+    align-items: start;
+    page-break-inside: avoid;
+  }
+
+  .side-by-side figure { margin-top: 0; }
+
+  .ui-text {
+    font-style: italic;
+    color: #374151;
+  }
+
+  footer.doc-footer {
+    text-align: center;
+    color: #9ca3af;
+    font-size: 10.5px;
+    margin-top: 2mm;
+  }
+</style>
+
+</head>
+<body>
+
+
+<div class="page">
+
+  <header class="cover">
+    <div class="eyebrow">Tickets 413 · 706 · 717 · 724-d · Tesorería</div>
+    <h1>Cada socia con su cuenta de aportes</h1>
+    <p class="subtitle">Guía de presentación — qué pedías, qué cambió y cómo usarlo</p>
+  </header>
+
+  <section>
+    <h2>1. Qué pedías</h2>
+    <p>Lo primero que hiciste al arrancar con PMS fue cargar la plata que cada socia puso en el
+    banco. Lo contaste así en el ticket 413:</p>
+    <div class="quote">
+      "Una de las primeras cosas que hicimos es poner plata en la cuenta bancaria cada socia
+      según su porcentaje. No es gasto… es activo contra activo."
+      <cite>— Elizabeth Pérez, ticket 413</cite>
+    </div>
+    <p>Y en el 706, cuando el saldo del banco no te daba, volviste sobre lo mismo:</p>
+    <div class="quote">
+      "Me faltó darle bola a este ticket porque si no no lleno el banco. Fue con aportes de
+      socios, así voy llegando al saldo real."
+      <cite>— Elizabeth Pérez, ticket 706</cite>
+    </div>
+    <p><strong>Qué pasaba.</strong> El aporte de socio ya existía en Tesorería → Movimientos de
+    Fondos, y al confirmarlo sí actualizaba el saldo del banco. Pero contablemente
+    <strong>todos los aportes iban a una sola cuenta</strong>, la que estaba configurada en
+    Ajustes contables, sin importar qué socia había puesto la plata. Elegir la socia en el
+    formulario era un dato informativo: quedaba anotado en el movimiento, pero el asiento no
+    la miraba. Así no había forma de ver en el Mayor cuánto aportó cada una.</p>
+  </section>
+
+  <section>
+    <h2>2. Qué cambió</h2>
+    <div class="before-after">
+      <div class="card before">
+        <h3>Antes</h3>
+        <p>Una única <strong>Cuenta de Aportes de Socios</strong> para toda la empresa. El aporte
+        de cualquier socia se imputaba ahí. La socia era opcional en el formulario y no
+        intervenía en el asiento.</p>
+      </div>
+      <div class="card after">
+        <h3>Ahora</h3>
+        <p>Cada socia puede tener <strong>su propia cuenta contable de aportes</strong>, elegida
+        en su ficha de Socios. Al confirmar un aporte o retiro, el asiento va
+        <strong>a la cuenta de esa socia</strong>. La socia pasa a ser obligatoria, y el
+        formulario te dice de antemano a qué cuenta va a ir.</p>
+      </div>
+    </div>
+    <figure>
+      <img src="assets/tsk717-08-asiento.png" alt="Asiento número 13 expandido en Contabilidad → Asientos: Banco Santander Río c/c en pesos en el Debe por $250.000 y Cuenta Part. Socio 1 en el Haber por $250.000, en estado Borrador" />
+      <figcaption>El asiento que genera un aporte de María López (datos de demostración). Entra
+      la plata al banco (Debe) contra <strong>la cuenta de la socia</strong> (Haber): "Cuenta
+      Part. Socio 1", que es la que tiene asignada en su ficha. Antes acá aparecía siempre la
+      misma cuenta general para todas.</figcaption>
+    </figure>
+  </section>
+
+  <section class="allow-break">
+    <h2>3. Cómo se usa, paso a paso</h2>
+    <p>Son tres momentos: asignarle la cuenta a cada socia (una sola vez), cargar el aporte, y
+    confirmarlo para ver el asiento.</p>
+    <ol class="steps long">
+      <li>
+        <div class="step-body">
+          <strong>Asigná la cuenta a cada socia en Tesorería → Socios.</strong> Entrá a la ficha
+          de la socia (o creá una nueva con <span class="ui-text">Nuevo Socio</span>) y buscá el
+          campo <span class="ui-text">Cuenta contable de aportes (opcional)</span>. Podés
+          escribir el código o el nombre de la cuenta para encontrarla rápido.
+          <figure>
+            <img src="assets/tsk717-01-form-socio-combo.png" alt="Formulario Datos del Socio de María López con el buscador de cuentas abierto: al escribir 1.1.4/02/01 aparece la opción Cuenta Part. Socio 1" />
+            <figcaption>El buscador de cuentas en la ficha de la socia. Se escribe una parte del
+            código o del nombre y se elige la cuenta de la lista.</figcaption>
+          </figure>
+          <figure>
+            <img src="assets/tsk717-02-form-socio-completo.png" alt="Formulario de la socia María López con la cuenta 1.1.4/02/01 - Cuenta Part. Socio 1 elegida como cuenta contable de aportes" />
+            <figcaption>La cuenta elegida. Debajo, el texto de ayuda recuerda que puede ser de
+            Activo, Pasivo o Patrimonio Neto, y que cambiarla no toca los asientos ya
+            generados.</figcaption>
+          </figure>
+          <p style="margin:8px 0 0 0">Al guardar, el listado de Socios muestra la columna
+          <span class="ui-text">Cuenta de aportes</span>: de un vistazo ves quién tiene la suya y
+          quién sigue en <span class="ui-text">Por defecto</span>.</p>
+          <figure>
+            <img src="assets/tsk717-03-listado-socios.png" alt="Listado de Socios con la columna Cuenta de aportes: Juan Perez figura como Por defecto y María López con 1.1.4/02/01 · Cuenta Part. Socio 1" />
+            <figcaption>María López ya tiene su cuenta; Juan Perez todavía no, por eso dice
+            "Por defecto".</figcaption>
+          </figure>
+        </div>
+      </li>
+      <li>
+        <div class="step-body">
+          <strong>Cargá el aporte en Tesorería → Movimientos de Fondos → Nuevo Movimiento.</strong>
+          Elegí <span class="ui-text">Aporte de socio</span>, el monto, la fecha, el banco o caja
+          donde entra la plata y, en <span class="ui-text">Socio</span>, la socia que aporta.
+          Apenas la elegís, debajo aparece un aviso con la cuenta a la que va a ir el asiento.
+          <figure class="modal">
+            <img src="assets/tsk717-04-aviso-cuenta-propia.png" alt="Modal Nuevo Movimiento de Fondos con María López elegida como socia y el aviso: El asiento se imputará a la cuenta 1.1.4/02/01 - Cuenta Part. Socio 1 de María López" />
+            <figcaption>El aviso confirma la cuenta antes de guardar: <span class="ui-text">"El
+            asiento se imputará a la cuenta 1.1.4/02/01 - Cuenta Part. Socio 1 de María
+            López."</span></figcaption>
+          </figure>
+          <figure class="modal">
+            <img src="assets/tsk717-06-modal-completo.png" alt="El mismo formulario completo: aporte de $250.000 al Banco Santander, socia María López, descripción Aporte inicial de capital, listo para Guardar y Confirmar" />
+            <figcaption>El movimiento completo, listo para <span class="ui-text">Guardar y
+            Confirmar</span>. Con <span class="ui-text">Guardar</span> solo, queda en borrador
+            para revisarlo después.</figcaption>
+          </figure>
+        </div>
+      </li>
+      <li>
+        <div class="step-body">
+          <strong>Confirmá y mirá el asiento.</strong> Al confirmar, el saldo del banco sube y el
+          movimiento aparece en el listado con su número de asiento. Ese número lo podés buscar
+          en <strong>Contabilidad → Asientos</strong>.
+          <figure>
+            <img src="assets/tsk717-07-listado-movimientos.png" alt="Listado de Movimientos de Fondos con el aporte de María López de $250.000 al Banco Santander, en estado Confirmado y con el asiento Nº 13" />
+            <figcaption>El aporte confirmado. La columna Socio dice quién aportó y la columna
+            Asiento da el número para encontrarlo en Contabilidad.</figcaption>
+          </figure>
+          <figure>
+            <img src="assets/tsk717-08-asiento.png" alt="Asiento 13 en Contabilidad → Asientos: Banco Santander en el Debe y Cuenta Part. Socio 1 en el Haber, por $250.000 cada línea" />
+            <figcaption>El asiento nº 13: la línea del Haber es la cuenta de María López. Si
+            otra socia aporta, su asiento tendrá la cuenta de ella. Fijate que dice
+            <span class="ui-text">Borrador</span>: eso lo explicamos en el punto 5.</figcaption>
+          </figure>
+        </div>
+      </li>
+    </ol>
+  </section>
+
+  <section class="allow-break">
+    <h2>4. Detalles que conviene saber</h2>
+
+    <div class="callout config">
+      <h3>La socia ahora es obligatoria en aportes y retiros</h3>
+      <p>Antes se podía cargar un aporte "sin socio". Ya no: para un
+      <span class="ui-text">Aporte de socio</span> o un <span class="ui-text">Retiro de
+      socio</span> hay que elegir a la persona, porque de eso depende a qué cuenta va el asiento.
+      Si tenías algún aporte guardado en borrador sin socia, al querer confirmarlo el sistema te
+      va a pedir que lo edites y elijas una. Las transferencias entre cuentas y los gastos
+      bancarios no piden socio, igual que antes.</p>
+    </div>
+
+    <div class="callout config">
+      <h3>Si una socia no tiene cuenta propia, va a la cuenta por defecto</h3>
+      <p>La cuenta que hasta hoy usaban todos los aportes sigue existiendo, ahora como
+      <span class="ui-text">Cuenta de aportes de socios por defecto</span>. Cuando elegís una
+      socia que no tiene cuenta asignada, el aviso te lo dice antes de guardar, y el aporte se
+      imputa ahí. Nada se pierde: en el listado de Socios esa persona figura como "Por defecto"
+      para que la detectes fácil.</p>
+      <figure class="modal">
+        <img src="assets/tsk717-05-aviso-por-defecto.png" alt="Modal de aporte con Juan Perez elegido y el aviso: Juan Perez no tiene cuenta de aportes propia: se usará la cuenta por defecto 3.1.1/01/00 - Acciones en Circulación" />
+        <figcaption>Juan Perez no tiene cuenta propia: el aviso anticipa que se va a usar la
+        por defecto, "3.1.1/01/00 - Acciones en Circulación".</figcaption>
+      </figure>
+    </div>
+
+    <div class="callout warning">
+      <h3>Si tampoco hay cuenta por defecto, no deja confirmar</h3>
+      <p>Si la socia no tiene cuenta y además el campo de Ajustes contables está vacío, el aviso
+      se pone naranja y te dice exactamente dónde resolverlo, con un link a la ficha de la socia y
+      otro a Ajustes contables. Podés guardar el borrador, pero no confirmarlo hasta que una de
+      las dos cuentas exista. Es a propósito: el sistema no imputa a cualquier lado por no
+      tener a dónde.</p>
+      <figure class="modal">
+        <img src="assets/tsk717-09-aviso-falta-configurar.png" alt="Modal de aporte con el aviso naranja: Juan Perez no tiene cuenta de aportes y no hay una cuenta por defecto. Asignale una en Tesorería → Socios, o configurá la Cuenta de aportes de socios por defecto en Ajustes contables. No vas a poder confirmar." />
+        <figcaption>El aviso naranja. Los textos subrayados son links: "Tesorería → Socios"
+        abre la ficha de esa persona; "Ajustes contables" abre la configuración.</figcaption>
+      </figure>
+    </div>
+
+    <div class="callout config">
+      <h3>Podés elegir cuentas de Activo, Pasivo o Patrimonio</h3>
+      <p>No te limitamos a Patrimonio Neto. En el buscador de la ficha de la socia aparecen todas
+      las cuentas imputables de <strong>Activo, Pasivo y Patrimonio</strong>; solo quedan afuera
+      las de Ingresos y Egresos. Cuál usar es criterio de tu contador: en el ejemplo usamos
+      "Cuenta Part. Socio 1" (una cuenta de Activo que ya viene en el plan de cuentas), pero
+      igual de válido es "Aportes Irrevocables" o una cuenta propia por socia creada bajo
+      "Capital Social".</p>
+      <p>Si la cuenta que querés usar no existe todavía, creala primero en
+      <strong>Contabilidad → Plan de Cuentas</strong>, eligiendo la cuenta madre. El sistema no
+      crea cuentas solo; prefiere que el plan lo arme tu contador.</p>
+    </div>
+
+    <div class="callout config">
+      <h3>Cambiar la cuenta de una socia no toca los aportes ya confirmados</h3>
+      <p>Si más adelante le cambiás la cuenta a una socia, los asientos que ya se generaron
+      quedan como están, en la cuenta que tenían en ese momento. Solo los aportes y retiros
+      nuevos usan la cuenta nueva. Un asiento es historia; no se reescribe por un cambio de
+      configuración. Lo mismo dice el texto de ayuda de la ficha, para que no te sorprenda.</p>
+    </div>
+  </section>
+
+  <section class="allow-break">
+    <h2>5. Importante: el asiento nace en Borrador</h2>
+    <p>Esto no es nuevo de este cambio, pero es muy probable que sea la razón de fondo por la que
+    "no te llenaba el banco" en el 706, así que lo dejamos por escrito.</p>
+    <p>Cuando confirmás un movimiento de fondos, pasan dos cosas distintas:</p>
+    <ul class="plain">
+      <li>El <strong>saldo de tesorería</strong> del banco (el que ves en Tesorería → Cuentas) se actualiza en el acto.</li>
+      <li>Se genera el <strong>asiento contable</strong>, pero queda en estado
+      <span class="ui-text">Borrador</span> en Contabilidad → Asientos. Es lo mismo que pasa con
+      los asientos que generan los recibos, las órdenes de pago y las facturas: nacen en
+      borrador para que el contador los revise antes de darlos por firmes.</li>
+    </ul>
+    <p>El <strong>Mayor</strong> y el <strong>Balance</strong> solo suman los asientos
+    <strong>Registrados</strong>. Mientras el asiento del aporte esté en Borrador, la cuenta
+    contable del banco no lo refleja, aunque el saldo de tesorería sí. Por eso podía parecer que
+    el aporte "no llenaba el banco": la plata estaba, pero el asiento no estaba registrado.</p>
+    <div class="callout config">
+      <h3>Cómo registrar los asientos</h3>
+      <p>Entrá a <strong>Contabilidad → Asientos</strong>, ubicá el asiento (podés ordenar por la
+      columna Estado para juntar los Borradores, o buscar el número que te dio el movimiento de
+      fondos) y en el menú
+      <strong>(…)</strong> de la fila elegí <strong>Registrar</strong>. Desde ese momento el
+      Mayor de la cuenta de la socia y el de la cuenta del banco lo suman.</p>
+      <p>Si ya cargaste varios aportes y el saldo contable del banco no te cierra, revisá primero
+      cuántos asientos tenés en Borrador: casi seguro la diferencia está ahí.</p>
+    </div>
+    <p>Una aclaración menor: si en el listado de Asientos ves la fecha de un aporte corrida un
+    día para atrás respecto de la fecha que cargaste, ya lo tenemos identificado; es un tema de
+    cómo se muestra la fecha en ese listado, no del asiento ni del movimiento, y se corrige
+    aparte.</p>
+  </section>
+
+  <section>
+    <h2>6. Qué no cambió</h2>
+    <div class="no-change-list">
+      <div class="no-change-item">
+        <span class="check">✓</span>
+        <span>Las <strong>transferencias entre cuentas</strong> y los <strong>gastos e impuestos
+        bancarios</strong> se cargan igual que antes: no piden socio.</span>
+      </div>
+      <div class="no-change-item">
+        <span class="check">✓</span>
+        <span>Los <strong>aportes que ya confirmaste</strong> quedan como estaban, imputados a la
+        cuenta general de ese momento. No se reasignan solos. Si querés que también queden
+        separados por socia, el camino es revertir el asiento desde Contabilidad y volver a
+        cargar el aporte con la socia y su cuenta; avisanos si preferís que lo hagamos
+        nosotros.</span>
+      </div>
+      <div class="no-change-item">
+        <span class="check">✓</span>
+        <span>El campo de <strong>Ajustes contables</strong> sigue ahí, ahora con el nombre
+        <span class="ui-text">Cuenta de aportes de socios por defecto</span>. Se usa solo para las
+        socias que no tienen cuenta propia, y <strong>puede quedar vacío</strong> si todas tienen
+        la suya.</span>
+      </div>
+      <div class="no-change-item">
+        <span class="check">✓</span>
+        <span>La <strong>Cuenta Corriente</strong> de la ficha del socio (lo que la empresa le
+        debe por gastos pagados con su tarjeta) es otra cosa y no suma aportes; los aportes se
+        ven en Movimientos de Fondos y en el Mayor de la cuenta de cada socia.</span>
+      </div>
+    </div>
+    <figure class="small" style="margin-top:10px">
+      <img src="assets/tsk717-10-ajustes-por-defecto.png" alt="Campo Cuenta de aportes de socios por defecto en Ajustes contables, con 3.1.1/01/00 - Acciones en Circulación elegida y el texto de ayuda que remite a Tesorería → Socios" />
+      <figcaption>El campo renombrado en Ajustes contables. Si todas las socias tienen su
+      cuenta, podés dejarlo sin asignar.</figcaption>
+    </figure>
+  </section>
+
+  <footer class="doc-footer">
+    TSK-717 — Cada socia con su cuenta de aportes · Tesorería → Socios · Tesorería → Movimientos de Fondos
+  </footer>
+
+</div>
+
+</body>
+</html>

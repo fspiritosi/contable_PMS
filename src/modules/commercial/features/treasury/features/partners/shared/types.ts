@@ -1,4 +1,4 @@
-import { PartnerMovementType } from '@/generated/prisma/enums';
+import { PartnerMovementType, type AccountType } from '@/generated/prisma/enums';
 
 export interface Partner extends Record<string, unknown> {
   id: string;
@@ -9,15 +9,34 @@ export interface Partner extends Record<string, unknown> {
   phone: string | null;
   notes: string | null;
   isActive: boolean;
+  /** TSK-717: cuenta contable propia para aportes/retiros; null = usa la por defecto. */
+  contributionsAccountId: string | null;
   createdBy: string;
   createdAt: Date;
   updatedAt: Date;
 }
 
+/** Referencia mínima a una cuenta del plan, para mostrar `code - name`. */
+export type PartnerAccountRef = { id: string; code: string; name: string };
+
+/** Socio con su cuenta de aportes resuelta (listado, detalle, edición). */
+export interface PartnerWithAccount extends Partner {
+  contributionsAccount: PartnerAccountRef | null;
+}
+
 /** Socio en el listado, con el balance (lo que la empresa le debe) ya calculado. */
-export interface PartnerWithBalance extends Partner {
+export interface PartnerWithBalance extends PartnerWithAccount {
   balance: number;
 }
+
+/**
+ * Tipos de cuenta que puede tener un socio como cuenta de aportes (TSK-717).
+ * Activo, Pasivo o Patrimonio Neto según el criterio del contador; quedan
+ * fuera Ingresos (REVENUE) y Egresos (EXPENSE). Lo usan el combo del form
+ * (`getPartnerContributionAccounts`) y la validación al confirmar el asiento
+ * (`resolvePartnerCapitalAccount`), para que nunca diverjan.
+ */
+export const PARTNER_CONTRIBUTION_ACCOUNT_TYPES: AccountType[] = ['ASSET', 'LIABILITY', 'EQUITY'];
 
 export interface PartnerMovement extends Record<string, unknown> {
   id: string;

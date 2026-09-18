@@ -1,25 +1,25 @@
 'use client';
 
+import { zodResolver } from '@hookform/resolvers/zod';
+import { Loader2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { useForm, type FieldErrors } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
-import { useRouter } from 'next/navigation';
-import { Loader2 } from 'lucide-react';
 
-import { logger } from '@/shared/lib/logger';
+import { AccountCombobox, type AccountOption } from '@/shared/components/common/AccountCombobox';
 import { Button } from '@/shared/components/ui/button';
 import { Label } from '@/shared/components/ui/label';
-import { AccountCombobox, type AccountOption } from '@/shared/components/common/AccountCombobox';
 import { Switch } from '@/shared/components/ui/switch';
 import { usePermissions } from '@/shared/hooks/usePermissions';
+import { logger } from '@/shared/lib/logger';
 
+import { getAccountingSettings, saveAccountingSettings } from '../actions.server';
 import {
   commercialIntegrationSchema,
   type CommercialIntegrationInput,
   type CommercialIntegrationValues,
 } from '../validators';
-import { saveAccountingSettings, getAccountingSettings } from '../actions.server';
 
 type FormInput = CommercialIntegrationInput;
 type FormValues = CommercialIntegrationValues;
@@ -139,9 +139,9 @@ const SECTIONS: SectionDef[] = [
       },
       {
         name: 'partnerContributionsAccountId',
-        label: 'Cuenta de Aportes de Socios',
+        label: 'Cuenta de aportes de socios por defecto',
         types: ['EQUITY'],
-        help: 'Cuenta de Patrimonio Neto usada como contrapartida de los aportes y retiros de socios (Movimientos de fondos)',
+        help: 'Cuenta de Patrimonio Neto usada en los aportes y retiros de los socios que no tienen una cuenta de aportes propia (se asigna en Tesorería → Socios). Si todos los socios tienen la suya, este campo puede quedar sin asignar.',
       },
     ],
   },
@@ -181,7 +181,11 @@ const SECTIONS: SectionDef[] = [
       'Cuentas de Pasivo donde se registran las percepciones que la empresa cobra a sus clientes',
     fields: [
       { name: 'perceptionIvaCollectedAccountId', label: 'Perc. IVA Cobrada', types: ['LIABILITY'] },
-      { name: 'perceptionIibbCollectedAccountId', label: 'Perc. IIBB Cobrada', types: ['LIABILITY'] },
+      {
+        name: 'perceptionIibbCollectedAccountId',
+        label: 'Perc. IIBB Cobrada',
+        types: ['LIABILITY'],
+      },
       {
         name: 'perceptionMunicipalCollectedAccountId',
         label: 'Perc. Municipal Cobrada',
@@ -205,8 +209,7 @@ const SECTIONS: SectionDef[] = [
   },
   {
     title: 'Impuestos Internos',
-    description:
-      'Cuenta donde se imputan los impuestos internos que discrimina el comprobante',
+    description: 'Cuenta donde se imputan los impuestos internos que discrimina el comprobante',
     fields: [
       {
         name: 'internalTaxesAccountId',
@@ -316,8 +319,8 @@ export function _CommercialIntegrationForm({
         <div className="space-y-1">
           <Label htmlFor="requireCostCenter">Exigir centro de costo</Label>
           <p className="text-xs text-muted-foreground">
-            Al confirmar una factura de compra o venta, cada línea imputada a una cuenta de
-            ingresos o egresos deberá tener su reparto por centro de costo.
+            Al confirmar una factura de compra o venta, cada línea imputada a una cuenta de ingresos
+            o egresos deberá tener su reparto por centro de costo.
           </p>
         </div>
         <Switch

@@ -14,6 +14,7 @@ import {
   Receipt,
   Trash2,
   TrendingUp,
+  Users,
   Vault,
 } from 'lucide-react';
 
@@ -754,6 +755,86 @@ export function _TreasuryGuide() {
         </AlertDescription>
       </Alert>
 
+      {/* Socios */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Users className="h-5 w-5" />
+            Socios
+          </CardTitle>
+          <CardDescription>
+            Los socios de la empresa, su cuenta corriente y su cuenta contable
+            de aportes
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-muted-foreground">
+            Un <strong>socio</strong> es una persona que forma parte de la
+            empresa. En el sistema puede ser <strong>titular de tarjetas</strong>,
+            tiene una <strong>cuenta corriente</strong> (lo que la empresa le
+            debe cuando paga gastos con su tarjeta personal) y, desde ahora,
+            puede tener su propia <strong>cuenta contable de aportes</strong>: la
+            cuenta del plan a la que van sus aportes y retiros de capital.
+          </p>
+          <p>
+            <strong>Cómo dar de alta un socio:</strong>
+          </p>
+          <ol className="list-decimal pl-6 space-y-1 text-muted-foreground">
+            <li>
+              Ve a <strong>Tesorería → Socios</strong> y hacé clic en{' '}
+              <strong>Nuevo Socio</strong>
+            </li>
+            <li>
+              Completá el <strong>nombre</strong> (obligatorio) y, si querés,
+              CUIT/CUIL, email, teléfono y notas.
+            </li>
+            <li>
+              En <strong>Cuenta contable de aportes (opcional)</strong> elegí la
+              cuenta del plan a la que se van a imputar los aportes y retiros
+              de este socio. Podés buscarla por código o por nombre. Puede ser
+              de <strong>Activo, Pasivo o Patrimonio Neto</strong>, según el
+              criterio de tu contador (por ejemplo, &quot;Cuenta Part. Socio
+              1&quot; o una cuenta propia bajo &quot;Capital Social&quot;).
+            </li>
+            <li>
+              Si la cuenta todavía no existe, creala antes en{' '}
+              <strong>Contabilidad → Plan de Cuentas</strong> eligiendo la
+              cuenta madre (por ejemplo, una hija de &quot;Capital
+              Social&quot;). El sistema no crea cuentas por su cuenta.
+            </li>
+            <li>
+              Guardá con <strong>Crear Socio</strong>. En el listado, la columna{' '}
+              <strong>Cuenta de aportes</strong> muestra la cuenta elegida o{' '}
+              <strong>Por defecto</strong> si no tiene ninguna.
+            </li>
+          </ol>
+          <Alert>
+            <Info className="h-4 w-4" />
+            <AlertDescription>
+              Si el socio no tiene cuenta propia, sus aportes y retiros van a la{' '}
+              <strong>Cuenta de aportes de socios por defecto</strong> de{' '}
+              <strong>Ajustes contables</strong>. En el listado de socios lo ves
+              como <strong>Por defecto</strong>.
+            </AlertDescription>
+          </Alert>
+          <Alert>
+            <Info className="h-4 w-4" />
+            <AlertDescription>
+              <strong>Cambiar la cuenta de un socio no modifica los asientos ya
+              generados.</strong> Los aportes y retiros confirmados quedan en la
+              cuenta que tenían; solo los nuevos usan la nueva cuenta.
+            </AlertDescription>
+          </Alert>
+          <p className="text-sm text-muted-foreground">
+            Un socio con aportes, retiros, tarjetas o movimientos de cuenta
+            corriente <strong>no se puede eliminar</strong>: si ya no opera,
+            desactivalo desde <strong>Editar</strong> con el interruptor{' '}
+            <strong>Activo</strong>. Los socios inactivos no aparecen para
+            elegir en movimientos nuevos.
+          </p>
+        </CardContent>
+      </Card>
+
       {/* Movimientos de Fondos */}
       <Card>
         <CardHeader>
@@ -781,12 +862,14 @@ export function _TreasuryGuide() {
           <ul className="list-disc pl-6 space-y-1 text-muted-foreground">
             <li>
               <strong>Aporte de socio</strong>: ingresa dinero a una cuenta de
-              banco o caja. Contablemente aumenta el activo y el capital (contra
-              la cuenta de aportes configurada).
+              banco o caja. Contablemente aumenta el activo y el capital, contra
+              la cuenta de aportes <strong>del socio</strong> (o la por defecto
+              si no tiene una propia).
             </li>
             <li>
               <strong>Retiro de socio</strong>: sale dinero de una cuenta hacia
-              un socio. Disminuye el capital y el activo.
+              un socio. Disminuye el capital y el activo, y usa la misma cuenta
+              del socio que el aporte.
             </li>
             <li>
               <strong>Transferencia entre cuentas</strong>: mueve fondos de una
@@ -815,8 +898,11 @@ export function _TreasuryGuide() {
             </li>
             <li>
               Seleccioná el banco o caja de origen y/o destino (según el tipo) y,
-              para aportes o retiros, opcionalmente el socio. Las cajas deben
-              tener una sesión abierta para operar.
+              para aportes o retiros, el <strong>socio</strong> (obligatorio).
+              Debajo del socio, un aviso te anticipa a qué cuenta se va a
+              imputar el asiento: la cuenta propia del socio o, si no tiene, la
+              por defecto de Ajustes contables. Las cajas deben tener una sesión
+              abierta para operar.
             </li>
             <li>
               Si el tipo es <strong>Gastos e impuestos bancarios</strong>, no
@@ -855,10 +941,25 @@ export function _TreasuryGuide() {
           <Alert>
             <Info className="h-4 w-4" />
             <AlertDescription>
-              Para registrar aportes o retiros primero configurá la{' '}
-              <strong>Cuenta de aportes de socios</strong> en{' '}
-              <strong>Ajustes contables</strong> (es una cuenta de Patrimonio
-              Neto).
+              Para confirmar un aporte o retiro, el socio tiene que tener su{' '}
+              <strong>cuenta de aportes</strong> (Tesorería → Socios) o tiene
+              que existir la <strong>Cuenta de aportes de socios por defecto</strong>{' '}
+              en <strong>Ajustes contables</strong>. Si falta, el aviso del
+              formulario se pone naranja y te dice dónde configurarla; el
+              movimiento se puede guardar, pero queda en borrador hasta que
+              la cuenta exista.
+            </AlertDescription>
+          </Alert>
+          <Alert>
+            <Info className="h-4 w-4" />
+            <AlertDescription>
+              <strong>El asiento nace en borrador.</strong> Confirmar el
+              movimiento actualiza el saldo del banco o caja y genera el
+              asiento, pero el asiento queda en estado <strong>Borrador</strong>{' '}
+              en <strong>Contabilidad → Asientos</strong>. Hasta que lo{' '}
+              <strong>Registres</strong>, el Mayor y el Balance no lo suman: si
+              el saldo contable del banco &quot;no cierra&quot;, revisá primero
+              los asientos en borrador.
             </AlertDescription>
           </Alert>
           <Alert>

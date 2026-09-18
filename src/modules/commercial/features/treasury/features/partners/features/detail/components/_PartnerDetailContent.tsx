@@ -1,15 +1,13 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { toast } from 'sonner';
-import moment from 'moment';
 import { Edit, Trash2 } from 'lucide-react';
+import moment from 'moment';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useState } from 'react';
+import { toast } from 'sonner';
 
-import { Button } from '@/shared/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card';
-import { Badge } from '@/shared/components/ui/badge';
+import { BackButton } from '@/shared/components/common/BackButton';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,14 +19,16 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/shared/components/ui/alert-dialog';
-import { BackButton } from '@/shared/components/common/BackButton';
+import { Badge } from '@/shared/components/ui/badge';
+import { Button } from '@/shared/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card';
 import { usePermissions } from '@/shared/hooks/usePermissions';
 import { logger } from '@/shared/lib/logger';
-import type { Partner } from '../../../shared/types';
+import type { PartnerWithAccount } from '../../../shared/types';
 import { deletePartner } from '../../list/actions.server';
 
 interface PartnerDetailContentProps {
-  partner: Partner;
+  partner: PartnerWithAccount;
 }
 
 export function _PartnerDetailContent({ partner }: PartnerDetailContentProps) {
@@ -90,8 +90,8 @@ export function _PartnerDetailContent({ partner }: PartnerDetailContentProps) {
                 <AlertDialogHeader>
                   <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    Vas a eliminar el socio &quot;{partner.name}&quot;. Esta acción no se
-                    puede deshacer.
+                    Vas a eliminar el socio &quot;{partner.name}&quot;. Esta acción no se puede
+                    deshacer.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
@@ -129,6 +129,22 @@ export function _PartnerDetailContent({ partner }: PartnerDetailContentProps) {
             </div>
           </div>
 
+          <div className="mt-4 border-t pt-4">
+            <p className="text-sm font-medium text-muted-foreground">Cuenta contable de aportes</p>
+            <p className="text-sm">
+              {partner.contributionsAccount ? (
+                <span className="font-mono">
+                  {partner.contributionsAccount.code} - {partner.contributionsAccount.name}
+                </span>
+              ) : (
+                'Por defecto (Ajustes contables)'
+              )}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Cambiar esta cuenta no modifica los asientos ya generados.
+            </p>
+          </div>
+
           {partner.notes && (
             <>
               <div className="my-4 border-t" />
@@ -150,17 +166,11 @@ export function _PartnerDetailContent({ partner }: PartnerDetailContentProps) {
           <div className="grid gap-4 md:grid-cols-2">
             <div>
               <p className="text-sm font-medium text-muted-foreground">Creado</p>
-              <p className="text-sm">
-                {moment(partner.createdAt).format('DD/MM/YYYY HH:mm')}
-              </p>
+              <p className="text-sm">{moment(partner.createdAt).format('DD/MM/YYYY HH:mm')}</p>
             </div>
             <div>
-              <p className="text-sm font-medium text-muted-foreground">
-                Última Actualización
-              </p>
-              <p className="text-sm">
-                {moment(partner.updatedAt).format('DD/MM/YYYY HH:mm')}
-              </p>
+              <p className="text-sm font-medium text-muted-foreground">Última Actualización</p>
+              <p className="text-sm">{moment(partner.updatedAt).format('DD/MM/YYYY HH:mm')}</p>
             </div>
           </div>
         </CardContent>

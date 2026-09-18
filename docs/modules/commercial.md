@@ -95,6 +95,8 @@ commercial/
 │       ├── sessions/               # Sesiones de Caja
 │       ├── movements/              # Movimientos de Caja
 │       ├── checks/                 # Cheques
+│       ├── partners/               # Socios (cuenta corriente y cuenta de aportes)
+│       ├── fund-movements/         # Movimientos de Fondos (aportes, retiros, transferencias, gastos bancarios)
 │       ├── cashflow/               # Análisis de Cashflow
 │       └── cashflow-projections/   # Proyecciones de Flujo
 │
@@ -252,6 +254,66 @@ CashRegister
         ├── amount
         └── reference           # Número de Recibo/OP
 ```
+
+### Socios y Movimientos de Fondos
+
+```
+Partner
+├── name, taxId, email, phone, notes, isActive
+├── contributionsAccountId?     # Cuenta contable de aportes (TSK-717), FK a Account con SetNull
+│
+├── PartnerAccountMovement[]    # Cuenta corriente de tesorería (OWED / REPAYMENT / ADJUSTMENT)
+├── Card[]                      # Tarjetas de las que es titular
+│
+└── FundMovement (por partnerId, SIN FK)
+    ├── type: PARTNER_CONTRIBUTION / PARTNER_WITHDRAWAL / ACCOUNT_TRANSFER / BANK_CHARGES
+    ├── status: DRAFT → CONFIRMED
+    ├── partnerId, partnerName      # Obligatorio en aporte y retiro; snapshot del nombre
+    ├── fundOut* / fundIn*          # Banco o caja de origen / destino
+    ├── journalEntryId              # Asiento generado al confirmar (nace en DRAFT)
+    └── FundMovementLine[]          # Solo BANK_CHARGES (TSK-585)
+```
+
+**Flujo**: el movimiento se guarda como borrador editable; **Confirmar** actualiza el saldo del
+banco/caja y genera el asiento (2 líneas en aporte/retiro/transferencia, N+1 en gastos bancarios)
+dentro de una única transacción. Confirmado no se edita ni se elimina.
+
+**Resolución de la cuenta de capital (TSK-717)** — `resolvePartnerCapitalAccount` en
+`fund-movements/list/actions.server.ts`:
+
+1. `partner.contributionsAccountId` si el socio tiene cuenta propia. Tiene que ser imputable (hoja,
+   activa, sin corte vigente) y de tipo `ASSET` / `LIABILITY` / `EQUITY`
+   (`PARTNER_CONTRIBUTION_ACCOUNT_TYPES`, `partners/shared/types.ts`). **Sin fallback si la cuenta
+   propia no es imputable**: error que nombra al socio y a la cuenta ("La cuenta de aportes
+   "X" del socio "Y" no está activa o no es imputable. Corregila en Tesorería → Socios → Editar.").
+2. `settings.partnerContributionsAccountId` ("Cuenta de aportes de socios por defecto", solo
+   `EQUITY`) si el socio no tiene cuenta propia.
+3. Si no hay ninguna: "El socio "Y" no tiene cuenta de aportes y no hay una cuenta por defecto.
+   Asignale una en Tesorería → Socios → Editar, o configurá la "Cuenta de aportes de socios por
+   defecto" en Ajustes contables."
+4. Borrador sin socio (anterior a TSK-717): "Este movimiento no tiene socio asignado. Editá el
+   movimiento y elegí el socio antes de confirmarlo." Socio borrado entre borrador y confirmación:
+   "El socio del movimiento ya no existe. Editá el movimiento y elegí otro socio."
+
+Todos son `BusinessError` → `{ success: false, error }`; el movimiento queda en `DRAFT`. En aporte
+la cuenta resuelta va al Haber (banco/caja al Debe); en retiro, al Debe (banco/caja al Haber). El
+`logger` registra `capitalSource: 'partner' | 'default'`.
+
+**Socio obligatorio**: `fundMovementSchema` exige `partnerId` en `PARTNER_CONTRIBUTION` y
+`PARTNER_WITHDRAWAL` ("Seleccioná el socio"); `ACCOUNT_TRANSFER` y `BANK_CHARGES` no lo piden.
+`createFundMovement` / `updateFundMovement` rechazan un socio ajeno a la empresa ("El socio
+seleccionado no es válido"). El modal anticipa la cuenta con `_PartnerAccountNotice` (cuenta
+propia / por defecto / falta configurar), alimentado por `getFundMovementCatalogs`, que devuelve
+`partners[].contributionsAccount` y `defaultContributionsAccount`.
+
+**Combo de cuentas del socio**: `getPartnerContributionAccounts(includeIds?)` en
+`partners/features/list/actions.server.ts` (`buildImputableAccountsWhere` con los tres tipos, más
+`includeIds` para preservar la cuenta ya guardada aunque haya dejado de ser imputable).
+
+**Regla de `deletePartner`**: borrado físico bloqueado si el socio tiene movimientos de cuenta
+corriente o tarjetas (regla previa) **o** movimientos de fondos en cualquier estado
+(`prisma.fundMovement.count` por `partnerId`, porque no hay FK): "No se puede eliminar un socio con
+aportes o retiros registrados. Desactivalo desde Editar si ya no opera."
 
 ### Inventario
 
@@ -776,6 +838,8 @@ Tanto Recibos como Órdenes de Pago soportan retenciones impositivas:
 | Recibos de Cobro | `modules/commercial/features/treasury/features/receipts/actions.server.ts` |
 | Órdenes de Pago | `modules/commercial/features/treasury/features/payment-orders/actions.server.ts` |
 | Movimientos Bancarios | `modules/commercial/features/treasury/features/bank-movements/actions.server.ts` |
+| Socios | `modules/commercial/features/treasury/features/partners/features/list/actions.server.ts` (`getPartnerContributionAccounts`, `deletePartner`) |
+| Movimientos de Fondos | `modules/commercial/features/treasury/features/fund-movements/list/actions.server.ts` (`confirmFundMovement`, `resolvePartnerCapitalAccount`, `getFundMovementCatalogs`) |
 | Sesiones de Caja | `modules/commercial/features/treasury/features/sessions/actions.server.ts` |
 | Movimientos de Stock | `modules/commercial/features/warehouses/features/movements/actions.server.ts` |
 | CC Cliente | `modules/commercial/features/clients/detail/actions.server.ts` |

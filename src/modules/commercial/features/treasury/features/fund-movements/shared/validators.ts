@@ -74,7 +74,9 @@ export const fundMovementSchema = z
     sourceFund: z.string().optional().or(z.literal('')),
     // Banco/caja a donde entran los fondos (aporte / transferencia): "BANK:id" | "CASH:id"
     destinationFund: z.string().optional().or(z.literal('')),
-    // Socio (aporte / retiro), informativo
+    // Socio del aporte / retiro. Obligatorio para esos dos tipos (ver superRefine);
+    // define la cuenta del asiento (TSK-717). El tipo base sigue admitiendo ''
+    // porque transferencia y gastos bancarios no lo usan.
     partnerId: z.string().uuid().optional().or(z.literal('')),
     // Conceptos del débito bancario. Solo los usa BANK_CHARGES (TSK-585).
     //
@@ -138,12 +140,27 @@ export const fundMovementSchema = z
           message: 'Seleccioná el banco o caja donde ingresan los fondos',
         });
       }
+      // TSK-717: el socio decide la cuenta del asiento, así que ya no es informativo.
+      if (!data.partnerId) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['partnerId'],
+          message: 'Seleccioná el socio',
+        });
+      }
     } else if (data.type === 'PARTNER_WITHDRAWAL') {
       if (!validRef(data.sourceFund)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['sourceFund'],
           message: 'Seleccioná el banco o caja de donde salen los fondos',
+        });
+      }
+      if (!data.partnerId) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['partnerId'],
+          message: 'Seleccioná el socio',
         });
       }
     } else if (data.type === 'ACCOUNT_TRANSFER') {

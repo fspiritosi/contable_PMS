@@ -1,9 +1,10 @@
 'use client';
 
 import { ColumnDef } from '@tanstack/react-table';
-import { MoreHorizontal, Users, Phone, Mail, Eye, Edit, Trash2 } from 'lucide-react';
+import { Edit, Eye, Mail, MoreHorizontal, Phone, Trash2, Users } from 'lucide-react';
 import Link from 'next/link';
 
+import { DataTableColumnHeader } from '@/shared/components/common/DataTable';
 import { Badge } from '@/shared/components/ui/badge';
 import { Button } from '@/shared/components/ui/button';
 import { Checkbox } from '@/shared/components/ui/checkbox';
@@ -15,9 +16,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/shared/components/ui/dropdown-menu';
-import { DataTableColumnHeader } from '@/shared/components/common/DataTable';
-import { formatCurrency } from '@/shared/utils/formatters';
 import type { ModulePermissions } from '@/shared/lib/permissions';
+import { formatCurrency } from '@/shared/utils/formatters';
 import type { PartnerWithBalance } from '../../shared/types';
 
 interface ColumnsProps {
@@ -119,6 +119,22 @@ export function getColumns({
       },
     },
     {
+      accessorKey: 'contributionsAccount',
+      meta: { title: 'Cuenta de aportes' },
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Cuenta de aportes" />,
+      // Es una relación: `stateToPrismaParams` no puede traducir el orderBy.
+      enableSorting: false,
+      cell: ({ row }) => {
+        const account = row.original.contributionsAccount;
+        if (!account) return <span className="text-muted-foreground">Por defecto</span>;
+        return (
+          <span className="font-mono text-xs" title={account.name}>
+            {account.code} · {account.name}
+          </span>
+        );
+      },
+    },
+    {
       accessorKey: 'balance',
       meta: { title: 'Saldo a favor' },
       header: ({ column }) => <DataTableColumnHeader column={column} title="Saldo a favor" />,
@@ -128,8 +144,8 @@ export function getColumns({
           balance > 0
             ? 'text-red-600 font-medium'
             : balance < 0
-            ? 'text-green-600 font-medium'
-            : 'text-muted-foreground';
+              ? 'text-green-600 font-medium'
+              : 'text-muted-foreground';
         return (
           <div className="text-right">
             <span className={colorClass}>{formatCurrency(balance)}</span>
@@ -181,10 +197,7 @@ export function getColumns({
               )}
               {canUpdate && canDelete && <DropdownMenuSeparator />}
               {canDelete && (
-                <DropdownMenuItem
-                  onClick={() => onDelete(partner)}
-                  className="text-destructive"
-                >
+                <DropdownMenuItem onClick={() => onDelete(partner)} className="text-destructive">
                   <Trash2 className="mr-2 h-4 w-4" />
                   Eliminar
                 </DropdownMenuItem>

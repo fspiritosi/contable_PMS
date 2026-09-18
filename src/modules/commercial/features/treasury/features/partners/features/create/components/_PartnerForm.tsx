@@ -1,10 +1,11 @@
 'use client';
 
-import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Loader2 } from 'lucide-react';
+import { useForm } from 'react-hook-form';
 
 import { Button } from '@/shared/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card';
 import {
   Form,
   FormControl,
@@ -17,14 +18,16 @@ import {
 import { Input } from '@/shared/components/ui/input';
 import { Switch } from '@/shared/components/ui/switch';
 import { Textarea } from '@/shared/components/ui/textarea';
-import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card';
 import { partnerSchema, type PartnerFormData } from '../../../shared/validators';
+import { _PartnerAccountField } from './_PartnerAccountField';
 
 interface PartnerFormProps {
   defaultValues?: Partial<PartnerFormData>;
   onSubmit: (data: PartnerFormData) => Promise<void>;
   isSubmitting?: boolean;
   submitLabel?: string;
+  /** Cuenta ya guardada (edición), para preservarla en el combo (TSK-717). */
+  savedAccountId?: string | null;
 }
 
 export function _PartnerForm({
@@ -32,8 +35,11 @@ export function _PartnerForm({
   onSubmit,
   isSubmitting = false,
   submitLabel = 'Crear Socio',
+  savedAccountId,
 }: PartnerFormProps) {
-  const form = useForm<PartnerFormData>({
+  // Sin genérico explícito: input/output se infieren del resolver (`isActive`
+  // tiene `.default(true)`, así que difieren) y `form.control` tipa bien.
+  const form = useForm({
     resolver: zodResolver(partnerSchema),
     defaultValues: {
       name: '',
@@ -42,6 +48,7 @@ export function _PartnerForm({
       phone: '',
       notes: '',
       isActive: true,
+      contributionsAccountId: null,
       ...defaultValues,
     },
   });
@@ -131,6 +138,8 @@ export function _PartnerForm({
                 </FormItem>
               )}
             />
+
+            <_PartnerAccountField control={form.control} savedAccountId={savedAccountId} />
 
             <FormField
               control={form.control}

@@ -1,13 +1,14 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
-import { Loader2, AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Loader2 } from 'lucide-react';
 import moment from 'moment';
+import { useEffect, useRef, useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { toast } from 'sonner';
 
+import { Button } from '@/shared/components/ui/button';
 import {
   Dialog,
   DialogContent,
@@ -26,8 +27,6 @@ import {
 } from '@/shared/components/ui/form';
 import { Input } from '@/shared/components/ui/input';
 import { MoneyInput } from '@/shared/components/ui/money-input';
-import { Textarea } from '@/shared/components/ui/textarea';
-import { Button } from '@/shared/components/ui/button';
 import {
   Select,
   SelectContent,
@@ -37,26 +36,29 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/shared/components/ui/select';
+import { Textarea } from '@/shared/components/ui/textarea';
 import {
-  fundMovementSchema,
   formatFundMovementDate,
   FUND_MOVEMENT_TYPE_LABELS,
   FUND_MOVEMENT_TYPES,
+  fundMovementSchema,
   type FundMovementFormInput,
   type FundMovementTypeValue,
 } from '../../shared/validators';
 import {
-  createFundMovement,
-  updateFundMovement,
   confirmFundMovement,
+  createFundMovement,
   getFundMovementById,
   getFundMovementLineAccounts,
+  updateFundMovement,
+  type FundMovementAccountRef,
   type FundMovementActionResult,
-  type FundOption,
-  type FundMovementPartnerOption,
   type FundMovementListItem,
+  type FundMovementPartnerOption,
+  type FundOption,
 } from '../actions.server';
 import { _FundMovementLinesField } from './_FundMovementLinesField';
+import { _PartnerAccountNotice } from './_PartnerAccountNotice';
 
 interface Props {
   open: boolean;
@@ -64,12 +66,11 @@ interface Props {
   banks: FundOption[];
   cashRegisters: FundOption[];
   partners: FundMovementPartnerOption[];
-  hasContributionsAccount: boolean;
+  /** Cuenta de aportes por defecto (Ajustes contables); `null` si no está configurada (TSK-717). */
+  defaultContributionsAccount: FundMovementAccountRef | null;
   movement?: FundMovementListItem | null; // presente = modo edición
   onSuccess: () => void;
 }
-
-const NONE = '__none__';
 
 function fundRefFrom(kind: string | null, id: string | null): string {
   return kind && id ? `${kind}:${id}` : '';
@@ -81,7 +82,7 @@ export function _CreateFundMovementModal({
   banks,
   cashRegisters,
   partners,
-  hasContributionsAccount,
+  defaultContributionsAccount,
   movement,
   onSuccess,
 }: Props) {
@@ -193,6 +194,8 @@ export function _CreateFundMovementModal({
   const isBankCharges = type === 'BANK_CHARGES';
   const isPartnerMovement = isContribution || isWithdrawal;
   const noFundAccounts = banks.length === 0 && cashRegisters.length === 0;
+  const partnerId = form.watch('partnerId');
+  const selectedPartner = partners.find((p) => p.id === partnerId);
 
   // Al cambiar el tipo de movimiento, los campos que dejan de aplicar no
   // pueden quedar colgados en el formulario: los conceptos se mandarían con
@@ -220,12 +223,15 @@ export function _CreateFundMovementModal({
       if (form.getValues('lines')?.length) form.setValue('lines', []);
     } else {
       if (form.getValues('destinationFund')) form.setValue('destinationFund', '');
-      if (form.getValues('partnerId')) form.setValue('partnerId', '');
     }
+    // TSK-717: solo aporte y retiro usan `partnerId` (y ahora define la cuenta
+    // del asiento); una transferencia tampoco debe arrastrar un socio elegido
+    // en un tipo anterior.
+    if (!isPartnerMovement && form.getValues('partnerId')) form.setValue('partnerId', '');
     if (isContribution && form.getValues('sourceFund')) {
       form.setValue('sourceFund', '');
     }
-  }, [isBankCharges, isContribution, form]);
+  }, [isBankCharges, isContribution, isPartnerMovement, form]);
 
   const persist = async (data: FundMovementFormInput, confirm: boolean) => {
     setIsSubmitting(true);
@@ -298,7 +304,9 @@ export function _CreateFundMovementModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[560px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{isEdit ? 'Editar Movimiento de Fondos' : 'Nuevo Movimiento de Fondos'}</DialogTitle>
+          <DialogTitle>
+            {isEdit ? 'Editar Movimiento de Fondos' : 'Nuevo Movimiento de Fondos'}
+          </DialogTitle>
           <DialogDescription>
             Se guarda como borrador editable. Al confirmarlo, actualiza el saldo del banco/caja y
             genera el asiento contable.
@@ -338,16 +346,6 @@ export function _CreateFundMovementModal({
                 <span>
                   No hay cuentas bancarias ni cajas con sesión abierta disponibles. Creá una cuenta
                   bancaria o abrí una caja antes de registrar movimientos de fondos.
-                </span>
-              </div>
-            )}
-
-            {isPartnerMovement && !hasContributionsAccount && (
-              <div className="flex items-start gap-2 rounded-md border border-orange-500/50 bg-orange-500/10 p-3 text-sm text-orange-600">
-                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                <span>
-                  Para confirmar aportes o retiros, configurá primero la &quot;Cuenta de aportes de
-                  socios&quot; en Ajustes contables.
                 </span>
               </div>
             )}
@@ -411,7 +409,9 @@ export function _CreateFundMovementModal({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>
-                      {isContribution ? 'Banco/caja donde ingresan los fondos *' : 'Banco/caja destino *'}
+                      {isContribution
+                        ? 'Banco/caja donde ingresan los fondos *'
+                        : 'Banco/caja destino *'}
                     </FormLabel>
                     <Select onValueChange={field.onChange} value={field.value || undefined}>
                       <FormControl>
@@ -460,18 +460,14 @@ export function _CreateFundMovementModal({
                 name="partnerId"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Socio (opcional)</FormLabel>
-                    <Select
-                      onValueChange={(v) => field.onChange(v === NONE ? '' : v)}
-                      value={field.value || NONE}
-                    >
+                    <FormLabel>Socio *</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value || undefined}>
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder="Sin socio" />
+                          <SelectValue placeholder="Seleccionar socio" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value={NONE}>Sin socio</SelectItem>
                         {partners.map((p) => (
                           <SelectItem key={p.id} value={p.id}>
                             {p.name}
@@ -482,6 +478,13 @@ export function _CreateFundMovementModal({
                     <FormMessage />
                   </FormItem>
                 )}
+              />
+            )}
+
+            {isPartnerMovement && (
+              <_PartnerAccountNotice
+                partner={selectedPartner}
+                defaultAccount={defaultContributionsAccount}
               />
             )}
 
@@ -500,10 +503,20 @@ export function _CreateFundMovementModal({
             />
 
             <DialogFooter className="gap-2 sm:gap-2">
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+                disabled={isSubmitting}
+              >
                 Cancelar
               </Button>
-              <Button type="button" variant="secondary" onClick={() => submit(false)} disabled={isSubmitting}>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => submit(false)}
+                disabled={isSubmitting}
+              >
                 {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Guardar
               </Button>
