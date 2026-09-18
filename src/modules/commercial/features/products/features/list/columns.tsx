@@ -18,6 +18,7 @@ import {
 import { DataTableColumnHeader } from '@/shared/components/common/DataTable';
 import type { ModulePermissions } from '@/shared/lib/permissions';
 import type { Product } from '../../shared/types';
+import { missingImputations } from '../../shared/imputation-filter';
 import { formatCurrency } from '@/shared/utils/formatters';
 import {
   PRODUCT_TYPE_LABELS,
@@ -236,6 +237,9 @@ export function getColumns({ onEdit, onDelete, onImputation, permissions, showOe
     },
     {
       id: 'imputation',
+      // Los valores del filtro (noIncome / noExpense) salen de este accessor; los
+      // conteos vienen del servidor (facetCounts.imputation).
+      accessorFn: (product) => missingImputations(product),
       meta: { title: 'Imputación' },
       header: ({ column }) => <DataTableColumnHeader column={column} title="Imputación" />,
       enableSorting: false,
@@ -243,14 +247,10 @@ export function getColumns({ onEdit, onDelete, onImputation, permissions, showOe
         const product = row.original;
         const income = product.defaultIncomeAccount;
         const expense = product.defaultExpenseAccount;
-        if (!income && !expense) {
-          return (
-            <Badge variant="outline" className="border-orange-500 text-orange-600 text-xs whitespace-nowrap">
-              <AlertTriangle className="mr-1 h-3 w-3" />
-              Sin imputar
-            </Badge>
-          );
-        }
+        // Qué falta SEGÚN EL USO del ítem (TSK-721): a uno solo de compra no le
+        // falta la de ingresos, y viceversa.
+        const missing = missingImputations(product);
+        const missingBadge = 'w-fit border-orange-500 text-orange-600 text-xs whitespace-nowrap';
         return (
           <div className="flex flex-col gap-0.5 text-xs">
             {income && (
@@ -264,6 +264,18 @@ export function getColumns({ onEdit, onDelete, onImputation, permissions, showOe
                 <span className="text-muted-foreground">Egr:</span>{' '}
                 <span className="font-mono">{expense.code}</span>
               </span>
+            )}
+            {missing.includes('noIncome') && (
+              <Badge variant="outline" className={missingBadge}>
+                <AlertTriangle className="mr-1 h-3 w-3" />
+                Sin ingreso
+              </Badge>
+            )}
+            {missing.includes('noExpense') && (
+              <Badge variant="outline" className={missingBadge}>
+                <AlertTriangle className="mr-1 h-3 w-3" />
+                Sin egreso
+              </Badge>
             )}
           </div>
         );

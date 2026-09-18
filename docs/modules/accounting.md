@@ -54,7 +54,9 @@ DRAFT ──(post)──> POSTED ──(reverse)──> REVERSED
 ### Asientos Automaticos
 
 Se generan al confirmar documentos comerciales (ver [Modulo Comercial](commercial.md#integracion-contable)):
-- Facturas de venta/compra (incluyen una linea por percepcion y otra por impuestos internos, TSK-644)
+- Facturas de venta/compra (incluyen una linea por percepcion y otra por impuestos internos, TSK-644;
+  la cuenta de cada linea es la del item o la "por defecto" de configuracion, y si falta la
+  confirmacion se bloquea, TSK-721 — ver [Resolucion de la cuenta de linea](#resolucion-de-la-cuenta-de-linea-tsk-721))
 - Recibos de cobro
 - Ordenes de pago
 - Gastos
@@ -177,7 +179,8 @@ Permite bloquear periodos contables mensuales para evitar la creacion o modifica
 | Crear asiento manual | Error: periodo bloqueado |
 | Registrar (post) asiento borrador | Error: periodo bloqueado |
 | Revertir asiento | Error: periodo bloqueado |
-| Confirmar factura/recibo/OP/gasto | Documento se confirma, asiento automatico se omite con warning |
+| Confirmar factura de venta/compra | La confirmacion falla con mensaje legible y se revierte: la factura sigue en `DRAFT` sin asiento (TSK-721: cualquier error del asiento bloquea) |
+| Confirmar recibo/OP/gasto | Documento se confirma, asiento automatico se omite con warning (pendiente de alinear con TSK-721) |
 | Contabilizar depreciacion | Error: periodo bloqueado |
 | Cierre fiscal | Auto-bloquea todos los meses del ejercicio |
 
@@ -187,16 +190,74 @@ Cuentas contables asignadas a funciones del sistema:
 
 | Campo | Funcion |
 |-------|---------|
-| `salesAccountId` | Ventas |
-| `purchasesAccountId` | Compras |
-| `receivablesAccountId` | Cuentas por Cobrar |
-| `payablesAccountId` | Cuentas por Pagar |
+| `salesAccountId` | Ventas **por defecto**: solo las lineas de venta cuyo item no tiene `defaultIncomeAccountId`. Puede ser `null` si todos los items de venta tienen la suya (TSK-721) |
+| `purchasesAccountId` | Compras **por defecto**: items sin `defaultExpenseAccountId` y **lineas sin item** (gastos no inventariables, comprobantes importados de AFIP). Requerida mientras se carguen compras sin item (TSK-721) |
+| `receivablesAccountId` | Cuentas por Cobrar (requerida por el asiento de venta) |
+| `payablesAccountId` | Cuentas por Pagar (requerida por el asiento de compra) |
 | `vatDebitAccountId` | IVA Debito Fiscal |
 | `vatCreditAccountId` | IVA Credito Fiscal |
 | `defaultCashAccountId` | Caja (default) |
 | `defaultBankAccountId` | Banco (default) |
+| `bankChargesAccountId` | Gastos bancarios **por defecto** (TSK-718): preseleccion de la cuenta de cada concepto nuevo de un movimiento de fondos `BANK_CHARGES`. Es solo UI: el asiento usa `FundMovementLine.accountId`, no esta cuenta |
 | `expensesAccountId` | Gastos Operativos |
 | `resultAccountId` | Resultado del Ejercicio |
+
+Labels en `_CommercialIntegrationForm.tsx`: "Cuenta de ventas por defecto", "Cuenta de compras por
+defecto" (seccion Cuentas de Resultado) y "Gastos bancarios por defecto" (seccion Cuentas de
+Tesoreria, tipo `EXPENSE`). Las ayudas dicen cuando se usa cada una; la de compras avisa que tiene
+que estar asignada si se cargan compras sin item.
+
+### Resolucion de la cuenta de linea (TSK-721)
+
+La cuenta contable de cada linea de factura la define el **item**; la global es un respaldo.
+Regla: `item → por defecto → error que nombra la linea`.
+
+| Origen | Ventas (Haber) | Compras (Debe) |
+|--------|----------------|----------------|
+| Item con cuenta | `Product.defaultIncomeAccountId` | `Product.defaultExpenseAccountId` |
+| Item sin cuenta | `salesAccountId` | `purchasesAccountId` |
+| Linea sin item | no existe en ventas | `purchasesAccountId` (unica opcion) |
+| Ninguna | `BusinessError` con la linea nombrada | idem |
+
+Implementacion:
+
+- **Helper puro** `src/modules/commercial/shared/line-accounts.ts` (0 imports, cubierto por
+  `line-accounts.test.ts`): `resolveLineAccount`, `findLinesMissingAccount`,
+  `buildMissingLineAccountsMessage`, `findLinesWithUnavailableAccount`,
+  `buildUnavailableLineAccountsMessage`, `formatAccountLabel`. Los textos que ve el usuario viven
+  ahi: «No se puede confirmar el comprobante: la linea «X» no tiene cuenta contable. Asignale una
+  Cuenta de Egresos al item (Items → Imputacion contable) o configura la "Cuenta de compras por
+  defecto" en Contabilidad → Configuracion.» (con «(sin item)» y una frase extra cuando la linea
+  no tiene item).
+- **Pre-validacion en el confirm** (`confirmInvoice` / `confirmPurchaseInvoice`, antes de abrir la
+  transaccion, mismo patron que tributos y centro de costo): (1) lineas que no resuelven cuenta;
+  (2) lineas cuya cuenta efectiva existe pero **no es imputable hoy** (inactiva, no hoja, de otra
+  empresa) usando `buildImputableAccountsWhere` + `findLinesWithUnavailableAccount`, con un mensaje
+  que distingue si la cuenta viene del item o de la configuracion. No hay fallback silencioso a la
+  global cuando la del item esta dada de baja.
+- **Asiento** (`features/integrations/commercial/index.ts`): `createJournalEntryForSalesInvoice` /
+  `ForPurchaseInvoice` repiten `findLinesMissingAccount` como defensa en profundidad y usan
+  `resolveLineAccount` por linea. El guard de configuracion ya no hace `return null`: lanza
+  `BusinessError('No se puede generar el asiento: falta configurar "Cuentas por Cobrar/Pagar" en
+  Contabilidad → Configuracion.')`. Las alicuotas de IVA sin cuenta (`vatDebit/CreditAccountId` o
+  `AccountingVatAccount`) tambien lanzan `BusinessError` en vez de `warn + continue`.
+  `createJournalEntry` pasa a devolver `Promise<string>` (antes `string | null`), y "No se
+  encontro configuracion contable" / "periodo cerrado" son `BusinessError`.
+- **Sin `catch` que trague**: los confirm de facturas ya no envuelven el asiento en un `try/catch`
+  con `logger.warn`. Cualquier error del asiento aborta la transaccion y llega al usuario como
+  `{ success: false, error }` (ver [Errores de negocio en Server Actions](../conventions/coding-standards.md#errores-de-negocio-en-server-actions)).
+  Antes de TSK-721 una factura con linea sin cuenta quedaba `CONFIRMED` con `journalEntryId = null`
+  en silencio; `prisma/scripts/diagnose-invoices-without-entry.ts` (solo lectura, SQL en el header)
+  lista las historicas.
+
+**Visibilidad de items sin cuenta**: `getItemsWithoutAccountCounts(companyId)` en
+`features/settings/actions.server.ts` (`checkPermission('accounting.settings','view')`, dos
+`prisma.product.count` sobre items `ACTIVE` con `usage` de venta/compra y cuenta `null`; Prisma
+directo, sin importar de `commercial`). `AccountingSettings.tsx` lo carga en `Promise.all` con las
+cuentas y renderiza `ItemsWithoutAccountNotice` (Server Component, bloque naranja `role="status"`)
+arriba del formulario: una fila por conteo > 0 con enlace «→ Ver» a
+`/dashboard/commercial/products?imputation=noIncome|noExpense&status=ACTIVE` (el enlace se oculta
+sin permiso `commercial.products.view`). Con ambos conteos en 0 no renderiza nada.
 
 ### Cuentas de Retenciones (8 campos)
 

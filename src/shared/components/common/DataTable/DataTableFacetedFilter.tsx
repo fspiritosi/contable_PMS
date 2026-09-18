@@ -45,8 +45,9 @@ export function DataTableFacetedFilter<TData, TValue>({
   options,
   externalCounts,
 }: DataTableFacetedFilterProps<TData, TValue>) {
-  const localFacets = column?.getFacetedUniqueValues();
-  const facets = externalCounts ?? localFacets;
+  // Con conteos externos no se calculan los facets locales: una columna de solo
+  // display (sin accessor) hace que getFacetedUniqueValues() falle.
+  const facets = externalCounts ?? column?.getFacetedUniqueValues();
   const selectedValues = new Set(column?.getFilterValue() as string[]);
 
   return (

@@ -215,12 +215,26 @@ export function _AccountingGuide() {
               En la sección <strong>Integración Comercial</strong>, mapea las
               cuentas contables:
               <ul className="list-disc pl-6 mt-1 space-y-1">
-                <li>Cuenta de Ventas</li>
-                <li>Cuenta de Compras</li>
+                <li>
+                  Cuenta de ventas <strong>por defecto</strong> y Cuenta de
+                  compras <strong>por defecto</strong>: la cuenta de cada
+                  línea de factura la define el <strong>ítem</strong> (Ítems →
+                  Imputación contable); estas dos se usan solo para los ítems
+                  que no tienen la suya. La de ventas puede quedar sin asignar
+                  si todos los ítems de venta tienen su Cuenta de Ingresos. La
+                  de compras hace falta mientras cargues líneas{' '}
+                  <strong>sin ítem</strong> (gastos sueltos, comprobantes
+                  importados de AFIP), porque esas líneas solo pueden usar la
+                  cuenta por defecto.
+                </li>
                 <li>Deudores por Ventas</li>
                 <li>Proveedores</li>
                 <li>IVA Débito Fiscal e IVA Crédito Fiscal</li>
-                <li>Caja y Banco</li>
+                <li>
+                  Caja y Banco, y Gastos bancarios <strong>por defecto</strong>{' '}
+                  (se preselecciona en cada concepto de un movimiento de
+                  Gastos e impuestos bancarios; podés cambiarla en cada fila)
+                </li>
                 <li>Gastos</li>
                 <li>
                   Retenciones (IVA, Ganancias, IIBB, SUSS - emitidas y
@@ -252,6 +266,20 @@ export function _AccountingGuide() {
               confirmado genera su asiento automáticamente
             </li>
           </ol>
+          <Alert>
+            <Info className="h-4 w-4" />
+            <AlertDescription>
+              <strong>Ítems sin cuenta contable.</strong> Arriba de estas
+              cuentas, la pantalla te muestra cuántos ítems activos todavía no
+              tienen su Cuenta de Ingresos (los de venta) o su Cuenta de
+              Egresos (los de compra), con un enlace <strong>Ver</strong> al
+              listado de Ítems ya filtrado para imputarlos. Mientras existan,
+              las facturas de esos ítems se imputan a la cuenta por defecto;
+              si tampoco hay cuenta por defecto, la factura{' '}
+              <strong>no se puede confirmar</strong> y el mensaje te nombra la
+              línea. Si no hay ítems pendientes, el aviso no aparece.
+            </AlertDescription>
+          </Alert>
           <p className="mt-3 text-sm text-muted-foreground">
             Cuando una línea de factura tiene su importe repartido entre
             varios centros de costo, el asiento genera una imputación por

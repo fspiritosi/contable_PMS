@@ -53,3 +53,18 @@ export function validateLines(
 
   return null;
 }
+
+/**
+ * Cuenta con la que nace un concepto nuevo (TSK-718): la "Gastos bancarios por
+ * defecto" de Ajustes contables, pero SOLO si está entre las cuentas que el
+ * combo ofrece. Preseleccionar un id que el combo no tiene deja el campo
+ * "vacío" a la vista y `assertLineAccounts` lo rechaza con el mensaje genérico
+ * (riesgo 1.6-6 del plan). Devuelve '' (sin cuenta) en cualquier otro caso.
+ */
+export function pickDefaultLineAccount(
+  defaultAccountId: string | null | undefined,
+  accounts: Array<{ id: string }>
+): string {
+  if (!defaultAccountId) return '';
+  return accounts.some((account) => account.id === defaultAccountId) ? defaultAccountId : '';
+}

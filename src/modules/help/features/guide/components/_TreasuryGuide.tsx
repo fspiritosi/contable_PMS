@@ -910,7 +910,14 @@ export function _TreasuryGuide() {
               agregando una fila por cada ítem del resumen bancario. Por cada
               uno elegís la cuenta contable, escribís una descripción y el
               importe. El total se calcula solo, sumando los conceptos, y no
-              se puede confirmar sin al menos uno cargado.
+              se puede confirmar sin al menos uno cargado. La cuenta de cada
+              concepto nuevo viene <strong>preseleccionada</strong> con la{' '}
+              <strong>Gastos bancarios por defecto</strong> de Ajustes
+              contables, y un aviso debajo de la tabla te dice cuál es; podés
+              cambiarla en cada fila (Sircreb y otros conceptos que son activo
+              se eligen a mano). Si esa cuenta no está configurada, el aviso
+              te lo indica con un enlace a Ajustes contables y elegís la
+              cuenta concepto por concepto, como hasta ahora.
             </li>
             <li>
               Escribí una descripción y elegí:

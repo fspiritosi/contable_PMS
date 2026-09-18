@@ -10,6 +10,7 @@ import {
   stateToPrismaParams,
 } from '@/shared/components/common/DataTable/helpers';
 import { buildImputableAccountsWhere } from '@/shared/lib/accounts/imputable-accounts';
+import { ActionResult, BusinessError, toActionResult } from '@/shared/lib/action-result';
 import { getActiveCompanyId } from '@/shared/lib/company';
 import { getCurrentUserId } from '@/shared/lib/current-user';
 import { logger } from '@/shared/lib/logger';
@@ -33,37 +34,11 @@ type PrismaTransactionClient = Omit<
 
 /**
  * Resultado de una mutación. Los errores esperables viajan como dato, no como
- * excepción: en producción Next.js redacta el mensaje de cualquier Error lanzado
- * desde un Server Action y el usuario terminaba viendo "An error occurred in the
- * Server Components render... a digest property is included" (TSK-481).
+ * excepción (TSK-481). `BusinessError` y `toActionResult` viven en
+ * `@/shared/lib/action-result` desde TSK-721, compartidos con la confirmación de
+ * facturas.
  */
-export type FundMovementActionResult =
-  | { success: true; id?: string }
-  | { success: false; error: string };
-
-/**
- * Condición esperable y explicable al usuario (falta configuración, caja sin
- * sesión abierta, movimiento ya confirmado). Se distingue de un fallo real para
- * poder devolver su mensaje tal cual.
- */
-class BusinessError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'BusinessError';
-  }
-}
-
-/** Traduce una excepción al resultado que consume el cliente. */
-function toActionResult(error: unknown, contexto: string): FundMovementActionResult {
-  if (error instanceof BusinessError) {
-    return { success: false, error: error.message };
-  }
-  logger.error(contexto, { data: { error } });
-  return {
-    success: false,
-    error: 'Ocurrió un error inesperado. Volvé a intentar o avisá al equipo si persiste.',
-  };
-}
+export type FundMovementActionResult = ActionResult<{ id?: string }>;
 
 // ============================================================================
 // QUERIES
@@ -118,7 +93,11 @@ export async function getFundMovementById(id: string) {
   };
 }
 
-/** Catálogos para el formulario: bancos, cajas con sesión abierta, socios (con su cuenta de aportes) y cuenta por defecto. */
+/**
+ * Catálogos para el formulario: bancos, cajas con sesión abierta, socios (con
+ * su cuenta de aportes), cuenta de aportes por defecto y cuenta de gastos
+ * bancarios por defecto (TSK-718).
+ */
 export async function getFundMovementCatalogs() {
   await checkPermission('commercial.treasury.fund-movements', 'view', { redirect: true });
   const companyId = await getActiveCompanyId();
@@ -146,7 +125,10 @@ export async function getFundMovementCatalogs() {
     }),
     prisma.accountingSettings.findUnique({
       where: { companyId },
-      select: { partnerContributionsAccount: { select: { id: true, code: true, name: true } } },
+      select: {
+        partnerContributionsAccount: { select: { id: true, code: true, name: true } },
+        bankChargesAccount: { select: { id: true, code: true, name: true } },
+      },
     }),
   ]);
 
@@ -161,6 +143,10 @@ export async function getFundMovementCatalogs() {
     // TSK-717: reemplaza `hasContributionsAccount: boolean`. El modal necesita
     // código y nombre para decir "se usará la cuenta por defecto X".
     defaultContributionsAccount: settings?.partnerContributionsAccount ?? null,
+    // TSK-718: se preselecciona en cada concepto nuevo de "Gastos e impuestos
+    // bancarios" si sigue imputable (lo decide `pickDefaultLineAccount` en el
+    // cliente contra las cuentas que ofrece `getFundMovementLineAccounts`).
+    defaultBankChargesAccount: settings?.bankChargesAccount ?? null,
   };
 }
 

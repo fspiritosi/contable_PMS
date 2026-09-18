@@ -9,11 +9,19 @@ import { Input } from '@/shared/components/ui/input';
 import { MoneyInput } from '@/shared/components/ui/money-input';
 import { formatCurrency } from '@/shared/utils/formatters';
 
-import { sumLines, type FundMovementLineInput } from '../../shared/lines-calc';
+import {
+  pickDefaultLineAccount,
+  sumLines,
+  type FundMovementLineInput,
+} from '../../shared/lines-calc';
+import type { FundMovementAccountRef } from '../actions.server';
+import { _BankChargesDefaultNotice } from './_BankChargesDefaultNotice';
 
 interface FundMovementLinesFieldProps {
   /** Cuentas imputables de tipo egreso o activo (ya filtradas por el servidor). */
   accounts: AccountOption[];
+  /** "Gastos bancarios por defecto" de Ajustes contables; se preselecciona en cada concepto nuevo (TSK-718). */
+  defaultAccount?: FundMovementAccountRef | null;
 }
 
 /**
@@ -28,9 +36,17 @@ interface FundMovementLinesFieldProps {
  * de cada línea (`lines.<index>`), no a un subcampo puntual, así que el
  * `<FormMessage>` genérico no lo encuentra.
  */
-export function _FundMovementLinesField({ accounts }: FundMovementLinesFieldProps) {
+export function _FundMovementLinesField({
+  accounts,
+  defaultAccount = null,
+}: FundMovementLinesFieldProps) {
   const { control, register, setValue } = useFormContext();
   const { fields, append, remove } = useFieldArray({ control, name: 'lines' });
+
+  // '' si no hay cuenta por defecto o si ya no está entre las imputables
+  // (riesgo 1.6-6). Solo aplica al `append`: el `reset` del modal en edición
+  // sigue cargando las cuentas guardadas del borrador.
+  const defaultAccountId = pickDefaultLineAccount(defaultAccount?.id, accounts);
 
   const lines = (useWatch({ control, name: 'lines' }) ?? []) as FundMovementLineInput[];
   const total = sumLines(lines);
@@ -48,7 +64,7 @@ export function _FundMovementLinesField({ accounts }: FundMovementLinesFieldProp
           type="button"
           variant="ghost"
           size="sm"
-          onClick={() => append({ accountId: '', description: '', amount: '' })}
+          onClick={() => append({ accountId: defaultAccountId, description: '', amount: '' })}
         >
           <Plus className="mr-1 h-4 w-4" />
           Agregar concepto
@@ -116,6 +132,12 @@ export function _FundMovementLinesField({ accounts }: FundMovementLinesFieldProp
           </div>
         </>
       )}
+
+      {/* Siempre visible (con y sin conceptos) para que se lea antes del primer "Agregar concepto". */}
+      <_BankChargesDefaultNotice
+        defaultAccount={defaultAccount}
+        available={defaultAccountId !== ''}
+      />
     </div>
   );
 }

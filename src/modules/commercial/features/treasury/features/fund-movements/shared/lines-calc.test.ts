@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { sumLines, validateLines, type FundMovementLineInput } from './lines-calc';
+import {
+  pickDefaultLineAccount,
+  sumLines,
+  validateLines,
+  type FundMovementLineInput,
+} from './lines-calc';
 
 const CUENTA_A = '11111111-1111-4111-8111-111111111111';
 const CUENTA_B = '22222222-2222-4222-8222-222222222222';
@@ -73,5 +78,30 @@ describe('validación de los conceptos', () => {
     const resultado = validateLines([linea({ description: '' }), linea({ accountId: '' })]);
 
     expect(resultado).toEqual({ index: 0, error: 'MISSING_DESCRIPTION' });
+  });
+});
+
+describe('pickDefaultLineAccount: cuenta con la que nace un concepto nuevo (TSK-718)', () => {
+  const cuentas = [{ id: CUENTA_A }, { id: CUENTA_B }];
+
+  it('devuelve la cuenta por defecto cuando está entre las disponibles', () => {
+    expect(pickDefaultLineAccount(CUENTA_B, cuentas)).toBe(CUENTA_B);
+  });
+
+  it("devuelve '' cuando no hay cuenta por defecto configurada", () => {
+    expect(pickDefaultLineAccount(null, cuentas)).toBe('');
+    expect(pickDefaultLineAccount(undefined, cuentas)).toBe('');
+  });
+
+  it("devuelve '' cuando la cuenta por defecto no está entre las disponibles (dada de baja / no imputable)", () => {
+    expect(pickDefaultLineAccount('33333333-3333-4333-8333-333333333333', cuentas)).toBe('');
+  });
+
+  it("devuelve '' cuando no hay cuentas disponibles, aunque haya cuenta por defecto", () => {
+    expect(pickDefaultLineAccount(CUENTA_A, [])).toBe('');
+  });
+
+  it('no depende del orden de las cuentas disponibles', () => {
+    expect(pickDefaultLineAccount(CUENTA_A, [...cuentas].reverse())).toBe(CUENTA_A);
   });
 });

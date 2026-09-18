@@ -84,6 +84,61 @@ export async function getItems() {
 }
 ```
 
+### Errores de negocio en Server Actions
+
+**Regla:** una mutacion que puede fallar por una condicion esperable (falta configuracion, cuenta
+no imputable, comprobante ya confirmado, periodo cerrado, stock insuficiente) **no lanza**: devuelve
+`ActionResult` y el mensaje viaja como dato. Helpers en `src/shared/lib/action-result.ts`:
+
+```typescript
+import { ActionResult, BusinessError, toActionResult } from '@/shared/lib/action-result';
+
+export async function confirmInvoice(id: string): Promise<ActionResult<{ id: string }>> {
+  await checkPermission('commercial.invoices', 'approve', { redirect: true });
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa'); // infraestructura: si lanza
+
+  try {
+    const invoice = await prisma.salesInvoice.findFirst({ ... });
+    if (!invoice) throw new BusinessError('Factura no encontrada');
+    if (invoice.status !== 'DRAFT') {
+      throw new BusinessError('Solo se pueden confirmar facturas en estado borrador');
+    }
+    // ... validaciones y transaccion; cualquier BusinessError interno sube hasta aca
+    return { success: true, id };
+  } catch (error) {
+    return toActionResult(error, 'Error al confirmar factura');
+  }
+}
+```
+
+- `ActionResult<T extends object = Record<never, never>>` = `({ success: true } & T) |
+  { success: false; error: string }`.
+- `BusinessError` es la unica excepcion cuyo mensaje llega al usuario tal cual. Cualquier otra
+  cosa (`Error` de Prisma, bug) `toActionResult` la loguea con el contexto y la reemplaza por
+  `UNEXPECTED_ERROR_MESSAGE` ("Ocurrio un error inesperado...").
+- `BusinessError` puede lanzarse desde capas internas (por ejemplo el asiento en
+  `accounting/features/integrations/commercial`), no solo desde el action: el `catch` externo la
+  traduce. Asi "periodo cerrado" o "falta configurar Cuentas por Cobrar" llegan legibles sin
+  remapear por texto.
+- El cliente hace `if (!result.success) { toast.error(result.error); return; }` dentro de un
+  `try/finally` (el `finally` resetea el estado de carga; no hace falta `catch`). **Nunca**
+  `try/catch` esperando leer `error.message`.
+- Los bulk (`bulkConfirmPurchaseInvoices`) reutilizan el mismo camino y arman `failures[{ fullNumber,
+  message }]` con `result.error`.
+
+**Por que.** En produccion Next.js **redacta** el mensaje de cualquier `Error` lanzado desde un
+Server Action: el cliente recibe "An error occurred in the Server Components render... a digest
+property is included" y el texto real solo queda en el log del servidor. Con `throw new Error(...)`
+las validaciones funcionan en `npm run dev` y fallan mudas en prod (TSK-481 lo detecto en
+movimientos de fondos). Verificado en TSK-721 con `npm run build && npm run start`: el toast
+muestra el mensaje completo.
+
+**Donde ya se usa:** `confirmInvoice` y `confirmPurchaseInvoice` (TSK-721), `createFundMovement` /
+`updateFundMovement` / `confirmFundMovement` (TSK-481, con un alias local que todavia no importa de
+`shared/lib`). Las actions nuevas que muten estado con validaciones de negocio deben seguir este
+patron; las de solo lectura pueden seguir lanzando (el error se muestra en `error.tsx`).
+
 ---
 
 ## Logger

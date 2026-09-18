@@ -39,6 +39,7 @@ interface Props {
   cashRegisters: FundOption[];
   partners: FundMovementPartnerOption[];
   defaultContributionsAccount: FundMovementAccountRef | null;
+  defaultBankChargesAccount: FundMovementAccountRef | null;
 }
 
 export function _FundMovementsTable({
@@ -50,6 +51,7 @@ export function _FundMovementsTable({
   cashRegisters,
   partners,
   defaultContributionsAccount,
+  defaultBankChargesAccount,
 }: Props) {
   const router = useRouter();
   const [createOpen, setCreateOpen] = useState(false);
@@ -132,6 +134,7 @@ export function _FundMovementsTable({
         cashRegisters={cashRegisters}
         partners={partners}
         defaultContributionsAccount={defaultContributionsAccount}
+        defaultBankChargesAccount={defaultBankChargesAccount}
         onSuccess={refresh}
       />
 
@@ -143,6 +146,7 @@ export function _FundMovementsTable({
         cashRegisters={cashRegisters}
         partners={partners}
         defaultContributionsAccount={defaultContributionsAccount}
+        defaultBankChargesAccount={defaultBankChargesAccount}
         movement={editing}
         onSuccess={refresh}
       />

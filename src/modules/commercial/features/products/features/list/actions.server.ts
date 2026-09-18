@@ -15,6 +15,11 @@ import {
   type UpdateProductFormData,
 } from '../../shared/validators';
 import type { Product } from '../../shared/types';
+import {
+  buildImputationWhere,
+  missingExpenseWhere,
+  missingIncomeWhere,
+} from '../../shared/imputation-filter';
 
 interface GetProductsParams {
   page?: number;
@@ -38,7 +43,7 @@ export async function getProducts(params: GetProductsParams = {}) {
     const filtersWhere = buildFiltersWhere(filters, {
       type: 'type',
       status: 'status',
-    }, { exclude: ['name', 'code', 'category', 'stockLevel'] });
+    }, { exclude: ['name', 'code', 'category', 'stockLevel', 'imputation'] });
 
     // Filtros de texto directos (buscan también en oemCode y auxiliaryCode)
     const nameFilter = filters['name']?.[0];
@@ -71,11 +76,16 @@ export async function getProducts(params: GetProductsParams = {}) {
       ? { category: { name: { contains: categoryFilter, mode: 'insensitive' as const } } }
       : {};
 
-    const where = {
+    // Filtro "Imputación" (TSK-721): sin cuenta de ingreso / sin cuenta de egreso,
+    // según el uso del ítem. Los dos valores juntos se combinan con OR.
+    const imputationWhere = buildImputationWhere(filters['imputation'] ?? []);
+
+    const where: Prisma.ProductWhereInput = {
       companyId,
       ...filtersWhere,
       ...textWhere,
       ...categoryWhere,
+      ...imputationWhere,
     };
 
     // Filtro especial: solo ítems bajo stock mínimo
@@ -160,7 +170,7 @@ export async function getProductFacetCounts() {
   const companyId = await getActiveCompanyId();
   if (!companyId) throw new Error('No hay empresa activa');
 
-  const [typeCounts, statusCounts] = await Promise.all([
+  const [typeCounts, statusCounts, noIncome, noExpense] = await Promise.all([
     prisma.product.groupBy({
       by: ['type'],
       where: { companyId },
@@ -171,11 +181,16 @@ export async function getProductFacetCounts() {
       where: { companyId },
       _count: { status: true },
     }),
+    prisma.product.count({ where: { companyId, ...missingIncomeWhere } }),
+    prisma.product.count({ where: { companyId, ...missingExpenseWhere } }),
   ]);
 
   return {
     type: Object.fromEntries(typeCounts.map((t) => [t.type, t._count.type])),
     status: Object.fromEntries(statusCounts.map((s) => [s.status, s._count.status])),
+    // TSK-721: conteo por valor del facet "Imputación". Sin filtrar por status,
+    // coherente con `type`/`status`.
+    imputation: { noIncome, noExpense },
   };
 }
 

@@ -145,15 +145,16 @@ export function _CommercialGuide() {
           <ul className="list-disc pl-6 space-y-1 text-muted-foreground">
             <li>
               <strong>Cuenta de Egresos</strong>: cuenta contable que se usará al
-              registrar compras de este ítem, en lugar de la cuenta de
-              compras general. Ofrece cuentas de gastos y de activo, porque un
-              ítem que es un activo también se compra
+              registrar compras de este ítem, en lugar de la{' '}
+              <strong>Cuenta de compras por defecto</strong>. Ofrece cuentas de
+              gastos y de activo, porque un ítem que es un activo también se
+              compra
             </li>
             <li>
               <strong>Cuenta de Ingresos</strong>: cuenta contable que se usará
-              al registrar ventas de este ítem, en lugar de la cuenta de
-              ventas general. Ofrece cuentas de ventas y de activo, porque un
-              activo también se puede vender
+              al registrar ventas de este ítem, en lugar de la{' '}
+              <strong>Cuenta de ventas por defecto</strong>. Ofrece cuentas de
+              ventas y de activo, porque un activo también se puede vender
             </li>
             <li>
               <strong>Centro de Costos</strong>: centro de costos que se asignará
@@ -169,12 +170,32 @@ export function _CommercialGuide() {
             </li>
           </ul>
           <p className="text-sm text-muted-foreground mt-2">
-            Estos campos son <strong>opcionales</strong>. Si no se asignan, el
-            sistema usa las cuentas contables globales configuradas en{' '}
-            <strong>Contabilidad → Configuración</strong>. Cuando están asignados,
-            tienen prioridad sobre la configuración global al generar asientos
-            automáticos de venta o compra.
+            Estos campos son <strong>opcionales</strong>. La cuenta del ítem
+            es la que manda en el asiento: si está asignada, la línea de la
+            factura va ahí. Si no, el sistema usa la Cuenta de ventas o de
+            compras <strong>por defecto</strong> configurada en{' '}
+            <strong>Contabilidad → Configuración</strong>.
           </p>
+          <Alert>
+            <Info className="h-4 w-4" />
+            <AlertDescription>
+              <strong>
+                Si el ítem no tiene cuenta y no hay cuenta por defecto, la
+                factura no se puede confirmar
+              </strong>
+              : el sistema nombra la línea y te dice dónde asignarla. Para
+              encontrar los ítems que faltan, en el listado de Ítems usá el
+              filtro <strong>Imputación</strong> (&quot;Sin cuenta de
+              ingreso&quot; / &quot;Sin cuenta de egreso&quot;); la columna
+              Imputación marca cada uno con un badge naranja{' '}
+              <strong>Sin ingreso</strong> o <strong>Sin egreso</strong>.
+              Seleccionalos y usá <strong>Editar en Lote</strong> para asignar
+              la cuenta a varios de una vez, o{' '}
+              <strong>Imputación contable</strong> en el menú de cada fila. En
+              Contabilidad → Configuración también ves cuántos ítems activos
+              faltan imputar, con un enlace a este listado ya filtrado.
+            </AlertDescription>
+          </Alert>
 
           <p className="mt-3">
             <strong>Categorías de Ítems:</strong>
@@ -407,7 +428,11 @@ export function _CommercialGuide() {
             </li>
             <li>
               <strong>Confirmada</strong>: ya no se puede editar, genera asiento
-              contable automático
+              contable automático. Cada línea se imputa a la Cuenta de
+              Ingresos de su ítem o, si no la tiene, a la Cuenta de ventas por
+              defecto; si no hay ninguna de las dos, no se confirma y el
+              mensaje nombra la línea (ver &quot;Qué revisa el sistema al
+              confirmar&quot; en Facturas de Compra)
             </li>
             <li>
               <strong>Cobrada / Parcialmente cobrada</strong>: según los recibos
@@ -497,6 +522,26 @@ export function _CommercialGuide() {
             líneas de resultado sin reparto completo: el sistema avisa cuáles
             faltan. Al confirmar varias a la vez, esas quedan afuera y las
             demás se confirman igual.
+          </p>
+          <p className="font-medium mt-3">Qué revisa el sistema al confirmar</p>
+          <p className="text-muted-foreground">
+            Tampoco se puede confirmar una factura (de compra o de venta) si
+            alguna línea <strong>no tiene cuenta contable</strong> —ni la del
+            ítem ni la por defecto— o si la cuenta del ítem está dada de
+            baja: el mensaje nombra la línea y te dice si resolverlo en{' '}
+            <strong>Ítems → Imputación contable</strong> o en{' '}
+            <strong>Contabilidad → Configuración</strong>. La factura queda en
+            Borrador hasta que lo corrijas. En compras, las líneas{' '}
+            <strong>sin ítem</strong> (gastos sueltos, comprobantes importados
+            de AFIP) siempre usan la Cuenta de compras por defecto, así que
+            esa cuenta tiene que estar asignada.
+          </p>
+          <p className="text-sm text-muted-foreground">
+            Antes, una factura con una línea sin cuenta podía quedar
+            confirmada <strong>sin asiento contable</strong> y sin ningún
+            aviso. Eso ya no pasa: o se confirma con su asiento, o no se
+            confirma y te dice por qué. Lo mismo vale si falta la cuenta de
+            IVA o si el período contable está cerrado.
           </p>
           <p className="font-medium mt-3">Confirmar varias a la vez</p>
           <p className="text-muted-foreground">
@@ -737,7 +782,9 @@ export function _CommercialGuide() {
               <strong>Contabilidad → Configuración</strong> (secciones
               Percepciones Cobradas, Percepciones Sufridas e Impuestos Internos).
               Si falta alguna, el sistema no deja confirmar y te dice cuál
-              cargar: así no queda una factura confirmada sin su asiento.
+              cargar. Lo mismo pasa con la cuenta contable de cada línea (la
+              del ítem o la por defecto) y con las cuentas de IVA: así no queda
+              una factura confirmada sin su asiento.
             </AlertDescription>
           </Alert>
 

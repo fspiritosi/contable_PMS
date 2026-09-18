@@ -14,10 +14,12 @@
  * Espejo exacto de `effectiveAccountType` (`cost-center.ts:37-42`).
  *
  * `accountIsFixedAsset` es la marca de la cuenta propia del ítem. Cuando el
- * ítem no tiene una cuenta de egresos cargada, el asiento no deja la línea sin
- * imputar: cae en `purchasesAccountId`
- * (`accounting/features/integrations/commercial/index.ts:505`), así que el
- * criterio tiene que mirar esa cuenta efectiva.
+ * ítem no tiene una cuenta de egresos cargada, el asiento cae en la "Cuenta de
+ * compras por defecto" de Ajustes contables (`purchasesAccountId`,
+ * `accounting/features/integrations/commercial/index.ts`), así que el
+ * criterio tiene que mirar esa cuenta efectiva. Una línea sin ninguna cuenta
+ * ya no llega a confirmarse: la rechaza la pre-validación de
+ * `line-accounts.ts` (TSK-721).
  *
  * OJO con el `null`: "el ítem no tiene cuenta" (`null`/`undefined`) y "el ítem
  * tiene una cuenta que no es Bien de Uso" (`false`) NO son lo mismo. Solo el

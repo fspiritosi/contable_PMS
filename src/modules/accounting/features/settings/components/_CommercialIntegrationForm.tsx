@@ -59,15 +59,15 @@ const SECTIONS: SectionDef[] = [
     fields: [
       {
         name: 'salesAccountId',
-        label: 'Cuenta de Ventas',
+        label: 'Cuenta de ventas por defecto',
         types: ['REVENUE'],
-        help: 'Se usa al confirmar facturas de venta (Haber)',
+        help: 'Se usa en las líneas de facturas de venta cuyo ítem no tiene Cuenta de Ingresos propia (Ítems → Imputación contable). Si todos los ítems de venta tienen la suya, puede quedar sin asignar.',
       },
       {
         name: 'purchasesAccountId',
-        label: 'Cuenta de Compras',
+        label: 'Cuenta de compras por defecto',
         types: ['EXPENSE'],
-        help: 'Se usa al confirmar facturas de compra (Debe)',
+        help: 'Se usa en las líneas de facturas de compra cuyo ítem no tiene Cuenta de Egresos propia y en las líneas sin ítem (gastos no inventariables, comprobantes importados de AFIP). Si cargás compras sin ítem, tiene que estar asignada.',
       },
       {
         name: 'expensesAccountId',
@@ -125,6 +125,12 @@ const SECTIONS: SectionDef[] = [
         label: 'Banco por Defecto',
         types: ['ASSET'],
         help: 'Se usa si la cuenta bancaria no tiene cuenta específica asignada',
+      },
+      {
+        name: 'bankChargesAccountId',
+        label: 'Gastos bancarios por defecto',
+        types: ['EXPENSE'],
+        help: 'Se preselecciona en cada concepto de un movimiento "Gastos e impuestos bancarios". Podés cambiarla concepto por concepto; los conceptos que son activo (Sircreb) se eligen a mano.',
       },
     ],
   },

@@ -8,11 +8,18 @@
  *
  * 1. Factura de Venta (confirmada):
  *    - Debe: Cuentas por Cobrar
- *    - Haber: Ventas + IVA Débito Fiscal
+ *    - Haber: cuenta de ingresos del ítem (o "Cuenta de ventas por defecto") + IVA Débito Fiscal
  *
  * 2. Factura de Compra (confirmada):
- *    - Debe: Compras + IVA Crédito Fiscal
+ *    - Debe: cuenta de egresos del ítem (o "Cuenta de compras por defecto", obligatoria para
+ *      líneas sin ítem) + IVA Crédito Fiscal
  *    - Haber: Cuentas por Pagar
+ *
+ * Las cuentas de línea se pre-validan en `confirmInvoice`/`confirmPurchaseInvoice`
+ * (TSK-721); los `throw` de este archivo son defensa en profundidad. Las
+ * condiciones que el usuario puede corregir (período cerrado, cuenta faltante,
+ * línea sin cuenta) se lanzan como `BusinessError` para que el action las
+ * devuelva con su mensaje tal cual.
  *
  * 3. Recibo de Cobro (confirmado):
  *    - Debe: Caja/Banco
@@ -32,9 +39,15 @@ import { Prisma } from '@/generated/prisma/client';
 import { BudgetStatus, AccountNature } from '@/generated/prisma/enums';
 import { prisma } from '@/shared/lib/prisma';
 import { logger } from '@/shared/lib/logger';
+import { BusinessError } from '@/shared/lib/action-result';
 import { isCreditNote } from '@/modules/commercial/shared/voucher-utils';
 import { expandByCostCenter } from '@/modules/commercial/shared/cost-center';
 import { buildMissingTributeAccountsMessage } from '@/modules/commercial/shared/perceptions';
+import {
+  buildMissingLineAccountsMessage,
+  findLinesMissingAccount,
+  resolveLineAccount,
+} from '@/modules/commercial/shared/line-accounts';
 
 // Tipo para el cliente de transacción de Prisma
 type PrismaTransactionClient = Omit<
@@ -177,7 +190,7 @@ function validateBalance(lines: JournalEntryLineInput[]): void {
 async function createJournalEntry(
   input: CreateJournalEntryInput,
   tx: PrismaTransactionClient
-): Promise<string | null> {
+): Promise<string> {
   const { companyId, date, description, lines } = input;
 
   // Validar balance
@@ -190,11 +203,11 @@ async function createJournalEntry(
   });
 
   if (!settings) {
-    throw new Error('No se encontró configuración contable');
+    throw new BusinessError('No se encontró configuración contable');
   }
 
   if (settings.lockedUntilDate && moment(date).isSameOrBefore(moment(settings.lockedUntilDate), 'day')) {
-    throw new Error(
+    throw new BusinessError(
       `No se puede generar el asiento contable: el período está cerrado para la fecha ${moment(date).format('DD/MM/YYYY')}. Contacte al contador para reabrir el período.`
     );
   }
@@ -274,7 +287,7 @@ export async function createJournalEntryForSalesInvoice(
   invoiceId: string,
   companyId: string,
   tx: PrismaTransactionClient
-): Promise<string | null> {
+): Promise<string> {
   try {
     const settings = await getAccountingSettings(companyId, tx);
 
@@ -291,9 +304,10 @@ export async function createJournalEntryForSalesInvoice(
         customer: { select: { name: true } },
         lines: {
           select: {
+            description: true,
             lineType: true, vatRate: true, vatAmount: true, subtotal: true,
             costCenterAllocations: { select: { costCenterId: true, percentage: true } },
-            product: { select: { defaultIncomeAccountId: true, defaultCostCenterId: true } },
+            product: { select: { name: true, defaultIncomeAccountId: true, defaultCostCenterId: true } },
           },
         },
         internalTaxes: true,
@@ -308,11 +322,27 @@ export async function createJournalEntryForSalesInvoice(
     const total = parseFloat(invoice.total.toString());
     const isNC = isCreditNote(invoice.voucherType);
 
-    if (!settings.receivablesAccountId || !settings.salesAccountId) {
-      logger.warn('No se puede crear asiento para factura de venta: cuentas no configuradas', {
-        data: { invoiceId, companyId },
-      });
-      return null;
+    // Ya no exige `salesAccountId`: la cuenta de cada línea la define el ítem
+    // y la global es solo respaldo (TSK-721). Lanza en vez de devolver null:
+    // un asiento que no se puede armar tiene que abortar la confirmación, no
+    // dejarla pasar sin asiento.
+    if (!settings.receivablesAccountId) {
+      throw new BusinessError(
+        'No se puede generar el asiento: falta configurar "Cuentas por Cobrar" en Contabilidad → Configuración.'
+      );
+    }
+
+    // Defensa en profundidad: confirmInvoice ya pre-validó esto antes de la transacción.
+    const missingLineAccounts = findLinesMissingAccount(
+      invoice.lines.map((line) => ({
+        description: line.description,
+        productName: line.product.name,
+        itemAccountId: line.product.defaultIncomeAccountId,
+      })),
+      settings.salesAccountId
+    );
+    if (missingLineAccounts.length > 0) {
+      throw new BusinessError(buildMissingLineAccountsMessage(missingLineAccounts, 'income'));
     }
 
     const docLabel = isNC ? 'Nota de crédito' : 'Factura de venta';
@@ -336,7 +366,11 @@ export async function createJournalEntryForSalesInvoice(
     // predeterminado del ítem) se perdía y sobrevivía un único centro.
     const expanded = expandByCostCenter(
       invoice.lines.map((line) => ({
-        accountId: line.product?.defaultIncomeAccountId || settings.salesAccountId!,
+        // El `!` está cubierto por findLinesMissingAccount, justo arriba.
+        accountId: resolveLineAccount(
+          line.product.defaultIncomeAccountId,
+          settings.salesAccountId
+        )!,
         subtotal: parseFloat(line.subtotal.toString()),
         allocations: line.costCenterAllocations.map((a) => ({
           costCenterId: a.costCenterId,
@@ -369,10 +403,9 @@ export async function createJournalEntryForSalesInvoice(
     for (const [rate, vatTotal] of vatByRate) {
       const accountId = getVatAccountId(settings, rate, 'DEBIT');
       if (!accountId) {
-        logger.warn('No se encontró cuenta de IVA DF para alícuota', {
-          data: { invoiceId, rate },
-        });
-        continue;
+        // Antes: warn + continue → asiento descuadrado que moría en
+        // validateBalance con un mensaje que no decía qué faltaba (TSK-721).
+        throw new BusinessError(buildMissingTributeAccountsMessage([`IVA Débito Fiscal ${rate}%`]));
       }
       lines.push({
         accountId,
@@ -390,7 +423,7 @@ export async function createJournalEntryForSalesInvoice(
       if (!accountId) {
         // Ver nota en el asiento de compra: saltear la percepción dejaba el
         // asiento descuadrado y la factura confirmada sin asiento (TSK-644).
-        throw new Error(
+        throw new BusinessError(
           buildMissingTributeAccountsMessage([
             `percepción ${perc.type} cobrada`,
           ])
@@ -410,7 +443,7 @@ export async function createJournalEntryForSalesInvoice(
     const internalTaxes = parseFloat(invoice.internalTaxes.toString());
     if (internalTaxes > 0) {
       if (!settings.internalTaxesAccountId) {
-        throw new Error(
+        throw new BusinessError(
           buildMissingTributeAccountsMessage(['impuestos internos'])
         );
       }
@@ -449,7 +482,7 @@ export async function createJournalEntryForPurchaseInvoice(
   invoiceId: string,
   companyId: string,
   tx: PrismaTransactionClient
-): Promise<string | null> {
+): Promise<string> {
   try {
     const settings = await getAccountingSettings(companyId, tx);
 
@@ -466,9 +499,10 @@ export async function createJournalEntryForPurchaseInvoice(
         supplier: { select: { businessName: true } },
         lines: {
           select: {
+            description: true,
             lineType: true, vatRate: true, vatAmount: true, subtotal: true,
             costCenterAllocations: { select: { costCenterId: true, percentage: true } },
-            product: { select: { defaultExpenseAccountId: true, defaultCostCenterId: true } },
+            product: { select: { name: true, defaultExpenseAccountId: true, defaultCostCenterId: true } },
           },
         },
         internalTaxes: true,
@@ -483,11 +517,26 @@ export async function createJournalEntryForPurchaseInvoice(
     const total = parseFloat(invoice.total.toString());
     const isNC = isCreditNote(invoice.voucherType);
 
-    if (!settings.payablesAccountId || !settings.purchasesAccountId) {
-      logger.warn('No se puede crear asiento para factura de compra: cuentas no configuradas', {
-        data: { invoiceId, companyId },
-      });
-      return null;
+    // Ya no exige `purchasesAccountId`: la cuenta de cada línea la define el
+    // ítem y la global es solo respaldo, obligatorio para las líneas sin ítem
+    // (TSK-721). Lanza en vez de devolver null: ver el asiento de venta.
+    if (!settings.payablesAccountId) {
+      throw new BusinessError(
+        'No se puede generar el asiento: falta configurar "Cuentas por Pagar" en Contabilidad → Configuración.'
+      );
+    }
+
+    // Defensa en profundidad: confirmPurchaseInvoice ya pre-validó esto antes de la transacción.
+    const missingLineAccounts = findLinesMissingAccount(
+      invoice.lines.map((line) => ({
+        description: line.description,
+        productName: line.product?.name ?? null,
+        itemAccountId: line.product?.defaultExpenseAccountId,
+      })),
+      settings.purchasesAccountId
+    );
+    if (missingLineAccounts.length > 0) {
+      throw new BusinessError(buildMissingLineAccountsMessage(missingLineAccounts, 'expense'));
     }
 
     const docLabel = isNC ? 'Nota de crédito de compra' : 'Factura de compra';
@@ -501,7 +550,11 @@ export async function createJournalEntryForPurchaseInvoice(
     // sobrevivía un único centro.
     const expanded = expandByCostCenter(
       invoice.lines.map((line) => ({
-        accountId: line.product?.defaultExpenseAccountId || settings.purchasesAccountId!,
+        // El `!` está cubierto por findLinesMissingAccount, justo arriba.
+        accountId: resolveLineAccount(
+          line.product?.defaultExpenseAccountId,
+          settings.purchasesAccountId
+        )!,
         subtotal: parseFloat(line.subtotal.toString()),
         allocations: line.costCenterAllocations.map((a) => ({
           costCenterId: a.costCenterId,
@@ -534,10 +587,9 @@ export async function createJournalEntryForPurchaseInvoice(
     for (const [rate, vatTotal] of vatByRate) {
       const accountId = getVatAccountId(settings, rate, 'CREDIT');
       if (!accountId) {
-        logger.warn('No se encontró cuenta de IVA CF para alícuota', {
-          data: { invoiceId, rate },
-        });
-        continue;
+        // Antes: warn + continue → asiento descuadrado que moría en
+        // validateBalance con un mensaje que no decía qué faltaba (TSK-721).
+        throw new BusinessError(buildMissingTributeAccountsMessage([`IVA Crédito Fiscal ${rate}%`]));
       }
       lines.push({
         accountId,
@@ -557,7 +609,7 @@ export async function createJournalEntryForPurchaseInvoice(
         // total ya incluía la percepción— y moría en `validateBalance`, dentro
         // de un `catch` que lo degradaba a warn otra vez. La factura terminaba
         // confirmada sin asiento y nadie se enteraba (TSK-644).
-        throw new Error(
+        throw new BusinessError(
           buildMissingTributeAccountsMessage([
             `percepción ${perc.type} sufrida`,
           ])
@@ -579,7 +631,7 @@ export async function createJournalEntryForPurchaseInvoice(
     const internalTaxes = parseFloat(invoice.internalTaxes.toString());
     if (internalTaxes > 0) {
       if (!settings.internalTaxesAccountId) {
-        throw new Error(
+        throw new BusinessError(
           buildMissingTributeAccountsMessage(['impuestos internos'])
         );
       }

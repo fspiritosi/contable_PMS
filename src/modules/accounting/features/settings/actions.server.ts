@@ -1,12 +1,12 @@
 ﻿'use server';
 
-import moment from 'moment';
+import { buildImputableAccountsWhere } from '@/shared/lib/accounts/imputable-accounts';
 import { getCurrentUserId } from '@/shared/lib/current-user';
-import { prisma } from '@/shared/lib/prisma';
 import { logger } from '@/shared/lib/logger';
 import { checkPermission } from '@/shared/lib/permissions';
+import { prisma } from '@/shared/lib/prisma';
+import moment from 'moment';
 import { revalidateAccountingRoutes } from '../../shared/utils';
-import { buildImputableAccountsWhere } from '@/shared/lib/accounts/imputable-accounts';
 
 /**
  * Obtiene la configuración contable de una empresa
@@ -44,6 +44,7 @@ export async function saveAccountingSettings(
     vatCreditAccountId?: string | null;
     defaultCashAccountId?: string | null;
     defaultBankAccountId?: string | null;
+    bankChargesAccountId?: string | null; // TSK-718
     expensesAccountId?: string | null;
     resultAccountId?: string | null;
     partnerContributionsAccountId?: string | null;
@@ -231,3 +232,46 @@ export async function getActiveAccounts(companyId: string, includeIds?: string[]
     throw error;
   }
 }
+
+/**
+ * Cuántos ítems ACTIVOS todavía caen en la "Cuenta de ventas/compras por
+ * defecto" porque no tienen la suya (TSK-721). Se cuenta por `usage`: un ítem
+ * solo de compra sin cuenta de ingresos no es un problema, y viceversa.
+ *
+ * Prisma directo sobre `product`, sin importar de `commercial` (regla
+ * `module-communication.md`): los literales de `usage` se duplican a propósito
+ * respecto de `products/shared/imputation-filter.ts` (el test de integración
+ * `product-imputation-filter.integration.test.ts` los ata). No cubre las
+ * líneas de compra sin ítem (formulario "Opcional", importación AFIP), que
+ * siempre usan la cuenta por defecto.
+ */
+export async function getItemsWithoutAccountCounts(
+  companyId: string
+): Promise<{ saleItemsWithoutIncome: number; purchaseItemsWithoutExpense: number }> {
+  const userId = await getCurrentUserId();
+  if (!userId) throw new Error('No autenticado');
+  await checkPermission('accounting.settings', 'view', { redirect: true });
+
+  const [saleItemsWithoutIncome, purchaseItemsWithoutExpense] = await Promise.all([
+    prisma.product.count({
+      where: {
+        companyId,
+        status: 'ACTIVE',
+        usage: { in: ['SALE', 'PURCHASE_SALE'] },
+        defaultIncomeAccountId: null,
+      },
+    }),
+    prisma.product.count({
+      where: {
+        companyId,
+        status: 'ACTIVE',
+        usage: { in: ['PURCHASE', 'PURCHASE_SALE'] },
+        defaultExpenseAccountId: null,
+      },
+    }),
+  ]);
+
+  return { saleItemsWithoutIncome, purchaseItemsWithoutExpense };
+}
+
+export type ItemsWithoutAccountCounts = Awaited<ReturnType<typeof getItemsWithoutAccountCounts>>;

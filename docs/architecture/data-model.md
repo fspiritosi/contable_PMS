@@ -208,13 +208,13 @@ Resolucion: Owner/Developer → acceso total. Otros → rol base + overrides ind
   se bloquea.
 
 **Conceptos contables por producto (Product):**
-- `defaultExpenseAccountId` → Account (naturaleza DEBIT, cuentas hoja). Sobrescribe `purchasesAccountId` de AccountingSettings al generar asientos de compra.
-- `defaultIncomeAccountId` → Account (naturaleza CREDIT, cuentas hoja). Sobrescribe `salesAccountId` de AccountingSettings al generar asientos de venta.
+- `defaultExpenseAccountId` → Account (tipos admitidos `EXPENSE` | `ASSET`, cuentas hoja, TSK-579). Es la cuenta de la linea en el asiento de compra; si es `null` cae en `purchasesAccountId` de AccountingSettings ("Cuenta de compras por defecto") y si tampoco hay, la confirmacion se rechaza nombrando la linea (TSK-721). Se valida imputable al confirmar: si esta dada de baja no hay fallback a la global.
+- `defaultIncomeAccountId` → Account (tipos admitidos `REVENUE` | `ASSET`, cuentas hoja, TSK-579). Idem para ventas, con `salesAccountId` ("Cuenta de ventas por defecto") como respaldo; esa global puede ser `null` si todos los items de venta tienen la suya.
 - `defaultCostCenterId` → CostCenter. Se asigna a las lineas del asiento contable del producto.
 - `defaultWarehouseId` → Warehouse. Almacen predeterminado para operaciones del producto.
 - `defaultSupplierId` → Supplier. Proveedor habitual del producto.
 
-Cuando se confirma una factura (venta o compra), la integracion contable agrupa las lineas por cuenta contable: si un producto tiene override (defaultIncomeAccountId o defaultExpenseAccountId), se usa ese; sino, se usa la cuenta global de AccountingSettings.
+Cuando se confirma una factura (venta o compra), la integracion contable agrupa las lineas por cuenta contable: la cuenta del producto (`defaultIncomeAccountId` / `defaultExpenseAccountId`) manda; si no tiene, se usa la cuenta por defecto de AccountingSettings; si no hay ninguna, la factura **no se confirma** (`BusinessError` que nombra la linea; `commercial/shared/line-accounts.ts`, TSK-721). Las lineas de compra sin producto solo pueden usar `purchasesAccountId`.
 
 ---
 
@@ -388,6 +388,10 @@ Reglas:
 - Las cuentas de `FundMovementLine.accountId` deben ser imputables (hoja, activas) y de tipo
   `EXPENSE` o `ASSET` — igual criterio que las líneas de compra/venta desde TSK-579. `LIABILITY` y
   `EQUITY` quedan afuera: no son contrapartida de un débito bancario.
+- `AccountingSettings.bankChargesAccountId` ("Gastos bancarios por defecto", TSK-718) es **solo
+  preselección de UI**: el modal la propone como cuenta de cada concepto nuevo de `BANK_CHARGES`
+  y el usuario puede cambiarla fila por fila. `FundMovementLine.accountId` sigue siendo NOT NULL y
+  es lo que lee el asiento; la global no participa en `createJournalEntryForFundMovement`.
 - **El asiento generado tiene N+1 líneas para `BANK_CHARGES`** (un débito por cada concepto, a su
   propia cuenta, más un crédito único al banco/caja de origen por el total), mientras que
   `PARTNER_CONTRIBUTION`, `PARTNER_WITHDRAWAL` y `ACCOUNT_TRANSFER` siguen generando su asiento de
@@ -452,7 +456,7 @@ Reglas:
 | `Account` | Cuenta contable (arbol) | code (formato x.x.x/xx/xx), name, type, nature, parentId, isLeaf, isActive, disabledFrom, disabledFromFiscalYearId |
 | `JournalEntry` | Asiento contable | number, date, description, status, isAutomatic, reversedById |
 | `JournalEntryLine` | Linea de asiento | accountId, debit, credit, description |
-| `AccountingSettings` | Config contable | salesAccountId, purchasesAccountId, vatAccountId, fixedAssetAccountId, depreciationExpenseAccountId, lockedUntilDate, productCodePrefix (default "PROD"), lastProductNumber (default 0), requireCostCenter (Boolean, default false, TSK-583), etc. |
+| `AccountingSettings` | Config contable | salesAccountId, purchasesAccountId (cuentas de ventas/compras **por defecto**: solo para lineas cuyo item no tiene cuenta propia, TSK-721), bankChargesAccountId? (gastos bancarios por defecto, FK SetNull, TSK-718), vatAccountId, fixedAssetAccountId, depreciationExpenseAccountId, lockedUntilDate, productCodePrefix (default "PROD"), lastProductNumber (default 0), requireCostCenter (Boolean, default false, TSK-583), etc. |
 | `RecurringEntry` | Asiento recurrente | frequency, nextExecution, templateLines |
 | `RecurringEntryLine` | Linea de asiento recurrente | accountId, debitAmount, creditAmount |
 

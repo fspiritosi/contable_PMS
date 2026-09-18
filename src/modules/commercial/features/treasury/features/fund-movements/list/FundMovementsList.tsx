@@ -35,6 +35,7 @@ export async function FundMovementsList({ searchParams = {} }: Props) {
           cashRegisters={catalogs.cashRegisters}
           partners={catalogs.partners}
           defaultContributionsAccount={catalogs.defaultContributionsAccount}
+          defaultBankChargesAccount={catalogs.defaultBankChargesAccount}
         />
       </div>
     </PermissionGuard>

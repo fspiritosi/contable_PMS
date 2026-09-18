@@ -26,13 +26,17 @@ export function allowsCostCenter(accountType: string | null | undefined): boolea
  * hallazgo de revisión final).
  *
  * `accountType` es la cuenta propia del ítem. Cuando el ítem no tiene una
- * cargada, el asiento no deja la línea sin imputar: cae en la cuenta por
- * defecto de la empresa (`purchasesAccountId`/`salesAccountId`, según
- * `createJournalEntryForPurchaseInvoice`/`createJournalEntryForSalesInvoice`).
+ * cargada, el asiento cae en la "Cuenta de ventas/compras por defecto" de
+ * Ajustes contables (`salesAccountId`/`purchasesAccountId`, según
+ * `createJournalEntryForSalesInvoice`/`createJournalEntryForPurchaseInvoice`).
  * El criterio de "¿esta línea admite/exige centro de costo?" tiene que mirar
  * esa misma cuenta efectiva, no solo la del ítem: con el criterio viejo, un
  * ítem sin cuenta propia nunca exigía reparto aunque el asiento lo imputara
  * igual a una cuenta de resultado.
+ *
+ * Una línea sin ninguna cuenta (ni del ítem ni por defecto) ya no llega a
+ * confirmarse: la rechaza la pre-validación de `line-accounts.ts` (TSK-721).
+ * Acá sigue devolviendo `null` porque el formulario de carga la evalúa antes.
  */
 export function effectiveAccountType(
   accountType: string | null | undefined,

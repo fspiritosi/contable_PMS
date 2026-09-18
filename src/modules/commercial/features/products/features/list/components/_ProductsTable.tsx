@@ -44,6 +44,8 @@ import {
 interface FacetCounts {
   type: Record<string, number>;
   status: Record<string, number>;
+  /** TSK-721: conteo por valor del facet "Imputación" (`noIncome` / `noExpense`). */
+  imputation?: Record<string, number>;
 }
 
 interface ProductsTableProps {
@@ -184,6 +186,17 @@ export function _ProductsTable({ data, totalRows, searchParams, permissions, fac
           { value: 'critical', label: 'Stock crítico' },
           { value: 'warning', label: 'Stock bajo' },
         ],
+      },
+      {
+        columnId: 'imputation',
+        title: 'Imputación',
+        options: [
+          { value: 'noIncome', label: 'Sin cuenta de ingreso' },
+          { value: 'noExpense', label: 'Sin cuenta de egreso' },
+        ],
+        externalCounts: facetCounts?.imputation
+          ? new Map(Object.entries(facetCounts.imputation))
+          : undefined,
       },
     ],
     [facetCounts]
