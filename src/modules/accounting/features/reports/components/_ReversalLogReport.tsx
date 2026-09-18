@@ -11,6 +11,7 @@ import { Loader2, Download } from 'lucide-react';
 import moment from 'moment';
 import { exportToExcel, type ExcelColumn } from '@/shared/lib/excel-export';
 import { logger } from '@/shared/lib/logger';
+import { formatDateUtc } from '@/shared/utils/formatters';
 
 interface ReversalLogReportProps {
   companyId: string;
@@ -59,11 +60,11 @@ export function _ReversalLogReport({ companyId }: ReversalLogReportProps) {
 
     const columns: ExcelColumn[] = [
       { key: 'originalNumber', title: 'Asiento Original', width: 15 },
-      { key: 'originalDate', title: 'Fecha Original', width: 12, formatter: (value) => value ? moment(value as Date).format('DD/MM/YYYY') : '-' },
+      { key: 'originalDate', title: 'Fecha Original', width: 12, formatter: (value) => value ? formatDateUtc(value as Date) : '-' },
       { key: 'description', title: 'Descripción', width: 40 },
       { key: 'amount', title: 'Importe', width: 15, formatter: (value) => (value as number).toFixed(2) },
       { key: 'reversalNumber', title: 'Asiento Reversión', width: 15 },
-      { key: 'reversalDate', title: 'Fecha Reversión', width: 12, formatter: (value) => value ? moment(value as Date).format('DD/MM/YYYY') : '-' },
+      { key: 'reversalDate', title: 'Fecha Reversión', width: 12, formatter: (value) => value ? formatDateUtc(value as Date) : '-' },
       { key: 'reversedBy', title: 'Anulado por', width: 20 },
       { key: 'reversedAt', title: 'Fecha Anulación', width: 15, formatter: (value) => value ? moment(value as Date).format('DD/MM/YYYY HH:mm') : '-' },
     ];
@@ -149,7 +150,7 @@ export function _ReversalLogReport({ companyId }: ReversalLogReportProps) {
                     {data.map((entry) => (
                       <tr key={entry.id} className="border-b">
                         <td className="py-2 pl-4 font-mono">{entry.number}</td>
-                        <td className="py-2">{moment(entry.date).format('DD/MM/YYYY')}</td>
+                        <td className="py-2">{formatDateUtc(entry.date)}</td>
                         <td className="py-2">{entry.description}</td>
                         <td className="py-2 text-right font-mono">{formatAmount(entry.totalAmount)}</td>
                         <td className="py-2 font-mono">
@@ -157,7 +158,7 @@ export function _ReversalLogReport({ companyId }: ReversalLogReportProps) {
                         </td>
                         <td className="py-2">
                           {entry.reversalEntry?.date
-                            ? moment(entry.reversalEntry.date).format('DD/MM/YYYY')
+                            ? formatDateUtc(entry.reversalEntry.date)
                             : '-'}
                         </td>
                         <td className="py-2 text-xs text-muted-foreground">

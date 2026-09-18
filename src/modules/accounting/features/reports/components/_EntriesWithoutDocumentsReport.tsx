@@ -13,6 +13,7 @@ import { Loader2, Download } from 'lucide-react';
 import moment from 'moment';
 import { exportToExcel, type ExcelColumn } from '@/shared/lib/excel-export';
 import { logger } from '@/shared/lib/logger';
+import { formatDateUtc } from '@/shared/utils/formatters';
 
 interface EntriesWithoutDocumentsReportProps {
   companyId: string;
@@ -50,7 +51,7 @@ export function _EntriesWithoutDocumentsReport({ companyId }: EntriesWithoutDocu
 
     const columns: ExcelColumn[] = [
       { key: 'number', title: 'Número', width: 10 },
-      { key: 'date', title: 'Fecha', width: 12, formatter: (value) => moment(value as Date).format('DD/MM/YYYY') },
+      { key: 'date', title: 'Fecha', width: 12, formatter: (value) => formatDateUtc(value as Date) },
       { key: 'description', title: 'Descripción', width: 40 },
       { key: 'status', title: 'Estado', width: 12 },
       { key: 'totalDebit', title: 'Debe', width: 15, formatter: (value) => (value as number).toFixed(2) },
@@ -152,7 +153,7 @@ export function _EntriesWithoutDocumentsReport({ companyId }: EntriesWithoutDocu
                     {data.map((entry) => (
                       <tr key={entry.id} className="border-b">
                         <td className="py-2 pl-4 font-mono">{entry.number}</td>
-                        <td className="py-2">{moment(entry.date).format('DD/MM/YYYY')}</td>
+                        <td className="py-2">{formatDateUtc(entry.date)}</td>
                         <td className="py-2">{entry.description}</td>
                         <td className="py-2">
                           <Badge variant={getStatusVariant(entry.status)}>

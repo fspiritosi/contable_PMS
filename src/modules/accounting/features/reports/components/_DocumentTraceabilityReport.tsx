@@ -19,6 +19,7 @@ import { Loader2, Download } from 'lucide-react';
 import moment from 'moment';
 import { exportToExcel, type ExcelColumn } from '@/shared/lib/excel-export';
 import { logger } from '@/shared/lib/logger';
+import { formatDateUtc } from '@/shared/utils/formatters';
 
 interface DocumentTraceabilityReportProps {
   companyId: string;
@@ -78,11 +79,11 @@ export function _DocumentTraceabilityReport({ companyId }: DocumentTraceabilityR
     const columns: ExcelColumn[] = [
       { key: 'documentType', title: 'Tipo Documento', width: 18 },
       { key: 'fullNumber', title: 'Número', width: 18 },
-      { key: 'date', title: 'Fecha', width: 12, formatter: (value) => moment(value as Date).format('DD/MM/YYYY') },
+      { key: 'date', title: 'Fecha', width: 12, formatter: (value) => formatDateUtc(value as Date) },
       { key: 'total', title: 'Importe', width: 15, formatter: (value) => (value as number).toFixed(2) },
       { key: 'status', title: 'Estado Documento', width: 15 },
       { key: 'entryNumber', title: 'Asiento Nº', width: 12 },
-      { key: 'entryDate', title: 'Fecha Asiento', width: 12, formatter: (value) => value ? moment(value as Date).format('DD/MM/YYYY') : '-' },
+      { key: 'entryDate', title: 'Fecha Asiento', width: 12, formatter: (value) => value ? formatDateUtc(value as Date) : '-' },
       { key: 'entryStatus', title: 'Estado Asiento', width: 15 },
     ];
 
@@ -192,7 +193,7 @@ export function _DocumentTraceabilityReport({ companyId }: DocumentTraceabilityR
                           </Badge>
                         </td>
                         <td className="py-2 font-mono text-sm">{item.fullNumber}</td>
-                        <td className="py-2">{moment(item.date).format('DD/MM/YYYY')}</td>
+                        <td className="py-2">{formatDateUtc(item.date)}</td>
                         <td className="py-2 text-right font-mono">{formatAmount(item.total)}</td>
                         <td className="py-2 text-sm">{item.status}</td>
                         <td className="py-2 font-mono">

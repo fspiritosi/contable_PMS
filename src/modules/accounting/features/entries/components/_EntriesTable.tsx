@@ -19,6 +19,7 @@ import { _ReverseEntryDialog } from './_ReverseEntryDialog';
 import { formatAmount } from '../../../shared/utils';
 import { cn } from '@/shared/lib/utils';
 import Link from 'next/link';
+import { formatDateUtc } from '@/shared/utils/formatters';
 
 interface EntriesTableProps {
   entries: JournalEntryWithLines[];
@@ -240,7 +241,7 @@ export function _EntriesTable({ entries }: EntriesTableProps) {
               <span className="ml-2">{entry.number}</span>
             </div>
           </td>
-          <td>{new Date(entry.date).toLocaleDateString()}</td>
+          <td>{formatDateUtc(entry.date)}</td>
           <td>{entry.description}</td>
           <td>
             <div className="flex items-center gap-1">

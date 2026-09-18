@@ -12,6 +12,7 @@ import { ChevronRight, ChevronDown, Loader2, Download } from 'lucide-react';
 import moment from 'moment';
 import { exportToExcel, ExcelColumn } from '@/shared/lib/excel-export';
 import { logger } from '@/shared/lib/logger';
+import { formatDateUtc } from '@/shared/utils/formatters';
 
 const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
   [AccountType.ASSET]: 'Activo',
@@ -115,7 +116,7 @@ export function _GeneralLedgerReport({ companyId }: GeneralLedgerReportProps) {
         key: 'date',
         title: 'Fecha',
         width: 12,
-        formatter: (value) => value ? moment(value as Date).format('DD/MM/YYYY') : '',
+        formatter: (value) => value ? formatDateUtc(value as Date) : '',
       },
       { key: 'entryNumber', title: 'Asiento', width: 10, formatter: (v) => v ? String(v) : '' },
       { key: 'description', title: 'Descripcion', width: 30 },
@@ -284,7 +285,7 @@ export function _GeneralLedgerReport({ companyId }: GeneralLedgerReportProps) {
                             <tr key={`${account.id}-${entry.entryNumber}`} className="bg-muted/30">
                               <td className="py-2 pl-12" colSpan={3}>
                                 <div>
-                                  {moment(entry.date).format('DD/MM/YYYY')}
+                                  {formatDateUtc(entry.date)}
                                   <span className="ml-4 text-sm text-muted-foreground">
                                     Asiento N° {entry.entryNumber}
                                   </span>
