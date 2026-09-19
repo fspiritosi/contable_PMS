@@ -22,7 +22,11 @@ interface ColumnsProps {
   permissions: ModulePermissions;
 }
 
-export function getColumns({ onEdit, onDelete, permissions }: ColumnsProps): ColumnDef<VehicleTypeListItem>[] {
+export function getColumns({
+  onEdit,
+  onDelete,
+  permissions,
+}: ColumnsProps): ColumnDef<VehicleTypeListItem>[] {
   const { canUpdate, canDelete } = permissions;
   const hasAnyAction = canUpdate || canDelete;
 
@@ -79,6 +83,35 @@ export function getColumns({ onEdit, onDelete, permissions }: ColumnsProps): Col
           {row.original._count.vehicles !== 1 ? 's' : ''}
         </Badge>
       ),
+      enableSorting: false,
+    },
+
+    // Cuentas contables de Bienes de Uso propias del tipo (TSK-724c)
+    {
+      id: 'accounts',
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Cuentas contables" />,
+      meta: { title: 'Cuentas contables' },
+      cell: ({ row }) => {
+        const {
+          id,
+          fixedAssetAccountId,
+          accumulatedDepreciationAccountId,
+          depreciationExpenseAccountId,
+        } = row.original;
+        const own = [
+          fixedAssetAccountId,
+          accumulatedDepreciationAccountId,
+          depreciationExpenseAccountId,
+        ].filter(Boolean).length;
+        return (
+          <Badge
+            variant={own === 3 ? 'default' : 'secondary'}
+            data-testid={`vehicle-type-accounts-${id}`}
+          >
+            {own === 0 ? 'Por defecto' : own === 3 ? 'Propias' : `${own}/3 propias`}
+          </Badge>
+        );
+      },
       enableSorting: false,
     },
   ];

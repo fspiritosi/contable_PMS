@@ -327,51 +327,58 @@ model Account {
   partners                 Partner[]          @relation("PartnerOwnContributionsAccount") // Socios con cuenta de aportes propia (TSK-717)
 
   // Relaciones inversas para AccountingSettings (many-to-one)
-  settingsAsSalesAccount           AccountingSettings[]   @relation("SalesAccount")
-  settingsAsPurchasesAccount       AccountingSettings[]   @relation("PurchasesAccount")
-  settingsAsReceivablesAccount     AccountingSettings[]   @relation("ReceivablesAccount")
-  settingsAsPayablesAccount        AccountingSettings[]   @relation("PayablesAccount")
-  settingsAsVatDebitAccount        AccountingSettings[]   @relation("VatDebitAccount")
-  settingsAsVatCreditAccount       AccountingSettings[]   @relation("VatCreditAccount")
-  settingsAsDefaultCashAccount     AccountingSettings[]   @relation("DefaultCashAccount")
-  settingsAsDefaultBankAccount     AccountingSettings[]   @relation("DefaultBankAccount")
-  settingsAsBankCharges            AccountingSettings[]   @relation("BankChargesAccount") // TSK-718
-  settingsAsExpensesAccount        AccountingSettings[]   @relation("ExpensesAccount")
-  settingsAsResultAccount          AccountingSettings[]   @relation("ResultAccount")
-  settingsAsPartnerContributions   AccountingSettings[]   @relation("PartnerContributionsAccount")
-  settingsAsWhIvaEmitted           AccountingSettings[]   @relation("WhIvaEmittedAccount")
-  settingsAsWhGananciasEmitted     AccountingSettings[]   @relation("WhGananciasEmittedAccount")
-  settingsAsWhIibbEmitted          AccountingSettings[]   @relation("WhIibbEmittedAccount")
-  settingsAsWhSussEmitted          AccountingSettings[]   @relation("WhSussEmittedAccount")
-  settingsAsWhIvaSuffered          AccountingSettings[]   @relation("WhIvaSufferedAccount")
-  settingsAsWhGananciasSuffered    AccountingSettings[]   @relation("WhGananciasSufferedAccount")
-  settingsAsWhIibbSuffered         AccountingSettings[]   @relation("WhIibbSufferedAccount")
-  settingsAsWhSussSuffered         AccountingSettings[]   @relation("WhSussSufferedAccount")
-  settingsAsFixedAsset             AccountingSettings[]   @relation("FixedAssetAccount")
-  settingsAsAccumulatedDepr        AccountingSettings[]   @relation("AccumulatedDepreciationAccount")
-  settingsAsDepreciationExpense    AccountingSettings[]   @relation("DepreciationExpenseAccount")
-  settingsAsAssetDisposalGL        AccountingSettings[]   @relation("AssetDisposalGainLossAccount")
-  settingsAsPercIvaCollected       AccountingSettings[]   @relation("PercIvaCollectedAccount")
-  settingsAsPercIibbCollected      AccountingSettings[]   @relation("PercIibbCollectedAccount")
-  settingsAsPercMunicipalCollected AccountingSettings[]   @relation("PercMunicipalCollectedAccount")
-  settingsAsPercIvaSuffered        AccountingSettings[]   @relation("PercIvaSufferedAccount")
-  settingsAsPercIibbSuffered       AccountingSettings[]   @relation("PercIibbSufferedAccount")
-  settingsAsPercMunicipalSuffered  AccountingSettings[]   @relation("PercMunicipalSufferedAccount")
-  settingsAsInternalTaxes          AccountingSettings[]   @relation("InternalTaxesAccount")
-  settingsAsCogs                   AccountingSettings[]   @relation("CogsAccount")
-  settingsAsInventory              AccountingSettings[]   @relation("InventoryAccount")
-  settingsAsChecksReceived         AccountingSettings[]   @relation("ChecksReceivedAccount")
-  settingsAsChecksRejected         AccountingSettings[]   @relation("ChecksRejectedAccount")
-  settingsAsVatPayable             AccountingSettings[]   @relation("VatPayableAccount")
-  settingsAsVatBalance             AccountingSettings[]   @relation("VatBalanceAccount")
-  settingsAsRecpam                 AccountingSettings[]   @relation("RecpamAccount")
-  vatAccountMappings               AccountingVatAccount[]
-  recurringEntryLines              RecurringEntryLine[]
-  budgets                          Budget[]
-  withholdingRegimes               WithholdingRegime[]
-  productsAsExpenseAccount         Product[]              @relation("ProductExpenseAccount")
-  productsAsIncomeAccount          Product[]              @relation("ProductIncomeAccount")
-  fundMovementLines                FundMovementLine[]
+  settingsAsSalesAccount             AccountingSettings[]   @relation("SalesAccount")
+  settingsAsPurchasesAccount         AccountingSettings[]   @relation("PurchasesAccount")
+  settingsAsReceivablesAccount       AccountingSettings[]   @relation("ReceivablesAccount")
+  settingsAsPayablesAccount          AccountingSettings[]   @relation("PayablesAccount")
+  settingsAsVatDebitAccount          AccountingSettings[]   @relation("VatDebitAccount")
+  settingsAsVatCreditAccount         AccountingSettings[]   @relation("VatCreditAccount")
+  settingsAsDefaultCashAccount       AccountingSettings[]   @relation("DefaultCashAccount")
+  settingsAsDefaultBankAccount       AccountingSettings[]   @relation("DefaultBankAccount")
+  settingsAsBankCharges              AccountingSettings[]   @relation("BankChargesAccount") // TSK-718
+  settingsAsExpensesAccount          AccountingSettings[]   @relation("ExpensesAccount")
+  settingsAsResultAccount            AccountingSettings[]   @relation("ResultAccount")
+  settingsAsPartnerContributions     AccountingSettings[]   @relation("PartnerContributionsAccount")
+  settingsAsWhIvaEmitted             AccountingSettings[]   @relation("WhIvaEmittedAccount")
+  settingsAsWhGananciasEmitted       AccountingSettings[]   @relation("WhGananciasEmittedAccount")
+  settingsAsWhIibbEmitted            AccountingSettings[]   @relation("WhIibbEmittedAccount")
+  settingsAsWhSussEmitted            AccountingSettings[]   @relation("WhSussEmittedAccount")
+  settingsAsWhIvaSuffered            AccountingSettings[]   @relation("WhIvaSufferedAccount")
+  settingsAsWhGananciasSuffered      AccountingSettings[]   @relation("WhGananciasSufferedAccount")
+  settingsAsWhIibbSuffered           AccountingSettings[]   @relation("WhIibbSufferedAccount")
+  settingsAsWhSussSuffered           AccountingSettings[]   @relation("WhSussSufferedAccount")
+  settingsAsFixedAsset               AccountingSettings[]   @relation("FixedAssetAccount")
+  settingsAsAccumulatedDepr          AccountingSettings[]   @relation("AccumulatedDepreciationAccount")
+  settingsAsDepreciationExpense      AccountingSettings[]   @relation("DepreciationExpenseAccount")
+  settingsAsAssetDisposalGL          AccountingSettings[]   @relation("AssetDisposalGainLossAccount")
+  // TSK-724c: cuentas de Bienes de Uso por tipo de equipo y override por depreciación
+  vehicleTypesAsFixedAsset           VehicleType[]          @relation("VehicleTypeFixedAssetAccount")
+  vehicleTypesAsAccumulatedDepr      VehicleType[]          @relation("VehicleTypeAccumulatedDepreciationAccount")
+  vehicleTypesAsDepreciationExpense  VehicleType[]          @relation("VehicleTypeDepreciationExpenseAccount")
+  depreciationsAsFixedAsset          VehicleDepreciation[]  @relation("DepreciationFixedAssetAccount")
+  depreciationsAsAccumulatedDepr     VehicleDepreciation[]  @relation("DepreciationAccumulatedDepreciationAccount")
+  depreciationsAsDepreciationExpense VehicleDepreciation[]  @relation("DepreciationDepreciationExpenseAccount")
+  settingsAsPercIvaCollected         AccountingSettings[]   @relation("PercIvaCollectedAccount")
+  settingsAsPercIibbCollected        AccountingSettings[]   @relation("PercIibbCollectedAccount")
+  settingsAsPercMunicipalCollected   AccountingSettings[]   @relation("PercMunicipalCollectedAccount")
+  settingsAsPercIvaSuffered          AccountingSettings[]   @relation("PercIvaSufferedAccount")
+  settingsAsPercIibbSuffered         AccountingSettings[]   @relation("PercIibbSufferedAccount")
+  settingsAsPercMunicipalSuffered    AccountingSettings[]   @relation("PercMunicipalSufferedAccount")
+  settingsAsInternalTaxes            AccountingSettings[]   @relation("InternalTaxesAccount")
+  settingsAsCogs                     AccountingSettings[]   @relation("CogsAccount")
+  settingsAsInventory                AccountingSettings[]   @relation("InventoryAccount")
+  settingsAsChecksReceived           AccountingSettings[]   @relation("ChecksReceivedAccount")
+  settingsAsChecksRejected           AccountingSettings[]   @relation("ChecksRejectedAccount")
+  settingsAsVatPayable               AccountingSettings[]   @relation("VatPayableAccount")
+  settingsAsVatBalance               AccountingSettings[]   @relation("VatBalanceAccount")
+  settingsAsRecpam                   AccountingSettings[]   @relation("RecpamAccount")
+  vatAccountMappings                 AccountingVatAccount[]
+  recurringEntryLines                RecurringEntryLine[]
+  budgets                            Budget[]
+  withholdingRegimes                 WithholdingRegime[]
+  productsAsExpenseAccount           Product[]              @relation("ProductExpenseAccount")
+  productsAsIncomeAccount            Product[]              @relation("ProductIncomeAccount")
+  fundMovementLines                  FundMovementLine[]
 
   @@unique([companyId, code])
   @@index([companyId, disabledFromFiscalYearId])
@@ -1104,14 +1111,26 @@ model VehicleType {
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 
+  // TSK-724c: cuentas de Bienes de Uso del tipo; null = usa la por defecto de AccountingSettings
+  fixedAssetAccountId              String? @map("fixed_asset_account_id") @db.Uuid
+  accumulatedDepreciationAccountId String? @map("accumulated_depreciation_account_id") @db.Uuid
+  depreciationExpenseAccountId     String? @map("depreciation_expense_account_id") @db.Uuid
+
   // Relaciones
   companyId String  @map("company_id") @db.Uuid
   company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  fixedAssetAccount              Account? @relation("VehicleTypeFixedAssetAccount", fields: [fixedAssetAccountId], references: [id], onDelete: SetNull)
+  accumulatedDepreciationAccount Account? @relation("VehicleTypeAccumulatedDepreciationAccount", fields: [accumulatedDepreciationAccountId], references: [id], onDelete: SetNull)
+  depreciationExpenseAccount     Account? @relation("VehicleTypeDepreciationExpenseAccount", fields: [depreciationExpenseAccountId], references: [id], onDelete: SetNull)
 
   vehicles               Vehicle[]
   documentTypeConditions DocumentTypeVehicleType[]
 
   @@unique([companyId, name])
+  @@index([fixedAssetAccountId])
+  @@index([accumulatedDepreciationAccountId])
+  @@index([depreciationExpenseAccountId])
   @@map("vehicle_types")
 }
 
@@ -4083,6 +4102,11 @@ model VehicleDepreciation {
   totalDepreciated     Decimal   @default(0) @map("total_depreciated") @db.Decimal(15, 2)
   lastDepreciationDate DateTime? @map("last_depreciation_date")
 
+  // TSK-724c: override de las cuentas del tipo de equipo; null = usa la del tipo o la por defecto
+  fixedAssetAccountId              String? @map("fixed_asset_account_id") @db.Uuid
+  accumulatedDepreciationAccountId String? @map("accumulated_depreciation_account_id") @db.Uuid
+  depreciationExpenseAccountId     String? @map("depreciation_expense_account_id") @db.Uuid
+
   // Auditoría
   companyId String   @map("company_id") @db.Uuid
   company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -4091,10 +4115,16 @@ model VehicleDepreciation {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relaciones
-  scheduleEntries DepreciationScheduleEntry[]
+  scheduleEntries                DepreciationScheduleEntry[]
+  fixedAssetAccount              Account?                    @relation("DepreciationFixedAssetAccount", fields: [fixedAssetAccountId], references: [id], onDelete: SetNull)
+  accumulatedDepreciationAccount Account?                    @relation("DepreciationAccumulatedDepreciationAccount", fields: [accumulatedDepreciationAccountId], references: [id], onDelete: SetNull)
+  depreciationExpenseAccount     Account?                    @relation("DepreciationDepreciationExpenseAccount", fields: [depreciationExpenseAccountId], references: [id], onDelete: SetNull)
 
   @@index([companyId])
   @@index([status])
+  @@index([fixedAssetAccountId])
+  @@index([accumulatedDepreciationAccountId])
+  @@index([depreciationExpenseAccountId])
   @@map("vehicle_depreciations")
 }
 

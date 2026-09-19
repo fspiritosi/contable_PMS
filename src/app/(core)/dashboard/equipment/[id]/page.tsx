@@ -11,7 +11,7 @@ export default async function EquipmentDetailPage({
   const { tab } = await searchParams;
 
   // Validate tab parameter
-  const validTabs: EquipmentDetailTab[] = ['info', 'contract', 'assignment', 'contractors', 'documents', 'qr'];
+  const validTabs: EquipmentDetailTab[] = ['info', 'contract', 'assignment', 'contractors', 'documents', 'depreciation', 'qr'];
   const currentTab = validTabs.includes(tab as EquipmentDetailTab)
     ? (tab as EquipmentDetailTab)
     : 'info';

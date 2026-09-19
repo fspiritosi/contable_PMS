@@ -1,31 +1,41 @@
 /**
- * Integración del módulo de equipos con contabilidad
+ * Integración del módulo de equipos con contabilidad: asientos de BAJA.
  *
- * Genera asientos contables para operaciones de activos fijos:
+ * Esta integración genera solo los asientos de baja de un bien de uso:
  *
- * 1. Alta de activo fijo (capitalización):
- *    - Debe: Bienes de Uso (fixedAssetAccount)
- *    - Haber: Cuentas por Pagar (payablesAccount)
+ * 1. Baja por venta (`createJournalEntryForAssetSale`):
+ *    - Debe: Amortización acumulada (total amortizado)
+ *    - Debe: Resultado por venta/baja de Bienes de Uso (valor libro restante)
+ *    - Haber: Bienes de Uso (valor de origen)
+ *    El ingreso por la venta se registra con la factura de venta (integración
+ *    comercial).
  *
- * 2. Depreciación periódica:
- *    - Debe: Gasto de Depreciación (depreciationExpenseAccount)
- *    - Haber: Depreciación Acumulada (accumulatedDepreciationAccount)
+ * 2. Baja por pérdida total / devolución (`createJournalEntryForAssetDisposal`):
+ *    - Debe: Amortización acumulada (total amortizado)
+ *    - Debe: Resultado por venta/baja de Bienes de Uso (valor libro restante)
+ *    - Haber: Bienes de Uso (valor de origen)
  *
- * 3. Baja por venta:
- *    - Debe: Depreciación Acumulada (total acumulado)
- *    - Debe/Haber: Resultado venta bienes de uso (ganancia/pérdida)
- *    - Haber: Bienes de Uso (valor bruto)
+ * Qué NO hace:
+ * - No hay asiento de alta: el bien entra a Bienes de Uso por la factura de
+ *   compra, con la cuenta del ítem (TSK-579 / TSK-721).
+ * - La amortización periódica vive en
+ *   `equipment/features/depreciation/actions.server.ts`.
  *
- * 4. Baja por pérdida total/devolución:
- *    - Debe: Depreciación Acumulada (total acumulado)
- *    - Debe: Resultado por baja (valor libro restante)
- *    - Haber: Bienes de Uso (valor bruto)
+ * Las cuentas llegan RESUELTAS por el llamador (depreciación del equipo → tipo
+ * de equipo → por defecto de Ajustes contables, vía
+ * `equipment/shared/asset-accounts-loader.ts`, TSK-724c): esta integración no
+ * importa nada de `equipment` y no lee `accountingSettings` para elegir
+ * cuentas. Toda condición de negocio (equipo sin depreciación, período
+ * cerrado) se lanza como `BusinessError` para que el action la devuelva como
+ * `{ success: false, error }`; antes se devolvía `null` y el equipo quedaba
+ * dado de baja sin asiento y sin aviso.
  */
 
-import moment from 'moment';
 import { Prisma } from '@/generated/prisma/client';
-import { prisma } from '@/shared/lib/prisma';
+import { BusinessError } from '@/shared/lib/action-result';
 import { logger } from '@/shared/lib/logger';
+import { prisma } from '@/shared/lib/prisma';
+import moment from 'moment';
 
 // Tipo para el cliente de transacción de Prisma
 type PrismaTransactionClient = Omit<
@@ -33,26 +43,11 @@ type PrismaTransactionClient = Omit<
   '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'
 >;
 
-// ============================================
-// HELPER: Obtener configuración contable de equipos
-// ============================================
-
-async function getEquipmentAccountingSettings(companyId: string, tx?: PrismaTransactionClient) {
-  const client = tx || prisma;
-
-  const settings = await client.accountingSettings.findUnique({
-    where: { companyId },
-    select: {
-      fixedAssetAccountId: true,
-      accumulatedDepreciationAccountId: true,
-      depreciationExpenseAccountId: true,
-      assetDisposalGainLossAccountId: true,
-      payablesAccountId: true,
-      lastEntryNumber: true,
-    },
-  });
-
-  return settings;
+/** Cuentas ya resueltas y validadas por el llamador para el asiento de baja. */
+export interface AssetDisposalAccounts {
+  fixedAssetAccountId: string;
+  accumulatedDepreciationAccountId: string;
+  assetDisposalGainLossAccountId: string;
 }
 
 // ============================================
@@ -73,17 +68,17 @@ async function createJournalEntry(
     description: string;
     lines: JournalEntryLineInput[];
   },
-  tx: PrismaTransactionClient,
-): Promise<string | null> {
+  tx: PrismaTransactionClient
+): Promise<string> {
   const { companyId, date, description, lines } = input;
 
-  // Validar balance
+  // Validar balance: un desbalance es un bug del llamador, no una condición de negocio.
   const totalDebit = lines.reduce((sum, line) => sum + line.debit, 0);
   const totalCredit = lines.reduce((sum, line) => sum + line.credit, 0);
 
   if (Math.abs(totalDebit - totalCredit) > 0.01) {
     throw new Error(
-      `El asiento no está balanceado. Debe: ${totalDebit.toFixed(2)}, Haber: ${totalCredit.toFixed(2)}`,
+      `El asiento no está balanceado. Debe: ${totalDebit.toFixed(2)}, Haber: ${totalCredit.toFixed(2)}`
     );
   }
 
@@ -94,11 +89,16 @@ async function createJournalEntry(
   });
 
   if (!settings) {
-    throw new Error('No se encontró configuración contable');
+    throw new BusinessError(
+      'No se encontró la configuración contable de la empresa. Configurala en Contabilidad → Configuración.'
+    );
   }
 
-  if (settings.lockedUntilDate && moment(date).isSameOrBefore(moment(settings.lockedUntilDate), 'day')) {
-    throw new Error(
+  if (
+    settings.lockedUntilDate &&
+    moment(date).isSameOrBefore(moment(settings.lockedUntilDate), 'day')
+  ) {
+    throw new BusinessError(
       `No se puede generar el asiento contable: el período está cerrado para la fecha ${moment(date).format('DD/MM/YYYY')}. Contacte al contador para reabrir el período.`
     );
   }
@@ -149,9 +149,10 @@ async function createJournalEntry(
         })),
       },
     },
+    select: { id: true },
   });
 
-  logger.info('Asiento contable de equipos creado', {
+  logger.info('Asiento contable de baja de equipo creado', {
     data: { entryId: entry.id, number: nextNumber, description },
   });
 
@@ -159,89 +160,119 @@ async function createJournalEntry(
 }
 
 // ============================================
-// INTEGRACIÓN: Baja de activo por venta
+// HELPER: Valores de la depreciación y líneas comunes de baja
 // ============================================
 
+interface DisposalFigures {
+  grossValue: number;
+  totalDepreciated: number;
+  bookValue: number;
+  vehicleLabel: string;
+}
+
 /**
- * Genera asiento de baja de activo fijo por venta.
- * El ingreso por venta se registra vía factura de venta (integración comercial).
+ * Lee la depreciación del equipo. Sin depreciación no hay valores para el
+ * asiento: se lanza `BusinessError` (defensa en profundidad; el llamador ya no
+ * llama en ese caso y da de baja sin asiento).
  */
-export async function createJournalEntryForAssetSale(
+async function loadDisposalFigures(
   vehicleId: string,
   companyId: string,
-  tx: PrismaTransactionClient,
-) {
-  const settings = await getEquipmentAccountingSettings(companyId, tx);
-
-  if (
-    !settings?.fixedAssetAccountId ||
-    !settings?.accumulatedDepreciationAccountId ||
-    !settings?.assetDisposalGainLossAccountId
-  ) {
-    logger.warn('Cuentas de activos fijos no configuradas - asiento de baja omitido', {
-      data: { vehicleId },
-    });
-    return null;
-  }
-
+  tx: PrismaTransactionClient
+): Promise<DisposalFigures> {
   const depreciation = await tx.vehicleDepreciation.findUnique({
     where: { vehicleId },
-    include: {
+    select: {
+      companyId: true,
+      grossValue: true,
+      totalDepreciated: true,
+      currentBookValue: true,
       vehicle: { select: { internNumber: true, domain: true } },
     },
   });
 
-  if (!depreciation) {
-    logger.warn('Equipo sin depreciación configurada - asiento de baja omitido', {
-      data: { vehicleId },
-    });
-    return null;
+  const label = depreciation?.vehicle.internNumber || depreciation?.vehicle.domain;
+  if (!depreciation || depreciation.companyId !== companyId) {
+    throw new BusinessError(
+      `El equipo «${label || vehicleId.slice(0, 8)}» no tiene depreciación configurada: la baja no genera asiento contable.`
+    );
   }
 
-  const grossValue = Number(depreciation.grossValue);
-  const totalDepreciated = Number(depreciation.totalDepreciated);
-  const bookValue = Number(depreciation.currentBookValue);
-  const vehicleLabel =
-    depreciation.vehicle.internNumber || depreciation.vehicle.domain || vehicleId.slice(0, 8);
+  return {
+    grossValue: Number(depreciation.grossValue),
+    totalDepreciated: Number(depreciation.totalDepreciated),
+    bookValue: Number(depreciation.currentBookValue),
+    vehicleLabel: label || vehicleId.slice(0, 8),
+  };
+}
 
-  const lines: JournalEntryLineInput[] = [
-    // Reversar depreciación acumulada
-    {
-      accountId: settings.accumulatedDepreciationAccountId,
+/**
+ * Líneas comunes a toda baja: reversar la acumulada (si hay algo amortizado:
+ * el check `chk_jel_debit_or_credit` rechaza una línea 0/0), dar de baja el
+ * valor de origen y mandar el valor libro restante a resultado.
+ */
+function buildDisposalLines(
+  figures: DisposalFigures,
+  accounts: AssetDisposalAccounts,
+  resultDescription: string
+): JournalEntryLineInput[] {
+  const { grossValue, totalDepreciated, bookValue, vehicleLabel } = figures;
+  const lines: JournalEntryLineInput[] = [];
+
+  if (totalDepreciated > 0) {
+    lines.push({
+      accountId: accounts.accumulatedDepreciationAccountId,
       debit: totalDepreciated,
       credit: 0,
-      description: `Baja dep. acumulada - Equipo ${vehicleLabel}`,
-    },
-    // Reversar bien de uso
-    {
-      accountId: settings.fixedAssetAccountId,
-      debit: 0,
-      credit: grossValue,
-      description: `Baja bien de uso - Equipo ${vehicleLabel}`,
-    },
-  ];
-
-  // Si hay valor libro restante, registrar como pérdida por baja
-  if (bookValue > 0) {
-    lines.push({
-      accountId: settings.assetDisposalGainLossAccountId,
-      debit: bookValue,
-      credit: 0,
-      description: `Resultado por venta - Equipo ${vehicleLabel}`,
+      description: `Baja amort. acumulada - Equipo ${vehicleLabel}`,
     });
   }
 
-  const entryId = await createJournalEntry(
+  lines.push({
+    accountId: accounts.fixedAssetAccountId,
+    debit: 0,
+    credit: grossValue,
+    description: `Baja bien de uso - Equipo ${vehicleLabel}`,
+  });
+
+  if (bookValue > 0) {
+    lines.push({
+      accountId: accounts.assetDisposalGainLossAccountId,
+      debit: bookValue,
+      credit: 0,
+      description: `${resultDescription} - Equipo ${vehicleLabel}`,
+    });
+  }
+
+  return lines;
+}
+
+// ============================================
+// INTEGRACIÓN: Baja de activo por venta
+// ============================================
+
+/**
+ * Genera el asiento de baja de un bien de uso por venta y devuelve su id.
+ * El ingreso por la venta se registra vía factura de venta (integración comercial).
+ * Lanza `BusinessError` si el equipo no tiene depreciación o el período está cerrado.
+ */
+export async function createJournalEntryForAssetSale(
+  vehicleId: string,
+  companyId: string,
+  accounts: AssetDisposalAccounts,
+  tx: PrismaTransactionClient
+): Promise<string> {
+  const figures = await loadDisposalFigures(vehicleId, companyId, tx);
+
+  return createJournalEntry(
     {
       companyId,
       date: new Date(),
-      description: `Baja por venta de activo fijo: Equipo ${vehicleLabel}`,
-      lines,
+      description: `Baja por venta de bien de uso: Equipo ${figures.vehicleLabel}`,
+      lines: buildDisposalLines(figures, accounts, 'Resultado por venta'),
     },
-    tx,
+    tx
   );
-
-  return entryId;
 }
 
 // ============================================
@@ -249,82 +280,26 @@ export async function createJournalEntryForAssetSale(
 // ============================================
 
 /**
- * Genera asiento de baja de activo fijo por pérdida total o devolución
+ * Genera el asiento de baja de un bien de uso por pérdida total o devolución
+ * y devuelve su id. Lanza `BusinessError` si el equipo no tiene depreciación
+ * o el período está cerrado.
  */
 export async function createJournalEntryForAssetDisposal(
   vehicleId: string,
   companyId: string,
-  tx: PrismaTransactionClient,
-) {
-  const settings = await getEquipmentAccountingSettings(companyId, tx);
+  accounts: AssetDisposalAccounts,
+  tx: PrismaTransactionClient
+): Promise<string> {
+  const figures = await loadDisposalFigures(vehicleId, companyId, tx);
+  const motivo = figures.bookValue > 0 ? 'pérdida total' : 'devolución';
 
-  if (
-    !settings?.fixedAssetAccountId ||
-    !settings?.accumulatedDepreciationAccountId ||
-    !settings?.assetDisposalGainLossAccountId
-  ) {
-    logger.warn('Cuentas de activos fijos no configuradas - asiento de baja omitido', {
-      data: { vehicleId },
-    });
-    return null;
-  }
-
-  const depreciation = await tx.vehicleDepreciation.findUnique({
-    where: { vehicleId },
-    include: {
-      vehicle: { select: { internNumber: true, domain: true } },
-    },
-  });
-
-  if (!depreciation) {
-    logger.warn('Equipo sin depreciación configurada - asiento de baja omitido', {
-      data: { vehicleId },
-    });
-    return null;
-  }
-
-  const grossValue = Number(depreciation.grossValue);
-  const totalDepreciated = Number(depreciation.totalDepreciated);
-  const bookValue = Number(depreciation.currentBookValue);
-  const vehicleLabel =
-    depreciation.vehicle.internNumber || depreciation.vehicle.domain || vehicleId.slice(0, 8);
-
-  const lines: JournalEntryLineInput[] = [
-    // Reversar depreciación acumulada
-    {
-      accountId: settings.accumulatedDepreciationAccountId,
-      debit: totalDepreciated,
-      credit: 0,
-      description: `Baja dep. acumulada - Equipo ${vehicleLabel}`,
-    },
-    // Reversar bien de uso
-    {
-      accountId: settings.fixedAssetAccountId,
-      debit: 0,
-      credit: grossValue,
-      description: `Baja bien de uso - Equipo ${vehicleLabel}`,
-    },
-  ];
-
-  // Si hay valor libro restante, registrar como pérdida
-  if (bookValue > 0) {
-    lines.push({
-      accountId: settings.assetDisposalGainLossAccountId,
-      debit: bookValue,
-      credit: 0,
-      description: `Pérdida por baja - Equipo ${vehicleLabel}`,
-    });
-  }
-
-  const entryId = await createJournalEntry(
+  return createJournalEntry(
     {
       companyId,
       date: new Date(),
-      description: `Baja por ${bookValue > 0 ? 'pérdida total' : 'devolución'} de activo fijo: Equipo ${vehicleLabel}`,
-      lines,
+      description: `Baja por ${motivo} de bien de uso: Equipo ${figures.vehicleLabel}`,
+      lines: buildDisposalLines(figures, accounts, 'Pérdida por baja'),
     },
-    tx,
+    tx
   );
-
-  return entryId;
 }

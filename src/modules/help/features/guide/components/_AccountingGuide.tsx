@@ -246,7 +246,15 @@ export function _AccountingGuide() {
                   cuenta de aportes en Tesorería → Socios; la por defecto se usa
                   para los que no la tienen)
                 </li>
-                <li>Activos Fijos (bienes de uso, depreciación y bajas)</li>
+                <li>
+                  Bienes de Uso <strong>por defecto</strong> (cada Tipo de
+                  Equipo define sus cuentas de Bienes de Uso, Amortización
+                  acumulada y Gasto de amortización en Empresa → Tipos de
+                  Equipo, y cada equipo puede sobreescribirlas en su pestaña
+                  Depreciación; las de acá se usan para los equipos que no
+                  tienen ninguna). La cuenta &quot;Resultado por venta/baja de
+                  Bienes de Uso&quot; sí es única para todos los equipos
+                </li>
               </ul>
             </li>
             <li>
@@ -666,12 +674,12 @@ export function _AccountingGuide() {
         </CardContent>
       </Card>
 
-      {/* Depreciación de Activos Fijos */}
+      {/* Bienes de Uso: amortización y bajas */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <TrendingDown className="h-5 w-5" />
-            Depreciación de Activos Fijos
+            Bienes de Uso: amortización y bajas
           </CardTitle>
           <CardDescription>
             Generación automática de asientos de depreciación
@@ -679,38 +687,63 @@ export function _AccountingGuide() {
         </CardHeader>
         <CardContent className="space-y-3">
           <p>
-            El sistema genera automáticamente asientos contables de
-            depreciación para los equipos configurados en el módulo de
-            Equipamiento.
+            El sistema genera automáticamente los asientos de amortización,
+            ajuste de valor y baja de los equipos configurados en el módulo
+            Equipos.
           </p>
           <p>
             <strong>Cómo funciona:</strong>
           </p>
           <ul className="list-disc pl-6 space-y-1 text-muted-foreground">
             <li>
-              Desde el detalle de un equipo (módulo Equipamiento), se configura
-              la <strong>depreciación</strong> con valor de origen, vida útil y
-              método
+              Desde el detalle de un equipo (módulo Equipos, pestaña
+              Depreciación), se configura la <strong>depreciación</strong> con
+              valor de origen, vida útil y método
             </li>
             <li>
               El sistema calcula el <strong>plan de depreciación</strong> mes a
               mes
             </li>
             <li>
-              Desde Contabilidad, puedes <strong>generar los asientos</strong>{' '}
-              de depreciación para el período actual
+              Desde Equipos (botón <strong>Contabilizar</strong> de cada
+              período en la pestaña Depreciación, o{' '}
+              <strong>Contabilizar Depreciaciones</strong> en el listado para
+              todos los equipos a la vez) se generan los asientos
             </li>
             <li>
-              Los asientos se crean automáticamente con las cuentas de
-              depreciación configuradas en la integración comercial
+              Cada asiento usa <strong>las cuentas del equipo</strong>: las de
+              su depreciación si las tiene, si no las de su Tipo de Equipo, si
+              no las por defecto de Contabilidad → Configuración. Cada una de
+              las tres cuentas se resuelve por separado
+            </li>
+            <li>
+              Si a un equipo le falta una cuenta, la contabilización{' '}
+              <strong>se rechaza</strong> con un mensaje que dice qué cuenta
+              falta y dónde cargarla (la depreciación del equipo, el tipo de
+              equipo o las cuentas por defecto). Nunca se genera un asiento
+              incompleto ni se omite en silencio. En la contabilización masiva
+              los equipos sin cuentas se omiten y se listan; los demás se
+              contabilizan igual
+            </li>
+            <li>
+              La <strong>baja</strong> por venta, destrucción total o
+              devolución también genera asiento (Bienes de Uso, Amortización
+              acumulada y Resultado por venta/baja); la baja por &quot;Otro&quot;
+              y la de equipos sin depreciación, no
             </li>
           </ul>
           <p className="text-sm text-muted-foreground mt-2">
             Los métodos de depreciación disponibles son:{' '}
             <strong>Línea recta</strong> (cuotas iguales) y{' '}
             <strong>Saldo decreciente</strong> (cuotas decrecientes). Consulta
-            la guía de Equipamiento para configurar la depreciación en cada
-            equipo.
+            la guía de Equipos para configurar la depreciación y las cuentas
+            contables de cada equipo.
+          </p>
+          <p className="text-sm text-muted-foreground">
+            La compra del bien no pasa por acá: entra a Bienes de Uso por la
+            cuenta del <strong>ítem</strong> de la factura de compra (Ítems →
+            Imputación contable). Para que el rubro cierre, esa cuenta y la
+            cuenta de Bienes de Uso del Tipo de Equipo tienen que ser la misma.
           </p>
         </CardContent>
       </Card>
@@ -735,8 +768,9 @@ export function _AccountingGuide() {
               indicadores financieros
             </li>
             <li>
-              <strong>Equipamiento</strong>: la depreciación de activos fijos
-              genera asientos contables automáticos
+              <strong>Equipos</strong>: la amortización, los ajustes de valor
+              y la baja de equipos generan asientos automáticos con las cuentas
+              del Tipo de Equipo (o las propias del equipo, o las por defecto)
             </li>
             <li>
               <strong>Presupuestos</strong>: los asientos registrados alimentan

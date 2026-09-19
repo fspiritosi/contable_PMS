@@ -44,3 +44,21 @@ export const valueAdjustmentSchema = z.object({
 });
 
 export type ValueAdjustmentInput = z.infer<typeof valueAdjustmentSchema>;
+
+/**
+ * Override de las cuentas de Bienes de Uso en la depreciación del equipo
+ * (TSK-724c). `null`/ausente = usar la del tipo de equipo o la por defecto.
+ */
+const accountField = z
+  .string()
+  .uuid('La cuenta contable seleccionada no es válida')
+  .nullish()
+  .transform((value) => value ?? null);
+
+export const depreciationAccountsSchema = z.object({
+  fixedAssetAccountId: accountField,
+  accumulatedDepreciationAccountId: accountField,
+  depreciationExpenseAccountId: accountField,
+});
+
+export type DepreciationAccountsInput = z.input<typeof depreciationAccountsSchema>;

@@ -300,7 +300,7 @@ export async function getPermissionsConfig() {
   ];
 
   // Ocultar los permisos de los módulos ocultos en este despliegue (TSK-403 / TSK-377:
-  // Empleados, Equipos, Documentos) y de sus catálogos de configuración dependientes
+  // Empleados y Documentos; Equipos es visible desde TSK-724c) y de sus catálogos dependientes
   // (ej. company.cost-centers → employees, company.vehicle-types → equipment), usando
   // el mismo mapeo permiso→módulo del sistema. Se descartan los grupos que queden vacíos.
   const resolveParentModule = (key: string) =>

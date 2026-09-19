@@ -6,7 +6,6 @@ import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
-import { z } from 'zod';
 
 import { Button } from '@/shared/components/ui/button';
 import { Checkbox } from '@/shared/components/ui/checkbox';
@@ -20,24 +19,11 @@ import {
 } from '@/shared/components/ui/dialog';
 import { Input } from '@/shared/components/ui/input';
 import { Label } from '@/shared/components/ui/label';
+import { Separator } from '@/shared/components/ui/separator';
 
-import { createVehicleType, type VehicleTypeListItem, updateVehicleType } from '../actions.server';
-
-// ============================================
-// SCHEMA
-// ============================================
-
-const vehicleTypeSchema = z.object({
-  name: z.string().min(2, 'El nombre debe tener al menos 2 caracteres'),
-  hasHitch: z.boolean(),
-  isTractorUnit: z.boolean(),
-});
-
-type VehicleTypeFormData = z.infer<typeof vehicleTypeSchema>;
-
-// ============================================
-// PROPS
-// ============================================
+import { createVehicleType, updateVehicleType, type VehicleTypeListItem } from '../actions.server';
+import { type VehicleTypeFormData, vehicleTypeSchema } from '../validators';
+import { _VehicleTypeAccountsFields } from './_VehicleTypeAccountsFields';
 
 interface Props {
   open: boolean;
@@ -45,9 +31,15 @@ interface Props {
   vehicleType?: VehicleTypeListItem | null;
 }
 
-// ============================================
-// COMPONENT
-// ============================================
+/** Valores del form a partir del tipo guardado (o vacíos para crear). */
+const toFormValues = (vehicleType?: VehicleTypeListItem | null): VehicleTypeFormData => ({
+  name: vehicleType?.name ?? '',
+  hasHitch: vehicleType?.hasHitch ?? false,
+  isTractorUnit: vehicleType?.isTractorUnit ?? false,
+  fixedAssetAccountId: vehicleType?.fixedAssetAccountId ?? null,
+  accumulatedDepreciationAccountId: vehicleType?.accumulatedDepreciationAccountId ?? null,
+  depreciationExpenseAccountId: vehicleType?.depreciationExpenseAccountId ?? null,
+});
 
 export function _VehicleTypeFormModal({ open, onOpenChange, vehicleType }: Props) {
   const router = useRouter();
@@ -63,22 +55,16 @@ export function _VehicleTypeFormModal({ open, onOpenChange, vehicleType }: Props
     formState: { errors, isSubmitting },
   } = useForm<VehicleTypeFormData>({
     resolver: zodResolver(vehicleTypeSchema),
-    defaultValues: { name: '', hasHitch: false, isTractorUnit: false },
+    defaultValues: toFormValues(null),
   });
 
-  // Watch checkbox values
+  // Watch checkbox values (las cuentas las lee `_VehicleTypeAccountsFields` con `watch()`)
   const hasHitch = watch('hasHitch');
   const isTractorUnit = watch('isTractorUnit');
 
   // Reset form cuando cambia vehicleType o se abre el modal
   useEffect(() => {
-    if (open) {
-      reset({
-        name: vehicleType?.name ?? '',
-        hasHitch: vehicleType?.hasHitch ?? false,
-        isTractorUnit: vehicleType?.isTractorUnit ?? false,
-      });
-    }
+    if (open) reset(toFormValues(vehicleType));
   }, [open, vehicleType, reset]);
 
   const createMutation = useMutation({
@@ -119,10 +105,15 @@ export function _VehicleTypeFormModal({ open, onOpenChange, vehicleType }: Props
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[425px]" data-testid="vehicle-type-form-modal">
+      <DialogContent
+        className="max-h-[90vh] overflow-y-auto sm:max-w-[600px]"
+        data-testid="vehicle-type-form-modal"
+      >
         <form onSubmit={handleSubmit(onSubmit)}>
           <DialogHeader>
-            <DialogTitle>{isEditing ? 'Editar Tipo de Equipo' : 'Nuevo Tipo de Equipo'}</DialogTitle>
+            <DialogTitle>
+              {isEditing ? 'Editar Tipo de Equipo' : 'Nuevo Tipo de Equipo'}
+            </DialogTitle>
             <DialogDescription>
               {isEditing
                 ? 'Modifica los datos del tipo de equipo'
@@ -169,6 +160,15 @@ export function _VehicleTypeFormModal({ open, onOpenChange, vehicleType }: Props
                 Es unidad tractora
               </Label>
             </div>
+
+            <Separator />
+            <h3 className="text-sm font-medium">Cuentas contables (Bienes de Uso)</h3>
+            <_VehicleTypeAccountsFields
+              values={watch()}
+              onChange={(field, accountId) => setValue(field, accountId, { shouldDirty: true })}
+              saved={vehicleType ?? null}
+              enabled={open}
+            />
           </div>
 
           <DialogFooter>

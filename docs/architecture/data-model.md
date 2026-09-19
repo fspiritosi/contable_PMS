@@ -78,7 +78,7 @@ Resolucion: Owner/Developer → acceso total. Otros → rol base + overrides ind
 
 | Modelo | Descripcion | Campos clave |
 |--------|-------------|--------------|
-| `Vehicle` | Vehiculo/equipo | plate, brand, model, year, status, condition, titularityType |
+| `Vehicle` | Vehiculo/equipo | plate, brand, model, year, status, condition, titularityType, vehicleTypeId. Sin cuentas contables propias: van en `VehicleType` (por tipo) y `VehicleDepreciation` (override), TSK-724c |
 
 **Enums:**
 - `VehicleStatus`: ACTIVE, INACTIVE, MAINTENANCE, RETIRED
@@ -89,7 +89,7 @@ Resolucion: Owner/Developer → acceso total. Otros → rol base + overrides ind
 
 | Modelo | Descripcion | Campos clave |
 |--------|-------------|--------------|
-| `VehicleDepreciation` | Config depreciacion | vehicleId, method, grossValue, salvageValue, usefulLifeMonths, status |
+| `VehicleDepreciation` | Config depreciacion | vehicleId, method, grossValue, salvageValue, usefulLifeMonths, status, **fixedAssetAccountId?, accumulatedDepreciationAccountId?, depreciationExpenseAccountId?** (override de las cuentas del tipo/por defecto, FK `SetNull`, TSK-724c) |
 | `DepreciationScheduleEntry` | Periodo del schedule | depreciationId, periodNumber, scheduledDate, amount, accumulatedAmount, bookValueAfter, journalEntryId? |
 | `AssetValueAdjustment` | Ajuste de valor | vehicleId, date, previousValue, newValue, reason, journalEntryId? |
 
@@ -102,7 +102,15 @@ Resolucion: Owner/Developer → acceso total. Otros → rol base + overrides ind
 - VehicleDepreciation 1←N DepreciationScheduleEntry (periodos del schedule)
 - Vehicle 1←N AssetValueAdjustment (historial de ajustes)
 - DepreciationScheduleEntry N→1 JournalEntry (asiento contable al contabilizar)
-- AssetValueAdjustment N→1 JournalEntry (asiento del ajuste, opcional)
+- AssetValueAdjustment N→1 JournalEntry (asiento del ajuste; desde TSK-724c siempre se genera)
+- VehicleDepreciation N→1 Account ×3 (`DepreciationFixedAssetAccount`, `DepreciationAccumulatedDepreciationAccount`, `DepreciationDepreciationExpenseAccount`; inversas en `Account`, TSK-724c)
+- VehicleType N→1 Account ×3 (`VehicleTypeFixedAssetAccount`, `VehicleTypeAccumulatedDepreciationAccount`, `VehicleTypeDepreciationExpenseAccount`, TSK-724c)
+
+**Resolucion de cuentas de Bienes de Uso** (helper puro `equipment/shared/asset-accounts.ts`): para cada
+una de las tres cuentas, `VehicleDepreciation` → `VehicleType` → `AccountingSettings` (por defecto). La
+cuenta de resultado por venta/baja sigue solo en `AccountingSettings`. Migracion
+`20260919121736_tsk_724c_asset_accounts_by_type`: 6 columnas nullable, 6 indices, 6 FK `ON DELETE SET
+NULL`, sin backfill (los asientos historicos quedan en las cuentas con las que se generaron).
 
 ---
 
@@ -147,7 +155,7 @@ Resolucion: Owner/Developer → acceso total. Otros → rol base + overrides ind
 |--------|-------------|
 | `VehicleBrand` | Marcas (→ VehicleModel) |
 | `VehicleModel` | Modelos de vehiculo |
-| `VehicleType` | Tipos de vehiculo |
+| `VehicleType` | Tipos de equipo + cuentas de Bienes de Uso del tipo (`fixedAssetAccountId?`, `accumulatedDepreciationAccountId?`, `depreciationExpenseAccountId?`, FK `SetNull`, TSK-724c) |
 | `TypeOfVehicle` | Clasificaciones de vehiculo |
 | `EquipmentOwner` | Titulares de equipo |
 | `Contractor` | Contratistas |
@@ -456,7 +464,7 @@ Reglas:
 | `Account` | Cuenta contable (arbol) | code (formato x.x.x/xx/xx), name, type, nature, parentId, isLeaf, isActive, disabledFrom, disabledFromFiscalYearId |
 | `JournalEntry` | Asiento contable | number, date, description, status, isAutomatic, reversedById |
 | `JournalEntryLine` | Linea de asiento | accountId, debit, credit, description |
-| `AccountingSettings` | Config contable | salesAccountId, purchasesAccountId (cuentas de ventas/compras **por defecto**: solo para lineas cuyo item no tiene cuenta propia, TSK-721), bankChargesAccountId? (gastos bancarios por defecto, FK SetNull, TSK-718), vatAccountId, fixedAssetAccountId, depreciationExpenseAccountId, lockedUntilDate, productCodePrefix (default "PROD"), lastProductNumber (default 0), requireCostCenter (Boolean, default false, TSK-583), etc. |
+| `AccountingSettings` | Config contable | salesAccountId, purchasesAccountId (cuentas de ventas/compras **por defecto**: solo para lineas cuyo item no tiene cuenta propia, TSK-721), bankChargesAccountId? (gastos bancarios por defecto, FK SetNull, TSK-718), vatAccountId, fixedAssetAccountId, accumulatedDepreciationAccountId, depreciationExpenseAccountId (cuentas de Bienes de Uso **por defecto**: respaldo de `VehicleDepreciation` → `VehicleType`, TSK-724c), assetDisposalGainLossAccountId (resultado por venta/baja, unica), lockedUntilDate, productCodePrefix (default "PROD"), lastProductNumber (default 0), requireCostCenter (Boolean, default false, TSK-583), etc. |
 | `RecurringEntry` | Asiento recurrente | frequency, nextExecution, templateLines |
 | `RecurringEntryLine` | Linea de asiento recurrente | accountId, debitAmount, creditAmount |
 

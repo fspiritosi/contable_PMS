@@ -191,7 +191,11 @@ export function _CompanyGuide() {
               <strong>Recursos Humanos</strong>: Empleados
             </li>
             <li>
-              <strong>Equipamiento</strong>: Equipos/Vehículos
+              <strong>Equipos</strong>: Equipos/Vehículos, y en Configuración
+              los catálogos de Empresa → Equipos (Tipos de Equipo, Marcas,
+              Titulares, etc.). A los roles personalizados hay que otorgarles
+              estos permisos expresamente: Editar para contabilizar
+              amortizaciones y editar cuentas, Eliminar para dar de baja
             </li>
             <li>
               <strong>Documentos</strong>: Documentación general, de empleados,
@@ -299,11 +303,12 @@ export function _CompanyGuide() {
               </ul>
             </div>
             <div className="space-y-1">
-              <p className="font-medium text-sm">Para Equipamiento:</p>
+              <p className="font-medium text-sm">Para Equipos (Empresa → Equipos):</p>
               <ul className="list-disc pl-6 space-y-1 text-sm text-muted-foreground">
-                <li>Marcas de vehículos</li>
-                <li>Tipos de vehículos</li>
-                <li>Propietarios de equipos</li>
+                <li>Marcas</li>
+                <li>Tipos de Equipo (con sus cuentas contables, ver abajo)</li>
+                <li>Titulares</li>
+                <li>Sectores y Tipos Operativos</li>
                 <li>Contratistas</li>
               </ul>
             </div>
@@ -314,6 +319,55 @@ export function _CompanyGuide() {
             desactivar opciones. Se recomienda cargar los catálogos antes de
             empezar a usar los módulos que los necesitan.
           </p>
+
+          <p className="mt-3">
+            <strong>Tipos de Equipo: cuentas contables de Bienes de Uso</strong>
+          </p>
+          <p className="text-sm text-muted-foreground">
+            Cada tipo de equipo (por ejemplo &quot;Rodados&quot; o
+            &quot;Maquinaria&quot;) define con qué cuentas se contabilizan la
+            amortización, los ajustes de valor y la baja de todos los equipos
+            de ese tipo. Al crear o editar un tipo, debajo de los datos básicos
+            está la sección <strong>Cuentas contables (Bienes de Uso)</strong>{' '}
+            con tres campos:
+          </p>
+          <ul className="list-disc pl-6 space-y-1 text-sm text-muted-foreground">
+            <li>
+              <strong>Cuenta de Bienes de Uso</strong>: el valor del bien (por
+              ejemplo &quot;Rodados Valores Originales&quot;). Se usa en la baja
+              y en el ajuste de valor. Conviene que sea la misma cuenta a la que
+              se imputó la compra del bien (Ítems → Imputación contable)
+            </li>
+            <li>
+              <strong>Amortización acumulada</strong>: la acumulada del mismo
+              rubro (por ejemplo &quot;Amortizac. Acumuladas Rodados&quot;). Se
+              usa en la amortización mensual y en la baja
+            </li>
+            <li>
+              <strong>Gasto de amortización</strong>: la cuenta de resultado del
+              gasto. Suele ir por función (explotación, administración), no por
+              rubro
+            </li>
+          </ul>
+          <p className="text-sm text-muted-foreground">
+            Un campo que queda <strong>Sin asignar</strong> usa la cuenta por
+            defecto de Contabilidad → Configuración; cada equipo puede además
+            sobreescribir estas cuentas en su pestaña Depreciación. En el
+            listado de tipos, la columna <strong>Cuentas contables</strong>{' '}
+            muestra &quot;Propias&quot; (las tres cargadas), &quot;N/3
+            propias&quot; o &quot;Por defecto&quot; (ninguna).
+          </p>
+          <Alert>
+            <Info className="h-4 w-4" />
+            <AlertDescription>
+              Si el tipo ya tiene equipos con amortizaciones contabilizadas, al
+              cambiar una cuenta aparece un aviso naranja: los asientos
+              anteriores no se modifican; las próximas amortizaciones y la baja
+              usan la cuenta nueva y el saldo acumulado hasta ese momento queda
+              en la anterior. Si hace falta, el contador lo reclasifica con un
+              asiento manual. El cambio no se bloquea.
+            </AlertDescription>
+          </Alert>
         </CardContent>
       </Card>
 
@@ -475,8 +529,10 @@ export function _CompanyGuide() {
               contratos, sindicatos, centros de costo y sectores
             </li>
             <li>
-              <strong>Equipamiento</strong>: usa catálogos de marcas, tipos de
-              vehículo, propietarios y contratistas
+              <strong>Equipos</strong>: usa los catálogos de Empresa → Equipos
+              (marcas, tipos de equipo, titulares, sectores, tipos operativos y
+              contratistas); las cuentas contables de cada Tipo de Equipo
+              definen cómo se contabilizan la amortización y la baja
             </li>
             <li>
               <strong>Documentos</strong>: las condiciones de aplicación de

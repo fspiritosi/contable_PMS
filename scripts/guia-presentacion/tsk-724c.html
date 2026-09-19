@@ -1,0 +1,702 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>TSK-724c — La cuenta de Bienes de Uso la define el tipo de equipo</title>
+<style>
+  @page {
+    size: A4;
+    margin: 0;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #1f2430;
+    font-size: 13px;
+    line-height: 1.55;
+    background: #ffffff;
+  }
+
+  .page {
+    padding: 4mm 2mm;
+  }
+
+  header.cover {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    text-align: left;
+    padding: 10mm 2mm 8mm 2mm;
+    border-bottom: 3px solid #2f6f4f;
+    margin-bottom: 10mm;
+  }
+
+  .eyebrow {
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 11px;
+    font-weight: 700;
+    color: #2f6f4f;
+    margin-bottom: 6px;
+  }
+
+  h1 {
+    font-size: 26px;
+    margin: 0 0 8px 0;
+    color: #14251c;
+  }
+
+  .subtitle {
+    font-size: 14px;
+    color: #4b5563;
+    margin: 0;
+  }
+
+  section {
+    margin-bottom: 9mm;
+    page-break-inside: avoid;
+  }
+
+  section.allow-break {
+    page-break-inside: auto;
+  }
+
+  section:last-of-type { margin-bottom: 2mm; }
+
+  h2 {
+    font-size: 16px;
+    color: #14251c;
+    border-left: 4px solid #2f6f4f;
+    padding-left: 8px;
+    margin: 0 0 6mm 0;
+    page-break-after: avoid;
+  }
+
+  h3.sub {
+    font-size: 13.5px;
+    color: #14251c;
+    margin: 6mm 0 3mm 0;
+    page-break-after: avoid;
+  }
+
+  .quote {
+    background: #f4f7f5;
+    border-left: 4px solid #2f6f4f;
+    padding: 10px 14px;
+    font-style: italic;
+    color: #2b3a33;
+    margin: 0 0 6px 0;
+  }
+
+  .quote cite {
+    display: block;
+    font-style: normal;
+    font-size: 11.5px;
+    color: #6b7280;
+    margin-top: 6px;
+  }
+
+  .before-after {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    page-break-inside: avoid;
+  }
+
+  .card {
+    border: 1px solid #e2e5e0;
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+
+  .card.before { background: #fbf7f2; border-color: #ecd9bd; }
+  .card.after { background: #f2f8f4; border-color: #bfe0cb; }
+
+  .card h3 {
+    margin: 0 0 6px 0;
+    font-size: 12.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .card.before h3 { color: #9a6a1f; }
+  .card.after h3 { color: #226240; }
+
+  .card p { margin: 0; }
+
+  ol.steps {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    counter-reset: step;
+  }
+
+  ol.steps > li {
+    counter-increment: step;
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+    page-break-inside: avoid;
+  }
+
+  ol.steps > li::before {
+    content: counter(step);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    border-radius: 50%;
+    background: #2f6f4f;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  ol.steps.letters > li::before {
+    content: counter(step, lower-alpha);
+  }
+
+  .step-body { flex: 1; }
+
+  .step-body strong { color: #14251c; }
+
+  figure {
+    margin: 8px 0 0 0;
+    page-break-inside: avoid;
+  }
+
+  figure img {
+    max-width: 100%;
+    border: 1px solid #d9dce0;
+    border-radius: 6px;
+    display: block;
+  }
+
+  figure.small img { max-width: 320px; }
+
+  figure.sidebar img { max-width: 150px; }
+
+  figure.modal img { max-width: 400px; }
+
+  figure.modal-sm img { max-width: 340px; }
+
+  ol.steps.long > li { page-break-inside: auto; }
+
+  figcaption {
+    font-size: 11px;
+    color: #6b7280;
+    margin-top: 4px;
+  }
+
+  .callout {
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin: 0 0 8px 0;
+    page-break-inside: avoid;
+  }
+
+  .callout.config {
+    background: #f2f6fb;
+    border: 1px solid #cddaeb;
+  }
+
+  .callout.warning {
+    background: #fdf5ec;
+    border: 1px solid #efd6a8;
+  }
+
+  .callout h3 {
+    margin: 0 0 4px 0;
+    font-size: 13px;
+  }
+
+  .callout p { margin: 0 0 6px 0; }
+  .callout p:last-child { margin-bottom: 0; }
+
+  ul.plain {
+    margin: 4px 0 0 0;
+    padding-left: 18px;
+  }
+
+  ul.plain li { margin-bottom: 4px; }
+
+  .no-change-list {
+    display: grid;
+    gap: 6px;
+  }
+
+  .no-change-item {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+  }
+
+  .check {
+    color: #2f6f4f;
+    font-weight: 700;
+  }
+
+  .side-by-side {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8mm;
+    align-items: start;
+    page-break-inside: avoid;
+  }
+
+  .side-by-side figure { margin-top: 0; }
+
+  .side-by-side.narrow-left {
+    grid-template-columns: 160px 1fr;
+  }
+
+  .ui-text {
+    font-style: italic;
+    color: #374151;
+  }
+
+  table.chain {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 6px 0 8px 0;
+    font-size: 12px;
+    page-break-inside: avoid;
+  }
+
+  table.chain th, table.chain td {
+    border: 1px solid #dfe3e0;
+    padding: 6px 8px;
+    text-align: left;
+    vertical-align: top;
+  }
+
+  table.chain th {
+    background: #f4f7f5;
+    color: #14251c;
+    font-weight: 700;
+  }
+
+  .entry {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 11.5px;
+    background: #f7f8f7;
+    border: 1px solid #e2e5e0;
+    border-radius: 6px;
+    padding: 8px 10px;
+    margin: 6px 0;
+    white-space: pre;
+  }
+
+  footer.doc-footer {
+    text-align: center;
+    color: #9ca3af;
+    font-size: 10.5px;
+    margin-top: 2mm;
+  }
+</style>
+
+</head>
+<body>
+
+
+<div class="page">
+
+  <header class="cover">
+    <div class="eyebrow">Ticket 724 (c) · Bienes de Uso · Equipos</div>
+    <h1>La cuenta de Bienes de Uso la define el tipo de equipo</h1>
+    <p class="subtitle">Guía de presentación — qué pediste, qué cambió, cómo se usa paso a paso y un aviso importante sobre la compra del bien</p>
+  </header>
+
+  <section>
+    <h2>1. Qué pediste</h2>
+    <p>En la reunión del 16 y 17 de septiembre dejaste el punto (c) del ticket 724, que cierra la
+    serie de cuentas contables "por defecto" que empezamos con ventas y compras (721) y con los
+    aportes de socios (717):</p>
+    <div class="quote">
+      "Cuentas de Bienes de Uso ⇒ Existen más de una cuenta para los bienes de uso, así que se
+      determina por ítem."
+      <cite>— Elizabeth Pérez, ticket 724 (c), Configuración de Cuentas Contables</cite>
+    </div>
+    <p><strong>Qué pasaba.</strong> En Contabilidad → Configuración había una sección
+    <span class="ui-text">Cuentas de Activos Fijos</span> con una sola cuenta de Bienes de Uso, una
+    sola de Amortización Acumulada y una sola de Gasto de Amortización <strong>para todos los
+    equipos de la empresa</strong>. Un camión, una máquina y una computadora se amortizaban contra la
+    misma cuenta, y toda la amortización acumulada terminaba en un solo lugar. Tu plan de cuentas,
+    en cambio, abre Bienes de Uso por rubro (Rodados, Maquinarias y Equipos, Muebles y Útiles,
+    Equipos Tecnológicos…) y cada rubro tiene su propia "Amortizaciones Acumuladas". Con una única
+    cuenta global, el rubro no cerraba.</p>
+    <p>Además encontramos algo que no pediste pero que había que arreglar: cuando dabas de baja un
+    equipo y faltaba alguna de esas cuentas, la baja <strong>se hacía igual, sin asiento y sin
+    avisar</strong>. Lo contamos en el punto 5.</p>
+  </section>
+
+  <section>
+    <h2>2. Qué cambió: la cuenta la define el tipo de equipo</h2>
+    <div class="before-after">
+      <div class="card before">
+        <h3>Antes</h3>
+        <p>Tres cuentas globales en Contabilidad → Configuración, iguales para todos los equipos.
+        No había forma de decir "los rodados van acá y las máquinas van allá". Si faltaba una
+        cuenta, el asiento de baja se salteaba en silencio.</p>
+      </div>
+      <div class="card after">
+        <h3>Ahora</h3>
+        <p>Cada <strong>Tipo de Equipo</strong> (Rodados, Maquinaria, …) tiene sus tres cuentas.
+        Cada equipo puntual puede <strong>sobreescribirlas</strong> si hace falta. Las de
+        Configuración pasan a ser <span class="ui-text">por defecto</span>: se usan solo para los
+        equipos que no tienen cuenta ni propia ni de tipo. Si no hay ninguna, el asiento no se genera
+        y el sistema te dice qué falta y dónde cargarlo.</p>
+      </div>
+    </div>
+    <p style="margin-top:8px">La regla, en una línea: <strong>cuenta del equipo → cuenta del tipo de
+    equipo → cuenta por defecto → si no hay ninguna, no se contabiliza</strong>. Y se aplica a cada
+    una de las tres cuentas por separado: un equipo puede tener propia solo la Amortización
+    acumulada y tomar las otras dos de su tipo.</p>
+    <table class="chain">
+      <thead>
+        <tr><th>Cuenta</th><th>Para qué se usa</th><th>Dónde se carga</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Bienes de Uso</strong></td>
+          <td>El valor del bien. Se usa en la baja y en el ajuste de valor.</td>
+          <td rowspan="3">Tipo de Equipo (lo normal) · pestaña Depreciación del equipo (excepciones) ·
+          Contabilidad → Configuración (por defecto)</td>
+        </tr>
+        <tr>
+          <td><strong>Amortización acumulada</strong></td>
+          <td>Lo ya amortizado del mismo rubro. Se usa en la amortización mensual y en la baja.</td>
+        </tr>
+        <tr>
+          <td><strong>Gasto de amortización</strong></td>
+          <td>La cuenta de resultado del gasto. Se usa en la amortización mensual. Suele ir por
+          función (explotación, administración), no por rubro.</td>
+        </tr>
+        <tr>
+          <td><strong>Resultado por venta/baja</strong></td>
+          <td>Recibe el valor no amortizado en la baja y la diferencia en los ajustes de valor.</td>
+          <td>Solo Contabilidad → Configuración. <strong>Sigue siendo una sola</strong> para todos los
+          equipos (ver punto 8).</td>
+        </tr>
+      </tbody>
+    </table>
+    <figure>
+      <img src="assets/tsk724c-03-ajustes-bienes-de-uso.png" alt="Sección Bienes de Uso (cuentas por defecto) de Contabilidad → Configuración con cuatro campos: Cuenta de Bienes de Uso por defecto, Amortización acumulada por defecto, Gasto de amortización por defecto y Resultado por venta/baja de Bienes de Uso, cada uno con su texto de ayuda" />
+      <figcaption>La sección renombrada en Contabilidad → Configuración:
+      <span class="ui-text">Bienes de Uso (cuentas por defecto)</span>. Las tres primeras dicen "por
+      defecto" en el nombre y la ayuda explica cuándo se usan. La cuarta, Resultado por venta/baja,
+      es la única para todos los equipos. En los datos de demostración las cuatro están vacías: como
+      vas a ver, con las cuentas cargadas en el tipo de equipo alcanza.</figcaption>
+    </figure>
+  </section>
+
+  <section class="allow-break">
+    <h2>3. Para usarlo hay que tener activo el módulo Equipos</h2>
+    <p>La depreciación, las cuentas de Bienes de Uso y la baja viven en el módulo
+    <strong>Equipos</strong>, que hasta ahora estaba oculto en tu instalación. Con esta entrega
+    aparece en el menú lateral, dentro de <span class="ui-text">Principal</span>, y en Empresa →
+    Módulos como cualquier otro módulo, con su interruptor para activarlo o desactivarlo.</p>
+    <div class="side-by-side narrow-left">
+      <figure class="sidebar">
+        <img src="assets/tsk724c-01-sidebar-equipos.png" alt="Menú lateral con Dashboard, Equipos, Comercial y Almacenes en el grupo Principal, y Empresa y Sistema en Configuración" />
+        <figcaption>Equipos en el menú, debajo de Dashboard.</figcaption>
+      </figure>
+      <div>
+        <figure>
+          <img src="assets/tsk724c-02-modulos-equipos.png" alt="Tarjeta del módulo Equipos en Empresa → Módulos, con la etiqueta Activo, el interruptor encendido y la descripción Gestión de equipos, vehículos, mantenimiento" style="max-width:300px" />
+          <figcaption>La tarjeta de Equipos en Empresa → Módulos. Si no lo necesitás en alguna
+          empresa, lo apagás acá y desaparecen el menú y los catálogos de Tipos de Equipo.</figcaption>
+        </figure>
+        <div class="callout warning" style="margin-top:10px">
+          <h3>Permisos: hay que dárselos a los demás roles</h3>
+          <p>Como el módulo estaba oculto, los roles que creaste hasta ahora <strong>no tienen
+          permiso</strong> sobre Equipos ni sobre Tipos de Equipo; nunca se pudo otorgar. Vos, como
+          Propietaria, ves todo. Para cualquier otro rol (Contador, Administrativo, etc.) entrá a
+          <strong>Empresa → Roles</strong>, editá el rol y marcá en <span class="ui-text">Equipos</span>
+          y en <span class="ui-text">Tipos de Equipo</span> lo que corresponda: Ver para consultar,
+          Editar para contabilizar y cambiar cuentas, Eliminar para dar de baja.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="allow-break">
+    <h2>4. Paso a paso, con el ejemplo de un rodado</h2>
+    <p>Los datos son de demostración: un tipo de equipo <span class="ui-text">Rodados</span> con sus
+    tres cuentas, otro <span class="ui-text">Maquinaria</span> sin ninguna, y dos equipos, uno de
+    cada tipo. Las cuentas por defecto de Configuración quedaron vacías a propósito, para que se vea
+    de dónde sale cada cuenta.</p>
+    <ol class="steps letters long">
+      <li>
+        <div class="step-body">
+          <strong>Cargá los tipos de equipo con sus cuentas.</strong> En Empresa → Equipos →
+          <span class="ui-text">Tipos de Equipo</span>, al crear o editar un tipo, debajo del nombre
+          aparece la sección <span class="ui-text">Cuentas contables (Bienes de Uso)</span> con los
+          tres campos. Escribí el código o el nombre para buscar la cuenta, igual que en Configuración.
+          Un campo que dejás <span class="ui-text">Sin asignar</span> usa la cuenta por defecto.
+          <div class="side-by-side">
+            <figure class="modal-sm">
+              <img src="assets/tsk724c-04-tipo-rodados-modal.png" alt="Diálogo Nuevo Tipo de Equipo con nombre Rodados y la sección Cuentas contables (Bienes de Uso): Cuenta de Bienes de Uso 1.2.2/04/01 Rodados Valores Originales, Amortización acumulada 1.2.2/04/03 Amortizac. Acumuladas Rodados, Gasto de amortización 4.2.1/02/10 Amortizaciones - Explotación" />
+              <figcaption>El tipo <span class="ui-text">Rodados</span> con sus tres cuentas del rubro
+              1.2.2/04 y el gasto de explotación. Debajo de cada campo, la ayuda dice para qué se
+              usa.</figcaption>
+            </figure>
+            <div>
+              <div class="callout config">
+                <h3>Qué tipos conviene tener</h3>
+                <p>Uno por rubro de tu plan de cuentas: Rodados, Maquinarias y Equipos, Muebles y
+                Útiles, Equipos Tecnológicos… Así cada tipo apunta a su cuenta de valores originales
+                y a su acumulada, y el rubro cierra solo.</p>
+              </div>
+              <div class="callout config">
+                <h3>Si el tipo ya tiene equipos amortizados</h3>
+                <p>Al cambiarle una cuenta, el modal te muestra un aviso naranja: los asientos ya
+                generados no cambian, las próximas amortizaciones y la baja usan la cuenta nueva.
+                Lo explicamos en el paso d.</p>
+              </div>
+            </div>
+          </div>
+          <figure>
+            <img src="assets/tsk724c-05-tipos-listado-cuentas.png" alt="Listado de Tipos de Equipo con la columna Cuentas contables: Maquinaria muestra Por defecto y Rodados muestra Propias" />
+            <figcaption>En el listado, la columna <span class="ui-text">Cuentas contables</span>
+            te dice de un vistazo qué tipos ya tienen sus cuentas: <span class="ui-text">Propias</span>
+            (las tres cargadas), <span class="ui-text">2/3 propias</span> o
+            <span class="ui-text">Por defecto</span> (ninguna). Acá Maquinaria todavía no tiene las
+            suyas: es el que va a fallar en el punto 5.</figcaption>
+          </figure>
+        </div>
+      </li>
+      <li>
+        <div class="step-body">
+          <strong>Dá de alta el equipo y configurá su depreciación.</strong> En Equipos →
+          <span class="ui-text">Nuevo Equipo</span> elegí el tipo de equipo (Rodados). Después, en el
+          detalle, pestaña <span class="ui-text">Depreciación</span> → <span class="ui-text">Configurar
+          Depreciación</span>: valor de origen, valor residual, vida útil en meses, fecha de inicio y
+          método. No hace falta tocar cuentas: apenas configurás la depreciación aparece la card
+          <span class="ui-text">Cuentas contables</span>, que te muestra las tres cuentas que el
+          sistema va a usar y <strong>de dónde sale cada una</strong>.
+          <figure>
+            <img src="assets/tsk724c-06-card-cuentas-del-tipo.png" alt="Card Cuentas contables del equipo TSK724C-001: Bienes de Uso 1.2.2/04/01 Rodados Valores Originales, Amortización acumulada 1.2.2/04/03 Amortizac. Acumuladas Rodados y Gasto de amortización 4.2.1/02/10 Amortizaciones - Explotación, las tres con la etiqueta del tipo de equipo «Rodados», y el botón Editar cuentas" />
+            <figcaption>Las tres cuentas del equipo, cada una con la etiqueta
+            <span class="ui-text">del tipo de equipo «Rodados»</span>: el equipo no tiene cuentas
+            propias, hereda las del tipo. Abajo, el recordatorio sobre la compra del bien que
+            explicamos en el punto 7.</figcaption>
+          </figure>
+        </div>
+      </li>
+      <li>
+        <div class="step-body">
+          <strong>Contabilizá la amortización.</strong> En el cronograma de la misma pestaña, cada
+          período pendiente tiene el botón <span class="ui-text">Contabilizar</span>. Al hacerlo, el
+          sistema genera el asiento del mes con las cuentas de la card y marca el período como
+          contabilizado. Para todos los equipos a la vez, en el listado de Equipos está
+          <span class="ui-text">Contabilizar Depreciaciones</span>, donde elegís hasta qué fecha.
+          <figure>
+            <img src="assets/tsk724c-07-asiento-amortizacion.png" alt="Contabilidad → Asientos: asiento 16 del 01/06/2026 Depreciación período 1: Equipo TSK724C-001 por $ 20.000,00, desplegado, con Debe 4.2.1/02/10 Amortizaciones - Explotación y Haber 1.2.2/04/03 Amortizac. Acumuladas Rodados" />
+            <figcaption>El asiento en Contabilidad → Asientos: Debe
+            <span class="ui-text">4.2.1/02/10 Amortizaciones - Explotación</span> / Haber
+            <span class="ui-text">1.2.2/04/03 Amortizac. Acumuladas Rodados</span>, las cuentas del tipo
+            Rodados. Antes de esta entrega ese haber iba a la única acumulada global, fuera cual
+            fuera el rubro.</figcaption>
+          </figure>
+        </div>
+      </li>
+      <li>
+        <div class="step-body">
+          <strong>Si un equipo puntual va a otra cuenta, cambiala solo para ese equipo.</strong> En
+          la card <span class="ui-text">Cuentas contables</span> → <span class="ui-text">Editar
+          cuentas</span>. Cada campo que dejás vacío sigue usando la del tipo (la ayuda debajo te dice
+          cuál); el que completás pasa a ser propio de ese equipo. Es para excepciones: si todos los
+          equipos de un tipo tienen que cambiar, cambiá el tipo.
+          <div class="side-by-side">
+            <figure class="modal-sm">
+              <img src="assets/tsk724c-08-override-aviso-naranja.png" alt="Diálogo Cuentas contables del equipo: Bienes de Uso vacío con la ayuda Si queda vacía se usa 1.2.2/04/01 Rodados Valores Originales del tipo de equipo «Rodados»; Amortización acumulada 1.2.2/02/03 Amortizaciones Acumuladas - Maquinarias y Eq., Propia de este equipo; Gasto vacío; y el aviso naranja: Este equipo tiene 1 período(s) contabilizado(s) con las cuentas anteriores. Cambiar la cuenta no modifica esos asientos" />
+              <figcaption>Se cambió solo la Amortización acumulada. Como ya había un período
+              contabilizado, aparece el aviso naranja.</figcaption>
+            </figure>
+            <div>
+              <figure>
+                <img src="assets/tsk724c-09-card-cuentas-override.png" alt="Card Cuentas contables después de guardar: Bienes de Uso y Gasto de amortización siguen del tipo de equipo «Rodados»; Amortización acumulada 1.2.2/02/03 con la etiqueta azul de la depreciación del equipo" />
+                <figcaption>Después de guardar: la acumulada lleva la etiqueta
+                <span class="ui-text">de la depreciación del equipo</span>; las otras dos siguen
+                viniendo del tipo.</figcaption>
+              </figure>
+              <div class="callout warning" style="margin-top:10px">
+                <h3>Qué significa el aviso naranja</h3>
+                <p>Cambiar una cuenta (en el equipo o en el tipo) <strong>no toca los asientos ya
+                generados</strong>: los próximos períodos y la baja usan la cuenta nueva, y lo que se
+                acumuló hasta ese momento queda en la anterior. El sistema te avisa pero no te frena;
+                si hace falta mover el saldo, tu contador lo reclasifica con un asiento manual. En
+                los datos de ejemplo, el asiento 17 (período 2) ya acredita la cuenta nueva y el 16
+                quedó como estaba.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </li>
+    </ol>
+  </section>
+
+  <section class="allow-break">
+    <h2>5. Si falta una cuenta, no se contabiliza y te dice dónde arreglarlo</h2>
+    <p>Esto es un <strong>cambio de comportamiento</strong>, igual que el de las facturas en el ticket
+    721. <strong>Hasta ahora</strong>, la baja de un equipo sin cuentas configuradas se hacía igual:
+    el equipo quedaba inactivo, pero el asiento no se generaba y nadie se enteraba. Y el ajuste de
+    valor, lo mismo. <strong>Desde esta entrega</strong>, ninguna operación sobre un equipo genera un
+    asiento incompleto ni se saltea el asiento: o se contabiliza con todas sus cuentas, o no se hace y
+    aparece un mensaje que nombra el equipo, qué cuenta falta y los tres lugares donde podés
+    cargarla.</p>
+    <figure>
+      <img src="assets/tsk724c-10-toast-error-sin-cuentas.png" alt="Pestaña Depreciación del equipo TSK724C-002: la card Cuentas contables muestra en rojo Sin cuenta — asignala acá, en el tipo de equipo «Maquinaria» o en Contabilidad → Configuración en las tres filas, y abajo a la derecha el mensaje: No se puede contabilizar la amortización del equipo «TSK724C-002»: no tiene cuenta de Amortización acumulada ni de Gasto de amortización. Asignalas en la depreciación del equipo (pestaña Depreciación → Cuentas contables), en el tipo de equipo «Maquinaria» (Empresa → Tipos de Equipo) o configurá Amortización acumulada por defecto y Gasto de amortización por defecto en Contabilidad → Configuración" />
+      <figcaption>El equipo de tipo <span class="ui-text">Maquinaria</span>, que no tiene cuentas ni
+      en el tipo ni por defecto. La card ya lo anticipa en rojo (<span class="ui-text">Sin cuenta —
+      asignala acá, en el tipo de equipo «Maquinaria» o en Contabilidad → Configuración</span>) y, al
+      intentar contabilizar, el mensaje dice exactamente qué falta y dónde. Ningún período quedó
+      contabilizado. Verificamos que este mensaje se ve completo también en la versión instalada, no
+      solo en desarrollo.</figcaption>
+    </figure>
+    <h3 class="sub">En la contabilización masiva, los demás no se frenan</h3>
+    <p>Si contabilizás todos los equipos de una vez y a alguno le faltan cuentas, ese se omite y los
+    demás se contabilizan normalmente. Te lo dice <strong>antes</strong> de confirmar y te lo repite
+    después con el resultado.</p>
+    <div class="side-by-side">
+      <figure class="modal-sm">
+        <img src="assets/tsk724c-11a-masiva-aviso-previo.png" alt="Diálogo Contabilizar Depreciaciones hasta el 19/09/2026: 6 períodos pendientes, 2 equipos, $ 95.555,56, y un aviso naranja: Estos equipos se van a omitir por falta de cuentas contables, con el mensaje del equipo TSK724C-002" />
+        <figcaption>Antes de confirmar: el aviso naranja <span class="ui-text">Estos equipos se van a
+        omitir por falta de cuentas contables</span> lista el equipo y su motivo. Podés cancelar y
+        arreglarlo, o seguir con los demás.</figcaption>
+      </figure>
+      <figure class="modal-sm">
+        <img src="assets/tsk724c-11-masiva-errores.png" alt="El mismo diálogo después de contabilizar, con un recuadro rojo: 1 equipo(s)/período(s) no se pudieron contabilizar, con el mensaje del equipo TSK724C-002, y el botón Cerrar" />
+        <figcaption>Después: <span class="ui-text">1 equipo(s)/período(s) no se pudieron
+        contabilizar</span>, con el mismo detalle. Los períodos del rodado se contabilizaron; los de la
+        máquina siguen pendientes hasta que le cargues las cuentas.</figcaption>
+      </figure>
+    </div>
+    <div class="callout warning">
+      <h3>Qué vas a notar en el día a día</h3>
+      <p>Puede pasar que una baja o una amortización que antes "pasaba" ahora se frene. <strong>Eso es
+      correcto</strong>: antes pasaba sin asiento. Cuando te aparezca el mensaje, no hay nada roto:
+      leé qué cuenta nombra, cargala en el tipo de equipo (lo más práctico) y volvé a intentar. El
+      recuadro amarillo de la contabilización masiva y la card en rojo te permiten adelantarte antes
+      de que pase.</p>
+    </div>
+  </section>
+
+  <section class="allow-break">
+    <h2>6. La baja de un equipo</h2>
+    <p>La baja se hace desde el botón <span class="ui-text">Baja</span> del detalle o desde el menú
+    <strong>(…)</strong> del listado; los dos abren el mismo diálogo. Elegís el motivo y, antes de
+    confirmar, el diálogo te dice <strong>qué va a pasar</strong>:</p>
+    <ul class="plain">
+      <li><strong>Venta, Destrucción Total y Devolución</strong> generan el asiento de baja: se
+      descarga el valor del bien (Bienes de Uso), se cancela lo amortizado (Amortización acumulada) y
+      el valor que quedaba sin amortizar va a <span class="ui-text">Resultado por venta/baja de Bienes
+      de Uso</span>. El diálogo lista las tres cuentas y de dónde sale cada una.</li>
+      <li><strong>Otro</strong> no genera asiento, y el diálogo lo dice.</li>
+      <li>Un equipo <strong>sin depreciación configurada</strong> se da de baja sin asiento, con
+      cualquier motivo, y el diálogo también lo avisa.</li>
+      <li>Si falta una cuenta, aparece un aviso naranja y, si igual confirmás, la baja <strong>no se
+      hace</strong>: el equipo sigue activo.</li>
+    </ul>
+    <div class="side-by-side">
+      <figure class="modal-sm">
+        <img src="assets/tsk724c-12-baja-dialogo-cuentas.png" alt="Diálogo Dar de baja equipo TSK724C-001, motivo Venta, con el aviso: La baja genera un asiento con estas cuentas: Bienes de Uso 1.2.2/04/01 Rodados Valores Originales (del tipo de equipo «Rodados»), Amortización acumulada 1.2.2/02/03 Amortizaciones Acumuladas - Maquinarias y Eq. (de la depreciación del equipo), Resultado 4.2.2/01/00 Pérdida por venta bienes de uso (por defecto, Ajustes contables)" />
+        <figcaption>Baja por venta del rodado: las tres cuentas con su origen. Bienes de Uso viene
+        del tipo, la acumulada es la propia del equipo (la cambiamos en el paso d) y el Resultado es
+        el de Configuración. El asiento generado descargó 1.200.000 de Rodados Valores Originales,
+        canceló 80.000 de acumulada (cuatro períodos) y mandó 1.120.000 a Pérdida por venta.</figcaption>
+      </figure>
+      <figure>
+        <img src="assets/tsk724c-13-baja-rechazada.png" alt="Listado de Equipos con el diálogo Dar de baja equipo TSK724C-002 abierto: aviso naranja La baja va a fallar: falta la cuenta de Bienes de Uso. Configurala en la pestaña Depreciación, en el tipo «Maquinaria» o en Contabilidad → Configuración; abajo a la derecha el mensaje rojo No se puede contabilizar la baja del equipo «TSK724C-002»: no tiene cuenta de Bienes de Uso ni de Amortización acumulada" />
+        <figcaption>La misma baja para la máquina sin cuentas: el aviso naranja anticipa
+        <span class="ui-text">La baja va a fallar: falta la cuenta de Bienes de Uso</span> y, al
+        confirmar, el mensaje rojo la rechaza nombrando las cuentas. El equipo sigue
+        <span class="ui-text">Activo</span> en el listado.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="allow-break">
+    <h2>7. Importante: la compra del bien entra por el ítem</h2>
+    <div class="callout warning">
+      <h3>Dos caminos que tienen que apuntar a la misma cuenta</h3>
+      <p>Cuando comprás un bien de uso con una factura de compra, el valor del bien entra a
+      Bienes de Uso por la <strong>cuenta del ítem</strong> de esa factura (Ítems → Imputación
+      contable), como resolvimos en el ticket 721. Ese asiento además registra el IVA crédito y la
+      deuda con el proveedor. Por eso el equipo <strong>no genera un asiento de alta</strong> cuando lo
+      cargás en Equipos ni cuando configurás su depreciación: sería duplicar el activo y la deuda.</p>
+      <p>El equipo se carga <strong>aparte</strong>, en Equipos, y sus cuentas salen del tipo de
+      equipo. Para que el rubro cierre, la <strong>cuenta de Bienes de Uso del tipo de equipo tiene que
+      ser la misma</strong> a la que se imputó la compra. Si el ítem "Camión Iveco" va a
+      <span class="ui-text">1.2.2/04/01 Rodados Valores Originales</span>, el tipo Rodados tiene que
+      tener esa misma cuenta; si no, la compra suma en una cuenta y la baja resta en otra.</p>
+      <p>Hoy la factura de compra y el equipo <strong>no están vinculados</strong>: el sistema no sabe
+      qué factura corresponde a qué equipo, así que no puede controlar esa coincidencia por vos. Lo
+      recordamos en la ayuda de los campos y en la card de cuentas, y lo anotamos como
+      <strong>mejora futura</strong>: crear el equipo desde la línea de la factura de compra, heredando
+      la cuenta y el valor de origen.</p>
+    </div>
+    <div class="callout config">
+      <h3>Los equipos que no se compraron con factura del sistema</h3>
+      <p>Los bienes históricos, los aportados por un socio o los comprados antes de usar el sistema
+      entran a Bienes de Uso por los saldos de apertura o por un asiento manual, como hasta ahora. En
+      Equipos los cargás igual, con su valor de origen y su depreciación, para que la amortización
+      mensual y la baja salgan solas.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>8. Qué no cambió</h2>
+    <div class="no-change-list">
+      <div class="no-change-item">
+        <span class="check">✓</span>
+        <span>La cuenta de <strong>Resultado por venta/baja de Bienes de Uso</strong> sigue siendo
+        una sola para todos los equipos. Es una cuenta de resultado, no depende del rubro; si en
+        algún momento hace falta separarla, lo vemos aparte.</span>
+      </div>
+      <div class="no-change-item">
+        <span class="check">✓</span>
+        <span>Los asientos automáticos siguen naciendo en <span class="ui-text">Borrador</span> en
+        Contabilidad → Asientos y hay que <strong>Registrarlos</strong> para que sumen en el Mayor y el
+        Balance, como te contamos en las guías del 717 y el 721.</span>
+      </div>
+      <div class="no-change-item">
+        <span class="check">✓</span>
+        <span>Los <strong>asientos ya generados</strong> quedan como están. Cambiar la cuenta de un
+        tipo o de un equipo solo afecta lo que contabilices de acá en adelante; el saldo acumulado
+        hasta ese momento lo reclasifica el contador si hace falta.</span>
+      </div>
+      <div class="no-change-item">
+        <span class="check">✓</span>
+        <span>Los <strong>equipos ya dados de baja</strong> no se tocan: no se les recalcula ni se
+        les vuelve a generar nada.</span>
+      </div>
+      <div class="no-change-item">
+        <span class="check">✓</span>
+        <span>La forma de configurar la depreciación (valor de origen, vida útil, método), el
+        cronograma y los informes <span class="ui-text">Registro de Bienes de Uso</span> y
+        <span class="ui-text">Depreciaciones del Período</span> son los mismos; solo se agregó la card
+        de cuentas y los avisos.</span>
+      </div>
+      <div class="no-change-item">
+        <span class="check">✓</span>
+        <span>El resto de las cuentas de Contabilidad → Configuración (Cuentas por Cobrar y por Pagar,
+        ventas y compras por defecto, IVA, retenciones, percepciones, gastos bancarios) siguen igual.</span>
+      </div>
+    </div>
+  </section>
+
+  <footer class="doc-footer">
+    TSK-724 (c) — La cuenta de Bienes de Uso la define el tipo de equipo · Equipos · Empresa → Tipos de Equipo · Contabilidad → Configuración
+  </footer>
+
+</div>
+
+</body>
+</html>

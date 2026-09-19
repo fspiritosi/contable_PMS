@@ -38,6 +38,32 @@ SQL que cada script documenta en su header.
   con esos comprobantes (regenerar el asiento o asentarlos a mano) es una decision contable y va
   en un ticket aparte.
 
+- **Equipos y Bienes de Uso** (TSK-724c). Dos chequeos, uno en la UI y otro en la base:
+  1. **Permisos de Equipos a roles personalizados.** `equipment` salio de `HIDDEN_MODULES`, y los roles
+     personalizados creados mientras estuvo oculto no tienen permisos de `equipment` ni de
+     `company.vehicle-types` (la UI de Roles nunca los ofrecio; los roles de sistema si los tienen).
+     Entrar a Empresa → Roles y otorgar Ver/Crear/Editar/Eliminar de "Equipos" y de "Tipos de Equipo"
+     a los roles que lo necesiten. Sin esto, un usuario que no sea Propietario no ve el modulo.
+  2. **Cuantos equipos/depreciaciones/periodos hay y si las globales estan cargadas.** Los campos
+     nuevos nacen en NULL y el fallback a las cuentas por defecto mantiene el comportamiento anterior
+     para todo equipo que no se toque; los asientos ya contabilizados quedan en la cuenta con la que se
+     generaron (no se reasignan). Anotar el resultado en el plan del ticket:
+
+     ```sql
+     SELECT c.name,
+            (SELECT count(*) FROM vehicles v WHERE v.company_id = c.id)                         AS equipos,
+            (SELECT count(*) FROM vehicle_depreciations d WHERE d.company_id = c.id)            AS con_depreciacion,
+            (SELECT count(*) FROM depreciation_schedule_entries e
+               JOIN vehicle_depreciations d ON d.id = e.depreciation_id
+              WHERE d.company_id = c.id AND e.is_posted)                                        AS periodos_contabilizados,
+            (SELECT count(*) FROM asset_value_adjustments a WHERE a.company_id = c.id)         AS ajustes,
+            s.fixed_asset_account_id IS NOT NULL                                                AS tiene_bu,
+            s.accumulated_depreciation_account_id IS NOT NULL                                   AS tiene_aa,
+            s.depreciation_expense_account_id IS NOT NULL                                       AS tiene_gasto,
+            (SELECT count(*) FROM vehicle_types t WHERE t.company_id = c.id AND t.is_active)   AS tipos_equipo
+     FROM companies c LEFT JOIN accounting_settings s ON s.company_id = c.id;
+     ```
+
 ```bash
 sudo docker exec -it $(sudo docker ps -q --filter name=contablemas-contablemas) \
   sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"'

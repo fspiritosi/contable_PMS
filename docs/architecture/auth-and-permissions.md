@@ -218,6 +218,17 @@ El sidebar aplica 4 capas en orden:
 
 La capa 4 usa `resolveEffectiveWorkspace(pathname, accessibleWorkspaces, saved)` para determinar el espacio efectivo y **oculta** cada `NavItem` donde `getWorkspaceForModule(item.module) !== effectiveWorkspace`.
 
+### Módulos ocultos del fork (`HIDDEN_MODULES`)
+
+Este despliegue (fork contable PMS) oculta módulos completos del producto original con la constante `HIDDEN_MODULES` de `src/shared/lib/modules/constants.ts`. **No es una capa del sidebar**: la constante la leen solo dos pantallas:
+
+- **Activación por empresa** (`/dashboard/company/modules`, `_ModulesConfigForm.tsx`): filtra `MODULE_ORDER`, así el módulo no aparece con su switch.
+- **Roles** (`company/features/general/roles/actions.server.ts`): oculta el grupo de permisos del módulo y los catálogos de Empresa que dependen de él según `PERMISSION_MODULE_MAP` (p. ej. `company.vehicle-types → equipment`). Un módulo oculto **no puede recibir permisos** desde la UI de roles.
+
+El ítem del sidebar (`_AppSidebar.tsx`, `navMain`) y la pestaña de la guía in-app (`_HelpGuideTabs.tsx`) **se quitan y reponen a mano**: TSK-377 los borró junto con la incorporación a `HIDDEN_MODULES`. Los módulos siguen en `ACTIVATABLE_MODULES` y `PERMISSION_MODULE_MAP`, y sus rutas siguen existiendo (enfoque reversible).
+
+Estado actual: `employees` y `documents` ocultos; `equipment` **visible desde TSK-724c** porque la contabilidad de Bienes de Uso (depreciación, baja, ajuste de valor) vive en Equipos. Al mostrar un módulo que estuvo oculto, los roles personalizados creados mientras tanto no tienen permisos sobre él (la UI nunca los ofreció): el owner ve todo, pero a los demás roles hay que otorgarles las acciones desde Roles.
+
 ### Persistencia
 
 El espacio activo se persiste en `UserPreference.activeWorkspaceId`. Se accede via:
