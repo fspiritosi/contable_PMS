@@ -857,7 +857,7 @@ no se testean. Línea base de `npm run check-types`: **219** errores preexistent
   para una operación dada, y arme los mensajes para el usuario nombrando equipo, tipo, cuenta y
   dónde configurarla.
 - **Tareas:**
-  - [ ] Escribir **primero** `src/modules/equipment/shared/asset-accounts.test.ts` (Vitest puro,
+  - [x] Escribir **primero** `src/modules/equipment/shared/asset-accounts.test.ts` (Vitest puro,
         estilo `commercial/shared/line-accounts.test.ts`). Casos mínimos (14):
     - `resolveAssetAccounts({ depreciation: { accumulatedDepreciationAccountId: 'D' }, type: {
       accumulatedDepreciationAccountId: 'T', depreciationExpenseAccountId: 'TG' }, settings: {
@@ -889,7 +889,7 @@ no se testean. Línea base de `npm run check-types`: **219** errores preexistent
     - `formatAccountLabel({ code: '1.2.2/04/01', name: 'Rodados Valores Originales' })` →
       `'1.2.2/04/01 - Rodados Valores Originales'`.
         Rojo primero: el módulo no existe.
-  - [ ] Crear `src/modules/equipment/shared/asset-accounts.ts` (puro, < 150 líneas, sin Prisma
+  - [x] Crear `src/modules/equipment/shared/asset-accounts.ts` (puro, < 150 líneas, sin Prisma
         ni imports de `@/modules/*`). Exportar:
     - `ASSET_ACCOUNT_KEYS = ['fixedAsset', 'accumulatedDepreciation', 'depreciationExpense'] as
       const`, `type AssetAccountKey`, `type AssetAccountSource = 'depreciation' | 'type' |
@@ -938,7 +938,7 @@ no se testean. Línea base de `npm run check-types`: **219** errores preexistent
         Encabezado con el porqué (TSK-724c: la cuenta la define el tipo de equipo, la
         depreciación puede sobreescribirla, la global es respaldo; nunca imputar en silencio;
         la cuenta de resultado sigue global por 1.2.3). Test en verde.
-  - [ ] Crear `src/modules/equipment/shared/asset-accounts-loader.ts` (`import 'server-only'`,
+  - [x] Crear `src/modules/equipment/shared/asset-accounts-loader.ts` (`import 'server-only'`,
         **sin** `'use server'`; usa `prisma` y `buildImputableAccountsWhere` de
         `@/shared/lib/accounts/imputable-accounts`; `BusinessError` de
         `@/shared/lib/action-result`). Exportar:
@@ -1429,7 +1429,7 @@ no se testean. Línea base de `npm run check-types`: **219** errores preexistent
   (verificado: `validators.ts:51-54` y `validators.test.ts` no cambian; el conteo de cuentas
   configurables sigue en 31).
 - **Tareas:**
-  - [ ] `settings/components/_CommercialIntegrationForm.tsx:227-244`: `title: 'Bienes de Uso
+  - [x] `settings/components/_CommercialIntegrationForm.tsx:227-244`: `title: 'Bienes de Uso
         (cuentas por defecto)'`, `description: 'Las cuentas de Bienes de Uso, Amortización
         acumulada y Gasto de amortización se definen por Tipo de Equipo (Empresa → Tipos de
         Equipo) y cada equipo puede sobreescribirlas en su pestaña Depreciación. Las de acá se
@@ -1476,31 +1476,31 @@ no se testean. Línea base de `npm run check-types`: **219** errores preexistent
   (en dev ambas empresas tienen `{}`). `equipment` cae en el espacio **Gestión**
   (`workspaces/helpers.ts:10-13`: solo `accounting*` es Contable).
 - **Tareas:**
-  - [ ] `src/shared/lib/modules/constants.ts:17-22`: `HIDDEN_MODULES = ['employees',
+  - [x] `src/shared/lib/modules/constants.ts:17-22`: `HIDDEN_MODULES = ['employees',
         'documents']` y actualizar el comentario: Equipos se muestra desde TSK-724c porque la
         contabilidad de Bienes de Uso (depreciación, baja) vive ahí.
-  - [ ] `src/shared/components/layout/_AppSidebar.tsx:83`: reponer `{ title: 'Equipos', href:
+  - [x] `src/shared/components/layout/_AppSidebar.tsx:83`: reponer `{ title: 'Equipos', href:
         '/dashboard/equipment', icon: Truck, module: 'equipment' }` después de Dashboard
         (`Truck` ya está importado, `:16`).
-  - [ ] `src/modules/help/features/guide/components/_HelpGuideTabs.tsx`: reponer `'equipamiento'`
+  - [x] `src/modules/help/features/guide/components/_HelpGuideTabs.tsx`: reponer `'equipamiento'`
         en `GuideTab`, `{ value: 'equipamiento', label: 'Equipamiento', icon: Truck }` en `tabs`
         (después de Dashboard) y `equipamiento: <_EquipmentGuide />` en `tabContent`, con los
         imports (`Truck` de lucide, `_EquipmentGuide`). Empleados y Documentos **no** se
         reponen.
-  - [ ] Verificar sin cambios de código: `/dashboard/company/modules` lista "Equipos" con su
+  - [x] Verificar sin cambios de código: `/dashboard/company/modules` lista "Equipos" con su
         switch y descripción; `/dashboard/company/general/roles` muestra el grupo "Equipos" y
         los catálogos de Config Equipos al editar un rol; `/dashboard/equipment` carga con
         `PermissionGuard module="equipment"` (`EquipmentList.tsx:34`); Empresa → Tipos de Equipo
         sigue accesible.
-  - [ ] Anotar en la sección 4 (y en la presentación, fase 8) que los **roles personalizados**
+  - [x] Anotar en la sección 4 (y en la presentación, fase 8) que los **roles personalizados**
         de la clienta hoy no tienen permisos de `equipment` ni de `company.vehicle-types`
         (nunca pudieron otorgarse porque la UI los ocultaba): el owner ve todo; a los demás hay
         que darles Ver/Crear/Editar/Eliminar de Equipos y de Tipos de Equipo desde Roles.
-  - [ ] `.claude/rules/modules.md`: agregar punto 7 "Módulos ocultos del fork
+  - [x] `.claude/rules/modules.md`: agregar punto 7 "Módulos ocultos del fork
         (`HIDDEN_MODULES`)": qué consume la constante (activación y roles), que el sidebar y la
         guía se editan a mano (`_AppSidebar.tsx` `navMain`, `_HelpGuideTabs.tsx`), y que desde
         TSK-724c `equipment` está visible.
-  - [ ] `docs/architecture/auth-and-permissions.md:211-219` (capas del sidebar): párrafo
+  - [x] `docs/architecture/auth-and-permissions.md:211-219` (capas del sidebar): párrafo
         "Módulos ocultos del fork" con la misma explicación y el estado actual
         (`employees`, `documents` ocultos; `equipment` visible desde TSK-724c).
 - **Archivos:**
@@ -1802,7 +1802,12 @@ _Pendiente - ejecutar `/disenar tsk-724c-bienes-de-uso-por-item-equipos`_
 - **Notas:** `prisma format` realineó las columnas del bloque `settingsAs*` de `Account` (solo whitespace). `check-types` 219 = base. En producción la migración la aplica solo el `docker-entrypoint.sh` al deployar; antes conviene correr la consulta de 1.2.7 con psql para saber cuántos equipos/períodos hay.
 
 ### Fase 2: Helper puro de cuentas de Bienes de Uso
-- **Estado:** Pendiente
+- **Estado:** Completada (2026-09-19)
+- **Archivos creados:**
+  - `src/modules/equipment/shared/asset-accounts.test.ts` - 16 tests Vitest puros (rojo primero: módulo inexistente). Cubre resolución independiente por cuenta con `source`, `''`/`null`/`undefined` como ausente, faltantes por operación, los tres mensajes (singular/plural, `la amortización`/`la baja`/`el ajuste de valor`, origen y destino por `source`), `formatAccountLabel` y los labels/constantes.
+  - `src/modules/equipment/shared/asset-accounts.ts` - helper puro (sin Prisma ni `@/modules/*`): `ASSET_ACCOUNT_KEYS`, `AssetAccountKey`, `AssetAccountSource`, `AssetOperation`, `AssetAccountIds`, `ResolvedAssetAccount(s)`, `ASSET_ACCOUNT_LABELS`, `ASSET_ACCOUNT_SOURCE_LABELS`, `REQUIRED_ACCOUNTS_BY_OPERATION`, `OPERATION_LABELS`, `resolveAssetAccounts`, `findMissingAssetAccounts`, `buildMissingAssetAccountsMessage`, `buildUnavailableAssetAccountMessage`, `buildMissingDisposalAccountMessage`, `formatAccountLabel`.
+  - `src/modules/equipment/shared/asset-accounts-loader.ts` - `import 'server-only'`; `PrismaTransactionClient`, `LoadedAccountInfo`, `LoadedVehicleAssetAccounts`, `AssertedAssetAccounts`, `loadVehiclesAssetAccounts(companyId, vehicleIds, client = prisma): Promise<Map<…>>` (1 `vehicle.findMany` + 1 `accountingSettings.findUnique` en paralelo, luego 2 `account.findMany`: datos + imputables con `buildImputableAccountsWhere({ companyId })` sin `atDate`), atajo `loadVehicleAssetAccounts(companyId, vehicleId, client?)` para un solo equipo, y `assertAssetAccountsForOperation(loaded, operation): AssertedAssetAccounts` que lanza `BusinessError` (faltante → no imputable → falta resultado global en baja/ajuste).
+- **Notas:** el helper quedó en 209 líneas (el plan pedía < 150): el exceso es el encabezado y los JSDoc de cada export; la lógica no supera las 100. La verificación de imputabilidad en `assertAssetAccountsForOperation` recorre solo `REQUIRED_ACCOUNTS_BY_OPERATION[operation]` (no las tres): una cuenta de Bienes de Uso vencida no frena la amortización, que no la toca; sigue sin caer nunca a la global cuando la propia/del tipo existe pero no sirve. Si la cuenta resuelta ya no existe en `account` (borrada), el mensaje usa el id crudo como label. Sin `checkPermission` en el loader (lo hacen las actions que lo llaman); sin test de integración propio, lo cubren fases 4 y 5. `check-types` 219 = base; eslint y prettier limpios.
 
 ### Fase 3: Tipos de equipo
 - **Estado:** Pendiente
@@ -1814,10 +1819,24 @@ _Pendiente - ejecutar `/disenar tsk-724c-bienes-de-uso-por-item-equipos`_
 - **Estado:** Pendiente
 
 ### Fase 6: Configuración contable "por defecto"
-- **Estado:** Pendiente
+- **Estado:** Completada (2026-09-19)
+- **Archivos modificados:**
+  - `src/modules/accounting/features/settings/components/_CommercialIntegrationForm.tsx` - sección renombrada a "Bienes de Uso (cuentas por defecto)" con `description` que explica la resolución (Tipo de Equipo → pestaña Depreciación del equipo → estas por defecto). Labels: `fixedAssetAccountId` → "Cuenta de Bienes de Uso por defecto"; `accumulatedDepreciationAccountId` → "Amortización acumulada por defecto"; `depreciationExpenseAccountId` → "Gasto de amortización por defecto"; `assetDisposalGainLossAccountId` → "Resultado por venta/baja de Bienes de Uso" (única para todos los equipos). Las cuatro con `help` según el plan. `name` y `types` sin cambios.
+- **Notas:** sin cambios en `validators.ts`, `actions.server.ts` ni tests (`validators.test.ts` sigue verde; los comentarios `// Cuentas de Activos Fijos` de esos dos archivos se dejan como están). Los tres labels "… por defecto" son los que debe usar `ASSET_ACCOUNT_LABELS[*].settingLabel` (fase 2) y `buildMissingDisposalAccountMessage` (fase 5) para que el mensaje de error nombre el campo exacto de la pantalla. `docs/modules/accounting.md` todavía menciona los labels viejos → fase 8. `check-types` 219 = base.
 
 ### Fase 7: Módulo Equipos visible
-- **Estado:** Pendiente
+- **Estado:** Completada (2026-09-19)
+- **Archivos modificados:**
+  - `src/shared/lib/modules/constants.ts` - `HIDDEN_MODULES = ['employees', 'documents']`; comentario reescrito: quién la consume (activación y roles), que sidebar y guía se editan a mano, y que `equipment` es visible desde TSK-724c.
+  - `src/shared/components/layout/_AppSidebar.tsx` - repuesto `{ title: 'Equipos', href: '/dashboard/equipment', icon: Truck, module: 'equipment' }` en `navMain` después de Dashboard (mismo literal que borró `7d3997e`; `Truck` ya estaba importado).
+  - `src/modules/help/features/guide/components/_HelpGuideTabs.tsx` - repuesta la pestaña `equipamiento` ("Equipamiento", ícono `Truck`, `<_EquipmentGuide />`) después de Dashboard. `_EquipmentGuide.tsx` existía (nunca se borró, solo se desmontó). Empleados y Documentos no se reponen.
+  - `src/modules/company/features/general/roles/actions.server.ts` - solo el comentario del filtro de módulos ocultos (decía "Empleados, Equipos, Documentos").
+  - `.claude/rules/modules.md` - punto 7 "Módulos ocultos del fork (`HIDDEN_MODULES`)".
+  - `docs/architecture/auth-and-permissions.md` - subsección "Módulos ocultos del fork (`HIDDEN_MODULES`)" debajo de las capas del sidebar.
+- **Notas:**
+  - Tres capas verificadas por código, sin cambios: RBAC filtra por `equipment` (`getSidebarPermissions`; el `PermissionGuard module="equipment"` de `EquipmentList.tsx:34` ya existía); industria: `equipment` no está en `INDUSTRY_MODULES` → universal; módulos activos: `activeModules` vacío = todo activo, y al salir de `HIDDEN_MODULES` la pantalla `/dashboard/company/modules` lo lista con su switch (filtra `MODULE_ORDER`, sin tocar código). Espacio de trabajo: `getWorkspaceForModule('equipment')` → Gestión.
+  - **Roles**: `getRolePermissionsMatrix` filtra los grupos con `HIDDEN_MODULES`, así que ahora la UI de roles muestra el grupo "Equipos" (Principal) y "Configuración - Equipos" (Titulares, Sectores, Tipos Operativos, Contratistas, Tipos Vehículo, Marcas Vehículo). **Hallazgo**: los roles personalizados creados en producción **no tienen** permisos de `equipment` ni de `company.vehicle-types` (la UI los ocultaba y nunca pudieron otorgarse). Los roles de sistema owner/developer/admin sí los tienen: `rbac-init.ts` itera todos los `MODULE_GROUPS`. Tras deployar hay que entrar a Roles y dar Ver/Crear/Editar/Eliminar de Equipos y de Tipos de Equipo a los roles personalizados que lo necesiten (anotar en la presentación, fase 8).
+  - La verificación en navegador (sidebar Gestión con "Equipos", Módulos, Roles, guía con pestaña Equipamiento, Empleados/Documentos siguen ocultos) queda para la fase 9: no había dev server levantado y otras fases editan la rama en paralelo. `check-types` 219 = base; `vitest` de settings y shared verde (27 tests). Los avisos de `prettier --check` en `_AppSidebar.tsx`, `constants.ts` y `roles/actions.server.ts` son preexistentes en HEAD (orden de imports, JSX largo) y ajenos a las líneas tocadas; no se reformatearon para no ensuciar el diff.
 
 ### Fase 8: Documentación
 - **Estado:** Pendiente
