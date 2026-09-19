@@ -75,21 +75,27 @@ export function _TerminateEntryNotice({ data, isLoading, reason }: Props) {
       ? `${ASSET_ACCOUNT_SOURCE_LABELS.type} «${data.typeName}»`
       : ASSET_ACCOUNT_SOURCE_LABELS[source];
 
+  // Una fila por cuenta: AlertDescription es un grid y partiría un párrafo con <code> inline.
+  const rows = [
+    { label: 'Bienes de Uso', account: fixedAsset, origin: origin(fixedAsset.source) },
+    { label: 'Amortización acumulada', account: accumulated, origin: origin(accumulated.source) },
+    { label: 'Resultado', account: result, origin: 'por defecto (Ajustes contables)' },
+  ];
+
   return (
     <Neutral testId="terminate-notice-entry">
-      La baja genera un asiento con: Bienes de Uso{' '}
-      <code className="text-xs">
-        {fixedAsset.code} - {fixedAsset.name}
-      </code>{' '}
-      ({origin(fixedAsset.source)}), Amortización acumulada{' '}
-      <code className="text-xs">
-        {accumulated.code} - {accumulated.name}
-      </code>{' '}
-      ({origin(accumulated.source)}) y Resultado{' '}
-      <code className="text-xs">
-        {result.code} - {result.name}
-      </code>
-      .
+      <p>La baja genera un asiento con estas cuentas:</p>
+      <ul className="mt-1 space-y-1">
+        {rows.map((row) => (
+          <li key={row.label} className="flex flex-wrap items-baseline gap-x-2">
+            <span className="text-muted-foreground">{row.label}:</span>
+            <code className="text-xs">
+              {row.account.code} - {row.account.name}
+            </code>
+            <span className="text-xs text-muted-foreground">({row.origin})</span>
+          </li>
+        ))}
+      </ul>
     </Neutral>
   );
 }

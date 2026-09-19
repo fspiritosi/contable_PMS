@@ -1614,12 +1614,14 @@ no se testean. Línea base de `npm run check-types`: **219** errores preexistent
 - **Objetivo:** evidencia de que todo funciona en dev **y en build de producción** (el toast con
   el mensaje real, no el digest; memoria `errores-negocio-server-actions`).
 - **Tareas:**
-  - [ ] `npm run check-types` → **219** (línea base); `npm run lint` sin errores nuevos en los
+  - [x] `npm run check-types` → **219** (línea base); `npm run lint` sin errores nuevos en los
         archivos tocados; `npm run test` en verde (unitarios + `depreciation-accounts.
         integration.test.ts` contra la base de dev; verificar que el `afterAll` deja `count` 0
         de `TSK724C-TEST-*` en `vehicles`, `vehicle_types`, `accounts`, `journal_entries`).
-  - [ ] Prueba manual en `npm run dev` (puerto 3010 según memoria `dev-local-capturas-y-login`),
-        con los datos sembrados por `capturas-tsk724c.mjs` o a mano:
+  - [x] Prueba manual en `npm run dev` (puerto 3010 según memoria `dev-local-capturas-y-login`),
+        con los datos sembrados por `capturas-tsk724c.mjs` o a mano (2026-09-19: pasos 1-8
+        cubiertos por el script; 9, 10 y 11 y las variantes "desactivar módulo", "cargar la
+        global", "Otro"/"sin depreciación" quedan pendientes — ver sección 4, Fase 9):
     1. Módulos: Equipos aparece; desactivarlo oculta el ítem del sidebar y Tipos de Equipo;
        reactivarlo los devuelve.
     2. Tipo "Camión" con las tres cuentas; tabla muestra "Propias".
@@ -1641,13 +1643,14 @@ no se testean. Línea base de `npm run check-types`: **219** errores preexistent
         la baja mostraba el genérico).
     11. Roles: el grupo Equipos aparece; asignar Ver a un rol y entrar con un usuario
         `@demo.local` de ese rol → ve Equipos, no ve "Contabilizar" (requiere Editar).
-  - [ ] **Build de producción**: `npm run build && NEXT_PUBLIC_APP_URL=http://localhost:3011 npm
+  - [x] **Build de producción**: `npm run build && NEXT_PUBLIC_APP_URL=http://localhost:3011 npm
         run start -- -p 3011`; repetir 5, 7 (con cuentas faltantes) y 9 y confirmar que el toast
-        muestra el mensaje de negocio, no "An error occurred in the Server Components render".
+        muestra el mensaje de negocio, no "An error occurred in the Server Components render"
+        (2026-09-19: 5 y 7 verificados con `--solo-error`; 9 —ajuste de valor— pendiente).
   - [ ] Consulta de 1.2.7 en producción (`psql` según memoria `produccion-dokploy-scripts-db`)
         para dejar registrado cuántos equipos/depreciaciones/períodos hay y si las globales
         están cargadas; anotar el resultado en la sección 5.
-  - [ ] Documentar todo en la sección 5 con los conteos, los asientos generados y las capturas
+  - [x] Documentar todo en la sección 5 con los conteos, los asientos generados y las capturas
         del build de producción.
 - **Archivos:** ninguno nuevo (sección 5 del documento).
 - **Criterio de completitud:** los once pasos manuales pasan, el build de producción muestra los
@@ -1885,7 +1888,44 @@ _Pendiente - ejecutar `/disenar tsk-724c-bienes-de-uso-por-item-equipos`_
 - **Estado:** Pendiente
 
 ### Fase 9: Verificación final
-- **Estado:** Pendiente
+- **Estado:** Completada (2026-09-19) — casos 1-8 del plan + build de producción; pendientes 9 (ajuste de valor), 10 (`lockedUntilDate`), 11 (roles) y la consulta en producción.
+- **Cómo:**
+  - Script `scripts/guia-presentacion/capturas-tsk724c.mjs` (nuevo, molde `capturas-tsk721.mjs`) contra `npm run dev -- -p 3010` (dev server relanzado para tomar el cliente Prisma nuevo). Modos: recorrido completo (siembra + 14 capturas), `--solo-error` (caso "sin cuentas" para el build de prod) y `--solo-capturas` (retoma 03 y 07 sin tocar datos).
+  - Siembra por SQL solo lo que no tiene ABM: `types_of_vehicles` "Vehículos" y "Maquinaria" en Empresa de Prueba 01 SA. Todo lo demás por UI: tipos "Rodados" (BU `1.2.2/04/01`, AA `1.2.2/04/03`, gasto `4.2.1/02/10`) y "Maquinaria" (sin cuentas); equipos `TSK724C-001` (Rodados, dominio AB123CD) y `TSK724C-002` (Maquinaria); depreciación lineal 1.200.000 / 60 meses y 500.000 / 36 meses con inicio 01/06/2026 (4 períodos vencidos). Las 4 globales quedaron en NULL todo el recorrido salvo la de Resultado (`4.2.2/01/00`), cargada por SQL solo para la baja por venta y restaurada a NULL al final (`settings después: NULL NULL NULL NULL`). Los tipos/equipos TSK724C-* quedan en la base; el script los borra (con sus asientos) si vuelve a correr.
+  - Build: `NEXT_PUBLIC_APP_URL=http://localhost:3011 BETTER_AUTH_URL=http://localhost:3011 npm run build && npm run start -- -p 3011` (build limpio, exit 0) y `capturas-tsk724c.mjs http://localhost:3011 --solo-error`. Servers dev y prod matados por PID de `ss -ltnp`.
+  - `npx vitest run` → 40 archivos / **480 tests** verdes; residuos `TSK724C-TEST-*` / `TSK724C-BAJA-*` en `vehicles`, `vehicle_types`, `accounts`, `journal_entries` = 0/0/0/0. `check-types` → **219** = base. `eslint` en `equipment`, `vehicle-types`, `integrations/equipment` y `app/(core)/dashboard/equipment` → 0 errores, 23 warnings preexistentes.
+- **Resultados:** ver tabla de la sección 5. Asiento de amortización #16 (período 1): Debe `4.2.1/02/10 Amortizaciones - Explotación` 20.000 / Haber `1.2.2/04/03 Amortizac. Acumuladas Rodados` 20.000. Tras el override de la acumulada a `1.2.2/02/03`, el #17 (período 2) acredita `1.2.2/02/03` y el #16 no cambió. Baja por venta #20: Debe `4.2.2/01/00 Pérdida por venta bienes de uso` 1.120.000 / Debe `1.2.2/02/03` 80.000 (acumulada del override, 4 períodos) / Haber `1.2.2/04/01 Rodados Valores Originales` 1.200.000; equipo `is_active=false`, `SALE`, depreciación `COMPLETED`.
+- **Hallazgos:**
+  1. **Bloqueante preexistente, corregido en el working tree SIN commit** (una palabra): `src/app/(core)/dashboard/equipment/[id]/page.tsx:14` validaba `tab` contra `['info','contract','assignment','contractors','documents','qr']` sin `'depreciation'`, así que el server siempre caía en `info` y, como `UrlTabs` es controlado, el clic en "Depreciación" (y el deep link `?tab=depreciation`) volvía a "Información": **la pestaña Depreciación era inalcanzable** desde el commit inicial. Se agregó `'depreciation'` a `validTabs` para poder verificar; revisar y commitear (o descartar) según criterio del responsable.
+  2. `_TerminateEntryNotice.tsx` (aviso neutro "La baja genera un asiento con: …"): `AlertDescription` es `grid`, así que cada `<code>` inline queda en su propia línea y el punto final aparece solo (captura 12). Cosmético; envolver el contenido en un `<span>`/`<p>` lo arregla.
+  3. Preexistente, fuera del ticket: el cronograma (`_DepreciationTab.tsx:209`, `moment(scheduledDate).format('MM/YYYY')`) muestra **05/2026** para un período guardado como `2026-06-01 00:00 UTC` (el navegador en -03 lo ve como 31/05 21:00), mientras el listado de asientos muestra 01/06/2026 para el mismo asiento. Capturas 10 y 11: "Contabilizar hasta 19/09/2026" y períodos 05/2026-08/2026 en pantalla vs. asientos 01/06-01/09.
+  4. Preexistente: los asientos generados por amortización y baja aparecen en Contabilidad → Asientos con origen **"Manual"** y estado **"Borrador"** (capturas 07 y listado), igual que los de aportes; no hay `source` de equipos ni confirmación automática.
+  5. Menor: el diálogo masivo cuenta en "Períodos pendientes 6 / Contabilizar 6 período(s) / $ 95.555,56" también los 4 del equipo que el propio aviso naranja dice que se va a omitir; luego contabiliza 2 y lista 1 error (capturas 11a/11).
+  6. El aviso naranja del diálogo de baja nombra solo la **primera** cuenta faltante ("falta la cuenta de Bienes de Uso") mientras el toast del rechazo nombra las dos (BU y Amortización acumulada). Consistente pero desparejo (captura 13).
+  7. No cubierto en esta fase: desactivar/reactivar el módulo Equipos; "cargar la global → contabiliza"; baja "Otro" y de un equipo sin depreciación; ajuste de valor (caso 9); `lockedUntilDate` (10); roles con usuario `@demo.local` (11); consulta 1.2.7 en producción.
 
 ## 5. Verificación
-_Pendiente - ejecutar `/verificar tsk-724c-bienes-de-uso-por-item-equipos`_
+
+Fecha: 2026-09-19 · rama `feat/tsk-724c-cuentas-bienes-de-uso` · dev `:3010` / prod `:3011` · script `scripts/guia-presentacion/capturas-tsk724c.mjs` · capturas `scripts/guia-presentacion/assets/tsk724c-*.png`.
+
+| # | Caso | Resultado | Evidencia |
+|---|------|-----------|-----------|
+| 1 | Módulo Equipos visible: sidebar (grupo Principal) y `/dashboard/company/modules` con switch "Activo" | OK | `01-sidebar-equipos`, `02-modulos-equipos` |
+| 2 | Ajustes contables: sección "Bienes de Uso (cuentas por defecto)" con los 4 labels nuevos y ayudas | OK (los 4 labels encontrados con `exact`) | `03-ajustes-bienes-de-uso` |
+| 3 | Tipo "Rodados" con `1.2.2/04/01`, `1.2.2/04/03`, `4.2.1/02/10`; tipo "Maquinaria" sin cuentas; columna "Cuentas contables" | OK — badges "Propias" / "Por defecto"; SQL `Rodados|3`, `Maquinaria|0` | `04-tipo-rodados-modal`, `05-tipos-listado-cuentas` |
+| 4 | Equipo `TSK724C-001` (Rodados) + depreciación lineal → card "Cuentas contables" | OK — las 3 cuentas con badge "del tipo de equipo «Rodados»" | `06-card-cuentas-del-tipo` |
+| 5 | Contabilizar período 1 → asiento | OK — toast "Período contabilizado (Asiento #16)"; SQL: Debe `4.2.1/02/10` 20.000 / Haber `1.2.2/04/03` 20.000 | `07-asiento-amortizacion` |
+| 6 | Override: "Editar cuentas" → acumulada `1.2.2/02/03` → aviso naranja → Guardar → período 2 | OK — aviso "Este equipo tiene 1 período(s) contabilizado(s)…"; toast "Cuentas actualizadas"; badge "de la depreciación del equipo"; asiento #17 acredita `1.2.2/02/03`; el #16 sigue en `1.2.2/04/03` | `08-override-aviso-naranja`, `09-card-cuentas-override` |
+| 7 | Equipo `TSK724C-002` (Maquinaria, sin cuentas, globales NULL) → Contabilizar | OK — toast rojo: «No se puede contabilizar la amortización del equipo «TSK724C-002»: no tiene cuenta de Amortización acumulada ni de Gasto de amortización. Asignalas en la depreciación del equipo (pestaña Depreciación → Cuentas contables), en el tipo de equipo «Maquinaria» (Empresa → Tipos de Equipo) o configurá "Amortización acumulada por defecto" y "Gasto de amortización por defecto" en Contabilidad → Configuración.»; períodos contabilizados = 0; la card muestra "Sin cuenta — asignala acá, en el tipo de equipo «Maquinaria» o en Contabilidad → Configuración" en las 3 filas | `10-toast-error-sin-cuentas` |
+| 8 | Masiva "Contabilizar pendientes" con ambos equipos | OK — aviso previo "Estos equipos se van a omitir por falta de cuentas contables" con el mensaje de TSK724C-002; tras confirmar: toast "2 período(s) contabilizado(s)" y alerta roja "1 equipo(s)/período(s) no se pudieron contabilizar" con el mensaje; SQL `TSK724C-001 4/60`, `TSK724C-002 0/36` | `11a-masiva-aviso-previo`, `11-masiva-errores` |
+| 9a | Baja por venta de `TSK724C-001` desde el **detalle** (botón "Baja" del encabezado) con Resultado global cargado | OK — diálogo "La baja genera un asiento con: Bienes de Uso 1.2.2/04/01 (del tipo de equipo «Rodados»), Amortización acumulada 1.2.2/02/03 (de la depreciación del equipo) y Resultado 4.2.2/01/00"; toast "Equipo dado de baja. Se generó el asiento contable."; asiento #20: Debe `4.2.2/01/00` 1.120.000 + Debe `1.2.2/02/03` 80.000 / Haber `1.2.2/04/01` 1.200.000; `is_active=f`, `SALE`, depreciación `COMPLETED` | `12-baja-dialogo-cuentas` |
+| 9b | Baja de `TSK724C-002` desde el **listado** (sin cuentas) | OK — aviso naranja "La baja va a fallar: falta la cuenta de Bienes de Uso. Configurala en la pestaña Depreciación, en el tipo «Maquinaria» o en Contabilidad → Configuración."; toast rojo «No se puede contabilizar la baja del equipo «TSK724C-002»: no tiene cuenta de Bienes de Uso ni de Amortización acumulada. Asignalas en la depreciación del equipo (pestaña Depreciación → Cuentas contables), en el tipo de equipo «Maquinaria» (Empresa → Tipos de Equipo) o configurá "Cuenta de Bienes de Uso por defecto" y "Amortización acumulada por defecto" en Contabilidad → Configuración.»; el equipo sigue activo | `13-baja-rechazada` |
+| 10 | **Build de producción** (`npm run build` exit 0 + `start -p 3011`): caso 7 y 9b contra `:3011` | OK — el toast muestra el **mensaje completo**, idéntico al de dev (amortización: «No se puede contabilizar la amortización del equipo «TSK724C-002»: no tiene cuenta de Amortización acumulada ni de Gasto de amortización. …»; baja: «No se puede contabilizar la baja del equipo «TSK724C-002»: no tiene cuenta de Bienes de Uso ni de Amortización acumulada. …»), no el digest "An error occurred in the Server Components render"; períodos contabilizados 0, equipo activo | `14-prod-toast-sin-cuentas` |
+| 11 | Restaurar settings | OK — `NULL NULL NULL NULL` antes y después (solo Resultado se cargó temporalmente para 9a) | log del script |
+| — | `npx vitest run` | 40 archivos / 480 tests verdes; residuos de los tests de integración 0 | — |
+| — | `npm run check-types` | 219 errores = línea base | — |
+| — | `eslint` equipment / vehicle-types / integrations/equipment / app/equipment | 0 errores (23 warnings preexistentes) | — |
+
+**Pendiente de verificar** (no cubierto por el script): desactivar/reactivar el módulo Equipos; cargar la global y ver que TSK724C-002 contabiliza; baja "Otro" y de equipo sin depreciación; ajuste de valor (con y sin cuenta de resultado); `lockedUntilDate` en el futuro; roles con usuario `@demo.local`; consulta 1.2.7 en producción.
+
+**Hallazgos** (detalle en sección 4, Fase 9): (1) pestaña Depreciación inalcanzable por `validTabs` sin `'depreciation'` en `app/(core)/dashboard/equipment/[id]/page.tsx` — corregido en el working tree sin commit; (2) `<code>` del aviso de baja en líneas separadas por el `grid` de `AlertDescription`; (3) cronograma muestra el mes anterior (UTC vs -03); (4) asientos de equipos salen "Manual"/"Borrador"; (5) el diálogo masivo cuenta los períodos que va a omitir; (6) el aviso de baja nombra solo la primera cuenta faltante.
