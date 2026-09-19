@@ -1284,23 +1284,23 @@ no se testean. Línea base de `npm run check-types`: **219** errores preexistent
   usuario, que el diálogo de baja avise cuándo **no** habrá asiento (sin depreciación, motivo
   "Otro"), y que "Dar de Baja" funcione también desde el detalle.
 - **Tareas:**
-  - [ ] `src/modules/accounting/features/integrations/equipment/index.ts:1-23`: reescribir el
+  - [x] `src/modules/accounting/features/integrations/equipment/index.ts:1-23`: reescribir el
         encabezado: la integración genera **solo** los asientos de baja (venta y
         pérdida/devolución); la amortización vive en `equipment/features/depreciation/
         actions.server.ts`; **no hay asiento de alta**: el bien entra a Bienes de Uso por la
         factura de compra (cuenta del ítem, TSK-579/721); las cuentas llegan **resueltas** por
         el llamador (`equipment/shared/asset-accounts-loader.ts`, TSK-724c) y esta integración
         no importa nada de `equipment`.
-  - [ ] Mismo archivo: eliminar `getEquipmentAccountingSettings` (`:40-56`, incluido el
+  - [x] Mismo archivo: eliminar `getEquipmentAccountingSettings` (`:40-56`, incluido el
         `payablesAccountId` muerto). Exportar `interface AssetDisposalAccounts {
         fixedAssetAccountId: string; accumulatedDepreciationAccountId: string;
         assetDisposalGainLossAccountId: string }`.
-  - [ ] Mismo archivo, `createJournalEntry` (`:69-159`): firma `Promise<string>` (nunca devolvía
+  - [x] Mismo archivo, `createJournalEntry` (`:69-159`): firma `Promise<string>` (nunca devolvía
         `null`); "No se encontró configuración contable" (`:96-98`) y "período cerrado"
         (`:100-104`) pasan a `throw new BusinessError(...)` (import de
         `@/shared/lib/action-result`); el desbalance (`:84-88`) queda como `Error` (es un bug,
         no una condición de negocio).
-  - [ ] Mismo archivo, `createJournalEntryForAssetSale` (`:169-245`) y
+  - [x] Mismo archivo, `createJournalEntryForAssetSale` (`:169-245`) y
         `createJournalEntryForAssetDisposal` (`:254-330`): nueva firma `(vehicleId, companyId,
         accounts: AssetDisposalAccounts, tx): Promise<string>`; borrar el guard de settings
         (`:176-185`, `:261-270`); el caso sin `VehicleDepreciation` (`:194-199`, `:279-284`)
@@ -1308,7 +1308,7 @@ no se testean. Línea base de `npm run check-types`: **219** errores preexistent
         «${label}» no tiene depreciación configurada: la baja no genera asiento contable')`
         (defensa en profundidad; el llamador ya no llama en ese caso); las líneas (`:207-232`,
         `:292-317`) usan `accounts.*`. La fecha sigue `new Date()` (2.4-6).
-  - [ ] `src/modules/equipment/features/list/actions.server.ts`, `softDeleteVehicle`
+  - [x] `src/modules/equipment/features/list/actions.server.ts`, `softDeleteVehicle`
         (`:333-379`) → `Promise<ActionResult<{ journalEntryId: string | null }>>`:
     - Imports: `ActionResult`, `BusinessError`, `toActionResult`;
       `loadVehiclesAssetAccounts`, `assertAssetAccountsForOperation`; `revalidatePath`.
@@ -1328,7 +1328,7 @@ no se testean. Línea base de `npm run check-types`: **219** errores preexistent
       toActionResult(error, 'Error al dar de baja el equipo')`. Comentario: `// TSK-724c: antes
       cualquier fallo (incluido "período cerrado") se convertía en un genérico y las cuentas
       faltantes dejaban el equipo dado de baja sin asiento y sin aviso.`
-  - [ ] `depreciation/actions.server.ts`, `createValueAdjustment` (`:786-988`) →
+  - [x] `depreciation/actions.server.ts`, `createValueAdjustment` (`:786-988`) →
         `Promise<ActionResult<{ journalEntryId: string }>>`: `safeParse` → `BusinessError`;
         "no encontrada" / "no activa" (`:814-820`) → `BusinessError`; reemplazar la lectura de
         settings (`:826-833`) por `loadVehiclesAssetAccounts(companyId, [vehicleId]).get(…)` +
@@ -1340,10 +1340,10 @@ no se testean. Línea base de `npm run check-types`: **219** errores preexistent
         `return { success: true, journalEntryId }`; `catch` → `toActionResult(error, 'Error al
         registrar el ajuste de valor')`. Comentario: `// TSK-724c: antes, sin cuentas, el
         ajuste se guardaba sin asiento y sin aviso.`
-  - [ ] `_ValueAdjustmentDialog.tsx:60-75`: `const result = await createValueAdjustment(...)`;
+  - [x] `_ValueAdjustmentDialog.tsx:60-75`: `const result = await createValueAdjustment(...)`;
         `if (!result.success) { toast.error(result.error); return; }`; éxito → invalidar también
         `['vehicleAssetAccounts', vehicleId]`. El `catch` queda para fallos de red.
-  - [ ] Crear `src/modules/equipment/shared/components/_TerminateEquipmentDialog.tsx` (< 190
+  - [x] Crear `src/modules/equipment/shared/components/_TerminateEquipmentDialog.tsx` (< 190
         líneas) moviendo el diálogo inline de `_EquipmentDataTable.tsx:290-343` y su mutación
         (`:106-118`). Props: `vehicle: { id: string; internNumber: string | null; domain:
         string | null } | null`, `open`, `onOpenChange`, `onTerminated?: () => void`. Dentro:
@@ -1364,22 +1364,22 @@ no se testean. Línea base de `npm run check-types`: **219** errores preexistent
         ['equipment'] }); router.refresh(); onTerminated?.(); onOpenChange(false); }`. Importa
         `getVehicleAssetAccounts` de `../../features/depreciation/actions.server` y
         `softDeleteVehicle` de `../../features/list/actions.server` (mismo módulo).
-  - [ ] `_EquipmentDataTable.tsx`: borrar el `Dialog` inline (`:290-343`), `deleteMutation`
+  - [x] `_EquipmentDataTable.tsx`: borrar el `Dialog` inline (`:290-343`), `deleteMutation`
         (`:106-118`), `terminationReason` (`:103`) y los imports que queden sin uso (`Select*`,
         `Dialog*`, `vehicleTerminationReasonLabels`, `VehicleTerminationReason` si no se usa
         más); montar `<_TerminateEquipmentDialog vehicle={selectedVehicle}
         open={deleteDialogOpen} onOpenChange={(o) => { setDeleteDialogOpen(o); if (!o)
         setSelectedVehicle(null); }} />`.
-  - [ ] `detail/components/_EquipmentHeader.tsx:153-158`: `useState(false)` para el diálogo;
+  - [x] `detail/components/_EquipmentHeader.tsx:153-158`: `useState(false)` para el diálogo;
         `onClick={() => setTerminateOpen(true)}` en el botón; renderizar
         `<_TerminateEquipmentDialog vehicle={{ id: vehicle.id, internNumber: vehicle.internNumber,
         domain: vehicle.domain }} open onOpenChange />`. `EquipmentDetail.tsx` es Server
         Component y re-renderiza con `router.refresh()` (`isActive` → badge "Inactivo", botón
         desaparece).
-  - [ ] Eliminar `list/components/_EquipmentTable.tsx` (436 líneas; sin importadores, verificado
+  - [x] Eliminar `list/components/_EquipmentTable.tsx` (436 líneas; sin importadores, verificado
         con grep; consumidor muerto de `softDeleteVehicle` con `onError` genérico). Verificar
         que `list/index.ts` no lo exporte.
-  - [ ] **Casos de integración** (agregar a `depreciation-accounts.integration.test.ts`, mismo
+  - [x] **Casos de integración** (agregar a `depreciation-accounts.integration.test.ts`, mismo
         andamiaje; rojo primero):
     - `softDeleteVehicle(conTipo.id, 'SALE')` con p1 contabilizado (`totalDepreciated:
       10000`, `currentBookValue: 110000`) → `{ success: true, journalEntryId }`; el asiento
@@ -1841,7 +1841,25 @@ _Pendiente - ejecutar `/disenar tsk-724c-bienes-de-uso-por-item-equipos`_
   - Pendiente para fase 9: verificar en navegador y en build de producción (`npm run build && npm run start`) que el toast muestre el mensaje completo. Ningún consumidor de `postDepreciationEntry`/`postAllPendingDepreciations` quedó con el `try/catch` viejo (grep: solo `_DepreciationTab` y `_BulkDepreciationDialog`).
 
 ### Fase 5: Bajas y ajuste de valor
-- **Estado:** Pendiente
+- **Estado:** Completada (2026-09-19)
+- **Archivos creados:**
+  - `src/modules/equipment/features/list/asset-disposal.integration.test.ts` - 10 tests contra la base real (rojo primero), mismo andamiaje que el de amortización pero con prefijo PROPIO `TSK724C-BAJA-`: Vitest corre los archivos en paralelo y el `afterAll` del test de la fase 4 cuenta lo que empieza con `TSK724C-TEST-`; compartir prefijo daba carrera. 5 equipos (`conTipo`, `conOverride` con BU propia, `sinNada`, `sinDepreciacion`, `ajuste`) con p1 "contabilizado" (`totalDepreciated: 10000`, `currentBookValue: 110000`) sembrado directo. Casos: venta con cuentas del tipo (Debe AA Rodados 10.000 / Haber BU Rodados 120.000 / Debe Resultado 110.000, `isActive:false`, `SALE`, depreciación `COMPLETED`); sin BU en ningún nivel → `{ success:false }` con «equipo», "Bienes de Uso", "la baja", «tipo», equipo activo y sin asiento; sin cuenta de resultado global → error "Resultado por venta/baja de Bienes de Uso"; período cerrado → "período está cerrado" y equipo activo (rollback de la transacción); pérdida total con override → BU PROPIA + AA del tipo; sin depreciación `RETURN` → `{ success:true, journalEntryId:null }` y conteo de asientos igual; `OTHER` ídem; equipo ya inactivo → "ya está dado de baja"; ajuste sin cuenta de resultado → `success:false`, sin `assetValueAdjustment` y `currentBookValue` intacto; ajuste con cuentas → asiento Debe Resultado / Haber AA Rodados por 20.000, `assetValueAdjustment.journalEntryId` = asiento, valor libro 90.000.
+  - `src/modules/equipment/shared/components/_TerminateEquipmentDialog.tsx` (145 líneas) - diálogo de baja compartido por listado y detalle. Props `vehicle: { id, internNumber, domain } | null`, `open`, `onOpenChange`, `onTerminated?`. `useQuery(['vehicleAssetAccounts', vehicle?.id])` habilitado con `open && !!vehicle`; `useMutation(softDeleteVehicle)` con `if (!result.success) toast.error(result.error)`; éxito → "Equipo dado de baja. Se generó el asiento contable." / "Equipo dado de baja (sin asiento contable)."; invalida `equipment` y `vehicleAssetAccounts`, `router.refresh()`, `onTerminated?.()`, cierra. `onError` solo "No se pudo contactar al servidor. Volvé a intentar." `data-testid`: `terminate-equipment-dialog`, `terminate-reason-select`, `terminate-confirm-button`.
+  - `src/modules/equipment/shared/components/_TerminateEntryNotice.tsx` (104 líneas) - aviso bajo el motivo, extraído para respetar el límite de líneas: "Verificando cuentas contables…" mientras carga; neutro "Este equipo no tiene depreciación configurada: la baja no genera asiento contable."; neutro "Baja por otro motivo: no genera asiento contable."; naranja (`role="alert"`, `terminate-notice-missing`) "La baja va a fallar: falta la cuenta de {Bienes de Uso | Amortización acumulada | Resultado por venta/baja de Bienes de Uso}. Configurala en la pestaña Depreciación, en el tipo «{typeName}» o en Contabilidad → Configuración."; neutro "La baja genera un asiento con: Bienes de Uso `code - name` (origen), Amortización acumulada `…` (origen) y Resultado `…`." (origen con «tipo» cuando `source === 'type'`).
+- **Archivos modificados:**
+  - `src/modules/accounting/features/integrations/equipment/index.ts` - encabezado reescrito (solo asientos de baja; sin asiento de alta: el bien entra por la factura de compra; amortización en `equipment/depreciation`; cuentas resueltas por el llamador; sin imports de `equipment`). Eliminado `getEquipmentAccountingSettings` (y el `payablesAccountId` muerto). Exporta `interface AssetDisposalAccounts { fixedAssetAccountId; accumulatedDepreciationAccountId; assetDisposalGainLossAccountId }` (las tres `string`). `createJournalEntry` → `Promise<string>`; sin settings y período cerrado → `BusinessError` (import de `@/shared/lib/action-result`, como `integrations/commercial`); desbalance sigue `Error`. `createJournalEntryForAssetSale(vehicleId, companyId, accounts: AssetDisposalAccounts, tx): Promise<string>` y `createJournalEntryForAssetDisposal(...)` ídem: sin `VehicleDepreciation` → `BusinessError('El equipo «…» no tiene depreciación configurada: la baja no genera asiento contable.')`. Lo común se extrajo a `loadDisposalFigures` (select mínimo, verifica `companyId`) y `buildDisposalLines`.
+  - `src/modules/equipment/features/list/actions.server.ts` - `softDeleteVehicle(id, terminationReason: VehicleTerminationReason): Promise<ActionResult<{ journalEntryId: string | null }>>`. Pre-validación ANTES de `$transaction`: `loadVehicleAssetAccounts` → "Equipo no encontrado" / "El equipo ya está dado de baja"; `generatesEntry = hasDepreciation && reason !== 'OTHER'`; `toDisposalAccounts(loaded)` (privada) llama `assertAssetAccountsForOperation(loaded, 'disposal')`. En la transacción: `vehicle.update` (`select: { id }`), asiento venta/baja según motivo y `vehicleDepreciation.update({ status: 'COMPLETED' })` con `loaded.depreciationId`; `revalidatePath` de listado y detalle; `catch` → `toActionResult(error, 'Error al dar de baja el equipo')` con el comentario TSK-724c. `checkPermission('equipment','delete')` intacto.
+  - `src/modules/equipment/features/depreciation/actions.server.ts` - `createValueAdjustment(vehicleId, input): Promise<ActionResult<{ journalEntryId: string }>>`: `safeParse`, "no encontrada", "no activa" → `BusinessError`; `loadVehicleAssetAccounts` + `assertAssetAccountsForOperation(loaded, 'adjustment')` ANTES de la transacción (sin el `if` silencioso: el asiento se genera siempre y `assetValueAdjustment.journalEntryId` nunca es `null`); `select` explícito en la depreciación; `catch` → `toActionResult(error, 'Error al registrar el ajuste de valor')`. `VehicleAssetAccounts` suma `assetDisposalGainLoss: VehicleAssetAccountView | null` (`source: 'default'`) y `getVehicleAssetAccounts` lo carga en la misma consulta de "cuentas de respaldo".
+  - `depreciation/components/_ValueAdjustmentDialog.tsx` - `const result = await createValueAdjustment(...)`; `if (!result.success) { toast.error(result.error); return; }`; éxito "Ajuste de valor registrado. Se generó el asiento contable." e invalida también `['vehicleAssetAccounts', vehicleId]`; el `catch` queda para red.
+  - `list/components/_EquipmentDataTable.tsx` - borrados el `Dialog` inline, `deleteMutation`, `terminationReason` y los imports de `Select*`, `Dialog*`, `vehicleTerminationReasonLabels`, `VehicleTerminationReason`, `softDeleteVehicle`; monta `<_TerminateEquipmentDialog vehicle={selectedVehicle} open onOpenChange={(o) => { setDeleteDialogOpen(o); if (!o) setSelectedVehicle(null); }} />`.
+  - `detail/components/_EquipmentHeader.tsx` - `useState(false)`, `onClick` en "Dar de Baja" (`data-testid="terminate-equipment-button"`) y `<_TerminateEquipmentDialog vehicle={{ id, internNumber, domain }} …/>`. `EquipmentDetail` es Server Component y se re-renderiza con `router.refresh()`.
+- **Archivos eliminados:**
+  - `list/components/_EquipmentTable.tsx` - 436 líneas sin importadores (grep en `src/`, `cypress/`, `docs/`; `list/index.ts` no lo exportaba).
+- **Notas:**
+  - **Desvíos respecto del plan:** (1) test en archivo propio `list/asset-disposal.integration.test.ts` con prefijo `TSK724C-BAJA-` en vez de agregar al de la fase 4 (motivo arriba: paralelismo de Vitest). (2) El aviso del diálogo vive en `_TerminateEntryNotice.tsx` aparte (el diálogo con el aviso adentro superaba las 190 líneas). (3) `createValueAdjustment` además rechaza con `BusinessError` la diferencia 0 ("El nuevo valor es igual al valor libro actual: no hay nada que ajustar") y el período cerrado con `loaded.lockedUntilDate` (mismo criterio que `postDepreciationEntry`); antes una diferencia 0 producía líneas 0/0 que rompen el check `chk_jel_debit_or_credit` de `journal_entry_lines`. (4) Por el mismo check, `buildDisposalLines` omite la línea de acumulada cuando `totalDepreciated` es 0 (equipo con depreciación configurada y ningún período contabilizado): antes esa baja explotaba con error de base.
+  - **Equipo sin depreciación**: la baja se hace sin asiento y devuelve `{ success: true, journalEntryId: null }`; el diálogo lo avisa antes y el toast dice "(sin asiento contable)". Mismo comportamiento para motivo "Otro". La `BusinessError` de la integración para ese caso queda como defensa en profundidad (el action ya no la llama).
+  - Los avisos de `prettier --check` que quedan en `list/actions.server.ts`, `depreciation/actions.server.ts`, `_EquipmentDataTable.tsx`, `_EquipmentHeader.tsx` y `_ValueAdjustmentDialog.tsx` son preexistentes en HEAD (orden de imports, JSX largo) y ajenos a las líneas tocadas; `integrations/equipment/index.ts` (reescrito) y los archivos nuevos están formateados. ESLint: 0 errores; los 3 warnings (`_tab` ×2, `handleReactivate`) son preexistentes. `check-types` 219 = base. `npx vitest run src/modules/equipment`: 4 archivos, 40 tests; suite completa: 40 archivos, 480 tests verdes.
+  - Pendiente para fase 9: verificar en navegador (baja desde listado y detalle abren el mismo diálogo; aviso naranja con tipo sin cuentas y globales vacías; "Otro"/sin depreciación → aviso y toast "sin asiento") y en build de producción que el toast muestre el mensaje completo.
 
 ### Fase 6: Configuración contable "por defecto"
 - **Estado:** Completada (2026-09-19)

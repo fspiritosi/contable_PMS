@@ -3,6 +3,7 @@
 import { AlertCircle, CheckCircle2, Edit, Trash2 } from 'lucide-react';
 import { BackButton } from '@/shared/components/common/BackButton';
 import Link from 'next/link';
+import { useState } from 'react';
 
 import { Badge } from '@/shared/components/ui/badge';
 import { Button } from '@/shared/components/ui/button';
@@ -13,6 +14,7 @@ import {
   TooltipTrigger,
 } from '@/shared/components/ui/tooltip';
 
+import { _TerminateEquipmentDialog } from '@/modules/equipment/shared/components/_TerminateEquipmentDialog';
 import { getBadgeConfig, vehicleConditionBadges, vehicleStatusBadges } from '@/shared/utils/mappers';
 import { usePermissions } from '@/shared/hooks/usePermissions';
 import type { VehicleStatusInfo } from '@/shared/lib/vehicleStatus.types';
@@ -25,6 +27,7 @@ interface Props {
 
 export function _EquipmentHeader({ vehicle, statusInfo }: Props) {
   const { hasPermission } = usePermissions();
+  const [terminateOpen, setTerminateOpen] = useState(false);
   const statusBadge = getBadgeConfig(vehicle.status, vehicleStatusBadges);
   const conditionBadge = getBadgeConfig(vehicle.condition, vehicleConditionBadges);
 
@@ -151,12 +154,24 @@ export function _EquipmentHeader({ vehicle, statusInfo }: Props) {
           </Button>
         )}
         {vehicle.isActive && hasPermission('equipment', 'delete') && (
-          <Button variant="destructive" className="flex-1 sm:flex-none">
+          <Button
+            variant="destructive"
+            className="flex-1 sm:flex-none"
+            onClick={() => setTerminateOpen(true)}
+            data-testid="terminate-equipment-button"
+          >
             <Trash2 className="mr-2 h-4 w-4" />
             <span className="hidden xs:inline">Dar de </span>Baja
           </Button>
         )}
       </div>
+
+      {/* TSK-724c: mismo diálogo que el listado; EquipmentDetail re-renderiza con router.refresh() */}
+      <_TerminateEquipmentDialog
+        vehicle={{ id: vehicle.id, internNumber: vehicle.internNumber, domain: vehicle.domain }}
+        open={terminateOpen}
+        onOpenChange={setTerminateOpen}
+      />
     </div>
   );
 }

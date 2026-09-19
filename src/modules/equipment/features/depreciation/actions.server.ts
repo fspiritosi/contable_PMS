@@ -179,6 +179,8 @@ export interface VehicleAssetAccounts {
   accounts: Record<AssetAccountKey, VehicleAssetAccountView | null>;
   /** Qué se usaría si el override quedara vacío (tipo → por defecto). */
   fallbacks: Record<AssetAccountKey, VehicleAssetAccountView | null>;
+  /** Cuenta de resultado por venta/baja: global (Ajustes contables), la usan baja y ajuste. */
+  assetDisposalGainLoss: VehicleAssetAccountView | null;
 }
 
 const ASSET_ACCOUNT_TYPES = ['ASSET', 'EXPENSE'] as const;
@@ -206,11 +208,12 @@ export async function getVehicleAssetAccounts(vehicleId: string): Promise<Vehicl
   });
   const fallbackResolved = resolveAssetAccounts({ type: loaded.typeAccounts, settings });
 
-  // Datos de las cuentas de respaldo que no están entre las resueltas.
-  const missingIds = ASSET_ACCOUNT_KEYS.flatMap((key) => {
-    const id = fallbackResolved[key]?.accountId;
-    return id && !loaded.accounts[id] ? [id] : [];
-  });
+  // Datos de las cuentas de respaldo (y de la de resultado) que no están entre las resueltas.
+  const disposalId = loaded.assetDisposalGainLossAccountId;
+  const missingIds = [
+    ...ASSET_ACCOUNT_KEYS.map((key) => fallbackResolved[key]?.accountId),
+    disposalId,
+  ].flatMap((id) => (id && !loaded.accounts[id] ? [id] : []));
   const extraRows =
     missingIds.length === 0
       ? []
@@ -268,6 +271,7 @@ export async function getVehicleAssetAccounts(vehicleId: string): Promise<Vehicl
     },
     accounts: mapKeys(loaded.resolved),
     fallbacks: mapKeys(fallbackResolved),
+    assetDisposalGainLoss: toView(disposalId ? { accountId: disposalId, source: 'default' } : null),
   };
 }
 
@@ -977,9 +981,16 @@ export async function postAllPendingDepreciations(
 // ============================================
 
 /**
- * Crea un ajuste de valor para un equipo con depreciación
+ * Registra un ajuste de valor (revaluación o deterioro) de un equipo con
+ * depreciación (TSK-724c). Las cuentas se resuelven depreciación → tipo de
+ * equipo → por defecto y se validan ANTES de la transacción; el asiento se
+ * genera SIEMPRE: si falta una cuenta, el ajuste no se guarda y el motivo
+ * vuelve como `{ success: false, error }`.
  */
-export async function createValueAdjustment(vehicleId: string, input: ValueAdjustmentInput) {
+export async function createValueAdjustment(
+  vehicleId: string,
+  input: ValueAdjustmentInput
+): Promise<ActionResult<{ journalEntryId: string }>> {
   await checkPermission('equipment', 'update', { redirect: true });
   const companyId = await getActiveCompanyId();
   if (!companyId) throw new Error('No hay empresa activa');
@@ -987,118 +998,129 @@ export async function createValueAdjustment(vehicleId: string, input: ValueAdjus
   const userId = await getCurrentUserId();
   if (!userId) throw new Error('No autenticado');
 
-  const parsed = valueAdjustmentSchema.safeParse(input);
-  if (!parsed.success) {
-    throw new Error(parsed.error.errors.map((e) => e.message).join(', '));
-  }
-
-  const data = parsed.data;
-
   try {
+    const parsed = valueAdjustmentSchema.safeParse(input);
+    if (!parsed.success) {
+      throw new BusinessError(parsed.error.errors.map((e) => e.message).join(', '));
+    }
+    const data = parsed.data;
+
     const depreciation = await prisma.vehicleDepreciation.findUnique({
       where: { vehicleId },
-      include: {
+      select: {
+        id: true,
+        companyId: true,
+        status: true,
+        method: true,
+        salvageValue: true,
+        depreciationRate: true,
+        currentBookValue: true,
         scheduleEntries: {
           orderBy: { periodNumber: 'asc' },
-        },
-        vehicle: {
-          select: { id: true, internNumber: true, domain: true },
+          select: {
+            periodNumber: true,
+            scheduledDate: true,
+            isPosted: true,
+            accumulatedAmount: true,
+          },
         },
       },
     });
 
     if (!depreciation || depreciation.companyId !== companyId) {
-      throw new Error('Depreciación no encontrada para este equipo');
+      throw new BusinessError('Depreciación no encontrada para este equipo');
     }
-
     if (depreciation.status !== 'ACTIVE') {
-      throw new Error('La depreciación no está activa');
+      throw new BusinessError('La depreciación no está activa');
     }
 
     const previousValue = Number(depreciation.currentBookValue);
     const differenceAmount = data.newValue - previousValue;
+    if (differenceAmount === 0) {
+      throw new BusinessError(
+        'El nuevo valor es igual al valor libro actual: no hay nada que ajustar'
+      );
+    }
 
-    // Obtener cuentas contables (solo lectura, fuera de la transacción)
-    const settings = await prisma.accountingSettings.findUnique({
-      where: { companyId },
-      select: {
-        fixedAssetAccountId: true,
-        accumulatedDepreciationAccountId: true,
-        assetDisposalGainLossAccountId: true,
-      },
-    });
+    // Cuentas resueltas y validadas fuera de la transacción.
+    // TSK-724c: antes, sin cuentas, el ajuste se guardaba sin asiento y sin aviso.
+    const loaded = await loadVehicleAssetAccounts(companyId, vehicleId);
+    if (!loaded) throw new BusinessError('Equipo no encontrado');
+    const asserted = assertAssetAccountsForOperation(loaded, 'adjustment');
+    const accounts = {
+      fixedAssetAccountId: asserted.fixedAssetAccountId!,
+      accumulatedDepreciationAccountId: asserted.accumulatedDepreciationAccountId!,
+      assetDisposalGainLossAccountId: asserted.assetDisposalGainLossAccountId!,
+    };
 
-    const vehicle = depreciation.vehicle;
-    const vehicleLabel = vehicle.internNumber || vehicle.domain || vehicle.id.slice(0, 8);
+    if (
+      loaded.lockedUntilDate &&
+      moment(data.date).isSameOrBefore(moment(loaded.lockedUntilDate), 'day')
+    ) {
+      throw new BusinessError(
+        `No se puede registrar el ajuste de valor: el período está cerrado para la fecha ${moment(data.date).format('DD/MM/YYYY')}.`
+      );
+    }
 
-    await prisma.$transaction(async (tx) => {
-      // Crear ajuste de valor
-      let journalEntryId: string | undefined;
+    const vehicleLabel = loaded.vehicleLabel;
+    const absAmount = Math.abs(differenceAmount);
+    const lines =
+      differenceAmount > 0
+        ? [
+            {
+              accountId: accounts.fixedAssetAccountId,
+              debit: new Prisma.Decimal(absAmount),
+              credit: new Prisma.Decimal(0),
+              description: `Revaluación - Equipo ${vehicleLabel}`,
+            },
+            {
+              accountId: accounts.assetDisposalGainLossAccountId,
+              debit: new Prisma.Decimal(0),
+              credit: new Prisma.Decimal(absAmount),
+              description: `Resultado por revaluación - Equipo ${vehicleLabel}`,
+            },
+          ]
+        : [
+            {
+              accountId: accounts.assetDisposalGainLossAccountId,
+              debit: new Prisma.Decimal(absAmount),
+              credit: new Prisma.Decimal(0),
+              description: `Deterioro de valor - Equipo ${vehicleLabel}`,
+            },
+            {
+              accountId: accounts.accumulatedDepreciationAccountId,
+              debit: new Prisma.Decimal(0),
+              credit: new Prisma.Decimal(absAmount),
+              description: `Ajuste amort. acumulada - Equipo ${vehicleLabel}`,
+            },
+          ];
 
-      // Crear asiento contable si las cuentas están configuradas
-      if (
-        settings?.fixedAssetAccountId &&
-        settings?.accumulatedDepreciationAccountId &&
-        settings?.assetDisposalGainLossAccountId
-      ) {
-        const fiscal = await resolveFiscalPeriodTx(companyId, data.date, tx);
+    const journalEntryId = await prisma.$transaction(async (tx) => {
+      const fiscal = await resolveFiscalPeriodTx(companyId, data.date, tx);
 
-        // Incremento atómico: UPDATE ... RETURNING evita race conditions
-        const [{ last_entry_number: nextNumber }] = await tx.$queryRaw<[{ last_entry_number: number }]>`
-          UPDATE accounting_settings
-          SET last_entry_number = last_entry_number + 1, updated_at = NOW()
-          WHERE company_id = ${companyId}::uuid
-          RETURNING last_entry_number
-        `;
+      // Incremento atómico: UPDATE ... RETURNING evita race conditions
+      const [{ last_entry_number: nextNumber }] = await tx.$queryRaw<
+        [{ last_entry_number: number }]
+      >`
+        UPDATE accounting_settings
+        SET last_entry_number = last_entry_number + 1, updated_at = NOW()
+        WHERE company_id = ${companyId}::uuid
+        RETURNING last_entry_number
+      `;
 
-        const absAmount = Math.abs(differenceAmount);
-
-        const lines =
-          differenceAmount > 0
-            ? [
-                {
-                  accountId: settings.fixedAssetAccountId,
-                  debit: new Prisma.Decimal(absAmount),
-                  credit: new Prisma.Decimal(0),
-                  description: `Revaluación - Equipo ${vehicleLabel}`,
-                },
-                {
-                  accountId: settings.assetDisposalGainLossAccountId,
-                  debit: new Prisma.Decimal(0),
-                  credit: new Prisma.Decimal(absAmount),
-                  description: `Resultado por revaluación - Equipo ${vehicleLabel}`,
-                },
-              ]
-            : [
-                {
-                  accountId: settings.assetDisposalGainLossAccountId,
-                  debit: new Prisma.Decimal(absAmount),
-                  credit: new Prisma.Decimal(0),
-                  description: `Deterioro de valor - Equipo ${vehicleLabel}`,
-                },
-                {
-                  accountId: settings.accumulatedDepreciationAccountId,
-                  debit: new Prisma.Decimal(0),
-                  credit: new Prisma.Decimal(absAmount),
-                  description: `Ajuste dep. acumulada - Equipo ${vehicleLabel}`,
-                },
-              ];
-
-        const journalEntry = await tx.journalEntry.create({
-          data: {
-            companyId,
-            number: nextNumber,
-            date: data.date,
-            description: `Ajuste de valor equipo ${vehicleLabel}: ${data.reason}`,
-            createdBy: 'system',
-            fiscalYearId: fiscal.fiscalYearId,
-            periodId: fiscal.periodId,
-            lines: { create: lines },
-          },
-        });
-
-        journalEntryId = journalEntry.id;
-      }
+      const journalEntry = await tx.journalEntry.create({
+        data: {
+          companyId,
+          number: nextNumber,
+          date: data.date,
+          description: `Ajuste de valor equipo ${vehicleLabel}: ${data.reason}`,
+          createdBy: 'system',
+          fiscalYearId: fiscal.fiscalYearId,
+          periodId: fiscal.periodId,
+          lines: { create: lines },
+        },
+        select: { id: true },
+      });
 
       await tx.assetValueAdjustment.create({
         data: {
@@ -1109,31 +1131,26 @@ export async function createValueAdjustment(vehicleId: string, input: ValueAdjus
           newValue: new Prisma.Decimal(data.newValue),
           differenceAmount: new Prisma.Decimal(differenceAmount),
           reason: data.reason,
-          journalEntryId,
+          journalEntryId: journalEntry.id,
           createdBy: userId,
         },
+        select: { id: true },
       });
 
       // Actualizar valor libro actual
       await tx.vehicleDepreciation.update({
         where: { vehicleId },
-        data: {
-          currentBookValue: new Prisma.Decimal(data.newValue),
-        },
+        data: { currentBookValue: new Prisma.Decimal(data.newValue) },
+        select: { id: true },
       });
 
       // Recalcular schedule de períodos no contabilizados
-      const lastPostedEntry = depreciation.scheduleEntries
-        .filter((e) => e.isPosted)
-        .pop();
-
+      const lastPostedEntry = depreciation.scheduleEntries.filter((e) => e.isPosted).pop();
       const unpostedEntries = depreciation.scheduleEntries.filter((e) => !e.isPosted);
 
       if (unpostedEntries.length > 0) {
         const startPeriodNumber = unpostedEntries[0].periodNumber;
-        const previousAccumulated = lastPostedEntry
-          ? Number(lastPostedEntry.accumulatedAmount)
-          : 0;
+        const previousAccumulated = lastPostedEntry ? Number(lastPostedEntry.accumulatedAmount) : 0;
 
         const newSchedule = recalculateScheduleFromPeriod(
           {
@@ -1147,15 +1164,12 @@ export async function createValueAdjustment(vehicleId: string, input: ValueAdjus
             startPeriodNumber,
             startDate: unpostedEntries[0].scheduledDate,
           },
-          previousAccumulated,
+          previousAccumulated
         );
 
         // Eliminar entries no contabilizados
         await tx.depreciationScheduleEntry.deleteMany({
-          where: {
-            depreciationId: depreciation.id,
-            isPosted: false,
-          },
+          where: { depreciationId: depreciation.id, isPosted: false },
         });
 
         // Crear nuevos entries
@@ -1170,16 +1184,18 @@ export async function createValueAdjustment(vehicleId: string, input: ValueAdjus
           })),
         });
       }
+
+      return journalEntry.id;
     });
 
     logger.info('Ajuste de valor creado', {
-      data: { vehicleId, previousValue, newValue: data.newValue, differenceAmount },
+      data: { vehicleId, previousValue, newValue: data.newValue, differenceAmount, journalEntryId },
     });
-
     revalidatePath(`/dashboard/equipment/${vehicleId}`);
+
+    return { success: true, journalEntryId };
   } catch (error) {
-    logger.error('Error creating value adjustment', { data: { error, vehicleId } });
-    throw error instanceof Error ? error : new Error('Error al crear el ajuste de valor');
+    return toActionResult(error, 'Error al registrar el ajuste de valor');
   }
 }
 

@@ -15,34 +15,14 @@ import {
   type DataTableSearchParams,
 } from '@/shared/components/common/DataTable';
 import { Button } from '@/shared/components/ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/shared/components/ui/dialog';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/shared/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/shared/components/ui/tabs';
-import {
-  vehicleConditionLabels,
-  vehicleStatusLabels,
-  vehicleTerminationReasonLabels,
-} from '@/shared/utils/mappers';
+import { vehicleConditionLabels, vehicleStatusLabels } from '@/shared/utils/mappers';
 
-import type { VehicleTerminationReason } from '@/generated/prisma/enums';
 import type { ModulePermissions } from '@/shared/lib/permissions';
+import { _TerminateEquipmentDialog } from '@/modules/equipment/shared/components/_TerminateEquipmentDialog';
 import {
   getAllEquipmentForExport,
   reactivateVehicle,
-  softDeleteVehicle,
   type EquipmentListItem,
   type EquipmentTab,
   type TabCounts,
@@ -100,24 +80,8 @@ export function _EquipmentDataTable({
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [bulkDepreciationOpen, setBulkDepreciationOpen] = useState(false);
   const [selectedVehicle, setSelectedVehicle] = useState<EquipmentListItem | null>(null);
-  const [terminationReason, setTerminationReason] = useState<VehicleTerminationReason>('SALE');
 
   // Mutations
-  const deleteMutation = useMutation({
-    mutationFn: ({ id, reason }: { id: string; reason: VehicleTerminationReason }) =>
-      softDeleteVehicle(id, reason),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['equipment'] });
-      toast.success('Equipo dado de baja correctamente');
-      setDeleteDialogOpen(false);
-      setSelectedVehicle(null);
-      router.refresh();
-    },
-    onError: () => {
-      toast.error('Error al dar de baja el equipo');
-    },
-  });
-
   const reactivateMutation = useMutation({
     mutationFn: reactivateVehicle,
     onSuccess: () => {
@@ -286,62 +250,15 @@ export function _EquipmentDataTable({
         data-testid="equipment-table"
       />
 
-      {/* Dialog para dar de baja */}
-      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Dar de baja equipo</DialogTitle>
-            <DialogDescription>
-              Vas a dar de baja el equipo{' '}
-              {selectedVehicle?.internNumber || selectedVehicle?.domain || 'seleccionado'}.
-              Selecciona el motivo de baja.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="py-4">
-            <Select
-              value={terminationReason}
-              onValueChange={(v) => setTerminationReason(v as VehicleTerminationReason)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Seleccionar motivo" />
-              </SelectTrigger>
-              <SelectContent>
-                {(
-                  Object.entries(vehicleTerminationReasonLabels) as [
-                    VehicleTerminationReason,
-                    string,
-                  ][]
-                ).map(([value, label]) => (
-                  <SelectItem key={value} value={value}>
-                    {label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
-              Cancelar
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => {
-                if (selectedVehicle) {
-                  deleteMutation.mutate({
-                    id: selectedVehicle.id,
-                    reason: terminationReason,
-                  });
-                }
-              }}
-              disabled={deleteMutation.isPending}
-            >
-              {deleteMutation.isPending ? 'Procesando...' : 'Dar de baja'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Diálogo de baja compartido con el detalle (TSK-724c) */}
+      <_TerminateEquipmentDialog
+        vehicle={selectedVehicle}
+        open={deleteDialogOpen}
+        onOpenChange={(o) => {
+          setDeleteDialogOpen(o);
+          if (!o) setSelectedVehicle(null);
+        }}
+      />
 
       {/* Dialog de contabilización masiva de depreciaciones */}
       <_BulkDepreciationDialog

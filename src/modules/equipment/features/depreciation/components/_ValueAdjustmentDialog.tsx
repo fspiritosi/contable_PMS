@@ -61,14 +61,20 @@ export function _ValueAdjustmentDialog({
   const handleSubmit = async (data: ValueAdjustmentInput) => {
     setIsSubmitting(true);
     try {
-      await createValueAdjustment(vehicleId, data);
-      toast.success('Ajuste de valor registrado correctamente');
+      const result = await createValueAdjustment(vehicleId, data);
+      if (!result.success) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success('Ajuste de valor registrado. Se generó el asiento contable.');
       queryClient.invalidateQueries({ queryKey: ['vehicleDepreciation', vehicleId] });
+      queryClient.invalidateQueries({ queryKey: ['vehicleAssetAccounts', vehicleId] });
       router.refresh();
       onOpenChange(false);
       form.reset();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Error al registrar el ajuste');
+    } catch {
+      // Solo fallos de red: los de negocio llegan como { success: false }.
+      toast.error('No se pudo contactar al servidor. Volvé a intentar.');
     } finally {
       setIsSubmitting(false);
     }

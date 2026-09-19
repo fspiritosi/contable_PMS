@@ -7,14 +7,22 @@ import {
   parseSearchParams,
   stateToPrismaParams,
 } from '@/shared/components/common/DataTable/helpers';
+import type { VehicleTerminationReason } from '@/generated/prisma/enums';
+import {
+  createJournalEntryForAssetDisposal,
+  createJournalEntryForAssetSale,
+  type AssetDisposalAccounts,
+} from '@/modules/accounting/features/integrations/equipment';
+import {
+  assertAssetAccountsForOperation,
+  loadVehicleAssetAccounts,
+} from '@/modules/equipment/shared/asset-accounts-loader';
+import { BusinessError, toActionResult, type ActionResult } from '@/shared/lib/action-result';
 import { getActiveCompanyId } from '@/shared/lib/company';
 import { logger } from '@/shared/lib/logger';
 import { checkPermission } from '@/shared/lib/permissions';
 import { prisma } from '@/shared/lib/prisma';
-import {
-  createJournalEntryForAssetSale,
-  createJournalEntryForAssetDisposal,
-} from '@/modules/accounting/features/integrations/equipment';
+import { revalidatePath } from 'next/cache';
 
 // ============================================
 // CONSTANTES
@@ -326,56 +334,89 @@ export async function getActiveVehicles() {
 }
 
 /**
- * Elimina (soft delete) un vehículo.
- * Si tiene depreciación configurada, genera asiento contable de baja
- * y marca la depreciación como completada.
+ * Da de baja (soft delete) un equipo (TSK-724c).
+ *
+ * Si el equipo tiene depreciación y el motivo no es "Otro", genera el asiento
+ * de baja con las cuentas resueltas (depreciación → tipo de equipo → por
+ * defecto) y marca la depreciación como completada. Las cuentas se validan
+ * ANTES de abrir la transacción: si falta alguna, el equipo no se toca y el
+ * motivo vuelve como `{ success: false, error }`. Sin depreciación o con
+ * motivo "Otro" la baja se hace sin asiento (`journalEntryId: null`); el
+ * diálogo lo avisa de antemano.
  */
 export async function softDeleteVehicle(
   id: string,
-  terminationReason: 'SALE' | 'TOTAL_LOSS' | 'RETURN' | 'OTHER'
-) {
+  terminationReason: VehicleTerminationReason
+): Promise<ActionResult<{ journalEntryId: string | null }>> {
   await checkPermission('equipment', 'delete', { redirect: true });
   const companyId = await getActiveCompanyId();
   if (!companyId) throw new Error('No hay empresa activa');
 
   try {
-    return await prisma.$transaction(async (tx) => {
-      // Dar de baja el vehículo
-      const vehicle = await tx.vehicle.update({
+    // Pre-validación fuera de la transacción (patrón TSK-721)
+    const loaded = await loadVehicleAssetAccounts(companyId, id);
+    if (!loaded) throw new BusinessError('Equipo no encontrado');
+    if (!loaded.isActive) throw new BusinessError('El equipo ya está dado de baja');
+
+    const generatesEntry = loaded.hasDepreciation && terminationReason !== 'OTHER';
+    const accounts = generatesEntry ? toDisposalAccounts(loaded) : null;
+
+    const journalEntryId = await prisma.$transaction(async (tx) => {
+      await tx.vehicle.update({
         where: { id, companyId },
         data: {
           isActive: false,
           terminationDate: new Date(),
           terminationReason,
         },
-      });
-
-      // Generar asiento contable de baja si tiene depreciación
-      if (terminationReason === 'SALE') {
-        await createJournalEntryForAssetSale(id, companyId, tx);
-      } else if (terminationReason === 'TOTAL_LOSS' || terminationReason === 'RETURN') {
-        await createJournalEntryForAssetDisposal(id, companyId, tx);
-      }
-
-      // Marcar depreciación como completada
-      const depreciation = await tx.vehicleDepreciation.findUnique({
-        where: { vehicleId: id },
         select: { id: true },
       });
 
-      if (depreciation) {
+      if (!accounts) return null;
+
+      const entryId =
+        terminationReason === 'SALE'
+          ? await createJournalEntryForAssetSale(id, companyId, accounts, tx)
+          : await createJournalEntryForAssetDisposal(id, companyId, accounts, tx);
+
+      if (loaded.depreciationId) {
         await tx.vehicleDepreciation.update({
-          where: { id: depreciation.id },
+          where: { id: loaded.depreciationId },
           data: { status: 'COMPLETED' },
+          select: { id: true },
         });
       }
 
-      return vehicle;
+      return entryId;
     });
+
+    logger.info('Equipo dado de baja', {
+      data: { vehicleId: id, terminationReason, journalEntryId },
+    });
+    revalidatePath('/dashboard/equipment');
+    revalidatePath(`/dashboard/equipment/${id}`);
+
+    return { success: true, journalEntryId };
   } catch (error) {
-    logger.error('Error deleting vehicle', { data: { error, id } });
-    throw new Error('Error al dar de baja el vehículo');
+    // TSK-724c: antes cualquier fallo (incluido "período cerrado") se convertía en un
+    // genérico y las cuentas faltantes dejaban el equipo dado de baja sin asiento y sin aviso.
+    return toActionResult(error, 'Error al dar de baja el equipo');
   }
+}
+
+/**
+ * Cuentas del asiento de baja. `assertAssetAccountsForOperation` ya lanzó
+ * `BusinessError` si falta alguna, así que las tres vienen garantizadas.
+ */
+function toDisposalAccounts(
+  loaded: NonNullable<Awaited<ReturnType<typeof loadVehicleAssetAccounts>>>
+): AssetDisposalAccounts {
+  const asserted = assertAssetAccountsForOperation(loaded, 'disposal');
+  return {
+    fixedAssetAccountId: asserted.fixedAssetAccountId!,
+    accumulatedDepreciationAccountId: asserted.accumulatedDepreciationAccountId!,
+    assetDisposalGainLossAccountId: asserted.assetDisposalGainLossAccountId!,
+  };
 }
 
 /**
