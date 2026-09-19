@@ -61,6 +61,17 @@ Se generan al confirmar documentos comerciales (ver [Modulo Comercial](commercia
 - Ordenes de pago
 - Gastos
 
+Y desde el modulo Equipos (ver [Integracion Contable de Equipamiento](equipment.md#integracion-contable)):
+- Amortizacion mensual (`equipment/features/depreciation/actions.server.ts`, individual y masiva)
+- Ajuste de valor (`createValueAdjustment`)
+- Baja por venta / perdida total / devolucion (`features/integrations/equipment/index.ts`,
+  `createJournalEntryForAssetSale` / `createJournalEntryForAssetDisposal`; las cuentas las resuelve el
+  llamador y llegan como `AssetDisposalAccounts`)
+
+**No existe asiento de alta / capitalizacion de equipos**: el bien entra a Bienes de Uso por la factura
+de compra (cuenta ASSET del item). `getEquipmentAccountingSettings` y el `payablesAccountId` que se
+guardaba para eso se eliminaron en TSK-724c.
+
 Creados como `isAutomatic = true`, `createdBy = 'system'`.
 
 ### Reversion
@@ -280,23 +291,35 @@ Las cuatro de IVA/IIBB existian en el modelo desde antes y el asiento ya las usa
 se expusieron en la UI de configuracion**: eran inconfigurables. TSK-644 las expone junto a las
 tres nuevas (municipales e impuestos internos).
 
-**Sin degradacion suave, a diferencia de los activos fijos:** si una factura tiene un tributo cuya
+**Sin degradacion suave (como en Bienes de Uso desde TSK-724c):** si una factura tiene un tributo cuya
 cuenta no esta configurada, `confirmPurchaseInvoice` / `confirmInvoice` **abortan la confirmacion**
 con un mensaje que nombra la cuenta faltante. El motivo: el total del comprobante ya incluye ese
 tributo, asi que omitir su linea produce un asiento descuadrado que `validateBalance` rechaza
 dentro de un `catch` que lo degradaba a `logger.warn` — la factura terminaba confirmada y sin
 asiento, en silencio. La validacion corre **antes** de abrir la transaccion.
 
-### Cuentas de Activos Fijos (4 campos)
+### Cuentas de Bienes de Uso (4 campos, 3 de ellos por defecto) — TSK-724c
 
-| Campo | Funcion | Tipo Cuenta |
-|-------|---------|-------------|
-| `fixedAssetAccountId` | Bienes de Uso | ASSET |
-| `accumulatedDepreciationAccountId` | Depreciacion Acumulada | ASSET |
-| `depreciationExpenseAccountId` | Gasto de Depreciacion | EXPENSE |
-| `assetDisposalGainLossAccountId` | Resultado Venta/Baja | REVENUE/EXPENSE |
+Seccion del form: **"Bienes de Uso (cuentas por defecto)"** (`_CommercialIntegrationForm.tsx`).
 
-Sin estas cuentas configuradas, los asientos de depreciacion y baja de activos no se generan (degradacion suave).
+| Campo | Label en pantalla | Tipo Cuenta | Respaldo de |
+|-------|-------------------|-------------|-------------|
+| `fixedAssetAccountId` | Cuenta de Bienes de Uso por defecto | ASSET | `VehicleDepreciation.fixedAssetAccountId` → `VehicleType.fixedAssetAccountId` |
+| `accumulatedDepreciationAccountId` | Amortizacion acumulada por defecto | ASSET | `VehicleDepreciation.accumulatedDepreciationAccountId` → `VehicleType.accumulatedDepreciationAccountId` |
+| `depreciationExpenseAccountId` | Gasto de amortizacion por defecto | EXPENSE | `VehicleDepreciation.depreciationExpenseAccountId` → `VehicleType.depreciationExpenseAccountId` |
+| `assetDisposalGainLossAccountId` | Resultado por venta/baja de Bienes de Uso | REVENUE/EXPENSE | — (unica para todos los equipos) |
+
+Las tres primeras son **"por defecto"** con la misma semantica que ventas/compras (TSK-721) y aportes de
+socios (TSK-717): la cuenta la define el **Tipo de Equipo** (Empresa → Tipos de Equipo), cada equipo puede
+sobreescribirla en su pestaña Depreciacion, y estas se usan solo cuando ninguna de las dos esta cargada.
+Cada cuenta se resuelve por separado. Los labels de la tabla son los que usa
+`ASSET_ACCOUNT_LABELS[*].settingLabel` (`src/shared/lib/assets/asset-account-labels.ts`) para que el
+mensaje de error nombre el campo exacto.
+
+**Sin cuenta resoluble la operacion se rechaza** con `ActionResult` que nombra el equipo, la cuenta y los
+tres lugares donde cargarla (TSK-724c); **no hay degradacion suave**. Antes, `softDeleteVehicle` y
+`createValueAdjustment` salteaban el asiento en silencio si faltaban cuentas. Detalle de la cadena, las
+operaciones y la politica de errores en [Modulo Equipamiento](equipment.md#integracion-contable).
 
 ### Centro de Costo Obligatorio (TSK-583)
 

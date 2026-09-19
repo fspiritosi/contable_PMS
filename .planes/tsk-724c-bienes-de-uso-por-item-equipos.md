@@ -3,7 +3,7 @@
 **Fecha de inicio:** 2026-09-18
 **Tickets:** [724-c] "Configuración de Cuentas Contables — Cuentas de Bienes de Uso" · cierra el paraguas 724 (a/b en 721, d en 717)
 **Origen:** reunión con Elizabeth Perez del 16-17/09
-**Estado:** Implementación en progreso (Fase 1 de 9 completada)
+**Estado:** Verificación completada (fases 1-9; pendiente solo la consulta 1.2.7 en producción, post-deploy)
 
 ---
 
@@ -1518,7 +1518,7 @@ no se testean. Línea base de `npm run check-types`: **219** errores preexistent
   cómo se resuelven y qué pasa si faltan; que `docs/` refleje el modelo y la integración; y
   que la clienta reciba el PDF con capturas reales (memoria `guia-presentacion-cliente-por-ticket`).
 - **Tareas:**
-  - [ ] `src/modules/help/features/guide/components/_EquipmentGuide.tsx:149-260` (card
+  - [x] `src/modules/help/features/guide/components/_EquipmentGuide.tsx:149-260` (card
         "Depreciación de Equipos"): agregar un bloque "**Cuentas contables**" con la cadena
         (depreciación del equipo → Tipo de Equipo → por defecto de Contabilidad →
         Configuración), dónde se cargan (Empresa → Tipos de Equipo; pestaña Depreciación →
@@ -1534,7 +1534,7 @@ no se testean. Línea base de `npm run check-types`: **219** errores preexistent
         (venta, pérdida total, devolución) y cuáles no (otro; sin depreciación), y que el aviso
         aparece en el diálogo. En el `Alert` final (`:264-286`), "Empresa → Catálogos": sumar
         "Tipos de Equipo define las cuentas contables de Bienes de Uso".
-  - [ ] `_AccountingGuide.tsx:249`: `Activos Fijos (bienes de uso, depreciación y bajas)` →
+  - [x] `_AccountingGuide.tsx:249`: `Activos Fijos (bienes de uso, depreciación y bajas)` →
         `Bienes de Uso (cuentas por defecto: cada Tipo de Equipo define las suyas y cada equipo
         puede sobreescribirlas en su pestaña Depreciación)`. `:669-715` (card "Depreciación de
         Activos Fijos"): `:703-706` "con las cuentas de depreciación configuradas en la
@@ -1544,7 +1544,7 @@ no se testean. Línea base de `npm run check-types`: **219** errores preexistent
         o botón Contabilizar Depreciaciones del listado) se generan los asientos"; agregar viñeta
         "Si a un equipo le falta una cuenta, la contabilización se rechaza con un mensaje que
         dice qué cuenta falta y dónde cargarla".
-  - [ ] `docs/modules/equipment.md:92-105` (Integración Contable): reemplazar la tabla por la
+  - [x] `docs/modules/equipment.md:92-105` (Integración Contable): reemplazar la tabla por la
         cadena de resolución (tabla: cuenta | dónde se define | tipo | se usa en), la lista de
         operaciones y sus cuentas requeridas (`REQUIRED_ACCOUNTS_BY_OPERATION`), la política de
         errores (`ActionResult`, mensajes, sin fallback silencioso, "advertir no bloquear"),
@@ -1557,12 +1557,12 @@ no se testean. Línea base de `npm run check-types`: **219** errores preexistent
         `HIDDEN_MODULES` desde TSK-724c; espacio Gestión; permisos a otorgar por rol). Sección
         "Helpers compartidos": `shared/asset-accounts.ts`, `asset-accounts-loader.ts`,
         `shared/components/_TerminateEquipmentDialog.tsx`.
-  - [ ] `docs/modules/accounting.md:290-299`: título "Cuentas de Bienes de Uso (4 campos, 3 de
+  - [x] `docs/modules/accounting.md:290-299`: título "Cuentas de Bienes de Uso (4 campos, 3 de
         ellos por defecto)"; tabla con la columna "Respaldo de" (VehicleDepreciation →
         VehicleType); reemplazar "Sin estas cuentas … no se generan (degradacion suave)" por
         "Sin cuenta resoluble la operacion se rechaza con `ActionResult` que nombra el equipo y
         la cuenta (TSK-724c); no hay degradacion suave".
-  - [ ] `docs/architecture/data-model.md:81` (`Vehicle`: sin cambios, aclarar "las cuentas
+  - [x] `docs/architecture/data-model.md:81` (`Vehicle`: sin cambios, aclarar "las cuentas
         contables van en VehicleType/VehicleDepreciation"), `:92` (`VehicleDepreciation`: sumar
         `fixedAssetAccountId?`, `accumulatedDepreciationAccountId?`,
         `depreciationExpenseAccountId?` override, FK SetNull, TSK-724c), `:101-103`
@@ -1570,7 +1570,7 @@ no se testean. Línea base de `npm run check-types`: **219** errores preexistent
         `:150` (`VehicleType`: "Tipos de equipo + cuentas de Bienes de Uso del tipo"), `:459`
         (`AccountingSettings`: `fixedAssetAccountId`, `accumulatedDepreciationAccountId`,
         `depreciationExpenseAccountId` **por defecto**, TSK-724c).
-  - [ ] Crear `scripts/guia-presentacion/capturas-tsk724c.mjs` (molde `capturas-tsk721.mjs:1-40`:
+  - [x] (hecho en fase 9, 2026-09-19; tipos "Rodados"/"Maquinaria" y 14 capturas en vez de "Camión"/"Otros equipos" y 11) Crear `scripts/guia-presentacion/capturas-tsk724c.mjs` (molde `capturas-tsk721.mjs:1-40`:
         `baseUrl` por argumento, login con las credenciales de la memoria
         `dev-local-capturas-y-login`, `psql` vía `docker exec contable-pms-db`, `hideNextBadge`).
         Siembra en "Empresa de Prueba 01 SA" (la que tiene plan de cuentas; 1.2.7) lo que falta:
@@ -1588,7 +1588,7 @@ no se testean. Línea base de `npm run check-types`: **219** errores preexistent
         aviso de cuentas / "sin asiento"; (10) diálogo masivo con la lista de errores; (11)
         Ajustes contables con la sección "Bienes de Uso (cuentas por defecto)". Restaurar los
         datos al final (borrar `TSK724C-*` y sus asientos; dejar settings como estaban).
-  - [ ] Crear `scripts/guia-presentacion/tsk-724c.html` (estructura de `tsk-721.html`): "Qué
+  - [x] Crear `scripts/guia-presentacion/tsk-724c.html` (estructura de `tsk-721.html`): "Qué
         pedía el ticket" (724-c en palabras de la clienta), "Qué cambió" (antes/después con
         capturas), "Cómo se usa paso a paso" (activar Equipos → cargar cuentas en Tipos de Equipo
         → dar de alta el equipo → Configurar Depreciación → Contabilizar → Dar de baja),
@@ -1885,7 +1885,24 @@ _Pendiente - ejecutar `/disenar tsk-724c-bienes-de-uso-por-item-equipos`_
   - La verificación en navegador (sidebar Gestión con "Equipos", Módulos, Roles, guía con pestaña Equipamiento, Empleados/Documentos siguen ocultos) queda para la fase 9: no había dev server levantado y otras fases editan la rama en paralelo. `check-types` 219 = base; `vitest` de settings y shared verde (27 tests). Los avisos de `prettier --check` en `_AppSidebar.tsx`, `constants.ts` y `roles/actions.server.ts` son preexistentes en HEAD (orden de imports, JSX largo) y ajenos a las líneas tocadas; no se reformatearon para no ensuciar el diff.
 
 ### Fase 8: Documentación
-- **Estado:** Pendiente
+- **Estado:** Completada (2026-09-19)
+- **Archivos creados:**
+  - `scripts/guia-presentacion/tsk-724c.html` - guía de presentación (estructura y CSS de `tsk-721.html` + tabla `chain`, pasos con letras, `side-by-side.narrow-left` para el sidebar). Eyebrow "Ticket 724 (c) · Bienes de Uso · Equipos". Secciones: 1 Qué pediste (cita de 724-c, qué pasaba, la baja sin asiento en silencio) · 2 Qué cambió (antes/después, regla en una línea, tabla de las 4 cuentas con uso y dónde se cargan, captura 03) · 3 Activar Equipos (01, 02; callout naranja de permisos a roles no Propietario) · 4 Paso a paso a-d (04, 05, 06, 07, 08, 09; callout "Qué tipos conviene tener" y "Qué significa el aviso naranja") · 5 Si falta una cuenta (10, 11a, 11; cambio de comportamiento, "Qué vas a notar") · 6 La baja (12, 13; motivos con/sin asiento) · 7 Importante: la compra entra por el ítem (no vinculados, mejora futura; equipos sin factura) · 8 Qué no cambió (resultado global, Borrador, asientos previos, equipos dados de baja, depreciación e informes, resto de Configuración). La captura 14 (prod) no se incluyó: es visualmente idéntica a la 10; el texto del punto 5 dice que el mensaje se verificó en la versión instalada.
+  - `docs/presentaciones/TSK-724c-bienes-de-uso.pdf` - 8 páginas A4, 866 KB (`generar-pdf.mjs`, Chrome del sistema). Sección 1-2 en pág. 1-2, 3 en 2-3, 4 en 3-5, 5 en 5-6, 6 en 7, 7-8 en 8.
+- **Archivos modificados:**
+  - `src/modules/help/features/guide/components/_EquipmentGuide.tsx` (518 líneas tras `prettier --write`; era 289) - reescrita al fork: título "Equipos", menú Equipos (grupo Principal), catálogos en Empresa → Equipos, listado (tabs, filtros, Contabilizar Depreciaciones, baja desde (…)), las 7 pestañas reales del detalle (Información, Contrato, Asignación, Contratistas, Documentos, Depreciación, QR), documentos en Empresa → General → Documentos (el módulo Documentos sigue oculto). Cards nuevas: "Cuentas contables de Bienes de Uso" (cadena equipo → tipo → por defecto, resolución por cuenta, qué muestra la card y sus badges, "Sin cuenta — …", Editar cuentas, alerta de períodos contabilizados, alerta "La compra del bien entra por el ítem" y sin asiento de alta), "Contabilizar la amortización" (individual con Contabilizar, masiva con aviso previo "Estos equipos se van a omitir…" y lista de errores, alerta "Si falta una cuenta, no se contabiliza", Bloqueo de Períodos, asientos en Borrador → Registrar) y "Dar de baja un equipo" (los 4 motivos con badges, cuáles generan asiento, sin depreciación/Otro sin asiento, el aviso previo del diálogo, la baja rechazada deja el equipo activo, reactivación). Ajustes de valor: asiento siempre y rechazo si falta cuenta. Alert final: Empresa → Equipos (Tipos de Equipo define cuentas), Módulos, Roles (Editar para contabilizar, Eliminar para baja), Contabilidad (informes), Comercial → Ítems.
+  - `_CompanyGuide.tsx` - catálogos "Para Equipos (Empresa → Equipos)" con los nombres reales; bloque "Tipos de Equipo: cuentas contables de Bienes de Uso" (los 3 campos con su ayuda, Sin asignar → por defecto, override por equipo, badges de la columna "Cuentas contables") + Alert con el aviso naranja ("El cambio no se bloquea"); "Módulos con Permisos": Equipos + catálogos de Empresa → Equipos y la nota de otorgar permisos a roles personalizados; "Relación con otros módulos" actualizado.
+  - `_AccountingGuide.tsx` - viñeta de Configuración: "Bienes de Uso por defecto (…)" con la cadena y la nota de que Resultado por venta/baja es única; card renombrada "Bienes de Uso: amortización y bajas" (se generan desde Equipos, cuentas del equipo → tipo → por defecto, rechazo con mensaje, masiva omite y lista, baja con/sin asiento, la compra entra por el ítem); "Relación con otros módulos" → Equipos.
+  - `docs/modules/equipment.md` - sección nueva "Visibilidad del modulo" (fuera de `HIDDEN_MODULES`, sidebar/guía, Módulos y Roles, roles personalizados sin permisos); tabla de modelos con las cuentas en `VehicleDepreciation` y `VehicleType`; flujo con la card y el único camino de escritura del override; "Integracion Contable" reescrita (tabla cuenta | tipo | orden de resolución | se usa en; `REQUIRED_ACCOUNTS_BY_OPERATION`; política "advertir no bloquear / rechazar no degradar" con `ActionResult` y los tres `build*Message`; casos sin asiento OTHER/sin depreciación y `totalDepreciated` 0; asientos de baja; **sin asiento de alta**, eliminación de `getEquipmentAccountingSettings`/`payablesAccountId`, compra y equipo no vinculados); "Helpers compartidos" (`asset-accounts.ts`, `asset-accounts-loader.ts`, `_TerminateEquipmentDialog`, `_TerminateEntryNotice`, tests de integración y sus prefijos); tabla de Server Actions con `ActionResult` marcado en `softDeleteVehicle`, `updateDepreciationAccounts`, `postDepreciationEntry`, `postAllPendingDepreciations`, `createValueAdjustment` + las nuevas de depreciación y de `vehicle-types`.
+  - `docs/modules/accounting.md` - "Cuentas de Bienes de Uso (4 campos, 3 de ellos por defecto) — TSK-724c" con labels reales y columna "Respaldo de"; "no hay degradacion suave" en lugar de "degradacion suave"; la comparación de tributos ahora dice "como en Bienes de Uso desde TSK-724c"; "Asientos Automaticos" suma amortización, ajuste y baja de Equipos y la nota de que no existe asiento de alta.
+  - `docs/architecture/data-model.md` - `Vehicle` (sin cuentas propias), `VehicleDepreciation` (3 campos override), relaciones `VehicleDepreciation N→1 Account ×3` y `VehicleType N→1 Account ×3` con los nombres de relación de Prisma, párrafo de resolución + migración; `VehicleType` en catálogos; `AccountingSettings` con las tres "por defecto" y `assetDisposalGainLossAccountId` única.
+  - `docs/infrastructure/deployment.md` - "Chequeos post-deploy": ítem "Equipos y Bienes de Uso" con (1) otorgar permisos de Equipos y Tipos de Equipo a roles personalizados y (2) la consulta SQL de 1.2.7.
+  - `docs/architecture/auth-and-permissions.md` - sin cambios: la subsección "Módulos ocultos del fork" de la fase 7 ya dice que `equipment` es visible desde TSK-724c y que a los roles personalizados hay que otorgarles permisos; coherente con `equipment.md` y `deployment.md`.
+- **Notas:**
+  - `eslint` en las tres guías: 0 errores (1 warning `Receipt` sin usar en `_AccountingGuide.tsx`, preexistente en HEAD). `prettier --check` de `_AccountingGuide.tsx` y `_CompanyGuide.tsx` ya fallaba en HEAD; no se reformatearon para no ensuciar el diff; `_EquipmentGuide.tsx` sí (reescrita entera). `check-types` 219 = base.
+  - Estilo: `_EquipmentGuide`/`_CompanyGuide` mantienen el "tú" ("Ve a", "Haz clic") del archivo; `_AccountingGuide` mantiene el "vos" de sus secciones nuevas. El PDF va en "vos", sin rutas ni nombres de componentes.
+  - Las tareas de la fase 8 que el plan describía con "Camión"/"Otros equipos" y 11 capturas se hicieron en la fase 9 con "Rodados"/"Maquinaria" y 14 capturas; los textos de la guía y el PDF usan los nombres reales de las capturas.
+  - Fase 9: la única tarea sin marcar es la consulta 1.2.7 en producción, que no es documentación y queda para el post-deploy (ahora documentada en `deployment.md`).
 
 ### Fase 9: Verificación final
 - **Estado:** Completada (2026-09-19) — casos 1-8 del plan + build de producción; pendientes 9 (ajuste de valor), 10 (`lockedUntilDate`), 11 (roles) y la consulta en producción.
