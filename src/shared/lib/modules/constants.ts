@@ -14,12 +14,20 @@ export const ACTIVATABLE_MODULES = {
 export type ActivatableModule = (typeof ACTIVATABLE_MODULES)[keyof typeof ACTIVATABLE_MODULES];
 
 /**
- * Módulos ocultos en este despliegue (fork contable PMS): no se muestran en el
- * sidebar ni en la pantalla de activación por empresa. Se mantienen en
- * ACTIVATABLE_MODULES y en PERMISSION_MODULE_MAP para no romper el mapeo de
- * permisos ni la compatibilidad con empresas existentes (activeModules).
+ * Módulos ocultos en este despliegue (fork contable PMS). La constante la leen
+ * la pantalla de activación por empresa (`_ModulesConfigForm.tsx`, filtra
+ * `MODULE_ORDER`) y la pantalla de roles (`roles/actions.server.ts`, oculta el
+ * grupo de permisos del módulo y los catálogos mapeados en PERMISSION_MODULE_MAP).
+ * El sidebar (`_AppSidebar.tsx`, `navMain`) y la guía in-app (`_HelpGuideTabs.tsx`)
+ * NO la leen: sus ítems se agregan o quitan a mano (TSK-377).
+ *
+ * Se mantienen en ACTIVATABLE_MODULES y en PERMISSION_MODULE_MAP para no romper
+ * el mapeo de permisos ni la compatibilidad con empresas existentes (activeModules).
+ *
+ * `equipment` se muestra desde TSK-724c: la contabilidad de Bienes de Uso
+ * (depreciación, baja, ajuste de valor) vive en Equipos.
  */
-export const HIDDEN_MODULES: ActivatableModule[] = ['employees', 'equipment', 'documents'];
+export const HIDDEN_MODULES: ActivatableModule[] = ['employees', 'documents'];
 
 /** Display labels */
 export const MODULE_DISPLAY_LABELS: Record<ActivatableModule, string> = {

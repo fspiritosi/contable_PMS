@@ -60,3 +60,14 @@ MODULE_DEPENDENCIES: {
 Ruta: `/dashboard/company/modules`
 Permiso: `company.general.users` (administración)
 Archivo: `src/modules/companies/features/modules/`
+
+## 7. Módulos ocultos del fork (`HIDDEN_MODULES`)
+
+`HIDDEN_MODULES` (`src/shared/lib/modules/constants.ts`) oculta módulos completos en este despliegue. Solo la consumen:
+
+- la pantalla de activación por empresa (`_ModulesConfigForm.tsx`, filtra `MODULE_ORDER`), y
+- la pantalla de roles (`roles/actions.server.ts`, oculta el grupo de permisos del módulo y sus catálogos de `PERMISSION_MODULE_MAP`).
+
+El sidebar (`_AppSidebar.tsx`, `navMain`) y la guía in-app (`_HelpGuideTabs.tsx`) **NO la leen**: al ocultar o mostrar un módulo hay que quitar o reponer a mano el ítem del sidebar y la pestaña de la guía.
+
+Estado: `employees` y `documents` ocultos; `equipment` visible desde TSK-724c. Al reponer un módulo, recordar que los roles personalizados no tienen permisos sobre él (la UI los ocultaba): otorgarlos desde Roles tras deployar.

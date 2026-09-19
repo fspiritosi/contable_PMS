@@ -6,6 +6,7 @@ import {
   Calculator,
   LayoutDashboard,
   ShoppingBag,
+  Truck,
   Wallet,
 } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
@@ -21,12 +22,14 @@ import { _AccountingGuide } from './_AccountingGuide';
 import { _CommercialGuide } from './_CommercialGuide';
 import { _CompanyGuide } from './_CompanyGuide';
 import { _DashboardGuide } from './_DashboardGuide';
+import { _EquipmentGuide } from './_EquipmentGuide';
 import { _GettingStarted } from './_GettingStarted';
 import { _TreasuryGuide } from './_TreasuryGuide';
 
 type GuideTab =
   | 'inicio'
   | 'dashboard'
+  | 'equipamiento'
   | 'comercial'
   | 'tesoreria'
   | 'contabilidad'
@@ -35,6 +38,7 @@ type GuideTab =
 const tabs: { value: GuideTab; label: string; icon: React.ElementType }[] = [
   { value: 'inicio', label: 'Primeros Pasos', icon: BookOpen },
   { value: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { value: 'equipamiento', label: 'Equipamiento', icon: Truck },
   { value: 'comercial', label: 'Comercial', icon: ShoppingBag },
   { value: 'tesoreria', label: 'Tesorería', icon: Wallet },
   { value: 'contabilidad', label: 'Contabilidad', icon: Calculator },
@@ -44,6 +48,7 @@ const tabs: { value: GuideTab; label: string; icon: React.ElementType }[] = [
 const tabContent: Record<GuideTab, React.ReactNode> = {
   inicio: <_GettingStarted />,
   dashboard: <_DashboardGuide />,
+  equipamiento: <_EquipmentGuide />,
   comercial: <_CommercialGuide />,
   tesoreria: <_TreasuryGuide />,
   contabilidad: <_AccountingGuide />,

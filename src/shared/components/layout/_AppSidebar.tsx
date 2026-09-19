@@ -81,6 +81,7 @@ interface NavItemWithSub {
 // Navegación principal (con algunos subitems)
 const navMain: NavItemWithSub[] = [
   { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, module: null },
+  { title: 'Equipos', href: '/dashboard/equipment', icon: Truck, module: 'equipment' },
   {
     title: 'Contabilidad',
     icon: Wallet,

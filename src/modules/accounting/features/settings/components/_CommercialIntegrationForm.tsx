@@ -226,19 +226,33 @@ const SECTIONS: SectionDef[] = [
     ],
   },
   {
-    title: 'Cuentas de Activos Fijos',
+    title: 'Bienes de Uso (cuentas por defecto)',
+    description:
+      'Las cuentas de Bienes de Uso, Amortización acumulada y Gasto de amortización se definen por Tipo de Equipo (Empresa → Tipos de Equipo) y cada equipo puede sobreescribirlas en su pestaña Depreciación. Las de acá se usan cuando ninguna de las dos está cargada.',
     fields: [
-      { name: 'fixedAssetAccountId', label: 'Bienes de Uso', types: ['ASSET'] },
+      {
+        name: 'fixedAssetAccountId',
+        label: 'Cuenta de Bienes de Uso por defecto',
+        types: ['ASSET'],
+        help: 'Se usa en la baja y en el ajuste de valor de los equipos que no tienen cuenta en su depreciación ni en su Tipo de Equipo. Conviene que sea la misma cuenta a la que se imputó la compra del bien (Ítems → Imputación contable).',
+      },
       {
         name: 'accumulatedDepreciationAccountId',
-        label: 'Depreciación Acumulada',
+        label: 'Amortización acumulada por defecto',
         types: ['ASSET'],
+        help: 'Se usa en la amortización mensual y en la baja de los equipos sin cuenta propia ni de tipo.',
       },
-      { name: 'depreciationExpenseAccountId', label: 'Gasto de Depreciación', types: ['EXPENSE'] },
+      {
+        name: 'depreciationExpenseAccountId',
+        label: 'Gasto de amortización por defecto',
+        types: ['EXPENSE'],
+        help: 'Se usa en la amortización mensual de los equipos sin cuenta propia ni de tipo. Suele ir por función (explotación, administración), no por rubro.',
+      },
       {
         name: 'assetDisposalGainLossAccountId',
-        label: 'Resultado Venta/Baja de B.U.',
+        label: 'Resultado por venta/baja de Bienes de Uso',
         types: ['REVENUE', 'EXPENSE'],
+        help: 'Única para todos los equipos: recibe el valor libro no amortizado en la baja y la diferencia en los ajustes de valor. Sin esta cuenta la baja y el ajuste no se pueden contabilizar.',
       },
     ],
   },
