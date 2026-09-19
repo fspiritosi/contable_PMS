@@ -983,35 +983,35 @@ no se testean. Línea base de `npm run check-types`: **219** errores preexistent
   (`includeIds`), advierten si hay equipos con períodos contabilizados y muestran en la tabla
   qué tipos tienen cuentas propias.
 - **Tareas:**
-  - [ ] **Validators (TDD).** Crear
+  - [x] **Validators (TDD).** Crear
         `src/modules/company/features/vehicle-types/list/validators.test.ts` con casos: nombre
         de menos de 2 caracteres falla; las tres cuentas son opcionales (ausentes → `undefined`,
         `null` → `null`); un valor que no es UUID falla en el campo correcto; `hasHitch` /
         `isTractorUnit` siguen obligatorios booleanos. Rojo porque el módulo no existe.
-  - [ ] Crear `vehicle-types/list/validators.ts` moviendo `vehicleTypeSchema` de
+  - [x] Crear `vehicle-types/list/validators.ts` moviendo `vehicleTypeSchema` de
         `_VehicleTypeFormModal.tsx:30-36` y agregando `fixedAssetAccountId`,
         `accumulatedDepreciationAccountId`, `depreciationExpenseAccountId` como
         `z.string().uuid().nullish()` (constante `accountField`). Exportar `vehicleTypeSchema`
         y `type VehicleTypeFormData = z.infer<…>`. Verde.
-  - [ ] `vehicle-types/list/actions.server.ts:19-29`: agregar los tres campos `?: string | null`
+  - [x] `vehicle-types/list/actions.server.ts:19-29`: agregar los tres campos `?: string | null`
         a `CreateVehicleTypeInput` y `UpdateVehicleTypeInput`.
-  - [ ] Mismo archivo: helper privado `assertAccountBelongsToCompany(accountId, companyId)`
+  - [x] Mismo archivo: helper privado `assertAccountBelongsToCompany(accountId, companyId)`
         (copiar de `partners/features/list/actions.server.ts:206-217`, incluido el comentario
         de por qué no exige imputable) y usarlo en `createVehicleType` (`:147-170`, `data` con
         los tres ids) y `updateVehicleType` (`:175-210`, ídem). En `updateVehicleType`, además,
         `logger.info` con las cuentas anteriores y nuevas cuando cambian (rastro para el
         contador; el `existing` de `:181-184` debe `select` las tres ids).
-  - [ ] Mismo archivo: nueva `getVehicleTypeAssetAccounts(includeIds?: string[])` con
+  - [x] Mismo archivo: nueva `getVehicleTypeAssetAccounts(includeIds?: string[])` con
         `checkPermission('company.vehicle-types', 'view', { redirect: true })`, que devuelve
         `{ asset: AccountOption[]; expense: AccountOption[] }` con
         `buildImputableAccountsWhere({ companyId, types: ['ASSET'] })` y `['EXPENSE']`
         respectivamente, envolviendo `includeIds` en `OR` como
         `getPartnerContributionAccounts` (`partners/…/actions.server.ts:164-183`). `select: {
         id, code, name }`, `orderBy: { code: 'asc' }`. Exportar `type VehicleTypeAccountOption`.
-  - [ ] Mismo archivo: nueva `getVehicleTypePostedDepreciationCount(typeId: string)` con el
+  - [x] Mismo archivo: nueva `getVehicleTypePostedDepreciationCount(typeId: string)` con el
         mismo permiso → `prisma.vehicle.count({ where: { companyId, typeId, depreciation: {
         scheduleEntries: { some: { isPosted: true } } } } })`. Devuelve `number`.
-  - [ ] Crear `vehicle-types/list/components/_VehicleTypeAccountsFields.tsx` (< 160 líneas).
+  - [x] Crear `vehicle-types/list/components/_VehicleTypeAccountsFields.tsx` (< 160 líneas).
         Props: `values: { fixedAssetAccountId; accumulatedDepreciationAccountId;
         depreciationExpenseAccountId }` (cada uno `string | null | undefined`), `onChange(key,
         accountId: string | null)`, `savedIds: string[]` (para `includeIds`), `isEditing`,
@@ -1034,7 +1034,7 @@ no se testean. Línea base de `npm run check-types`: **219** errores preexistent
         párrafo final neutro: "Si un campo queda vacío se usa la cuenta por defecto de
         Contabilidad → Configuración. Cada equipo puede sobreescribir estas cuentas en su
         pestaña Depreciación."
-  - [ ] `_VehicleTypeFormModal.tsx`: importar `vehicleTypeSchema`/`VehicleTypeFormData` de
+  - [x] `_VehicleTypeFormModal.tsx`: importar `vehicleTypeSchema`/`VehicleTypeFormData` de
         `../validators` (borrar `:26-38`); `defaultValues` (`:66`) y el `reset` (`:75-82`) con
         los tres campos desde `vehicleType?.…AccountId ?? null`; `useQuery({ queryKey:
         ['vehicle-type-posted-count', vehicleType?.id], queryFn: () =>
@@ -1045,7 +1045,7 @@ no se testean. Línea base de `npm run check-types`: **219** errores preexistent
         subtítulo "Cuentas contables (Bienes de Uso)"; `DialogContent` de `sm:max-w-[425px]`
         (`:126`) a `sm:max-w-[600px]`. Las mutaciones (`:88-112`) no cambian: ya mandan `data`
         completo.
-  - [ ] `vehicle-types/list/columns.tsx:70-83`: después de "Equipos", columna `id: 'accounts'`,
+  - [x] `vehicle-types/list/columns.tsx:70-83`: después de "Equipos", columna `id: 'accounts'`,
         header "Cuentas contables" (`DataTableColumnHeader`), `meta: { title: 'Cuentas
         contables' }`, `enableSorting: false`, cell: cuenta cuántas de las tres ids no son
         `null` → `Badge` `variant="secondary"` con "Por defecto" (0), `"{n}/3 propias"`
@@ -1810,7 +1810,17 @@ _Pendiente - ejecutar `/disenar tsk-724c-bienes-de-uso-por-item-equipos`_
 - **Notas:** el helper quedó en 209 líneas (el plan pedía < 150): el exceso es el encabezado y los JSDoc de cada export; la lógica no supera las 100. La verificación de imputabilidad en `assertAssetAccountsForOperation` recorre solo `REQUIRED_ACCOUNTS_BY_OPERATION[operation]` (no las tres): una cuenta de Bienes de Uso vencida no frena la amortización, que no la toca; sigue sin caer nunca a la global cuando la propia/del tipo existe pero no sirve. Si la cuenta resuelta ya no existe en `account` (borrada), el mensaje usa el id crudo como label. Sin `checkPermission` en el loader (lo hacen las actions que lo llaman); sin test de integración propio, lo cubren fases 4 y 5. `check-types` 219 = base; eslint y prettier limpios.
 
 ### Fase 3: Tipos de equipo
-- **Estado:** Pendiente
+- **Estado:** Completada (2026-09-19)
+- **Archivos creados:**
+  - `src/modules/company/features/vehicle-types/list/validators.test.ts` - 8 tests Vitest (rojo primero: módulo inexistente): nombre corto, cuentas ausentes → `undefined`, `null` → `null`, UUIDs válidos, no-UUID señalado en el campo correcto (`it.each` por los tres), `hasHitch`/`isTractorUnit` obligatorios booleanos.
+  - `src/modules/company/features/vehicle-types/list/validators.ts` - `vehicleTypeSchema` movido del modal + `accountField = z.string().uuid().nullish()` para las tres cuentas; `VehicleTypeFormData`.
+  - `src/modules/company/features/vehicle-types/list/components/_VehicleTypeAccountsFields.tsx` (121 líneas) - tres `AccountCombobox` (Bienes de Uso y Amortización acumulada sobre la lista `asset`, Gasto de amortización sobre `expense`), ayuda por campo, `clearLabel="Sin asignar (usar la cuenta por defecto)"`, aviso naranja y párrafo final neutro. Props: `values: AssetAccountIds`, `onChange(field, accountId)`, `saved: (AssetAccountIds & { id }) | null`, `enabled`. Calcula adentro `savedIds`/`isDirty` y hace los dos `useQuery` (`['vehicle-type-asset-accounts', savedIds]` y `['vehicle-type-posted-count', saved?.id]`, este último solo con `saved`).
+  - `src/shared/lib/assets/asset-account-labels.ts` - `ASSET_ACCOUNT_KEYS`, `AssetAccountKey`, `AssetAccountIds`, `ASSET_ACCOUNT_FIELD_BY_KEY`, `ASSET_ACCOUNT_LABELS`. **Decisión:** `company` no puede importar de `equipment/shared`, así que las constantes se movieron a `shared/` en vez de duplicarlas; `equipment/shared/asset-accounts.ts` las importa y re-exporta (sus 16 tests siguen verdes, `asset-accounts-loader.ts` sin cambios).
+- **Archivos modificados:**
+  - `vehicle-types/list/actions.server.ts` - `CreateVehicleTypeInput`/`UpdateVehicleTypeInput` extienden `VehicleTypeAccountsInput` (tres `?: string | null`); `getVehicleTypesPaginated` con `select` explícito (id, name, hasHitch, isTractorUnit, isActive, las tres cuentas, `_count.vehicles`); `getVehicleTypeAssetAccounts(includeIds?: string[]): Promise<{ asset: {id,code,name}[]; expense: … }>` (dos `findMany` en paralelo con `buildImputableAccountsWhere({ companyId, types: ['ASSET'] })` / `['EXPENSE']`, `includeIds` envuelto en `OR`, sin exigir `isFixedAsset`); `getVehicleTypePostedDepreciationCount(typeId: string): Promise<number>` (`vehicle.count` con `depreciation.scheduleEntries.some.isPosted`); `assertAccountBelongsToCompany` privado (copiado de partners) + `resolveAccountsInput` que respeta `undefined`; `createVehicleType` lo llama fuera del `try` (el `catch` reenvuelve el mensaje) y guarda las tres; `updateVehicleType` `select` las tres del `existing`, guarda y hace `logger.info` con `previous`/`next` cuando alguna cambió. Tipos `VehicleTypeAssetAccounts` y `VehicleTypeAccountOption`.
+  - `components/_VehicleTypeFormModal.tsx` (196 líneas) - schema importado de `../validators`; `toFormValues(vehicleType)` para `defaultValues` y `reset`; `<Separator />` + subtítulo "Cuentas contables (Bienes de Uso)" + `_VehicleTypeAccountsFields values={watch()} saved={vehicleType ?? null} enabled={open}`; `DialogContent` a `sm:max-w-[600px]` con `max-h-[90vh] overflow-y-auto`.
+  - `columns.tsx` - columna `id: 'accounts'` "Cuentas contables" (`meta.title`, `enableSorting: false`) después de "Equipos": `Badge` "Por defecto" (0, secondary), "{n}/3 propias" (1-2, secondary), "Propias" (3, default); `data-testid="vehicle-type-accounts-{id}"`.
+- **Notas:** el aviso naranja (`role="alert"`, `data-testid="vehicle-type-accounts-posted-warning"`) aparece solo editando, con alguna cuenta distinta de la guardada y `postedCount > 0`; texto: "Este tipo tiene {N} equipo(s) con amortizaciones ya contabilizadas. Cambiar las cuentas no modifica esos asientos: las próximas amortizaciones y la baja usarán la cuenta nueva y el saldo acumulado hasta hoy queda en la anterior. Si hace falta, el contador lo reclasifica con un asiento manual." Los conteos `_VehicleTypesTable.tsx` (legacy, usa `getAllVehicleTypes` con `include`) no se tocaron. `prettier --write` sobre los archivos tocados también ordenó imports preexistentes en `actions.server.ts`, `columns.tsx` y el modal (ruido mínimo). `vitest` vehicle-types + equipment/shared: 24 tests verdes; eslint y prettier limpios; `check-types` 219 = base. La verificación en navegador (crear "Camión" con tres cuentas → "Propias", vaciar una → "2/3 propias", aviso con equipo amortizado) queda para la fase 9.
 
 ### Fase 4: Depreciación
 - **Estado:** Pendiente

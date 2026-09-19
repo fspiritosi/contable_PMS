@@ -12,17 +12,23 @@
  * La cuenta "Resultado por venta/baja de Bienes de Uso" sigue siendo global
  * (Contabilidad → Configuración): es de resultado, no depende del rubro (1.2.3).
  *
- * Funciones puras, sin Prisma ni imports de otros módulos. Las consume
+ * Funciones puras, sin Prisma ni imports de otros módulos (solo `shared/`). Las consume
  * `asset-accounts-loader.ts` (server) y la UI de depreciación/tipos de equipo.
  */
 
-export const ASSET_ACCOUNT_KEYS = [
-  'fixedAsset',
-  'accumulatedDepreciation',
-  'depreciationExpense',
-] as const;
+import {
+  ASSET_ACCOUNT_FIELD_BY_KEY,
+  ASSET_ACCOUNT_KEYS,
+  ASSET_ACCOUNT_LABELS,
+  type AssetAccountIds,
+  type AssetAccountKey,
+} from '@/shared/lib/assets/asset-account-labels';
 
-export type AssetAccountKey = (typeof ASSET_ACCOUNT_KEYS)[number];
+// Claves, campos y labels viven en `shared/lib/assets` (fase 3) porque también
+// los usa el ABM Tipos de Equipo del módulo `company`; acá se re-exportan para
+// que los consumidores de `equipment` sigan importando desde este helper.
+export { ASSET_ACCOUNT_KEYS, ASSET_ACCOUNT_LABELS };
+export type { AssetAccountIds, AssetAccountKey };
 
 /** De dónde salió la cuenta efectiva. */
 export type AssetAccountSource = 'depreciation' | 'type' | 'default';
@@ -30,45 +36,12 @@ export type AssetAccountSource = 'depreciation' | 'type' | 'default';
 /** Operaciones que generan asiento sobre un equipo. */
 export type AssetOperation = 'depreciation' | 'disposal' | 'adjustment';
 
-/**
- * Las tres cuentas tal como están en `VehicleDepreciation`, `VehicleType` y
- * `AccountingSettings`: se les pasa el registro de Prisma tal cual.
- */
-export interface AssetAccountIds {
-  fixedAssetAccountId?: string | null;
-  accumulatedDepreciationAccountId?: string | null;
-  depreciationExpenseAccountId?: string | null;
-}
-
 export interface ResolvedAssetAccount {
   accountId: string;
   source: AssetAccountSource;
 }
 
 export type ResolvedAssetAccounts = Record<AssetAccountKey, ResolvedAssetAccount | null>;
-
-/** Campo de `AssetAccountIds` que corresponde a cada clave. */
-const FIELD_BY_KEY: Record<AssetAccountKey, keyof AssetAccountIds> = {
-  fixedAsset: 'fixedAssetAccountId',
-  accumulatedDepreciation: 'accumulatedDepreciationAccountId',
-  depreciationExpense: 'depreciationExpenseAccountId',
-};
-
-/** Cómo se llama cada cuenta en pantalla y cómo se llama su ajuste contable (fase 6). */
-export const ASSET_ACCOUNT_LABELS: Record<
-  AssetAccountKey,
-  { field: string; settingLabel: string }
-> = {
-  fixedAsset: { field: 'Bienes de Uso', settingLabel: 'Cuenta de Bienes de Uso por defecto' },
-  accumulatedDepreciation: {
-    field: 'Amortización acumulada',
-    settingLabel: 'Amortización acumulada por defecto',
-  },
-  depreciationExpense: {
-    field: 'Gasto de amortización',
-    settingLabel: 'Gasto de amortización por defecto',
-  },
-};
 
 /** Para la UI: "1.2.2/04/03 - … — del tipo de equipo Camión". */
 export const ASSET_ACCOUNT_SOURCE_LABELS: Record<AssetAccountSource, string> = {
@@ -108,7 +81,7 @@ export function resolveAssetAccounts({
   settings?: AssetAccountIds | null;
 }): ResolvedAssetAccounts {
   const resolveOne = (key: AssetAccountKey): ResolvedAssetAccount | null => {
-    const field = FIELD_BY_KEY[key];
+    const field = ASSET_ACCOUNT_FIELD_BY_KEY[key];
     const fromDepreciation = depreciation?.[field];
     if (fromDepreciation) return { accountId: fromDepreciation, source: 'depreciation' };
     const fromType = type?.[field];
