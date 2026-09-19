@@ -1,12 +1,13 @@
 'use client';
 
-import { useState } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
-import { toast } from 'sonner';
-import { useRouter } from 'next/navigation';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { AlertTriangle, Calculator, Loader2 } from 'lucide-react';
 import moment from 'moment';
-import { Calculator, Loader2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 
+import { Alert, AlertDescription, AlertTitle } from '@/shared/components/ui/alert';
 import { Button } from '@/shared/components/ui/button';
 import {
   Dialog,
@@ -22,6 +23,7 @@ import { Label } from '@/shared/components/ui/label';
 import {
   getPendingDepreciationsSummary,
   postAllPendingDepreciations,
+  type BulkDepreciationError,
 } from '@/modules/equipment/features/depreciation/actions.server';
 
 interface Props {
@@ -29,15 +31,28 @@ interface Props {
   onOpenChange: (open: boolean) => void;
 }
 
+/** Lista de motivos, con scroll: sirve tanto para el aviso previo como para el resultado. */
+function _MessageList({ items }: { items: { key: string; message: string }[] }) {
+  return (
+    <ul className="max-h-60 list-disc space-y-1 overflow-y-auto pl-4 text-sm">
+      {items.map((item) => (
+        <li key={item.key}>{item.message}</li>
+      ))}
+    </ul>
+  );
+}
+
 export function _BulkDepreciationDialog({ open, onOpenChange }: Props) {
   const router = useRouter();
   const [upToDate, setUpToDate] = useState(moment().format('YYYY-MM-DD'));
+  const [resultErrors, setResultErrors] = useState<BulkDepreciationError[]>([]);
 
-  const {
-    data: summary,
-    isLoading,
-    refetch,
-  } = useQuery({
+  // Al reabrir o cambiar la fecha, el resultado anterior deja de valer.
+  useEffect(() => {
+    setResultErrors([]);
+  }, [open, upToDate]);
+
+  const { data: summary, isLoading } = useQuery({
     queryKey: ['pendingDepreciations', upToDate],
     queryFn: () => getPendingDepreciationsSummary(new Date(upToDate)),
     enabled: open,
@@ -46,23 +61,32 @@ export function _BulkDepreciationDialog({ open, onOpenChange }: Props) {
   const postMutation = useMutation({
     mutationFn: () => postAllPendingDepreciations(new Date(upToDate)),
     onSuccess: (result) => {
+      if (!result.success) {
+        toast.error(result.error);
+        return;
+      }
       if (result.posted > 0) {
         toast.success(`${result.posted} período(s) contabilizado(s)`);
       }
-      if (result.errors.length > 0) {
-        toast.warning(`${result.errors.length} error(es) durante la contabilización`);
-      }
       router.refresh();
+      if (result.errors.length > 0) {
+        // No se cierra solo: el usuario tiene que ver qué quedó afuera y por qué.
+        setResultErrors(result.errors);
+        return;
+      }
       onOpenChange(false);
     },
-    onError: (error: Error) => {
-      toast.error(error.message);
+    onError: () => {
+      toast.error('No se pudo contactar al servidor');
     },
   });
 
+  const skipped = summary?.vehiclesWithoutAccounts ?? [];
+  const hasResult = resultErrors.length > 0;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[560px]">
         <DialogHeader>
           <DialogTitle>Contabilizar Depreciaciones</DialogTitle>
           <DialogDescription>
@@ -78,6 +102,7 @@ export function _BulkDepreciationDialog({ open, onOpenChange }: Props) {
               type="date"
               value={upToDate}
               onChange={(e) => setUpToDate(e.target.value)}
+              disabled={postMutation.isPending}
             />
           </div>
 
@@ -105,28 +130,61 @@ export function _BulkDepreciationDialog({ open, onOpenChange }: Props) {
               </div>
             </div>
           ) : null}
+
+          {hasResult ? (
+            <Alert variant="destructive">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>
+                {resultErrors.length} equipo(s)/período(s) no se pudieron contabilizar
+              </AlertTitle>
+              <AlertDescription>
+                <_MessageList
+                  items={resultErrors.map((e, i) => ({
+                    key: `${e.vehicleId}-${i}`,
+                    message: e.message,
+                  }))}
+                />
+              </AlertDescription>
+            </Alert>
+          ) : skipped.length > 0 ? (
+            <Alert className="border-orange-300 text-orange-900 dark:text-orange-200">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>Estos equipos se van a omitir por falta de cuentas contables</AlertTitle>
+              <AlertDescription>
+                <_MessageList
+                  items={skipped.map((v) => ({ key: v.vehicleId, message: v.message }))}
+                />
+              </AlertDescription>
+            </Alert>
+          ) : null}
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancelar
-          </Button>
-          <Button
-            onClick={() => postMutation.mutate()}
-            disabled={postMutation.isPending || !summary || summary.totalEntries === 0}
-          >
-            {postMutation.isPending ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Contabilizando...
-              </>
-            ) : (
-              <>
-                <Calculator className="mr-2 h-4 w-4" />
-                Contabilizar {summary?.totalEntries || 0} período(s)
-              </>
-            )}
-          </Button>
+          {hasResult ? (
+            <Button onClick={() => onOpenChange(false)}>Cerrar</Button>
+          ) : (
+            <>
+              <Button variant="outline" onClick={() => onOpenChange(false)}>
+                Cancelar
+              </Button>
+              <Button
+                onClick={() => postMutation.mutate()}
+                disabled={postMutation.isPending || !summary || summary.totalEntries === 0}
+              >
+                {postMutation.isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Contabilizando...
+                  </>
+                ) : (
+                  <>
+                    <Calculator className="mr-2 h-4 w-4" />
+                    Contabilizar {summary?.totalEntries || 0} período(s)
+                  </>
+                )}
+              </Button>
+            </>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

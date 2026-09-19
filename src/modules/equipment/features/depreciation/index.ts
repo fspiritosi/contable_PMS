@@ -1,2 +1,10 @@
-export { depreciationConfigSchema, valueAdjustmentSchema } from './validators';
-export type { DepreciationConfigInput, ValueAdjustmentInput } from './validators';
+export {
+  depreciationAccountsSchema,
+  depreciationConfigSchema,
+  valueAdjustmentSchema,
+} from './validators';
+export type {
+  DepreciationAccountsInput,
+  DepreciationConfigInput,
+  ValueAdjustmentInput,
+} from './validators';

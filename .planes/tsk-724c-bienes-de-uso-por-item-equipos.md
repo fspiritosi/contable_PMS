@@ -1072,18 +1072,18 @@ no se testean. Línea base de `npm run check-types`: **219** errores preexistent
   la transacción y devuelva errores legibles en producción (individual: toast con el motivo;
   masiva: lista de mensajes, no solo el conteo).
 - **Tareas:**
-  - [ ] **Validators (TDD).** Crear `src/modules/equipment/features/depreciation/validators.test.ts`:
+  - [x] **Validators (TDD).** Crear `src/modules/equipment/features/depreciation/validators.test.ts`:
         `depreciationConfigSchema` sigue aceptando el input actual sin cuentas (regresión);
         acepta las tres cuentas como UUID o `null`; rechaza un no-UUID; los `refine` existentes
         (`salvageValue < grossValue`, tasa obligatoria en `DECLINING_BALANCE`) siguen
         funcionando con los campos nuevos presentes; nuevo `depreciationAccountsSchema` parsea
         `{ fixedAssetAccountId: null, accumulatedDepreciationAccountId: UUID,
         depreciationExpenseAccountId: undefined }`. Rojo primero.
-  - [ ] `depreciation/validators.ts:3-15`: agregar los tres `accountField = z.string().uuid()
+  - [x] `depreciation/validators.ts:3-15`: agregar los tres `accountField = z.string().uuid()
         .nullish()` dentro del `z.object` (antes de los `.refine`). Nuevo
         `depreciationAccountsSchema = z.object({ los tres })` + `type DepreciationAccountsInput`.
         Reexportar desde `depreciation/index.ts`. Verde.
-  - [ ] `depreciation/actions.server.ts`: importar `ActionResult`, `BusinessError`,
+  - [x] `depreciation/actions.server.ts`: importar `ActionResult`, `BusinessError`,
         `toActionResult` de `@/shared/lib/action-result` y `loadVehiclesAssetAccounts`,
         `assertAssetAccountsForOperation` de `@/modules/equipment/shared/asset-accounts-loader`.
         Helper privado `assertAccountsBelongToCompany(ids: (string | null | undefined)[],
@@ -1092,7 +1092,7 @@ no se testean. Línea base de `npm run check-types`: **219** errores preexistent
         (`?? null`) tras `assertAccountsBelongToCompany`. `updateVehicleDepreciation`
         (`:256-340`): ídem en `data` (`:301-315`). Ambas conservan su forma (`throw`): siguen
         siendo formularios que hoy muestran `error.message` y no son los puntos de asiento.
-  - [ ] Nueva `updateDepreciationAccounts(depreciationId: string, input:
+  - [x] Nueva `updateDepreciationAccounts(depreciationId: string, input:
         DepreciationAccountsInput): Promise<ActionResult>`: `checkPermission('equipment',
         'update')`, `safeParse` → `BusinessError` con los mensajes de Zod; depreciación de la
         empresa o `BusinessError('Depreciación no encontrada')`; **no** bloquea por períodos
@@ -1101,11 +1101,11 @@ no se testean. Línea base de `npm run check-types`: **219** errores preexistent
         vehicleId, before, after, postedCount } })`; `revalidatePath(`/dashboard/equipment/${vehicleId}`)`;
         `return { success: true }`; `catch` → `toActionResult(error, 'Error al actualizar las
         cuentas de la depreciación')`.
-  - [ ] Nueva `getDepreciationAccountOptions(includeIds?: string[])` con
+  - [x] Nueva `getDepreciationAccountOptions(includeIds?: string[])` con
         `checkPermission('equipment', 'view')` → `{ asset, expense }` igual que
         `getVehicleTypeAssetAccounts` (fase 3) pero con el permiso de equipos; no se importa la
         de `company` (regla de módulos: `equipment` no importa de `company`).
-  - [ ] Nueva `getVehicleAssetAccounts(vehicleId: string)` con `checkPermission('equipment',
+  - [x] Nueva `getVehicleAssetAccounts(vehicleId: string)` con `checkPermission('equipment',
         'view')`: `loadVehiclesAssetAccounts(companyId, [vehicleId]).get(vehicleId)` → si no
         existe, `throw new Error('Equipo no encontrado')` (lectura; no es mutación); devuelve
         un objeto **plano** `{ vehicleLabel, typeId, typeName, isActive, hasDepreciation,
@@ -1113,7 +1113,7 @@ no se testean. Línea base de `npm run check-types`: **219** errores preexistent
         AssetAccountKey, { accountId, code, name, source, imputable } | null>,
         assetDisposalGainLoss: { accountId, code, name } | null }` (sin `Map`, sin `Date`
         innecesarias). Exportar `type VehicleAssetAccounts`.
-  - [ ] **`postDepreciationEntry`** (`:426-595`) → `Promise<ActionResult<{ journalEntryId:
+  - [x] **`postDepreciationEntry`** (`:426-595`) → `Promise<ActionResult<{ journalEntryId:
         string; journalEntryNumber: number }>>`:
     - Todos los `throw new Error(...)` de negocio (`:448-476`: no encontrado, sin permiso, ya
       contabilizado, no activa, secuencia) pasan a `throw new BusinessError(...)`.
@@ -1127,7 +1127,7 @@ no se testean. Línea base de `npm run check-types`: **219** errores preexistent
     - Fin: `return { success: true, journalEntryId: result.id, journalEntryNumber: result.number
       }`; `catch` (`:591-594`) → `return toActionResult(error, 'Error al contabilizar el
       período')`. Quitar el `logger.error` duplicado (lo hace `toActionResult`).
-  - [ ] **`postAllPendingDepreciations`** (`:600-777`) → `Promise<ActionResult<{ posted: number;
+  - [x] **`postAllPendingDepreciations`** (`:600-777`) → `Promise<ActionResult<{ posted: number;
         errors: string[] }>>`:
     - Quitar el guard global (`:610-623`); leer solo `lockedUntilDate` de settings para el
       `where` (`:626-635`).
@@ -1145,7 +1145,7 @@ no se testean. Línea base de `npm run check-types`: **219** errores preexistent
       (`:674-678`, `:761`) se conservan.
     - `return { success: true, posted, errors }`; `catch` → `toActionResult(error, 'Error al
       contabilizar depreciaciones')`.
-  - [ ] **`getPendingDepreciationsSummary`** (`:993-1041`): con el mismo `Map`, agregar al
+  - [x] **`getPendingDepreciationsSummary`** (`:993-1041`): con el mismo `Map`, agregar al
         resultado `vehiclesWithoutAccounts: Array<{ vehicleId; vehicleLabel; message: string }>`
         (el `message` de la `BusinessError` de `assertAssetAccountsForOperation`), para que el
         diálogo avise **antes** de contabilizar. `totalEntries`/`totalAmount` no cambian (siguen
@@ -1171,7 +1171,7 @@ no se testean. Línea base de `npm run check-types`: **219** errores preexistent
         ~290 líneas, mover el `Collapsible` + fields a
         `_DepreciationConfigAccountsSection.tsx`. `DialogContent` `sm:max-w-[600px]` (`:90`)
         alcanza.
-  - [ ] Crear `depreciation/components/_DepreciationAccountsCard.tsx` (< 180 líneas): `Card`
+  - [x] Crear `depreciation/components/_DepreciationAccountsCard.tsx` (< 180 líneas): `Card`
         "Cuentas contables" con tres filas `{field}: {code - name}` + `Badge` con
         `ASSET_ACCOUNT_SOURCE_LABELS[source]` ("de la depreciación del equipo" / "del tipo de
         equipo Camión" / "por defecto"), o "**Sin cuenta** — asignala acá, en el tipo «Camión» o
@@ -1182,13 +1182,13 @@ no se testean. Línea base de `npm run check-types`: **219** errores preexistent
         'update')`) que abre `_DepreciationAccountsDialog`. Props: `vehicleId`, `data:
         VehicleAssetAccounts`, `onChanged` (invalidar `['vehicleAssetAccounts', vehicleId]` y
         `['vehicleDepreciation', vehicleId]`).
-  - [ ] Crear `depreciation/components/_DepreciationAccountsDialog.tsx` (< 160 líneas): `Dialog`
+  - [x] Crear `depreciation/components/_DepreciationAccountsDialog.tsx` (< 160 líneas): `Dialog`
         con `_DepreciationAccountsFields` (`values` desde `data.overrides`, `savedIds` con las
         tres guardadas, `preview={data}`, `postedCount={data.postedCount}`, `isDirty`
         comparando con `overrides`), botón "Guardar" → `updateDepreciationAccounts(
         data.depreciationId, values)`; `if (!result.success) { toast.error(result.error);
         return; }` → `toast.success('Cuentas actualizadas')`, `onChanged()`, cerrar.
-  - [ ] `_DepreciationTab.tsx`: segundo `useQuery(['vehicleAssetAccounts', vehicleId], () =>
+  - [x] `_DepreciationTab.tsx`: segundo `useQuery(['vehicleAssetAccounts', vehicleId], () =>
         getVehicleAssetAccounts(vehicleId))`; montar `<_DepreciationAccountsCard>` entre la card
         de resumen y "Cronograma" (`:371`); `postMutation` (`:98-110`): `onSuccess: (result) =>
         { if (!result.success) { toast.error(result.error); return; } toast.success(`Período
@@ -1197,7 +1197,7 @@ no se testean. Línea base de `npm run check-types`: **219** errores preexistent
         invalidar también `['vehicleAssetAccounts', vehicleId]` (cambia `postedCount`). Si el
         archivo pasa de 439 a > 470 líneas, extraer las columnas del cronograma a
         `depreciation-columns.tsx` (ya es deuda; no ampliar).
-  - [ ] `list/components/_BulkDepreciationDialog.tsx`: estado `resultErrors: string[]`;
+  - [x] `list/components/_BulkDepreciationDialog.tsx`: estado `resultErrors: string[]`;
         `postMutation.onSuccess` (`:48-57`): `if (!result.success) { toast.error(result.error);
         return; }`; si `result.posted > 0` toast de éxito; si `result.errors.length > 0` →
         `setResultErrors(result.errors)` y **no cerrar** el diálogo: mostrar una lista
@@ -1207,7 +1207,7 @@ no se testean. Línea base de `npm run check-types`: **219** errores preexistent
         equipos y sus mensajes ("Estos equipos se van a omitir: …"). Al cambiar `upToDate` o
         reabrir, limpiar `resultErrors`. Si pasa de 200 líneas, extraer la lista a
         `_BulkDepreciationErrors.tsx`.
-  - [ ] **Test de integración (rojo primero).** Crear
+  - [x] **Test de integración (rojo primero).** Crear
         `src/modules/equipment/features/depreciation/depreciation-accounts.integration.test.ts`
         con el andamiaje de `fund-movement-partner-account.integration.test.ts:19-47` (`import
         'dotenv/config'`, `describe.skipIf(!dbAvailable)`, los cuatro `vi.mock`:
@@ -1823,7 +1823,22 @@ _Pendiente - ejecutar `/disenar tsk-724c-bienes-de-uso-por-item-equipos`_
 - **Notas:** el aviso naranja (`role="alert"`, `data-testid="vehicle-type-accounts-posted-warning"`) aparece solo editando, con alguna cuenta distinta de la guardada y `postedCount > 0`; texto: "Este tipo tiene {N} equipo(s) con amortizaciones ya contabilizadas. Cambiar las cuentas no modifica esos asientos: las próximas amortizaciones y la baja usarán la cuenta nueva y el saldo acumulado hasta hoy queda en la anterior. Si hace falta, el contador lo reclasifica con un asiento manual." Los conteos `_VehicleTypesTable.tsx` (legacy, usa `getAllVehicleTypes` con `include`) no se tocaron. `prettier --write` sobre los archivos tocados también ordenó imports preexistentes en `actions.server.ts`, `columns.tsx` y el modal (ruido mínimo). `vitest` vehicle-types + equipment/shared: 24 tests verdes; eslint y prettier limpios; `check-types` 219 = base. La verificación en navegador (crear "Camión" con tres cuentas → "Propias", vaciar una → "2/3 propias", aviso con equipo amortizado) queda para la fase 9.
 
 ### Fase 4: Depreciación
-- **Estado:** Pendiente
+- **Estado:** Completada (2026-09-19)
+- **Archivos creados:**
+  - `src/modules/equipment/features/depreciation/asset-accounts.integration.test.ts` - 11 tests contra la base real (rojo primero), andamiaje de `fund-movement-partner-account.integration.test.ts` + `vi.mock('server-only')` (el loader lo importa y no resuelve bajo Node). Empresa/cuentas/tipos/4 equipos con 3 períodos cada uno bajo prefijo `TSK724C-TEST-`. Casos: cuentas del tipo; override solo del gasto (independencia por cuenta) + `getVehicleAssetAccounts` con `source`/`fallbacks`; caída a las por defecto; sin acumulada → `{ success:false }` con equipo, cuenta, tipo y "Contabilidad → Configuración", sin asiento ni `isPosted`; cuenta del tipo inactiva → error con `code` y "Empresa → Tipos de Equipo", sin caer a la global; secuencia como dato; masiva con `sinNada` sin cuentas → `posted: 4`, `errors[0]` lo nombra y `vehiclesWithoutAccounts` lo avisa antes; `updateDepreciationAccounts` con períodos contabilizados guarda, no toca el cronograma y el próximo período usa la nueva; cuenta ajena → error como dato; masiva sin pendientes.
+  - `src/modules/equipment/features/depreciation/validators.test.ts` - 3 tests de `depreciationAccountsSchema` (UUID/null/ausente → null; mensaje en español) y regresión de `depreciationConfigSchema`.
+  - `src/modules/equipment/features/depreciation/components/_DepreciationAccountsCard.tsx` (128 líneas) - card "Cuentas contables": `useQuery(['vehicleAssetAccounts', vehicleId])`, tres filas `code - name` + badge de origen ("de la depreciación del equipo" / "del tipo de equipo «Camión»" / "por defecto (Ajustes contables)"), badge rojo "no imputable", "Sin cuenta — asignala acá, en el tipo de equipo «…» o en Contabilidad → Configuración" en rojo; nota fija sobre la compra del ítem; botón "Editar cuentas" con `hasPermission('equipment','update')`; monta el diálogo e invalida `vehicleAssetAccounts` y `vehicleDepreciation`.
+  - `src/modules/equipment/features/depreciation/components/_DepreciationAccountsDialog.tsx` (177 líneas) - tres `AccountCombobox` (Activo para Bienes de Uso y Amortización acumulada, Gasto para el gasto; `clearLabel` "Sin asignar (usar la del tipo de equipo o la por defecto)"), `useQuery(['depreciation-account-options', savedIds])`, ayuda por campo "Si queda vacía se usa {cuenta} — del tipo de equipo «…»" o en rojo "Si queda vacía no hay cuenta: configurala en …", aviso naranja si `isDirty && postedCount > 0`, Guardar → `updateDepreciationAccounts`, `if (!result.success) toast.error(result.error)`.
+- **Archivos modificados:**
+  - `depreciation/validators.ts` + `index.ts` - `depreciationAccountsSchema` (`z.string().uuid().nullish()` → `null`) y `DepreciationAccountsInput`. `depreciationConfigSchema` sin cambios.
+  - `depreciation/actions.server.ts` - sección "CUENTAS DE BIENES DE USO": `getVehicleAssetAccounts(vehicleId): Promise<VehicleAssetAccounts>` (plano: `overrides`, `accounts` y `fallbacks` por clave con `{ accountId, code, name, source, imputable }`, `postedCount`, `depreciationId`), `getDepreciationAccountOptions(includeIds?) → { asset, expense }` con `buildImputableAccountsWhere`, `updateDepreciationAccounts(depreciationId, input): Promise<ActionResult>` (no bloquea por períodos, `assertAccountsBelongToCompany` → `BusinessError`, `logger.info` con before/after/postedCount). `postDepreciationEntry(id): Promise<ActionResult<{ journalEntryId; journalEntryNumber }>>` y `postAllPendingDepreciations(upToDate): Promise<ActionResult<{ posted; errors: BulkDepreciationError[] }>>` con `loadVehicle(s)AssetAccounts` + `assertAssetAccountsForOperation(...,'depreciation')` ANTES de `$transaction`, `BusinessError` para todos los motivos de negocio (incl. período bloqueado, con `loaded.lockedUntilDate`) y `toActionResult` en el catch. El asiento + marcas se extrajo a `postEntryTx` (privada, compartida por individual y masiva; misma descripción y líneas). `getPendingDepreciationsSummary` suma `vehiclesWithoutAccounts: { vehicleId, vehicleLabel, message }[]`.
+  - `components/_DepreciationTab.tsx` - monta `<_DepreciationAccountsCard>` entre resumen y cronograma; `postMutation.onSuccess` hace `if (!result.success) toast.error(result.error)`, invalida también `vehicleAssetAccounts`; `onError` solo "No se pudo contactar al servidor".
+  - `list/components/_BulkDepreciationDialog.tsx` (192 líneas) - `resultErrors: BulkDepreciationError[]` (se limpia al reabrir/cambiar fecha); aviso naranja previo "Estos equipos se van a omitir por falta de cuentas contables" con los mensajes de `vehiclesWithoutAccounts`; tras contabilizar con errores no se cierra: `Alert` destructivo "{N} equipo(s)/período(s) no se pudieron contabilizar" con la lista (scroll `max-h-60`) y botón "Cerrar".
+- **Notas:**
+  - **Desvíos respecto del plan:** `errors[]` de la masiva es `{ vehicleId, label, message }[]` (indicación del orquestador) en vez de `string[]`. No se agregaron las tres cuentas a `depreciationConfigSchema`/`createVehicleDepreciation`/`updateVehicleDepreciation` ni el `Collapsible` en `_DepreciationConfigDialog` (tareas sin marcar): el override se edita solo desde la card, que aparece apenas se configura la depreciación; evita un segundo camino de escritura. `_DepreciationAccountsFields.tsx` no se creó (los combos viven en el diálogo, 177 líneas). `VehicleAssetAccounts` no incluye `assetDisposalGainLoss` (fase 5 si lo necesita) y suma `fallbacks` (qué se usaría con el override vacío), que el diálogo usa para la ayuda por campo.
+  - `getVehicleAssetAccounts` hace 2 queries extra (settings + cuentas de respaldo no resueltas) para `fallbacks`; imputabilidad de esas con el mismo criterio que `buildImputableAccountsWhere` (hoja, activa, sin corte vigente).
+  - Se quitó el BOM inicial de `actions.server.ts` (línea 1). Los avisos de `prettier --check` que quedan en `actions.server.ts`, `validators.ts` y `_DepreciationTab.tsx` son preexistentes en HEAD (orden de imports, comas finales) y ajenos a las líneas tocadas; los archivos nuevos y `_BulkDepreciationDialog.tsx` están formateados. ESLint limpio en lo tocado (los 2 warnings de `_DepreciationConfigDialog.tsx` son preexistentes). `check-types` 219 = base. `npx vitest run src/modules/equipment`: 3 archivos, 30 tests verdes.
+  - Pendiente para fase 9: verificar en navegador y en build de producción (`npm run build && npm run start`) que el toast muestre el mensaje completo. Ningún consumidor de `postDepreciationEntry`/`postAllPendingDepreciations` quedó con el `try/catch` viejo (grep: solo `_DepreciationTab` y `_BulkDepreciationDialog`).
 
 ### Fase 5: Bajas y ajuste de valor
 - **Estado:** Pendiente

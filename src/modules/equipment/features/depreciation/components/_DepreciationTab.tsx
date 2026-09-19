@@ -46,6 +46,7 @@ import {
   toggleDepreciationStatus,
   deleteVehicleDepreciation,
 } from '../actions.server';
+import { _DepreciationAccountsCard } from './_DepreciationAccountsCard';
 import { _DepreciationConfigDialog } from './_DepreciationConfigDialog';
 import { _ValueAdjustmentDialog } from './_ValueAdjustmentDialog';
 import { createColumnHelper } from '@tanstack/react-table';
@@ -98,12 +99,18 @@ export function _DepreciationTab({ vehicleId, vehiclePrice }: Props) {
   const postMutation = useMutation({
     mutationFn: postDepreciationEntry,
     onSuccess: (result) => {
+      // Los motivos de negocio (sin cuentas, período bloqueado, secuencia) viajan como dato.
+      if (!result.success) {
+        toast.error(result.error);
+        return;
+      }
       toast.success(`Período contabilizado (Asiento #${result.journalEntryNumber})`);
       queryClient.invalidateQueries({ queryKey: ['vehicleDepreciation', vehicleId] });
+      queryClient.invalidateQueries({ queryKey: ['vehicleAssetAccounts', vehicleId] });
       router.refresh();
     },
-    onError: (error: Error) => {
-      toast.error(error.message);
+    onError: () => {
+      toast.error('No se pudo contactar al servidor');
     },
     onSettled: () => {
       setPostingEntryId(null);
@@ -388,6 +395,9 @@ export function _DepreciationTab({ vehicleId, vehiclePrice }: Props) {
           </div>
         </CardContent>
       </Card>
+
+      {/* Cuentas contables (TSK-724c) */}
+      <_DepreciationAccountsCard vehicleId={vehicleId} />
 
       {/* Schedule */}
       <Card>
