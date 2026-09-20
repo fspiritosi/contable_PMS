@@ -423,10 +423,36 @@ function refineCheckPayment(
   }
 }
 
-// Schema para pago de recibo (forma de pago) — el emisor del cheque (cliente o tercero) es requerido
+/**
+ * Efectivo sin caja y transferencia/débito sin banco no mueven fondos ni tienen
+ * cuenta para el asiento (TSK-728): no se deja crear el borrador así. En OP el
+ * débito puede ser con tarjeta de un socio (la empresa no mueve banco), por eso
+ * `requireBankForDebitCard` es opcional; ahí lo decide la pre-validación al confirmar.
+ */
+function refineFundsSourcePayment(
+  data: { paymentMethod: string; cashRegisterId?: string | null; bankAccountId?: string | null },
+  ctx: z.RefinementCtx,
+  options: { requireBankForDebitCard: boolean }
+) {
+  if (data.paymentMethod === 'CASH' && !data.cashRegisterId) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['cashRegisterId'], message: 'Debe seleccionar la caja' });
+  }
+  const requiresBank =
+    data.paymentMethod === 'TRANSFER' ||
+    (data.paymentMethod === 'DEBIT_CARD' && options.requireBankForDebitCard);
+  if (requiresBank && !data.bankAccountId) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['bankAccountId'], message: 'Debe seleccionar la cuenta bancaria' });
+  }
+}
+
+// Schema para pago de recibo (forma de pago) — el emisor del cheque (cliente o tercero) es requerido;
+// el débito siempre entra a un banco propio, así que la cuenta bancaria es obligatoria
 export const receiptPaymentSchema = z
   .object(basePaymentFields)
-  .superRefine((data, ctx) => refineCheckPayment(data, ctx, { requireDrawer: true }));
+  .superRefine((data, ctx) => {
+    refineCheckPayment(data, ctx, { requireDrawer: true });
+    refineFundsSourcePayment(data, ctx, { requireBankForDebitCard: true });
+  });
 
 // Schema para crear recibo
 export const createReceiptSchema = z
@@ -440,7 +466,8 @@ export const createReceiptSchema = z
   })
   .refine(
     (data) => {
-      // Sin pagos ni retenciones es válido (se vincula después a movimiento bancario)
+      // Sin pagos ni retenciones el borrador es válido, pero la confirmación lo rechaza:
+      // el asiento quedaría con una sola línea (TSK-728)
       if (data.payments.length === 0 && data.withholdings.length === 0) return true;
       // Con pagos/retenciones, validar que el total sea igual al de facturas
       // Usar multiplicación por 100 y redondeo para evitar errores de punto flotante con montos grandes
@@ -529,6 +556,7 @@ export const paymentOrderPaymentSchema = z
   .superRefine((data, ctx) => {
     refineCheckPayment(data, ctx, { requireDrawer: false, allowOwnership: true });
     refineCardPayment(data, ctx);
+    refineFundsSourcePayment(data, ctx, { requireBankForDebitCard: false });
   });
 
 // Schema para crear orden de pago
@@ -543,7 +571,8 @@ export const createPaymentOrderSchema = z
   })
   .refine(
     (data) => {
-      // Sin pagos ni retenciones es válido (se vincula después a movimiento bancario)
+      // Sin pagos ni retenciones el borrador es válido, pero la confirmación lo rechaza:
+      // el asiento quedaría con una sola línea (TSK-728)
       if (data.payments.length === 0 && data.withholdings.length === 0) return true;
       // Con pagos/retenciones, validar que el total sea igual al de facturas
       // Usar multiplicación por 100 y redondeo para evitar errores de punto flotante con montos grandes

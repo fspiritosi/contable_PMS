@@ -12,6 +12,7 @@ import { Button } from '@/shared/components/ui/button';
 import { Label } from '@/shared/components/ui/label';
 import { Switch } from '@/shared/components/ui/switch';
 import { usePermissions } from '@/shared/hooks/usePermissions';
+import { ACCOUNTING_SETTINGS_ACCOUNT_LABELS } from '@/shared/lib/accounts/settings-account-labels';
 import { logger } from '@/shared/lib/logger';
 
 import { getAccountingSettings, saveAccountingSettings } from '../actions.server';
@@ -51,7 +52,8 @@ interface SectionDef {
 /**
  * Las cuentas por defecto, declaradas una sola vez. Antes cada campo era un
  * bloque de ~22 líneas repetido 23 veces, lo que hacía fácil olvidar uno
- * (así se coló TSK-492).
+ * (así se coló TSK-492). El `label` de cada una sale de `shared/lib` (TSK-728)
+ * para que los mensajes de error de los comprobantes digan el mismo texto.
  */
 const SECTIONS: SectionDef[] = [
   {
@@ -59,19 +61,19 @@ const SECTIONS: SectionDef[] = [
     fields: [
       {
         name: 'salesAccountId',
-        label: 'Cuenta de ventas por defecto',
+        label: ACCOUNTING_SETTINGS_ACCOUNT_LABELS.salesAccountId,
         types: ['REVENUE'],
         help: 'Se usa en las líneas de facturas de venta cuyo ítem no tiene Cuenta de Ingresos propia (Ítems → Imputación contable). Si todos los ítems de venta tienen la suya, puede quedar sin asignar.',
       },
       {
         name: 'purchasesAccountId',
-        label: 'Cuenta de compras por defecto',
+        label: ACCOUNTING_SETTINGS_ACCOUNT_LABELS.purchasesAccountId,
         types: ['EXPENSE'],
         help: 'Se usa en las líneas de facturas de compra cuyo ítem no tiene Cuenta de Egresos propia y en las líneas sin ítem (gastos no inventariables, comprobantes importados de AFIP). Si cargás compras sin ítem, tiene que estar asignada.',
       },
       {
         name: 'expensesAccountId',
-        label: 'Cuenta de Gastos Operativos',
+        label: ACCOUNTING_SETTINGS_ACCOUNT_LABELS.expensesAccountId,
         types: ['EXPENSE'],
         help: 'Se usa al confirmar gastos operativos (Debe)',
       },
@@ -82,13 +84,13 @@ const SECTIONS: SectionDef[] = [
     fields: [
       {
         name: 'receivablesAccountId',
-        label: 'Cuentas por Cobrar',
+        label: ACCOUNTING_SETTINGS_ACCOUNT_LABELS.receivablesAccountId,
         types: ['ASSET'],
         help: 'Se usa en facturas de venta (Debe) y recibos (Haber)',
       },
       {
         name: 'payablesAccountId',
-        label: 'Cuentas por Pagar',
+        label: ACCOUNTING_SETTINGS_ACCOUNT_LABELS.payablesAccountId,
         types: ['LIABILITY'],
         help: 'Se usa en facturas de compra (Haber) y órdenes de pago (Debe)',
       },
@@ -99,13 +101,13 @@ const SECTIONS: SectionDef[] = [
     fields: [
       {
         name: 'vatDebitAccountId',
-        label: 'IVA Débito Fiscal',
+        label: ACCOUNTING_SETTINGS_ACCOUNT_LABELS.vatDebitAccountId,
         types: ['LIABILITY'],
         help: 'IVA de ventas (Haber)',
       },
       {
         name: 'vatCreditAccountId',
-        label: 'IVA Crédito Fiscal',
+        label: ACCOUNTING_SETTINGS_ACCOUNT_LABELS.vatCreditAccountId,
         types: ['ASSET'],
         help: 'IVA de compras (Debe)',
       },
@@ -116,19 +118,19 @@ const SECTIONS: SectionDef[] = [
     fields: [
       {
         name: 'defaultCashAccountId',
-        label: 'Caja por Defecto',
+        label: ACCOUNTING_SETTINGS_ACCOUNT_LABELS.defaultCashAccountId,
         types: ['ASSET'],
         help: 'Se usa si la caja no tiene cuenta específica asignada',
       },
       {
         name: 'defaultBankAccountId',
-        label: 'Banco por Defecto',
+        label: ACCOUNTING_SETTINGS_ACCOUNT_LABELS.defaultBankAccountId,
         types: ['ASSET'],
         help: 'Se usa si la cuenta bancaria no tiene cuenta específica asignada',
       },
       {
         name: 'bankChargesAccountId',
-        label: 'Gastos bancarios por defecto',
+        label: ACCOUNTING_SETTINGS_ACCOUNT_LABELS.bankChargesAccountId,
         types: ['EXPENSE'],
         help: 'Se preselecciona en cada concepto de un movimiento "Gastos e impuestos bancarios". Podés cambiarla concepto por concepto; los conceptos que son activo (Sircreb) se eligen a mano.',
       },
@@ -139,13 +141,13 @@ const SECTIONS: SectionDef[] = [
     fields: [
       {
         name: 'resultAccountId',
-        label: 'Cuenta de Resultado del Ejercicio',
+        label: ACCOUNTING_SETTINGS_ACCOUNT_LABELS.resultAccountId,
         types: ['EQUITY'],
         help: 'Cuenta de Patrimonio Neto donde se registra el resultado al cerrar el ejercicio fiscal',
       },
       {
         name: 'partnerContributionsAccountId',
-        label: 'Cuenta de aportes de socios por defecto',
+        label: ACCOUNTING_SETTINGS_ACCOUNT_LABELS.partnerContributionsAccountId,
         types: ['EQUITY'],
         help: 'Cuenta de Patrimonio Neto usada en los aportes y retiros de los socios que no tienen una cuenta de aportes propia (se asigna en Tesorería → Socios). Si todos los socios tienen la suya, este campo puede quedar sin asignar.',
       },
@@ -156,14 +158,26 @@ const SECTIONS: SectionDef[] = [
     description:
       'Cuentas de Pasivo donde se registran las retenciones que la empresa emite al pagar a proveedores',
     fields: [
-      { name: 'withholdingIvaEmittedAccountId', label: 'Ret. IVA Emitida', types: ['LIABILITY'] },
       {
-        name: 'withholdingGananciasEmittedAccountId',
-        label: 'Ret. Ganancias Emitida',
+        name: 'withholdingIvaEmittedAccountId',
+        label: ACCOUNTING_SETTINGS_ACCOUNT_LABELS.withholdingIvaEmittedAccountId,
         types: ['LIABILITY'],
       },
-      { name: 'withholdingIibbEmittedAccountId', label: 'Ret. IIBB Emitida', types: ['LIABILITY'] },
-      { name: 'withholdingSussEmittedAccountId', label: 'Ret. SUSS Emitida', types: ['LIABILITY'] },
+      {
+        name: 'withholdingGananciasEmittedAccountId',
+        label: ACCOUNTING_SETTINGS_ACCOUNT_LABELS.withholdingGananciasEmittedAccountId,
+        types: ['LIABILITY'],
+      },
+      {
+        name: 'withholdingIibbEmittedAccountId',
+        label: ACCOUNTING_SETTINGS_ACCOUNT_LABELS.withholdingIibbEmittedAccountId,
+        types: ['LIABILITY'],
+      },
+      {
+        name: 'withholdingSussEmittedAccountId',
+        label: ACCOUNTING_SETTINGS_ACCOUNT_LABELS.withholdingSussEmittedAccountId,
+        types: ['LIABILITY'],
+      },
     ],
   },
   {
@@ -171,14 +185,26 @@ const SECTIONS: SectionDef[] = [
     description:
       'Cuentas de Activo donde se registran las retenciones que los clientes aplican a la empresa',
     fields: [
-      { name: 'withholdingIvaSufferedAccountId', label: 'Ret. IVA Sufrida', types: ['ASSET'] },
       {
-        name: 'withholdingGananciasSufferedAccountId',
-        label: 'Ret. Ganancias Sufrida',
+        name: 'withholdingIvaSufferedAccountId',
+        label: ACCOUNTING_SETTINGS_ACCOUNT_LABELS.withholdingIvaSufferedAccountId,
         types: ['ASSET'],
       },
-      { name: 'withholdingIibbSufferedAccountId', label: 'Ret. IIBB Sufrida', types: ['ASSET'] },
-      { name: 'withholdingSussSufferedAccountId', label: 'Ret. SUSS Sufrida', types: ['ASSET'] },
+      {
+        name: 'withholdingGananciasSufferedAccountId',
+        label: ACCOUNTING_SETTINGS_ACCOUNT_LABELS.withholdingGananciasSufferedAccountId,
+        types: ['ASSET'],
+      },
+      {
+        name: 'withholdingIibbSufferedAccountId',
+        label: ACCOUNTING_SETTINGS_ACCOUNT_LABELS.withholdingIibbSufferedAccountId,
+        types: ['ASSET'],
+      },
+      {
+        name: 'withholdingSussSufferedAccountId',
+        label: ACCOUNTING_SETTINGS_ACCOUNT_LABELS.withholdingSussSufferedAccountId,
+        types: ['ASSET'],
+      },
     ],
   },
   {
@@ -186,15 +212,19 @@ const SECTIONS: SectionDef[] = [
     description:
       'Cuentas de Pasivo donde se registran las percepciones que la empresa cobra a sus clientes',
     fields: [
-      { name: 'perceptionIvaCollectedAccountId', label: 'Perc. IVA Cobrada', types: ['LIABILITY'] },
+      {
+        name: 'perceptionIvaCollectedAccountId',
+        label: ACCOUNTING_SETTINGS_ACCOUNT_LABELS.perceptionIvaCollectedAccountId,
+        types: ['LIABILITY'],
+      },
       {
         name: 'perceptionIibbCollectedAccountId',
-        label: 'Perc. IIBB Cobrada',
+        label: ACCOUNTING_SETTINGS_ACCOUNT_LABELS.perceptionIibbCollectedAccountId,
         types: ['LIABILITY'],
       },
       {
         name: 'perceptionMunicipalCollectedAccountId',
-        label: 'Perc. Municipal Cobrada',
+        label: ACCOUNTING_SETTINGS_ACCOUNT_LABELS.perceptionMunicipalCollectedAccountId,
         types: ['LIABILITY'],
       },
     ],
@@ -204,11 +234,19 @@ const SECTIONS: SectionDef[] = [
     description:
       'Cuentas de Activo donde se registran las percepciones que los proveedores aplican a la empresa',
     fields: [
-      { name: 'perceptionIvaSufferedAccountId', label: 'Perc. IVA Sufrida', types: ['ASSET'] },
-      { name: 'perceptionIibbSufferedAccountId', label: 'Perc. IIBB Sufrida', types: ['ASSET'] },
+      {
+        name: 'perceptionIvaSufferedAccountId',
+        label: ACCOUNTING_SETTINGS_ACCOUNT_LABELS.perceptionIvaSufferedAccountId,
+        types: ['ASSET'],
+      },
+      {
+        name: 'perceptionIibbSufferedAccountId',
+        label: ACCOUNTING_SETTINGS_ACCOUNT_LABELS.perceptionIibbSufferedAccountId,
+        types: ['ASSET'],
+      },
       {
         name: 'perceptionMunicipalSufferedAccountId',
-        label: 'Perc. Municipal Sufrida',
+        label: ACCOUNTING_SETTINGS_ACCOUNT_LABELS.perceptionMunicipalSufferedAccountId,
         types: ['ASSET'],
       },
     ],
@@ -219,7 +257,7 @@ const SECTIONS: SectionDef[] = [
     fields: [
       {
         name: 'internalTaxesAccountId',
-        label: 'Impuestos Internos',
+        label: ACCOUNTING_SETTINGS_ACCOUNT_LABELS.internalTaxesAccountId,
         types: ['EXPENSE', 'LIABILITY'],
         help: 'En compras suele ser una cuenta de resultado (mayor costo); en ventas, un pasivo a depositar',
       },
@@ -232,25 +270,25 @@ const SECTIONS: SectionDef[] = [
     fields: [
       {
         name: 'fixedAssetAccountId',
-        label: 'Cuenta de Bienes de Uso por defecto',
+        label: ACCOUNTING_SETTINGS_ACCOUNT_LABELS.fixedAssetAccountId,
         types: ['ASSET'],
         help: 'Se usa en la baja y en el ajuste de valor de los equipos que no tienen cuenta en su depreciación ni en su Tipo de Equipo. Conviene que sea la misma cuenta a la que se imputó la compra del bien (Ítems → Imputación contable).',
       },
       {
         name: 'accumulatedDepreciationAccountId',
-        label: 'Amortización acumulada por defecto',
+        label: ACCOUNTING_SETTINGS_ACCOUNT_LABELS.accumulatedDepreciationAccountId,
         types: ['ASSET'],
         help: 'Se usa en la amortización mensual y en la baja de los equipos sin cuenta propia ni de tipo.',
       },
       {
         name: 'depreciationExpenseAccountId',
-        label: 'Gasto de amortización por defecto',
+        label: ACCOUNTING_SETTINGS_ACCOUNT_LABELS.depreciationExpenseAccountId,
         types: ['EXPENSE'],
         help: 'Se usa en la amortización mensual de los equipos sin cuenta propia ni de tipo. Suele ir por función (explotación, administración), no por rubro.',
       },
       {
         name: 'assetDisposalGainLossAccountId',
-        label: 'Resultado por venta/baja de Bienes de Uso',
+        label: ACCOUNTING_SETTINGS_ACCOUNT_LABELS.assetDisposalGainLossAccountId,
         types: ['REVENUE', 'EXPENSE'],
         help: 'Única para todos los equipos: recibe el valor libro no amortizado en la baja y la diferencia en los ajustes de valor. Sin esta cuenta la baja y el ajuste no se pueden contabilizar.',
       },
