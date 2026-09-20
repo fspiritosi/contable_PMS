@@ -737,7 +737,7 @@ Cada documento comercial confirmado genera un asiento contable automático:
   cuenta, período cerrado, o un fallo inesperado) aborta la transacción, la factura sigue en
   `DRAFT` sin `journalEntryId` y el usuario ve el mensaje. Antes, la factura quedaba `CONFIRMED`
   **sin asiento** y nadie se enteraba (`prisma/scripts/diagnose-invoices-without-entry.ts` lista
-  las históricas, solo lectura).
+  las históricas de facturas y, desde TSK-728, de recibos/OP/gastos; solo lectura).
 - **Recibos, órdenes de pago, gastos y movimientos bancarios manuales**: siguen siendo
   no-bloqueantes (warning y la operación continúa). Pendiente de alinear.
 

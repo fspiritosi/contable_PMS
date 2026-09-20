@@ -1206,7 +1206,7 @@ base) y en los tres tests de integración contra la base de dev (fases 2-4): el 
   sin asiento (el conteo de dev es 0, 1.2.6), con el mismo script y el mismo SQL de header que
   ya usa el chequeo post-deploy de 721.
 - **Tareas:**
-  - [ ] `prisma/scripts/diagnose-invoices-without-entry.ts`:
+  - [x] `prisma/scripts/diagnose-invoices-without-entry.ts`:
     - Header (`:1-88`): título «Diagnóstico de comprobantes confirmados SIN asiento contable
       (TSK-721 facturas, TSK-728 recibos/OP/gastos)»; sumar al SQL 1) las tres ramas del análisis
       1.2.6 (`RECIBO`, `OP`, `GASTO`) con `status::text` y `date::date`, alineando columnas con
@@ -1231,7 +1231,7 @@ base) y en los tres tests de integración contra la base de dev (fases 2-4): el 
       filas para los tres tipos nuevos y las 8 compras históricas ya conocidas) y el SQL 1) y 3)
       con `docker exec contable-pms-db psql -U postgres -d contable_pms` para verificar que no
       hay errores de columnas ni de casteo de enums.
-  - [ ] `docs/infrastructure/deployment.md:32-38`: la viñeta pasa a «Comprobantes confirmados
+  - [x] `docs/infrastructure/deployment.md:32-38`: la viñeta pasa a «Comprobantes confirmados
         sin asiento (facturas TSK-721; recibos, OP y gastos TSK-728)» y agrega que el SQL 3)
         dice qué medios de pago se usan (insumo del ticket de seguimiento).
 - **Archivos:**
@@ -1588,7 +1588,60 @@ _Pendiente - ejecutar `/disenar tsk-728-recibos-op-gastos-asiento-sin-silencio`_
 
 ### Fase 5: Script de diagnóstico
 
-**Estado:** Pendiente.
+**Estado:** Completada (2026-09-20).
+
+**Archivos modificados:**
+- `prisma/scripts/diagnose-invoices-without-entry.ts` (nombre sin cambios; el plan dice
+  "Modificar", y `docs/` y el plan de 721 lo referencian por ese nombre). Solo lectura: cinco
+  `findMany` (`salesInvoice`/`purchaseInvoice` `status notIn [DRAFT,CANCELLED]`; `receipt` y
+  `paymentOrder` `status: 'CONFIRMED'`, la OP con `partnerId: null`; `expense` `status notIn`)
+  con `journalEntryId: null`; `findPartnerOrdersWithoutEntry` (OP a socio, sección aparte
+  "NO ES PROBLEMA"); `reportPaymentMethods` (`groupBy paymentMethod` con `_count`/`_sum` sobre
+  `receiptPayment`/`paymentOrderPayment` de comprobantes CONFIRMED, y `count` de recibos/OP con
+  algún pago en `CHECK`/`CREDIT_CARD`/`ACCOUNT`). `DocumentKind` de cinco valores,
+  `DocumentWithoutEntry` con `voucherType: string | null`, `CompanySummary.byKind`. Header con
+  los seis bloques SQL para `psql` (1 detalle UNION, 2 OP a socio, 3 resumen, 4 uso por medio,
+  5 comprobantes con medio sin cuenta, 6 ítems sin cuenta de 721).
+- `docs/infrastructure/deployment.md`: viñeta «Comprobantes confirmados sin asiento (facturas
+  TSK-721; recibos, OP y gastos TSK-728)» con los seis bloques y el insumo del seguimiento.
+- `docs/modules/accounting.md`, `docs/modules/commercial.md`: la mención al script dice que
+  también cubre recibos/OP/gastos (el resto de esas secciones es de la Fase 6).
+
+**Desvíos respecto del plan:**
+- `voucher_type` es un enum en Postgres: el SQL 1) necesita `s.voucher_type::text` /
+  `p.voucher_type::text` además de `NULL::text` en las otras ramas (el header de 721 no lo
+  casteaba porque las dos ramas compartían el enum). Detectado al correr el SQL en psql.
+- Las "8 compras históricas ya conocidas" del plan no aparecen: en dev `purchase_invoices` tiene
+  5 DRAFT y 3 CONFIRMED con asiento, así que el detalle da 0 filas (correcto).
+- Sección 2 (OP a socio) sumada al script y al SQL, para que en prod se vea cuántas hay sin
+  contarlas como problema; y SQL 5) (comprobantes con medio sin cuenta) además del 4) por medio.
+
+**Verificación:**
+- `npx tsx prisma/scripts/diagnose-invoices-without-entry.ts` en dev (base `contable-pms-db`,
+  `receipts`/`payment_orders`/`expenses`/`receipt_payments`/`payment_order_payments` en 0 filas):
+
+  ```
+  === Diagnóstico de comprobantes confirmados sin asiento (TSK-721 / TSK-728) ===
+  (solo lectura: no se corrige nada)
+
+  --- 1) PROBLEMA: comprobantes confirmados SIN asiento contable ---
+  (VENTA/COMPRA/GASTO: no DRAFT ni CANCELLED; RECIBO/OP: CONFIRMED; OP a socio excluidas, ver 2)
+
+  Ninguno. Nada que revisar.
+
+  --- 2) NO ES PROBLEMA: OP a socio confirmadas sin asiento (sin asiento por diseño) ---
+  Ninguna.
+
+  --- 3) Uso de medios de pago en recibos y OP CONFIRMADOS (con o sin asiento) ---
+  Ninguno: no hay pagos en recibos ni OP confirmados.
+
+  Con al menos un pago SIN cuenta contable definida hoy (CHECK, CREDIT_CARD, ACCOUNT): RECIBO 0 | OP 0.
+  ```
+- Los seis bloques SQL del header corridos con `docker exec -i contable-pms-db psql -U postgres
+  -d contable_pms` (solo SELECT): 1) 0 filas con columnas `tipo, empresa, numero, voucher_type,
+  fecha, tercero, total, status, id`; 2) 0 filas; 3) 0 filas; 4) 0 filas; 5) `RECIBO 0 / OP 0`;
+  sin errores de columnas ni de enums.
+- `check-types` en 219 (línea base, sin errores en el script); ESLint y Prettier limpios.
 
 ### Fase 6: Documentación
 

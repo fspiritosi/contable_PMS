@@ -259,7 +259,8 @@ Implementacion:
   `{ success: false, error }` (ver [Errores de negocio en Server Actions](../conventions/coding-standards.md#errores-de-negocio-en-server-actions)).
   Antes de TSK-721 una factura con linea sin cuenta quedaba `CONFIRMED` con `journalEntryId = null`
   en silencio; `prisma/scripts/diagnose-invoices-without-entry.ts` (solo lectura, SQL en el header)
-  lista las historicas.
+  lista las historicas (y desde TSK-728 tambien recibos, OP y gastos sin asiento, mas el uso de
+  medios de pago).
 
 **Visibilidad de items sin cuenta**: `getItemsWithoutAccountCounts(companyId)` en
 `features/settings/actions.server.ts` (`checkPermission('accounting.settings','view')`, dos
