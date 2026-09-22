@@ -57,9 +57,9 @@ Se generan al confirmar documentos comerciales (ver [Modulo Comercial](commercia
 - Facturas de venta/compra (incluyen una linea por percepcion y otra por impuestos internos, TSK-644;
   la cuenta de cada linea es la del item o la "por defecto" de configuracion, y si falta la
   confirmacion se bloquea, TSK-721 — ver [Resolucion de la cuenta de linea](#resolucion-de-la-cuenta-de-linea-tsk-721))
-- Recibos de cobro
-- Ordenes de pago
-- Gastos
+- Recibos de cobro, ordenes de pago y gastos (desde TSK-728 la confirmacion se bloquea si falta
+  una cuenta; los medios de pago sin cuenta se omiten con aviso — ver
+  [Asientos de recibos, OP y gastos](#asientos-de-recibos-op-y-gastos-tsk-728))
 
 Y desde el modulo Equipos (ver [Integracion Contable de Equipamiento](equipment.md#integracion-contable)):
 - Amortizacion mensual (`equipment/features/depreciation/actions.server.ts`, individual y masiva)
@@ -191,7 +191,7 @@ Permite bloquear periodos contables mensuales para evitar la creacion o modifica
 | Registrar (post) asiento borrador | Error: periodo bloqueado |
 | Revertir asiento | Error: periodo bloqueado |
 | Confirmar factura de venta/compra | La confirmacion falla con mensaje legible y se revierte: la factura sigue en `DRAFT` sin asiento (TSK-721: cualquier error del asiento bloquea) |
-| Confirmar recibo/OP/gasto | Documento se confirma, asiento automatico se omite con warning (pendiente de alinear con TSK-721) |
+| Confirmar recibo/OP/gasto | La confirmacion falla con mensaje legible y se revierte: el comprobante sigue en `DRAFT` sin asiento (TSK-728, mismo esquema que facturas) |
 | Contabilizar depreciacion | Error: periodo bloqueado |
 | Cierre fiscal | Auto-bloquea todos los meses del ejercicio |
 
@@ -203,20 +203,27 @@ Cuentas contables asignadas a funciones del sistema:
 |-------|---------|
 | `salesAccountId` | Ventas **por defecto**: solo las lineas de venta cuyo item no tiene `defaultIncomeAccountId`. Puede ser `null` si todos los items de venta tienen la suya (TSK-721) |
 | `purchasesAccountId` | Compras **por defecto**: items sin `defaultExpenseAccountId` y **lineas sin item** (gastos no inventariables, comprobantes importados de AFIP). Requerida mientras se carguen compras sin item (TSK-721) |
-| `receivablesAccountId` | Cuentas por Cobrar (requerida por el asiento de venta) |
-| `payablesAccountId` | Cuentas por Pagar (requerida por el asiento de compra) |
+| `receivablesAccountId` | Cuentas por Cobrar (requerida por el asiento de venta y de recibo) |
+| `payablesAccountId` | Cuentas por Pagar (requerida por el asiento de compra, de OP y de gasto) |
 | `vatDebitAccountId` | IVA Debito Fiscal |
 | `vatCreditAccountId` | IVA Credito Fiscal |
-| `defaultCashAccountId` | Caja (default) |
-| `defaultBankAccountId` | Banco (default) |
+| `defaultCashAccountId` | Caja **por defecto**: respaldo cuando la caja de un pago no tiene `CashRegister.accountId` (TSK-728) |
+| `defaultBankAccountId` | Banco **por defecto**: respaldo cuando la cuenta bancaria de un pago no tiene `BankAccount.accountId` (TSK-728) |
 | `bankChargesAccountId` | Gastos bancarios **por defecto** (TSK-718): preseleccion de la cuenta de cada concepto nuevo de un movimiento de fondos `BANK_CHARGES`. Es solo UI: el asiento usa `FundMovementLine.accountId`, no esta cuenta |
-| `expensesAccountId` | Gastos Operativos |
+| `expensesAccountId` | Gastos Operativos (requerida por el asiento del gasto, TSK-728) |
 | `resultAccountId` | Resultado del Ejercicio |
 
-Labels en `_CommercialIntegrationForm.tsx`: "Cuenta de ventas por defecto", "Cuenta de compras por
-defecto" (seccion Cuentas de Resultado) y "Gastos bancarios por defecto" (seccion Cuentas de
-Tesoreria, tipo `EXPENSE`). Las ayudas dicen cuando se usa cada una; la de compras avisa que tiene
-que estar asignada si se cargan compras sin item.
+**Labels**: la fuente unica es `src/shared/lib/accounts/settings-account-labels.ts`
+(`ACCOUNTING_SETTINGS_ACCOUNT_FIELDS`, 31 campos; `ACCOUNTING_SETTINGS_ACCOUNT_LABELS`;
+`ACCOUNTING_SETTINGS_PATH = 'Contabilidad → Configuración'`; `settingsAccountLabel(field)`).
+`_CommercialIntegrationForm.tsx` lee de ahi los `label` de `SECTIONS`, y los mensajes de error de
+`commercial` los citan textualmente («falta configurar "Cuentas por Cobrar" en Contabilidad →
+Configuración»); un test de `settings/validators.test.ts` verifica que cada `*AccountId` del
+schema tenga label (TSK-728). Ejemplos: "Cuenta de ventas por defecto", "Cuenta de compras por
+defecto" (seccion Cuentas de Resultado), "Cuentas por Cobrar", "Cuentas por Pagar", "Caja por
+Defecto", "Banco por Defecto", "Gastos bancarios por defecto" (seccion Cuentas de Tesoreria),
+"Cuenta de Gastos Operativos", "Ret. IVA Sufrida". Las ayudas dicen cuando se usa cada una; la de
+compras avisa que tiene que estar asignada si se cargan compras sin item.
 
 ### Resolucion de la cuenta de linea (TSK-721)
 
@@ -271,10 +278,46 @@ arriba del formulario: una fila por conteo > 0 con enlace «→ Ver» a
 `/dashboard/commercial/products?imputation=noIncome|noExpense&status=ACTIVE` (el enlace se oculta
 sin permiso `commercial.products.view`). Con ambos conteos en 0 no renderiza nada.
 
+### Asientos de recibos, OP y gastos (TSK-728)
+
+Hasta TSK-728 `createJournalEntryForReceipt` / `ForPaymentOrder` / `ForExpense` devolvian `null`
+si faltaba una cuenta global y hacian `continue` sobre los pagos o retenciones sin cuenta (asiento
+descuadrado que `validateBalance` rechazaba), y los tres confirm tragaban el error con
+`logger.warn`: el comprobante quedaba `CONFIRMED` con `journalEntryId = null`. Ahora:
+
+- Las tres devuelven `Promise<string>` y lanzan `BusinessError` donde antes habia `return null` o
+  `continue`. `getAccountingSettings` tambien lanza `BusinessError('No se encontró configuración
+  contable para la empresa. Configurala en Contabilidad → Configuración.')`; `getWithholdingAccountId`
+  resuelve el campo con `withholdingSettingsField(taxType, 'suffered' | 'emitted')`.
+- Recibo: Debe caja/banco de cada pago resuelto + Ret. Sufridas → Haber Cuentas por Cobrar **por el
+  importe contabilizable** (`total − omittedAmount`). OP: espejo con Cuentas por Pagar y Ret.
+  Emitidas; las OP a socio (`partnerId`) no generan asiento (sin cambio). Gasto: Debe Gastos
+  Operativos → Haber Cuentas por Pagar.
+- Los **medios de pago sin cuenta** (cheque fisico/propio/endosado, tarjeta de credito, tarjeta de
+  socio, "Cuenta Corriente") se clasifican como `omitted` (`classifyPayments`,
+  `commercial/shared/payment-accounts.ts`) y no generan linea; el confirm los devuelve en
+  `warnings[]` y el usuario los ve antes (dialogo) y despues (toast). Si ningun pago genera linea y
+  no hay retenciones, la pre-validacion bloquea (asiento de una sola linea). Cadena de resolucion
+  de caja/banco: cuenta propia → "Caja/Banco por Defecto" → `BusinessError` que nombra la caja o el
+  banco y donde configurarlo. Detalle y tabla por medio en
+  [Modulo Comercial](commercial.md#cuentas-de-medios-de-pago-tsk-728).
+- La pre-validacion corre **antes** de `prisma.$transaction` en `confirmReceipt` /
+  `confirmPaymentOrder` (`treasury/shared/entry-preflight.ts`, la misma funcion alimenta
+  `getReceiptEntryPreview` / `getPaymentOrderEntryPreview` para la vista previa del dialogo) y en
+  `confirmExpense` (`assertExpenseEntryAccounts`); el asiento repite los chequeos como defensa en
+  profundidad. Sin `try/catch` que trague: cualquier error aborta la transaccion y llega como
+  `{ success: false, error }`.
+- Seguimientos (`.planes/tsk-728-…md` 2.4): dar cuenta a cheques/tarjetas/socios
+  (`checksReceivedAccountId` existe sin UI), movimientos bancarios manuales y transferencias (siguen
+  no bloqueantes), `integrations/treasury/index.ts` sin llamadores, CMV.
+
 ### Cuentas de Retenciones (8 campos)
 
-- Emitidas: IVA, Ganancias, IIBB, SUSS
-- Sufridas: IVA, Ganancias, IIBB, SUSS
+- Emitidas: IVA, Ganancias, IIBB, SUSS ("Ret. IVA Emitida", …): las usan las OP
+- Sufridas: IVA, Ganancias, IIBB, SUSS ("Ret. IVA Sufrida", …): las usan los recibos
+
+Si un recibo u OP lleva una retencion cuyo tipo no tiene cuenta, la confirmacion se bloquea con el
+label del campo (TSK-728).
 
 ### Cuentas de Percepciones e Impuestos Internos (7 campos, TSK-644)
 

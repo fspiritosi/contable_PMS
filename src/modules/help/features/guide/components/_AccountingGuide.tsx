@@ -10,7 +10,6 @@ import {
   Link2,
   Lock,
   PiggyBank,
-  Receipt,
   RefreshCcw,
   Settings,
   TrendingDown,
@@ -26,6 +25,14 @@ import {
   CardTitle,
 } from '@/shared/components/ui/card';
 import { Separator } from '@/shared/components/ui/separator';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/shared/components/ui/table';
 
 export function _AccountingGuide() {
   return (
@@ -227,18 +234,26 @@ export function _AccountingGuide() {
                   importados de AFIP), porque esas líneas solo pueden usar la
                   cuenta por defecto.
                 </li>
-                <li>Deudores por Ventas</li>
-                <li>Proveedores</li>
+                <li>
+                  Cuentas por Cobrar y Cuentas por Pagar: las usan las facturas
+                  y también los recibos, las órdenes de pago y los egresos
+                </li>
                 <li>IVA Débito Fiscal e IVA Crédito Fiscal</li>
                 <li>
-                  Caja y Banco, y Gastos bancarios <strong>por defecto</strong>{' '}
-                  (se preselecciona en cada concepto de un movimiento de
-                  Gastos e impuestos bancarios; podés cambiarla en cada fila)
+                  Caja por Defecto y Banco por Defecto: se usan cuando la caja
+                  o la cuenta bancaria de un pago no tiene su propia cuenta
+                  contable (Tesorería → Cajas / Cuentas Bancarias)
                 </li>
-                <li>Gastos</li>
+                <li>
+                  Gastos bancarios <strong>por defecto</strong> (se preselecciona
+                  en cada concepto de un movimiento de Gastos e impuestos
+                  bancarios; podés cambiarla en cada fila)
+                </li>
+                <li>Cuenta de Gastos Operativos: la usa el asiento de cada egreso</li>
                 <li>
                   Retenciones (IVA, Ganancias, IIBB, SUSS - emitidas y
-                  sufridas)
+                  sufridas): cada tipo que uses en recibos u órdenes de pago
+                  necesita su cuenta
                 </li>
                 <li>
                   Resultado del Ejercicio y Aportes de Socios{' '}
@@ -270,10 +285,74 @@ export function _AccountingGuide() {
               sistema te avisa qué campo revisar.
             </li>
             <li>
-              Una vez configurado, cada factura, recibo u orden de pago
-              confirmado genera su asiento automáticamente
+              Una vez configurado, cada factura, recibo, orden de pago o
+              egreso confirmado genera su asiento automáticamente. Si falta
+              una cuenta requerida, la confirmación se rechaza y el mensaje
+              dice cuál y dónde cargarla
             </li>
           </ol>
+          <p className="font-medium mt-3">Qué cuentas exige cada comprobante</p>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Comprobante</TableHead>
+                <TableHead>Cuentas que tienen que estar cargadas</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow>
+                <TableCell className="font-medium">Factura de venta</TableCell>
+                <TableCell>
+                  Cuentas por Cobrar, IVA Débito Fiscal, la cuenta de cada
+                  línea (ítem o Cuenta de ventas por defecto)
+                </TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell className="font-medium">Factura de compra</TableCell>
+                <TableCell>
+                  Cuentas por Pagar, IVA Crédito Fiscal, la cuenta de cada
+                  línea (ítem o Cuenta de compras por defecto), percepciones e
+                  impuestos internos que lleve
+                </TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell className="font-medium">Recibo de cobro</TableCell>
+                <TableCell>
+                  Cuentas por Cobrar, la cuenta de cada caja o banco usado (o
+                  Caja / Banco por Defecto), la Ret. … Sufrida de cada
+                  retención
+                </TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell className="font-medium">Orden de pago</TableCell>
+                <TableCell>
+                  Cuentas por Pagar, la cuenta de cada caja o banco usado (o
+                  Caja / Banco por Defecto), la Ret. … Emitida de cada
+                  retención
+                </TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell className="font-medium">Egreso</TableCell>
+                <TableCell>Cuenta de Gastos Operativos y Cuentas por Pagar</TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+          <Alert>
+            <Info className="h-4 w-4" />
+            <AlertDescription>
+              <strong>Ningún comprobante se confirma sin asiento.</strong>{' '}
+              Antes, si faltaba una cuenta, una factura, un recibo, una orden
+              de pago o un egreso podía quedar confirmado sin asiento y sin
+              aviso. Ahora, en todos los casos, el sistema te frena con el
+              nombre exacto del campo que falta (tal como aparece en esta
+              pantalla) y el comprobante queda en Borrador. En recibos y
+              órdenes de pago, además, el diálogo de confirmar te muestra las
+              cuentas antes de que confirmes. Los pagos con cheque, tarjeta de
+              crédito, tarjeta de un socio o cuenta corriente todavía no
+              tienen cuenta en el sistema: se confirman con un aviso y ese
+              importe queda pendiente en Cuentas por Cobrar / Pagar.
+            </AlertDescription>
+          </Alert>
           <Alert>
             <Info className="h-4 w-4" />
             <AlertDescription>
@@ -760,8 +839,10 @@ export function _AccountingGuide() {
               asientos automáticos al confirmarse
             </li>
             <li>
-              <strong>Tesorería</strong>: los recibos y órdenes de pago generan
-              asientos automáticos al confirmarse
+              <strong>Tesorería</strong>: los recibos, las órdenes de pago y
+              los egresos generan asientos automáticos al confirmarse; si falta
+              una cuenta requerida, la confirmación se rechaza y el mensaje
+              dice cuál
             </li>
             <li>
               <strong>Dashboard</strong>: los reportes contables alimentan

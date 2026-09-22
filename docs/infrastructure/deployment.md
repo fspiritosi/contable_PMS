@@ -35,7 +35,9 @@ SQL que cada script documenta en su header.
   sin cuenta contable quedaba `CONFIRMED` con `journal_entry_id IS NULL` en silencio, y hasta
   TSK-728 pasaba lo mismo con recibos, ordenes de pago y gastos (cuenta de Cobrar/Pagar, caja,
   banco o retencion faltante, o medio de pago sin cuenta). Desde esos tickets la confirmacion se
-  bloquea, pero los historicos siguen en la base. El header del script trae el SQL para `psql`:
+  bloquea (los medios sin cuenta —cheque, tarjeta de credito, tarjeta de socio, cuenta corriente—
+  se confirman con aviso y asiento parcial: el importe queda en Cobrar/Pagar), pero los historicos
+  siguen en la base. El header del script trae el SQL para `psql`:
   1) detalle por empresa y fecha de los cinco tipos (VENTA, COMPRA, RECIBO, OP, GASTO; `status::text`
   y `voucher_type::text` por el UNION), 2) las OP a socio sin asiento (no son problema: no generan
   asiento por diseno), 3) resumen por empresa y tipo, 4) y 5) **que medios de pago se usan** en

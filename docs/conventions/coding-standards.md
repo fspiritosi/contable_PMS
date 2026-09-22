@@ -134,10 +134,29 @@ las validaciones funcionan en `npm run dev` y fallan mudas en prod (TSK-481 lo d
 movimientos de fondos). Verificado en TSK-721 con `npm run build && npm run start`: el toast
 muestra el mensaje completo.
 
-**Donde ya se usa:** `confirmInvoice` y `confirmPurchaseInvoice` (TSK-721), `createFundMovement` /
-`updateFundMovement` / `confirmFundMovement` (TSK-481, con un alias local que todavia no importa de
-`shared/lib`). Las actions nuevas que muten estado con validaciones de negocio deben seguir este
-patron; las de solo lectura pueden seguir lanzando (el error se muestra en `error.tsx`).
+**Donde ya se usa:** `confirmInvoice` y `confirmPurchaseInvoice` (TSK-721), `confirmReceipt`,
+`confirmPaymentOrder` y `confirmExpense` (TSK-728), `createFundMovement` / `updateFundMovement` /
+`confirmFundMovement` (TSK-481, con un alias local que todavia no importa de `shared/lib`). Las
+actions nuevas que muten estado con validaciones de negocio deben seguir este patron; las de solo
+lectura pueden seguir lanzando (el error se muestra en `error.tsx`).
+
+**Variante con avisos:** cuando la operacion sale bien pero hay algo que avisar (pagos que quedan
+fuera del asiento, presupuesto excedido), el `success` lleva el dato:
+`ActionResult<{ id: string; warnings: string[] }>` (`confirmReceipt`, `confirmPaymentOrder`) o
+`ActionResult<{ budgetWarning?: { message; executedPercent } }>` (`confirmExpense`). El cliente
+muestra `toast.success(...)` y, si hay avisos, `toast.warning(titulo, { description })`. No mezclar
+avisos en `error`: `success: false` significa que no paso nada.
+
+**Vista previa + pre-validacion (recomendado para confirmaciones con asiento):** la validacion de
+negocio vive en una funcion `server-only` que devuelve el resultado como dato
+(`EntryPreflight { error, warnings, accounts }`, `treasury/shared/entry-preflight.ts`) y la usan dos
+actions: una de vista previa (`getReceiptEntryPreview`, permiso `approve`) que el dialogo de
+confirmar carga con `useQuery` al abrirse —nunca `useEffect` + `useState`— para mostrar las cuentas,
+deshabilitar el boton si va a fallar y listar los avisos; y el confirm, que la vuelve a correr
+**antes** de `prisma.$transaction` y lanza `BusinessError` con el mismo `error`. Asi el usuario no
+descubre el bloqueo despues de hacer clic, y nada se mueve si va a fallar por configuracion
+(`_ConfirmEntryDialog` + `_EntryPreviewNotice` en `treasury/shared/components/`; en equipos, el
+dialogo de baja de TSK-724c sigue la misma idea).
 
 ---
 

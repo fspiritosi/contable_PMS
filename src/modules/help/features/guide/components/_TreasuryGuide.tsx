@@ -317,6 +317,40 @@ export function _TreasuryGuide() {
             Al confirmar, se actualiza el saldo de las facturas y se genera el
             asiento contable.
           </p>
+
+          <p className="font-medium mt-3">Qué revisa el sistema al confirmar</p>
+          <p className="text-muted-foreground">
+            Al hacer clic en <strong>Confirmar</strong>, el diálogo te muestra
+            de antemano <strong>con qué cuentas se va a generar el asiento</strong>:
+            Cuentas por Cobrar, la cuenta de cada caja o banco usado y la de
+            cada retención. Si falta alguna, el diálogo lo dice en rojo y el
+            botón queda deshabilitado. El mensaje nombra el campo exacto y dónde
+            cargarlo: en <strong>Contabilidad → Configuración</strong> (por
+            ejemplo &quot;Cuentas por Cobrar&quot; o &quot;Ret. IIBB Sufrida&quot;)
+            o, si la caja o el banco no tienen cuenta contable, en{' '}
+            <strong>Tesorería → Cajas / Cuentas Bancarias</strong> (o definís
+            &quot;Caja por Defecto&quot; / &quot;Banco por Defecto&quot; en
+            Configuración). El recibo queda en Borrador hasta que lo corrijas.
+          </p>
+          <p className="text-muted-foreground">
+            Los pagos con <strong>cheque, tarjeta de crédito o cuenta
+            corriente</strong> todavía no tienen cuenta contable en el sistema
+            y <strong>no generan línea en el asiento</strong>. El diálogo los
+            lista en un aviso naranja antes de confirmar y, si confirmás igual,
+            te lo repite después: ese importe queda pendiente en Cuentas por
+            Cobrar hasta que se regularice. Si <strong>todos</strong> los pagos
+            son de ese tipo y no hay retenciones, el recibo no se puede
+            confirmar: agregá un pago en efectivo, transferencia o e-cheq, o
+            una retención.
+          </p>
+          <p className="text-sm text-muted-foreground">
+            Antes, un recibo con una cuenta faltante podía quedar confirmado{' '}
+            <strong>sin asiento contable</strong> y sin ningún aviso. Eso ya no
+            pasa: o se confirma con su asiento, o no se confirma y te dice por
+            qué. Además, al cargar el recibo, <strong>Efectivo</strong> exige
+            elegir la caja y <strong>Transferencia</strong> (o tarjeta de
+            débito) la cuenta bancaria.
+          </p>
         </CardContent>
       </Card>
 
@@ -367,6 +401,38 @@ export function _TreasuryGuide() {
               Al confirmar, se registra el pago y se genera el asiento
             </li>
           </ol>
+
+          <p className="font-medium mt-3">Qué revisa el sistema al confirmar</p>
+          <p className="text-muted-foreground">
+            Igual que en los recibos, el diálogo de <strong>Confirmar</strong>{' '}
+            te muestra antes <strong>con qué cuentas se va a generar el
+            asiento</strong>: Cuentas por Pagar, la cuenta de cada caja o banco
+            usado y la de cada retención emitida. Si falta alguna, el diálogo lo
+            dice en rojo, el botón queda deshabilitado y el mensaje nombra el
+            campo y dónde cargarlo (<strong>Contabilidad → Configuración</strong>{' '}
+            o <strong>Tesorería → Cajas / Cuentas Bancarias</strong>). La orden
+            queda en Borrador hasta que lo corrijas.
+          </p>
+          <p className="text-muted-foreground">
+            Los pagos con <strong>cheque propio o endosado, tarjeta de
+            crédito, tarjeta de un socio o cuenta corriente</strong> todavía no
+            tienen cuenta contable en el sistema y no generan línea en el
+            asiento: el diálogo los lista en un aviso naranja y, si confirmás,
+            ese importe queda pendiente en Cuentas por Pagar hasta que se
+            regularice. Si <strong>todos</strong> los pagos son de ese tipo y
+            no hay retenciones, la orden no se puede confirmar: agregá un pago
+            en efectivo, transferencia, débito de la empresa o e-cheq, o una
+            retención.
+          </p>
+          <p className="text-sm text-muted-foreground">
+            Las <strong>órdenes de pago a un socio</strong> (devolución de
+            aportes) mueven la caja o el banco pero <strong>no generan
+            asiento</strong>; el diálogo te lo avisa. Al cargar cualquier
+            orden, <strong>Efectivo</strong> exige elegir la caja y{' '}
+            <strong>Transferencia</strong> la cuenta bancaria. Antes, una orden
+            con una cuenta faltante podía quedar confirmada sin asiento y sin
+            aviso; eso ya no pasa.
+          </p>
         </CardContent>
       </Card>
 
@@ -736,7 +802,10 @@ export function _TreasuryGuide() {
             </li>
             <li>
               <strong>Contabilidad</strong>: al confirmar recibos y órdenes de
-              pago se generan asientos contables automáticos
+              pago se generan asientos contables automáticos; si el asiento no
+              se puede generar (falta una cuenta en Contabilidad →
+              Configuración, o la caja o el banco no tienen cuenta), la
+              confirmación se rechaza con el motivo
             </li>
             <li>
               <strong>Dashboard</strong>: los saldos bancarios y totales de

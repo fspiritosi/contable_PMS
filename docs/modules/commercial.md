@@ -470,7 +470,7 @@ DRAFT ──→ CONFIRMED (no se cancela)
 ### Gasto (Expense)
 
 ```
-PENDING ──→ PAID / PARTIAL_PAID (via OP) ──→ CANCELLED
+DRAFT ──→ CONFIRMED (asiento) ──→ PARTIAL_PAID / PAID (via OP) ──→ CANCELLED
 ```
 
 ---
@@ -595,30 +595,47 @@ OC con 3 líneas:
 | Validación de cuentas de línea | Siempre | Aborta si alguna línea no resuelve cuenta (ítem → Ventas por defecto) o la cuenta resuelta no es imputable (TSK-721) |
 | Auto-compensación NC | Si es NC | Aplica NC contra facturas pendientes |
 
-`confirmInvoice` y `confirmPurchaseInvoice` devuelven `ActionResult` (`{ success: true, id }` o
-`{ success: false, error }`) en vez de lanzar; ver
+`confirmInvoice`, `confirmPurchaseInvoice`, `confirmReceipt`, `confirmPaymentOrder` y
+`confirmExpense` devuelven `ActionResult` (`{ success: true, ... }` o `{ success: false, error }`)
+en vez de lanzar; ver
 [Errores de negocio en Server Actions](../conventions/coding-standards.md#errores-de-negocio-en-server-actions).
+Recibos y OP devuelven además `warnings: string[]` (pagos que quedaron fuera del asiento);
+gastos, `budgetWarning?`.
 
 ### Confirmar Recibo de Cobro
 
 | Efecto | Condición | Detalle |
 |--------|-----------|---------|
+| Pre-validación | Siempre, antes de `$transaction` | `loadReceiptEntryPreflight` + `assertEntryPreflight` (`treasury/shared/entry-preflight.ts`): aborta con `BusinessError` si falta "Cuentas por Cobrar" o la "Ret. … Sufrida" de una retención en Ajustes, si una caja/banco usado no resuelve cuenta (propia → "Caja/Banco por Defecto"), si alguna cuenta resuelta no es imputable, o si ningún pago genera línea y no hay retenciones (asiento de una sola línea). Nada se mueve (TSK-728) |
 | SalesInvoice.status | Siempre | Actualiza a PAID / PARTIAL_PAID |
-| CashMovement (INCOME) | Si pago en efectivo | Crea movimiento, incrementa expectedBalance |
+| CashMovement (INCOME) | Si pago en efectivo | Crea movimiento, incrementa expectedBalance (requiere sesión abierta; `BusinessError` si no) |
 | BankMovement (DEPOSIT) | Si pago por transferencia | Crea movimiento, incrementa balance bancario |
 | Check (THIRD_PARTY) | Si pago con cheque | Crea cheque en estado PORTFOLIO |
-| Asiento Contable | Siempre | Dr: Caja/Banco + Ret. Sufridas → Cr: Ctas por Cobrar |
+| Asiento Contable | Siempre | Dr: Caja/Banco de cada pago (cuenta propia → "Caja/Banco por Defecto") + Ret. Sufridas → Cr: Ctas por Cobrar **por el importe contabilizable** (`total − omittedAmount`). Si el asiento falla, la confirmación se revierte (TSK-728) |
+| Pagos sin cuenta | Cheque físico, tarjeta de crédito, "Cuenta Corriente" | No generan línea; aviso en el diálogo (`_EntryPreviewNotice`) y en `toast.warning` después; `warnings[]` en el resultado. El importe queda pendiente en Cobrar hasta regularizar |
 
 ### Confirmar Orden de Pago
 
 | Efecto | Condición | Detalle |
 |--------|-----------|---------|
+| Pre-validación | Siempre, antes de `$transaction` | `loadPaymentOrderEntryPreflight` + `assertEntryPreflight`: igual que el recibo con "Cuentas por Pagar" y "Ret. … Emitida". OP a socio (`partnerId`): solo se verifica caja/banco, `generatesEntry: false` y aviso «Las órdenes de pago a socios no generan asiento contable.» (TSK-728) |
 | PurchaseInvoice.status | Si tiene facturas | Actualiza a PAID / PARTIAL_PAID |
 | Expense.status | Si tiene gastos | Actualiza a PAID / PARTIAL_PAID |
-| CashMovement (EXPENSE) | Si pago en efectivo | Crea movimiento, decrementa expectedBalance |
-| BankMovement (WITHDRAWAL) | Si pago por transferencia | Crea movimiento, decrementa balance bancario |
-| Check (OWN) | Si pago con cheque | Crea cheque propio estado DELIVERED |
-| Asiento Contable | Siempre | Dr: Ctas por Pagar → Cr: Caja/Banco + Ret. Emitidas |
+| CashMovement (EXPENSE) | Si pago en efectivo | Crea movimiento, decrementa expectedBalance (requiere sesión abierta) |
+| BankMovement (WITHDRAWAL) | Si pago por transferencia / débito de empresa / e-cheq | Crea movimiento, decrementa balance bancario |
+| Check (OWN) | Si pago con cheque propio | Crea cheque propio estado DELIVERED |
+| Check endosado | Si `endorsedCheckId` | El cheque de tercero pasa a ENDORSED (`BusinessError` si ya no está en cartera) |
+| Asiento Contable | Si no es OP a socio | Dr: Ctas por Pagar **por el importe contabilizable** → Cr: Caja/Banco de cada pago + Ret. Emitidas. Si el asiento falla, la confirmación se revierte (TSK-728) |
+| Pagos sin cuenta | Cheque propio/endosado, tarjeta de crédito, tarjeta de socio, "Cuenta Corriente" | No generan línea; aviso previo y posterior; `warnings[]`. El importe queda pendiente en Pagar |
+
+### Confirmar Gasto (Egreso)
+
+| Efecto | Condición | Detalle |
+|--------|-----------|---------|
+| Pre-validación | Siempre, antes de `$transaction` | `assertExpenseEntryAccounts` (privado en `expenses/actions.server.ts`): `BusinessError` si falta "Cuenta de Gastos Operativos" o "Cuentas por Pagar" en Ajustes, o si alguna no es imputable (TSK-728) |
+| Verificación presupuestaria | Si hay presupuesto para `expensesAccountId` | `checkBudgetForExpense`; **no bloqueante**: `budgetWarning { message, executedPercent }` en el resultado, `toast.warning` en tabla y detalle |
+| Expense.status | Siempre | DRAFT → CONFIRMED |
+| Asiento Contable | Siempre | Dr: Gastos Operativos → Cr: Ctas por Pagar. Si el asiento falla, la confirmación se revierte (TSK-728) |
 
 ---
 
@@ -738,8 +755,58 @@ Cada documento comercial confirmado genera un asiento contable automático:
   `DRAFT` sin `journalEntryId` y el usuario ve el mensaje. Antes, la factura quedaba `CONFIRMED`
   **sin asiento** y nadie se enteraba (`prisma/scripts/diagnose-invoices-without-entry.ts` lista
   las históricas de facturas y, desde TSK-728, de recibos/OP/gastos; solo lectura).
-- **Recibos, órdenes de pago, gastos y movimientos bancarios manuales**: siguen siendo
-  no-bloqueantes (warning y la operación continúa). Pendiente de alinear.
+- **Recibos, órdenes de pago y gastos (TSK-728): bloqueante**, mismo esquema que facturas. Las tres
+  integraciones (`createJournalEntryForReceipt` / `ForPaymentOrder` / `ForExpense`) devuelven
+  `Promise<string>` y lanzan `BusinessError` donde antes hacían `return null` o `continue`; los
+  confirm pre-validan antes de la transacción y ya no envuelven el asiento en `try/catch`. Los
+  medios de pago sin cuenta (cheque, tarjeta de crédito, tarjeta de socio, "Cuenta Corriente") se
+  **omiten con aviso** y la línea de Cobrar/Pagar va por el importe contabilizable (asiento parcial,
+  decisión del ticket: bloquearlos dejaba esos comprobantes sin poder confirmarse nunca). Ver
+  [Cuentas de medios de pago](#cuentas-de-medios-de-pago-tsk-728).
+- **Movimientos bancarios manuales y transferencias banco→banco / banco→caja**: siguen
+  no-bloqueantes (`if (bankAccount.accountId)` sin aviso). Seguimiento en
+  `.planes/tsk-728-…md` 2.4-2.
+
+### Cuentas de medios de pago (TSK-728)
+
+Cadena de resolución de la cuenta de cada pago de un recibo u OP, idéntica en los dos
+(`resolvePaymentAccount`, `modules/commercial/shared/payment-accounts.ts`):
+
+```
+tarjeta de socio (OP)                        → omitido (PARTNER_CARD)
+cashRegisterId && cashRegister.accountId     → cuenta propia de la caja
+bankAccountId  && bankAccount.accountId      → cuenta propia del banco
+cashRegisterId && defaultCashAccountId       → "Caja por Defecto"  (Ajustes)
+bankAccountId  && defaultBankAccountId       → "Banco por Defecto" (Ajustes)
+CASH sin caja / TRANSFER-DEBIT-ECHEQ sin banco → missing (bloquea)
+CHECK / CREDIT_CARD / ACCOUNT                → omitido (aviso)
+```
+
+| Medio (`PaymentMethod`) | Recibo | OP | Tratamiento |
+|---|---|---|---|
+| `CASH` | caja (obligatoria en Zod) | ídem | Obligatorio: caja → "Caja por Defecto"; sin cuenta → **bloquea** con el nombre de la caja |
+| `TRANSFER` | banco (obligatorio en Zod) | ídem | Obligatorio: banco → "Banco por Defecto"; sin cuenta → **bloquea** con el nombre del banco |
+| `DEBIT_CARD` | banco obligatorio en Zod | banco opcional (tarjeta de socio) | Empresa: como transferencia. Socio: **omitido** con aviso |
+| `ECHEQ` | banco obligatorio | banco (emisión) | Como transferencia (se imputa al banco antes de acreditarse; seguimiento 2.4-1) |
+| `CHECK` | cheque físico recibido | propio o endosado | **Omitido** con aviso («los cheques todavía no tienen cuenta asignada en el sistema») |
+| `CREDIT_CARD` | solo `cardLast4` | `cardId` + cuotas | **Omitido** con aviso |
+| `ACCOUNT` ("Cuenta Corriente") | nada | nada | **Omitido** con aviso («no representa un movimiento de fondos») |
+| Sin pagos ni retenciones / solo omitidos | — | — | **Bloquea**: «… el asiento quedaría con una sola línea. Agregá un pago en efectivo, transferencia[, débito de la empresa] o e-cheq, o una retención.» |
+
+Los mensajes citan el label literal de Ajustes (`shared/lib/accounts/settings-account-labels.ts`) y
+la ruta `ACCOUNTING_SETTINGS_PATH` («Contabilidad → Configuración»). Helpers:
+
+| Archivo | Rol |
+|---|---|
+| `modules/commercial/shared/settings-accounts.ts` | `findMissingSettingsAccounts`, `withholdingSettingsField`, `buildMissingSettingsAccountsMessage` («No se puede confirmar el recibo R-00001: falta configurar "Cuentas por Cobrar" en Contabilidad → Configuración.») |
+| `modules/commercial/shared/payment-accounts.ts` | `resolvePaymentAccount`, `classifyPayments` (`resolved` / `missing` / `omitted` + `omittedAmount`), `describePayment`, `buildMissingPaymentAccountMessage`, `buildOmittedPaymentWarning`, `buildSingleLineEntryMessage`, `buildPartnerOrderWarning`. Puros, 36 tests |
+| `treasury/shared/entry-preflight.ts` (`server-only`) | `loadReceiptEntryPreflight` / `loadPaymentOrderEntryPreflight(companyId, id, client?)` → `EntryPreflight { documentLabel, error, warnings, accounts }`; `assertEntryPreflight` lanza `BusinessError` con `error`. Una sola query alimenta la vista previa y la pre-validación |
+| `treasury/shared/components/_ConfirmEntryDialog.tsx` | Diálogo genérico de confirmar (recibo y OP): `useQuery` a `getReceiptEntryPreview` / `getPaymentOrderEntryPreview` (permiso `approve`), botón deshabilitado con `error`, `toast.error(result.error)`, `toast.warning(warningsTitle, { description: warnings.join(' ') })` |
+| `treasury/shared/components/_EntryPreviewNotice.tsx` | Estados del diálogo: «Verificando cuentas contables…», rojo «No se va a poder confirmar», ámbar «Avisos del asiento contable», neutro «El asiento contable se genera con estas cuentas:» |
+
+Al cargar el comprobante, Zod (`refineFundsSourcePayment`) exige caja para `CASH` («Debe
+seleccionar la caja») y banco para `TRANSFER` («Debe seleccionar la cuenta bancaria»); en recibos
+también para `DEBIT_CARD`.
 
 ### Cuentas de línea (TSK-721)
 
@@ -861,10 +928,17 @@ Tanto Recibos como Órdenes de Pago soportan retenciones impositivas:
   cuenta debe ser imputable (TSK-721)
 
 ### Recibo / Orden de Pago
-- Requiere sesión de caja ABIERTA si paga en efectivo
-- Medios de pago deben tener campos requeridos (bankAccountId, cashRegisterId)
+- Requiere sesión de caja ABIERTA si paga en efectivo (`BusinessError` al confirmar)
+- Medios de pago deben tener campos requeridos: `CASH` → `cashRegisterId`, `TRANSFER` →
+  `bankAccountId` (en recibos también `DEBIT_CARD`), Zod al crear (TSK-728)
 - totalAmount == sum(items)
 - sum(payments) + sum(withholdings) == totalAmount
+- Al confirmar: cuentas de Ajustes, caja/banco y retenciones resueltas e imputables; al menos una
+  línea además de Cobrar/Pagar (ver [Cuentas de medios de pago](#cuentas-de-medios-de-pago-tsk-728))
+
+### Gasto (Egreso)
+- Al confirmar: "Cuenta de Gastos Operativos" y "Cuentas por Pagar" configuradas e imputables
+  (TSK-728); el presupuesto solo avisa
 
 ### Stock
 - Ajustes EXIT/LOSS: verificar stock suficiente
@@ -887,7 +961,8 @@ Tanto Recibos como Órdenes de Pago soportan retenciones impositivas:
 | Confirmar NC Venta | +qty | CONFIRMED | — | — | — | Si |
 | Confirmar ND Venta | — | CONFIRMED | — | — | — | Si |
 | Confirmar Recibo | — | PAID/PARTIAL | — | — | +balance | Si |
-| Confirmar OP | — | PAID/PARTIAL | — | — | -balance | Si |
+| Confirmar OP | — | PAID/PARTIAL | — | — | -balance | Si (no en OP a socio) |
+| Confirmar Gasto | — | — | — | — | — | Si |
 
 *\* Solo si no hay remitos confirmados*
 
@@ -903,8 +978,9 @@ Tanto Recibos como Órdenes de Pago soportan retenciones impositivas:
 | Facturas de Compra | `modules/commercial/features/purchases/features/invoices/list/actions.server.ts` |
 | Remitos de Recepción | `modules/commercial/features/purchases/features/receiving-notes/list/actions.server.ts` |
 | Facturas de Venta | `modules/commercial/features/sales/features/invoices/list/actions.server.ts` |
-| Recibos de Cobro | `modules/commercial/features/treasury/features/receipts/actions.server.ts` |
-| Órdenes de Pago | `modules/commercial/features/treasury/features/payment-orders/actions.server.ts` |
+| Recibos de Cobro | `modules/commercial/features/treasury/features/receipts/actions.server.ts` (`confirmReceipt`, `getReceiptEntryPreview`) |
+| Órdenes de Pago | `modules/commercial/features/treasury/features/payment-orders/actions.server.ts` (`confirmPaymentOrder`, `getPaymentOrderEntryPreview`) |
+| Gastos (Egresos) | `modules/commercial/features/expenses/actions.server.ts` (`confirmExpense`, `assertExpenseEntryAccounts`) |
 | Movimientos Bancarios | `modules/commercial/features/treasury/features/bank-movements/actions.server.ts` |
 | Socios | `modules/commercial/features/treasury/features/partners/features/list/actions.server.ts` (`getPartnerContributionAccounts`, `deletePartner`) |
 | Movimientos de Fondos | `modules/commercial/features/treasury/features/fund-movements/list/actions.server.ts` (`confirmFundMovement`, `resolvePartnerCapitalAccount`, `getFundMovementCatalogs`) |
@@ -937,6 +1013,11 @@ Tanto Recibos como Órdenes de Pago soportan retenciones impositivas:
 | `modules/commercial/shared/credit-note-compensation.ts` | Auto-compensación FIFO de NC contra facturas abiertas |
 | `modules/commercial/shared/line-accounts.ts` | Resolución de la cuenta contable de cada línea (ítem → por defecto → error que nombra la línea) y sus mensajes (TSK-721) |
 | `modules/commercial/features/products/shared/imputation-filter.ts` | `missingImputations`, `buildImputationWhere`: badges y facet «Imputación» de ítems sin cuenta (TSK-721) |
+| `modules/commercial/shared/settings-accounts.ts` | Cuentas de Ajustes faltantes y su mensaje con el label literal (TSK-728) |
+| `modules/commercial/shared/payment-accounts.ts` | Resolución de la cuenta de cada medio de pago (propia → por defecto → faltante / omitido) y sus mensajes (TSK-728) |
+| `modules/commercial/features/treasury/shared/entry-preflight.ts` | Pre-validación + vista previa del asiento de recibos y OP (`EntryPreflight`), `server-only` (TSK-728) |
+| `modules/commercial/features/treasury/shared/components/_ConfirmEntryDialog.tsx`, `_EntryPreviewNotice.tsx` | Diálogo genérico de confirmar con vista previa de cuentas, bloqueo y avisos (TSK-728) |
+| `shared/lib/accounts/settings-account-labels.ts` | Labels literales de los 31 campos de Ajustes contables + `ACCOUNTING_SETTINGS_PATH`; los lee el formulario y los citan los mensajes (TSK-728) |
 | `modules/commercial/features/treasury/features/fund-movements/shared/lines-calc.ts` | Totales de conceptos de gastos bancarios y `pickDefaultLineAccount` (preselección de la cuenta por defecto, TSK-718) |
 | `shared/lib/action-result.ts` | `ActionResult`, `BusinessError`, `toActionResult`: errores de negocio como dato en Server Actions (TSK-481 / TSK-721) |
 | `modules/commercial/shared/components/_DocumentAttachment.tsx` | UI de adjuntos |

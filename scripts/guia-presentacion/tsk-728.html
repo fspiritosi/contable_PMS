@@ -1,0 +1,623 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>TSK-728 — Recibos, órdenes de pago y egresos ya no se confirman sin asiento</title>
+<style>
+  @page {
+    size: A4;
+    margin: 0;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #1f2430;
+    font-size: 13px;
+    line-height: 1.55;
+    background: #ffffff;
+  }
+
+  .page {
+    padding: 4mm 2mm;
+  }
+
+  header.cover {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    text-align: left;
+    padding: 10mm 2mm 8mm 2mm;
+    border-bottom: 3px solid #2f6f4f;
+    margin-bottom: 10mm;
+  }
+
+  .eyebrow {
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 11px;
+    font-weight: 700;
+    color: #2f6f4f;
+    margin-bottom: 6px;
+  }
+
+  h1 {
+    font-size: 26px;
+    margin: 0 0 8px 0;
+    color: #14251c;
+  }
+
+  .subtitle {
+    font-size: 14px;
+    color: #4b5563;
+    margin: 0;
+  }
+
+  section {
+    margin-bottom: 9mm;
+    page-break-inside: avoid;
+  }
+
+  section.allow-break {
+    page-break-inside: auto;
+  }
+
+  section:last-of-type { margin-bottom: 2mm; }
+
+  h2 {
+    font-size: 16px;
+    color: #14251c;
+    border-left: 4px solid #2f6f4f;
+    padding-left: 8px;
+    margin: 0 0 6mm 0;
+    page-break-after: avoid;
+  }
+
+  h3.sub {
+    font-size: 13.5px;
+    color: #14251c;
+    margin: 6mm 0 3mm 0;
+    page-break-after: avoid;
+  }
+
+  .quote {
+    background: #f4f7f5;
+    border-left: 4px solid #2f6f4f;
+    padding: 10px 14px;
+    font-style: italic;
+    color: #2b3a33;
+    margin: 0 0 6px 0;
+  }
+
+  .quote cite {
+    display: block;
+    font-style: normal;
+    font-size: 11.5px;
+    color: #6b7280;
+    margin-top: 6px;
+  }
+
+  .before-after {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    page-break-inside: avoid;
+  }
+
+  .card {
+    border: 1px solid #e2e5e0;
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+
+  .card.before { background: #fbf7f2; border-color: #ecd9bd; }
+  .card.after { background: #f2f8f4; border-color: #bfe0cb; }
+
+  .card h3 {
+    margin: 0 0 6px 0;
+    font-size: 12.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .card.before h3 { color: #9a6a1f; }
+  .card.after h3 { color: #226240; }
+
+  .card p { margin: 0; }
+
+  ol.steps {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    counter-reset: step;
+  }
+
+  ol.steps > li {
+    counter-increment: step;
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+    page-break-inside: avoid;
+  }
+
+  ol.steps > li::before {
+    content: counter(step);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    border-radius: 50%;
+    background: #2f6f4f;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  ol.steps.letters > li::before {
+    content: counter(step, lower-alpha);
+  }
+
+  .step-body { flex: 1; }
+
+  .step-body strong { color: #14251c; }
+
+  figure {
+    margin: 8px 0 0 0;
+    page-break-inside: avoid;
+  }
+
+  figure img {
+    max-width: 100%;
+    border: 1px solid #d9dce0;
+    border-radius: 6px;
+    display: block;
+  }
+
+  figure.small img { max-width: 320px; }
+
+  figure.sidebar img { max-width: 150px; }
+
+  figure.modal img { max-width: 400px; }
+
+  figure.modal-sm img { max-width: 340px; }
+
+  ol.steps.long > li { page-break-inside: auto; }
+
+  figcaption {
+    font-size: 11px;
+    color: #6b7280;
+    margin-top: 4px;
+  }
+
+  .callout {
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin: 0 0 8px 0;
+    page-break-inside: avoid;
+  }
+
+  .callout.config {
+    background: #f2f6fb;
+    border: 1px solid #cddaeb;
+  }
+
+  .callout.warning {
+    background: #fdf5ec;
+    border: 1px solid #efd6a8;
+  }
+
+  .callout h3 {
+    margin: 0 0 4px 0;
+    font-size: 13px;
+  }
+
+  .callout p { margin: 0 0 6px 0; }
+  .callout p:last-child { margin-bottom: 0; }
+
+  ul.plain {
+    margin: 4px 0 0 0;
+    padding-left: 18px;
+  }
+
+  ul.plain li { margin-bottom: 4px; }
+
+  .no-change-list {
+    display: grid;
+    gap: 6px;
+  }
+
+  .no-change-item {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+  }
+
+  .check {
+    color: #2f6f4f;
+    font-weight: 700;
+  }
+
+  .side-by-side {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8mm;
+    align-items: start;
+    page-break-inside: avoid;
+  }
+
+  .side-by-side figure { margin-top: 0; }
+
+  .side-by-side.narrow-left {
+    grid-template-columns: 160px 1fr;
+  }
+
+  .ui-text {
+    font-style: italic;
+    color: #374151;
+  }
+
+  table.chain {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 6px 0 8px 0;
+    font-size: 12px;
+    page-break-inside: avoid;
+  }
+
+  table.chain th, table.chain td {
+    border: 1px solid #dfe3e0;
+    padding: 6px 8px;
+    text-align: left;
+    vertical-align: top;
+  }
+
+  table.chain th {
+    background: #f4f7f5;
+    color: #14251c;
+    font-weight: 700;
+  }
+
+  .entry {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 11.5px;
+    background: #f7f8f7;
+    border: 1px solid #e2e5e0;
+    border-radius: 6px;
+    padding: 8px 10px;
+    margin: 6px 0;
+    white-space: pre;
+  }
+
+  footer.doc-footer {
+    text-align: center;
+    color: #9ca3af;
+    font-size: 10.5px;
+    margin-top: 2mm;
+  }
+</style>
+
+</head>
+<body>
+
+
+<div class="page">
+
+  <header class="cover">
+    <div class="eyebrow">Ticket 728 · Tesorería · Recibos, Órdenes de pago y Egresos</div>
+    <h1>Recibos, órdenes de pago y egresos ya no se confirman sin asiento</h1>
+    <p class="subtitle">Guía de presentación — qué pasaba, qué cambió, qué hacer con cheques y tarjetas, y qué revisar en tu empresa antes de usarlo</p>
+  </header>
+
+  <section>
+    <h2>1. Qué pasaba</h2>
+    <p>Este punto <strong>no lo pediste vos</strong>: lo encontramos revisando el sistema mientras
+    cerrábamos el ticket 721 (las cuentas contables de las facturas) y el 724 (los bienes de uso).
+    Es la misma clase de problema que arreglamos ahí, pero en otros tres comprobantes.</p>
+    <p>Cuando confirmabas un <strong>recibo de cobro</strong>, una <strong>orden de pago</strong> o un
+    <strong>egreso</strong>, el sistema intentaba generar el asiento contable. Si le faltaba una
+    cuenta (por ejemplo "Cuentas por Cobrar" sin cargar en Contabilidad → Configuración, o un banco
+    sin cuenta contable asociada), el asiento <strong>no se generaba</strong>, pero el comprobante
+    <strong>quedaba confirmado igual</strong>: la caja o el banco ya se habían movido, las facturas
+    ya figuraban como pagadas, y nadie se enteraba de que faltaba el asiento. Recién aparecía el
+    hueco cuando el Mayor o el Balance "no cerraban".</p>
+    <div class="before-after">
+      <div class="card before">
+        <h3>Antes</h3>
+        <p>Confirmabas, el sistema decía "confirmado" y listo. Si faltaba una cuenta, el asiento se
+        salteaba en silencio. El recibo o la orden quedaba confirmado, con el saldo movido, pero sin
+        asiento en Contabilidad.</p>
+      </div>
+      <div class="card after">
+        <h3>Ahora</h3>
+        <p>Antes de confirmar ves con qué cuentas se va a generar el asiento. Si falta algo, no te
+        deja confirmar y te dice exactamente qué campo falta y dónde cargarlo. O se confirma con su
+        asiento, o no se confirma.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="allow-break">
+    <h2>2. Qué cambió: ves las cuentas antes de confirmar</h2>
+    <p>Al hacer clic en <span class="ui-text">Confirmar</span> en un recibo o en una orden de pago, el
+    diálogo ahora tiene un recuadro que se completa solo. Hay tres versiones, según lo que encuentre
+    el sistema.</p>
+
+    <h3 class="sub">Todo en orden: te lista las cuentas</h3>
+    <p>Un recuadro gris con el título <span class="ui-text">El asiento contable se genera con estas
+    cuentas</span> y una línea por cada cuenta: la de Cuentas por Cobrar o por Pagar, la de cada caja
+    o banco que usaste y la de cada retención. Si algo no te cierra, cancelás sin haber movido nada.</p>
+    <div class="side-by-side">
+      <figure class="modal-sm">
+        <img src="assets/tsk728-08-recibo-ok-cuentas.png" alt="Diálogo ¿Confirmar recibo? con el recuadro El asiento contable se genera con estas cuentas: Cuentas por Cobrar 1.1.3/01/01 Deudores locales, Caja Caja Principal 1.1.1/01/01 Caja, y los botones Cancelar y Confirmar" />
+        <figcaption>Recibo R-00001 cobrado en efectivo en la Caja Principal: Deudores locales y la
+        cuenta de la caja. Los datos son de demostración.</figcaption>
+      </figure>
+      <figure class="modal-sm">
+        <img src="assets/tsk728-03-op-ok-cuentas.png" alt="Diálogo ¿Confirmar orden de pago? con el recuadro El asiento contable se genera con estas cuentas: Cuentas por Pagar 2.1.1/02/01 Acreedores Locales (Ctes.), Banco Banco Santander 1085628-1 1.1.1/02/01 Banco Santander Río c/c en pesos" />
+        <figcaption>Orden de pago OP-00001 por transferencia: Acreedores Locales y la cuenta del
+        Banco Santander.</figcaption>
+      </figure>
+    </div>
+    <figure>
+      <img src="assets/tsk728-04-op-asiento.png" alt="Contabilidad → Asientos: asiento 25 del 22/09/2026 Orden de pago OP-00001, origen Orden Pago, estado Borrador, $ 50.000,00, desplegado con Debe 2.1.1/02/01 Acreedores Locales (Ctes.) $ 50.000,00 y Haber 1.1.1/02/01 Banco Santander Río c/c en pesos $ 50.000,00" />
+      <figcaption>El asiento que generó esa orden, en Contabilidad → Asientos: Debe Acreedores
+      Locales / Haber Banco Santander, las mismas dos cuentas que te mostró el diálogo. Con el origen
+      <span class="ui-text">Orden Pago</span> y el número OP-00001 para volver al comprobante.</figcaption>
+    </figure>
+
+    <h3 class="sub">Falta una cuenta: no te deja confirmar y te dice cuál</h3>
+    <p>El recuadro se pone rojo, con el título <span class="ui-text">No se va a poder confirmar</span>,
+    y el botón <span class="ui-text">Confirmar</span> queda deshabilitado. El mensaje nombra el
+    comprobante, el campo que falta <strong>con el mismo nombre que tiene en la pantalla de
+    configuración</strong> y dónde cargarlo. El comprobante queda en Borrador; lo arreglás y volvés
+    a confirmar.</p>
+    <div class="side-by-side">
+      <figure class="modal-sm">
+        <img src="assets/tsk728-09-recibo-bloqueado-ajustes.png" alt="Diálogo ¿Confirmar recibo? con el recuadro rojo No se va a poder confirmar: No se puede confirmar el recibo R-00001: falta configurar Cuentas por Cobrar en Contabilidad → Configuración. El botón Confirmar está deshabilitado" />
+        <figcaption>Falta "Cuentas por Cobrar" en Contabilidad → Configuración. En los datos de
+        demostración ese campo estaba vacío: hasta esta entrega el recibo se confirmaba igual, sin
+        asiento.</figcaption>
+      </figure>
+      <figure class="modal-sm">
+        <img src="assets/tsk728-01-op-bloqueada-ajustes.png" alt="Diálogo ¿Confirmar orden de pago? con el recuadro rojo: No se puede confirmar la orden de pago OP-00001: falta configurar Cuentas por Pagar en Contabilidad → Configuración. Confirmar deshabilitado" />
+        <figcaption>Lo mismo en una orden de pago, con "Cuentas por Pagar".</figcaption>
+      </figure>
+    </div>
+    <figure class="modal-sm">
+      <img src="assets/tsk728-02-op-bloqueada-banco-sin-cuenta.png" alt="Diálogo ¿Confirmar orden de pago? con el recuadro rojo: No se puede confirmar la orden de pago OP-00001: la cuenta bancaria Banco Santander 1085628-1 no tiene cuenta contable asociada. Configurala en Tesorería → Cuentas Bancarias o definí el Banco por Defecto en Contabilidad → Configuración" />
+      <figcaption>Cuando lo que falta es la cuenta contable del banco (o de la caja), el mensaje te
+      da las dos formas de resolverlo: cargarla en esa cuenta bancaria, o definir un "Banco por
+      Defecto" en Configuración que se use para todos los bancos que no tengan la suya.</figcaption>
+    </figure>
+    <div class="callout warning">
+      <h3>Qué vas a notar en el día a día</h3>
+      <p>Puede pasar que un recibo o una orden que antes "pasaba" ahora se frene. <strong>Eso es
+      correcto</strong>: antes pasaba sin asiento. Cuando aparezca el recuadro rojo, no hay nada
+      roto: leé qué campo nombra, cargalo donde te indica y volvé a confirmar. Lo verificamos también
+      en la versión instalada (no solo en desarrollo): el mensaje llega completo.</p>
+    </div>
+  </section>
+
+  <section class="allow-break">
+    <h2>3. Cheques, tarjetas y cuenta corriente: se confirman con aviso</h2>
+    <p>Acá hay algo que tenés que saber. Hoy el sistema <strong>no tiene una cuenta contable
+    definida</strong> para algunos medios de pago: los <strong>cheques</strong> (recibidos, propios o
+    endosados), las <strong>tarjetas de crédito</strong>, las <strong>tarjetas de un socio</strong> y
+    la opción <span class="ui-text">Cuenta Corriente</span>. Hasta ahora, un recibo o una orden con
+    uno de esos pagos se confirmaba sin asiento, en silencio, como todo lo demás.</p>
+    <p>Bloquear esos comprobantes hubiera sido peor: no podrías confirmar ningún cobro con cheque.
+    Por eso, en esta entrega, ese pago <strong>no genera línea en el asiento</strong>, pero el recibo
+    o la orden <strong>se confirma igual</strong>, con un aviso claro antes y después:</p>
+    <ol class="steps">
+      <li>
+        <div class="step-body">
+          <strong>Antes de confirmar</strong>, un recuadro amarillo <span class="ui-text">Avisos del
+          asiento contable</span> te lista cada pago que va a quedar afuera, con su importe. Debajo
+          siguen apareciendo las cuentas que sí se van a usar.
+        </div>
+      </li>
+      <li>
+        <div class="step-body">
+          <strong>Después de confirmar</strong>, además del aviso verde de siempre, aparece uno
+          amarillo que te repite lo mismo, por si confirmaste sin leer.
+        </div>
+      </li>
+      <li>
+        <div class="step-body">
+          <strong>El asiento se genera por la parte que sí tiene cuenta.</strong> El importe del
+          cheque o la tarjeta <strong>queda pendiente en Cuentas por Cobrar</strong> (o por Pagar)
+          hasta que se regularice con un asiento manual. Es decir: contablemente, la deuda de ese
+          cliente o proveedor sigue abierta por ese importe, aunque el recibo diga que la factura
+          está pagada.
+        </div>
+      </li>
+    </ol>
+    <div class="side-by-side">
+      <figure class="modal-sm">
+        <img src="assets/tsk728-05-op-mixta-aviso-cheque.png" alt="Diálogo ¿Confirmar orden de pago? con el recuadro amarillo Avisos del asiento contable: Cheque N° 10001 por $ 20.000,00 no genera línea en el asiento contable: los cheques todavía no tienen cuenta asignada en el sistema. Ese importe queda pendiente en Cuentas por Pagar hasta que se regularice. Debajo, el recuadro gris con Cuentas por Pagar 2.1.1/02/01 y Banco Santander 1.1.1/02/01" />
+        <figcaption>Orden OP-00002 de $ 50.000: $ 30.000 por transferencia y $ 20.000 con un cheque
+        propio. El amarillo avisa que el cheque queda afuera; el gris muestra que el resto sí se
+        contabiliza. El botón <span class="ui-text">Confirmar</span> está habilitado.</figcaption>
+      </figure>
+      <div>
+        <figure>
+          <img src="assets/tsk728-06-op-mixta-toast-avisos.png" alt="Aviso amarillo: La orden de pago se confirmó con avisos contables. Cheque N° 10001 por $ 20.000,00 no genera línea en el asiento contable: los cheques todavía no tienen cuenta asignada en el sistema. Ese importe queda pendiente en Cuentas por Pagar hasta que se regularice" style="max-width:340px" />
+          <figcaption>Después de confirmar: el aviso amarillo repite el detalle. El asiento generado
+          lleva Acreedores Locales $ 30.000 / Banco $ 30.000: los $ 20.000 del cheque quedaron
+          pendientes en Cuentas por Pagar.</figcaption>
+        </figure>
+        <div class="callout config" style="margin-top:10px">
+          <h3>Lo dejamos anotado como próxima mejora</h3>
+          <p>Darle a cada uno de esos medios su cuenta contable (valores a depositar para los cheques
+          recibidos, cheques diferidos a pagar para los propios, tarjetas a pagar, deuda con socios).
+          Cuando eso esté, los cheques y las tarjetas van a generar su línea como cualquier otro pago
+          y estos avisos van a desaparecer. Va en un ticket aparte, junto con la regularización de
+          los importes que hayan quedado pendientes mientras tanto.</p>
+        </div>
+      </div>
+    </div>
+
+    <h3 class="sub">Si todos los pagos son de ese tipo, no se confirma</h3>
+    <p>Un recibo cobrado <strong>solo</strong> con un cheque, o una orden pagada <strong>solo</strong>
+    con tarjeta de crédito, y sin retenciones, no tiene ninguna línea que contabilizar además de
+    Cuentas por Cobrar o por Pagar: el asiento quedaría con una sola línea, que no es un asiento.
+    En ese caso el sistema <strong>no deja confirmar</strong>, y es a propósito: si lo dejara pasar,
+    estaríamos de vuelta en el comprobante confirmado sin asiento que vinimos a arreglar. El mensaje
+    te dice qué agregar.</p>
+    <figure class="modal-sm">
+      <img src="assets/tsk728-07-op-solo-cheque-bloqueada.png" alt="Diálogo ¿Confirmar orden de pago? con el recuadro rojo: No se puede confirmar la orden de pago OP-00003: ningún pago genera línea contable (Cheque N° 10002 por $ 10.000,00) y no hay retenciones, así que el asiento quedaría con una sola línea. Agregá un pago en efectivo, transferencia, débito de la empresa o e-cheq, o una retención. Confirmar deshabilitado" />
+      <figcaption>OP-00003 pagada solo con un cheque propio de $ 10.000. Hasta que los cheques
+      tengan su cuenta (la mejora de arriba), una orden así se puede dejar en borrador o pagar de
+      otra forma. Es una limitación conocida, no un error.</figcaption>
+    </figure>
+    <div class="callout warning">
+      <h3>Órdenes de pago a un socio</h3>
+      <p>Las órdenes de pago de devolución a un socio <strong>nunca generaron asiento</strong>
+      (mueven la caja o el banco, pero el asiento de la deuda con el socio se hace a mano). Eso no
+      cambió; lo que cambió es que ahora el diálogo te lo dice: <span class="ui-text">Las órdenes de
+      pago a socios no generan asiento contable</span>.</p>
+    </div>
+  </section>
+
+  <section class="allow-break">
+    <h2>4. Egresos: también se frenan si falta la cuenta</h2>
+    <p>Los egresos (Comercial → Egresos) no tienen medios de pago, así que no tienen el recuadro de
+    vista previa: el diálogo de confirmar es el de siempre. Lo que cambió es que, al confirmar, el
+    sistema verifica que estén cargadas la <strong>"Cuenta de Gastos Operativos"</strong> y
+    <strong>"Cuentas por Pagar"</strong> en Contabilidad → Configuración. Si falta alguna, el
+    egreso <strong>no se confirma</strong> y el mensaje nombra la cuenta; queda en Borrador hasta
+    que la cargues.</p>
+    <div class="side-by-side">
+      <figure>
+        <img src="assets/tsk728-10-egreso-sin-cuenta-toast.png" alt="Mensaje de error: No se puede confirmar el gasto GTO-00003: falta configurar Cuenta de Gastos Operativos en Contabilidad → Configuración" style="max-width:340px" />
+        <figcaption>Egreso GTO-00003 sin "Cuenta de Gastos Operativos" configurada: no se
+        confirma. Antes de esta entrega se confirmaba sin asiento.</figcaption>
+      </figure>
+      <figure>
+        <img src="assets/tsk728-11-egreso-ok-toast.png" alt="Mensaje: Egreso confirmado correctamente" style="max-width:340px" />
+        <figcaption>El mismo egreso después de cargar la cuenta: se confirma y genera su asiento
+        (Gastos Varios - Administración $ 15.000 / Acreedores Locales $ 15.000 en los datos de
+        demostración).</figcaption>
+      </figure>
+    </div>
+    <p>El aviso de presupuesto (cuando el egreso lleva la cuenta de gastos al 80% o más de lo
+    presupuestado en el mes) sigue siendo un aviso: no frena la confirmación, y ahora también se
+    muestra cuando confirmás desde el listado, no solo desde el detalle.</p>
+  </section>
+
+  <section>
+    <h2>5. Al cargar: Efectivo pide caja, Transferencia pide banco</h2>
+    <p>Un detalle que ayuda a no llegar al diálogo con el problema ya cargado. Hasta ahora podías
+    guardar un recibo o una orden con un pago en <span class="ui-text">Efectivo</span> sin elegir la
+    caja, o en <span class="ui-text">Transferencia</span> sin elegir el banco; después no había de
+    dónde sacar la cuenta contable (ni el movimiento de caja). Ahora el formulario lo exige en el
+    momento, con el mensaje debajo del campo.</p>
+    <figure>
+      <img src="assets/tsk728-12-nueva-op-efectivo-sin-caja.png" alt="Formulario de nueva orden de pago, Pago 1: método Efectivo, monto 121.000,00, el selector Caja en rojo con el texto Seleccionar caja y el mensaje Debe seleccionar la caja" style="max-width:560px" />
+      <figcaption>Nueva orden de pago con un pago en efectivo sin caja: <span class="ui-text">Debe
+      seleccionar la caja</span>, y no se crea hasta que la elijas. Con Transferencia, lo mismo para
+      la cuenta bancaria.</figcaption>
+    </figure>
+  </section>
+
+  <section class="allow-break">
+    <h2>6. Qué revisar en tu empresa antes de usarlo</h2>
+    <p>Para que ningún recibo, orden o egreso se frene por configuración, conviene dejar cargado
+    esto una sola vez. Es la misma pantalla de Contabilidad → Configuración de los tickets
+    anteriores, más las cuentas de cada caja y banco.</p>
+    <table class="chain">
+      <thead>
+        <tr><th>Qué</th><th>Dónde</th><th>Lo usa</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Cuentas por Cobrar</strong></td>
+          <td rowspan="4">Contabilidad → Configuración</td>
+          <td>Recibos (y facturas de venta)</td>
+        </tr>
+        <tr>
+          <td><strong>Cuentas por Pagar</strong></td>
+          <td>Órdenes de pago y egresos (y facturas de compra)</td>
+        </tr>
+        <tr>
+          <td><strong>Cuenta de Gastos Operativos</strong></td>
+          <td>Egresos</td>
+        </tr>
+        <tr>
+          <td><strong>Retenciones</strong> que uses: Ret. IVA / Ganancias / IIBB / SUSS,
+          <em>Sufrida</em> para recibos y <em>Emitida</em> para órdenes de pago</td>
+          <td>Recibos y órdenes de pago con retención</td>
+        </tr>
+        <tr>
+          <td><strong>Cuenta contable de cada caja y de cada cuenta bancaria</strong></td>
+          <td>Tesorería → Cajas y Tesorería → Cuentas Bancarias, al editar cada una. O, para no
+          cargarlas una por una, <strong>"Caja por Defecto"</strong> y <strong>"Banco por
+          Defecto"</strong> en Contabilidad → Configuración, que se usan para las que no tengan la
+          suya</td>
+          <td>Cada pago en efectivo, transferencia, débito o e-cheq</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="callout config">
+      <h3>Los recibos, órdenes y egresos que ya confirmaste</h3>
+      <p>Esta entrega no toca lo ya confirmado. Si antes de hoy confirmaste recibos, órdenes de pago
+      o egresos y a alguno le faltó el asiento, sigue sin asiento: no lo sabemos hasta mirar la base.
+      <strong>Nosotros lo revisamos al instalar esta versión</strong> y, si aparece alguno, te
+      pasamos el listado (comprobante, fecha, tercero e importe) para que decidas con tu contador
+      si se genera el asiento a la fecha original o se asienta a mano. No hace falta que hagas nada
+      ahora.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>7. Qué no cambió</h2>
+    <div class="no-change-list">
+      <div class="no-change-item">
+        <span class="check">✓</span>
+        <span>Los asientos automáticos siguen naciendo en <span class="ui-text">Borrador</span> en
+        Contabilidad → Asientos y hay que <strong>Registrarlos</strong> para que sumen en el Mayor y
+        el Balance, como te contamos en las guías anteriores.</span>
+      </div>
+      <div class="no-change-item">
+        <span class="check">✓</span>
+        <span>Los recibos, órdenes de pago y egresos <strong>ya confirmados</strong> no se tocan: no
+        se les regenera nada. Si alguno quedó sin asiento, te lo listamos (punto 6).</span>
+      </div>
+      <div class="no-change-item">
+        <span class="check">✓</span>
+        <span>Las <strong>órdenes de pago a un socio</strong> siguen sin generar asiento. Ahora el
+        diálogo te lo avisa.</span>
+      </div>
+      <div class="no-change-item">
+        <span class="check">✓</span>
+        <span>La forma de cargar un recibo, una orden de pago o un egreso (cliente o proveedor,
+        facturas, formas de pago, retenciones) es la misma. Solo se agregó el recuadro de cuentas en
+        el diálogo de confirmar y la exigencia de caja o banco al cargar el pago.</span>
+      </div>
+      <div class="no-change-item">
+        <span class="check">✓</span>
+        <span>Lo que hace cada confirmación en Tesorería —el movimiento de caja o banco, el cheque
+        que pasa a cartera o se entrega, la factura que pasa a pagada— es igual que antes. Solo que
+        ahora, si el asiento no se puede generar, <strong>nada de eso se mueve</strong> hasta que lo
+        corrijas.</span>
+      </div>
+      <div class="no-change-item">
+        <span class="check">✓</span>
+        <span>Las facturas de venta y compra siguen con lo que entregamos en el 721; los
+        movimientos de fondos y los gastos bancarios, con lo del 717 y el 718.</span>
+      </div>
+    </div>
+  </section>
+
+  <footer class="doc-footer">
+    TSK-728 — Recibos, órdenes de pago y egresos ya no se confirman sin asiento · Tesorería → Recibos / Órdenes de Pago · Comercial → Egresos · Contabilidad → Configuración
+  </footer>
+
+</div>
+
+</body>
+</html>

@@ -2,7 +2,7 @@
 
 **Fecha de inicio:** 2026-09-19
 **Ticket:** [728] "Recibos, órdenes de pago y gastos: el fallo del asiento se traga en silencio" · seguimiento de 721 y 724c
-**Estado:** Implementación en progreso (Fases 1, 2, 3, 4 y 5 de 7 completadas; faltan 6 y 7)
+**Estado:** Verificación completada (pendiente solo el diagnóstico en producción, post-deploy)
 
 ---
 
@@ -1249,7 +1249,7 @@ base) y en los tres tests de integración contra la base de dev (fases 2-4): el 
   liste las tres actions; y que la clienta reciba el PDF con capturas reales (memoria
   `guia-presentacion-cliente-por-ticket`).
 - **Tareas:**
-  - [ ] `src/modules/help/features/guide/components/_TreasuryGuide.tsx`:
+  - [x] `src/modules/help/features/guide/components/_TreasuryGuide.tsx`:
     - `:316-319` (recibos, «Al confirmar, se actualiza el saldo de las facturas y se genera el
       asiento contable»): agregar un párrafo «Si falta una cuenta contable (Cuentas por Cobrar,
       la cuenta de la caja o del banco, la de una retención) el recibo **no se confirma** y el
@@ -1262,17 +1262,17 @@ base) y en los tres tests de integración contra la base de dev (fases 2-4): el 
       devolución a un socio no generan asiento».
     - `:737-740` (relación con Contabilidad): «… se generan asientos automáticos; si el asiento
       no se puede generar, la confirmación se rechaza con el motivo».
-  - [ ] `src/modules/help/features/guide/components/_CommercialGuide.tsx:1109-1190` (card
+  - [x] `src/modules/help/features/guide/components/_CommercialGuide.tsx:1109-1190` (card
         "Gastos"): título → **"Egresos"** (como la pantalla, `ExpensesList.tsx:34` y el sidebar);
         agregar «Al confirmar un egreso se genera el asiento (Gastos Operativos contra Cuentas
         por Pagar). Si falta alguna de esas dos cuentas en Contabilidad → Configuración, el
         egreso no se confirma y el mensaje nombra la cuenta.» `:1401-1404`: «al confirmar
         facturas, recibos, órdenes de pago y egresos se generan asientos … si falta una cuenta la
         confirmación se rechaza».
-  - [ ] `src/modules/help/features/guide/components/_AccountingGuide.tsx:273-274`: «cada
+  - [x] `src/modules/help/features/guide/components/_AccountingGuide.tsx:273-274`: «cada
         factura, recibo, orden de pago o egreso confirmado genera su asiento automáticamente; si
         falta una cuenta requerida, la confirmación se rechaza y el mensaje dice cuál».
-  - [ ] `docs/modules/commercial.md`:
+  - [x] `docs/modules/commercial.md`:
     - `:604-612` ("Confirmar Recibo de Cobro"): fila `Asiento Contable` → «Dr: Caja/Banco de cada
       pago (cuenta propia → "Caja/Banco por Defecto") + Ret. Sufridas → Cr: Ctas por Cobrar por
       el importe contabilizable. Si el asiento falla, la confirmación se revierte (TSK-728)»; filas
@@ -1297,21 +1297,21 @@ base) y en los tres tests de integración contra la base de dev (fases 2-4): el 
       medios y su tratamiento (obligatorio / omitido / bloqueado), y los helpers
       (`commercial/shared/payment-accounts.ts`, `settings-accounts.ts`,
       `treasury/shared/entry-preflight.ts`, `shared/lib/accounts/settings-account-labels.ts`).
-  - [ ] `docs/modules/accounting.md:194`: fila «Confirmar recibo/OP/gasto» → «La confirmación
+  - [x] `docs/modules/accounting.md:194`: fila «Confirmar recibo/OP/gasto» → «La confirmación
         falla con mensaje legible y se revierte: el comprobante sigue en `DRAFT` sin asiento
         (TSK-728)». Agregar en la sección de configuración (`:200-220`) que los labels de los
         campos viven en `shared/lib/accounts/settings-account-labels.ts` y que los mensajes de
         error los citan textualmente.
-  - [ ] `docs/conventions/coding-standards.md:137-140` ("Donde ya se usa"): sumar
+  - [x] `docs/conventions/coding-standards.md:137-140` ("Donde ya se usa"): sumar
         `confirmReceipt`, `confirmPaymentOrder`, `confirmExpense` (TSK-728) y la variante
         «`ActionResult<{ warnings: string[] }>` cuando la operación sale bien pero hay algo que
         avisar (medios de pago sin asiento): el cliente muestra `toast.warning`». Sumar la regla
         «el aviso previo del diálogo se alimenta con una action de vista previa vía `useQuery`
         (`getReceiptEntryPreview`), no con `useEffect`».
-  - [ ] Memoria `errores-negocio-server-actions.md`: reemplazar «Recibos, órdenes de pago y
+  - [x] Memoria `errores-negocio-server-actions.md`: reemplazar «Recibos, órdenes de pago y
         gastos todavía tragan…» por «Desde TSK-728 recibos, OP y gastos también devuelven
         `ActionResult`; quedan pendientes movimientos bancarios manuales/transferencias».
-  - [ ] Crear `scripts/guia-presentacion/capturas-tsk728.mjs` (molde `capturas-tsk721.mjs:1-45`:
+  - [x] Crear `scripts/guia-presentacion/capturas-tsk728.mjs` (molde `capturas-tsk721.mjs:1-45`:
         `BASE` por argumento, login con las credenciales de la memoria `dev-local-capturas-y-login`,
         `psql` vía `docker exec contable-pms-db`, `hideNextBadge`). Siembra en "Empresa de Prueba
         01 SA" con prefijo `TSK728-`: caja "Caja TSK728" con sesión abierta y cuenta; banco
@@ -1326,7 +1326,7 @@ base) y en los tres tests de integración contra la base de dev (fases 2-4): el 
         Operativos"; (8) Ajustes contables con los campos nombrados; (9) modal de recibo con el
         error Zod "Debe seleccionar la caja". Restaurar todo al final (borrar `TSK728-*` y sus
         asientos, devolver settings).
-  - [ ] Crear `scripts/guia-presentacion/tsk-728.html` (estructura de `tsk-721.html`): "Qué pedía
+  - [x] Crear `scripts/guia-presentacion/tsk-728.html` (estructura de `tsk-721.html`): "Qué pedía
         el ticket" (en palabras de la clienta: «un recibo se confirmaba aunque el asiento
         fallara y nadie se enteraba»), "Qué cambió" (antes/después: antes confirmado sin asiento;
         ahora se rechaza con el motivo; capturas 2, 6, 7), "Cómo se usa paso a paso" (cargar las
@@ -1778,7 +1778,65 @@ ya pasaba); `check-types` en 219; ESLint sin errores en lo tocado; Prettier limp
 
 ### Fase 6: Documentación
 
-**Estado:** Pendiente.
+**Estado:** Completada (2026-09-22).
+
+**Archivos creados:**
+- `scripts/guia-presentacion/tsk-728.html` (CSS de `tsk-724c.html`) y
+  `docs/presentaciones/TSK-728-asientos-sin-silencio.pdf` (5 páginas A4, 396 KB, generado con
+  `generar-pdf.mjs` sobre el Chrome del sistema). Eyebrow «Ticket 728 · Tesorería · Recibos, Órdenes
+  de pago y Egresos». Secciones: 1 Qué pasaba (no lo pidió la clienta; antes/después) · 2 Qué cambió
+  (vista previa con cuentas: 08, 03, 04; bloqueo con el campo y dónde: 09, 01, 02; callout «Qué vas a
+  notar») · 3 Cheques, tarjetas y cuenta corriente (05, 06, asiento parcial, próxima mejora, «si
+  todos los pagos son de ese tipo, no se confirma» con 07, OP a socio) · 4 Egresos (10, 11,
+  presupuesto solo avisa) · 5 Al cargar (12) · 6 Qué revisar en tu empresa (tabla de cuentas por
+  comprobante + cajas/bancos; históricos: «nosotros lo revisamos al instalar») · 7 Qué no cambió.
+  Las capturas 13-15 (prod) no van en el PDF; se mencionan como «lo verificamos también en la
+  versión instalada».
+
+**Archivos modificados:**
+- `_TreasuryGuide.tsx`: subsección «Qué revisa el sistema al confirmar» en Recibos y en Órdenes de
+  Pago (vista previa, bloqueo con el nombre del campo y dónde, medios sin cuenta con aviso y saldo
+  pendiente en Cobrar/Pagar, bloqueo de una sola línea, OP a socio sin asiento, Efectivo exige caja /
+  Transferencia exige banco); relación con Contabilidad («si el asiento no se puede generar… la
+  confirmación se rechaza con el motivo»).
+- `_CommercialGuide.tsx`: card «Gastos» → **«Egresos»** (ruta, botón «Nuevo Egreso»), subsección
+  «Qué revisa el sistema al confirmar» (Gastos Operativos contra Cuentas por Pagar; presupuesto solo
+  avisa); relación con Contabilidad suma egresos y el rechazo.
+- `_AccountingGuide.tsx`: lista de cuentas con los labels reales («Cuentas por Cobrar», «Caja por
+  Defecto», «Cuenta de Gastos Operativos»…), tabla «Qué cuentas exige cada comprobante» (shadcn
+  `Table`), alert «Ningún comprobante se confirma sin asiento», relación con Tesorería suma egresos.
+  Se quitó el import `Receipt` sin uso (warning previo).
+- `docs/modules/commercial.md`: ciclo de vida del gasto (`DRAFT → CONFIRMED → …`); las cinco actions
+  con `ActionResult` (+ `warnings` / `budgetWarning`); tablas de Confirmar Recibo / OP con filas
+  «Pre-validación», «Asiento por importe contabilizable» y «Pagos sin cuenta»; nueva «Confirmar Gasto
+  (Egreso)»; «Comportamiento ante errores» ya no dice «pendiente de alinear» (bloqueante para los
+  tres; bancarios manuales/transferencias siguen no-bloqueantes); nueva «Cuentas de medios de pago
+  (TSK-728)» con la cadena, la tabla por medio y los helpers; reglas de validación; tabla resumen
+  (+ Gasto, OP a socio); archivos clave.
+- `docs/modules/accounting.md`: asientos automáticos, fila de período bloqueado para recibo/OP/gasto,
+  mapeo de cuentas (Cobrar/Pagar/Gastos/Caja-Banco por defecto con quién los usa), **labels** con
+  `settings-account-labels.ts` como fuente única, nueva «Asientos de recibos, OP y gastos (TSK-728)»
+  (integraciones con `BusinessError`, `getAccountingSettings`, importe contabilizable, medios omitidos,
+  pre-validación, seguimientos), retenciones con sus labels y el bloqueo.
+- `docs/conventions/coding-standards.md`: «Donde ya se usa» suma las tres actions; «Variante con
+  avisos» (`warnings[]` / `budgetWarning` → `toast.warning`); «Vista previa + pre-validación» como
+  patrón recomendado para confirmaciones con asiento (`useQuery`, nunca `useEffect`).
+- `docs/infrastructure/deployment.md`: la frase «desde esos tickets la confirmación se bloquea»
+  aclara que los medios sin cuenta se confirman con aviso y asiento parcial.
+- Memoria `errores-negocio-server-actions.md`: recibos/OP/gastos ya usan el patrón; pendientes solo
+  movimientos bancarios manuales y transferencias.
+
+**Desvíos respecto del plan:**
+- `scripts/guia-presentacion/capturas-tsk728.mjs` y las capturas se hicieron en la Fase 7 (antes que
+  esta), con el set de 15 capturas de la sección 5 en lugar de las 9 planificadas; la tarea queda
+  marcada acá por completitud.
+- El PDF no incluye la captura de Ajustes contables (8 del plan): la sección 6 lista los campos en
+  una tabla con sus nombres literales, que es lo que la clienta necesita para encontrarlos.
+- Las tres guías in-app ya no cumplían Prettier en HEAD; se respetó el estilo del archivo (ESLint
+  limpio en las tres).
+
+**Verificación:** `npx eslint` en las tres guías sin errores ni warnings; `check-types` en 219
+(línea base); PDF abierto y revisado página por página (5 páginas, capturas legibles).
 
 ### Fase 7: Verificación final
 
