@@ -297,7 +297,10 @@ export function _CompanyGuide() {
                 <li>Tipos de contrato</li>
                 <li>Sindicatos</li>
                 <li>Convenios colectivos</li>
-                <li>Centros de costo</li>
+                <li>
+                  Centros de costo (con <strong>Ver movimientos</strong> en el
+                  menú de cada centro, que abre el informe contable ya filtrado)
+                </li>
                 <li>Sectores</li>
                 <li>Tipos operativos</li>
               </ul>
@@ -533,6 +536,20 @@ export function _CompanyGuide() {
               (marcas, tipos de equipo, titulares, sectores, tipos operativos y
               contratistas); las cuentas contables de cada Tipo de Equipo
               definen cómo se contabilizan la amortización y la baja
+            </li>
+            <li>
+              <strong>Contabilidad</strong>: el informe{' '}
+              <strong>Movimientos por Centro de Costo</strong> (Contabilidad →
+              Informes) muestra las entradas, las salidas y el saldo imputados a
+              cada centro; se abre directo con <strong>Ver movimientos</strong>{' '}
+              desde el catálogo de centros de costo, si el usuario tiene permiso
+              sobre los informes contables. Hoy imputan centro de costo las
+              líneas de las <strong>facturas de venta y de compra</strong> (con
+              el reparto por porcentaje) y los asientos manuales que lo lleven;{' '}
+              <strong>todavía no</strong> los movimientos de fondos, las
+              amortizaciones de equipos, los recibos, las órdenes de pago ni los
+              egresos. El centro de costo cargado en el legajo del empleado o en
+              la ficha del equipo es informativo y no llega al asiento
             </li>
             <li>
               <strong>Documentos</strong>: las condiciones de aplicación de

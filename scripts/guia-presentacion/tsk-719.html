@@ -1,0 +1,626 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>TSK-719 — Entradas y salidas por centro de costo</title>
+<style>
+  @page {
+    size: A4;
+    margin: 0;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #1f2430;
+    font-size: 13px;
+    line-height: 1.55;
+    background: #ffffff;
+  }
+
+  .page {
+    padding: 4mm 2mm;
+  }
+
+  header.cover {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    text-align: left;
+    padding: 10mm 2mm 8mm 2mm;
+    border-bottom: 3px solid #2f6f4f;
+    margin-bottom: 10mm;
+  }
+
+  .eyebrow {
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 11px;
+    font-weight: 700;
+    color: #2f6f4f;
+    margin-bottom: 6px;
+  }
+
+  h1 {
+    font-size: 26px;
+    margin: 0 0 8px 0;
+    color: #14251c;
+  }
+
+  .subtitle {
+    font-size: 14px;
+    color: #4b5563;
+    margin: 0;
+  }
+
+  section {
+    margin-bottom: 9mm;
+    page-break-inside: avoid;
+  }
+
+  section.allow-break {
+    page-break-inside: auto;
+  }
+
+  section:last-of-type { margin-bottom: 2mm; }
+
+  h2 {
+    font-size: 16px;
+    color: #14251c;
+    border-left: 4px solid #2f6f4f;
+    padding-left: 8px;
+    margin: 0 0 6mm 0;
+    page-break-after: avoid;
+  }
+
+  h3.sub {
+    font-size: 13.5px;
+    color: #14251c;
+    margin: 6mm 0 3mm 0;
+    page-break-after: avoid;
+  }
+
+  .quote {
+    background: #f4f7f5;
+    border-left: 4px solid #2f6f4f;
+    padding: 10px 14px;
+    font-style: italic;
+    color: #2b3a33;
+    margin: 0 0 6px 0;
+  }
+
+  .quote cite {
+    display: block;
+    font-style: normal;
+    font-size: 11.5px;
+    color: #6b7280;
+    margin-top: 6px;
+  }
+
+  .before-after {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    page-break-inside: avoid;
+  }
+
+  .card {
+    border: 1px solid #e2e5e0;
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+
+  .card.before { background: #fbf7f2; border-color: #ecd9bd; }
+  .card.after { background: #f2f8f4; border-color: #bfe0cb; }
+
+  .card h3 {
+    margin: 0 0 6px 0;
+    font-size: 12.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .card.before h3 { color: #9a6a1f; }
+  .card.after h3 { color: #226240; }
+
+  .card p { margin: 0; }
+
+  ol.steps {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    counter-reset: step;
+  }
+
+  ol.steps > li {
+    counter-increment: step;
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+    page-break-inside: avoid;
+  }
+
+  ol.steps > li::before {
+    content: counter(step);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    border-radius: 50%;
+    background: #2f6f4f;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .step-body { flex: 1; }
+
+  .step-body strong { color: #14251c; }
+
+  figure {
+    margin: 8px 0 0 0;
+    page-break-inside: avoid;
+  }
+
+  figure img {
+    max-width: 100%;
+    border: 1px solid #d9dce0;
+    border-radius: 6px;
+    display: block;
+  }
+
+  figure.totals img { max-width: 100%; }
+
+  figure.report img { max-width: 430px; }
+
+  figure.report-wide img { max-width: 470px; }
+
+  .block { page-break-inside: avoid; }
+
+  figcaption {
+    font-size: 11px;
+    color: #6b7280;
+    margin-top: 4px;
+  }
+
+  .callout {
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin: 0 0 8px 0;
+    page-break-inside: avoid;
+  }
+
+  .callout.config {
+    background: #f2f6fb;
+    border: 1px solid #cddaeb;
+  }
+
+  .callout.warning {
+    background: #fdf5ec;
+    border: 1px solid #efd6a8;
+  }
+
+  .callout h3 {
+    margin: 0 0 4px 0;
+    font-size: 13px;
+  }
+
+  .callout p { margin: 0 0 6px 0; }
+  .callout p:last-child { margin-bottom: 0; }
+
+  ul.plain {
+    margin: 4px 0 0 0;
+    padding-left: 18px;
+  }
+
+  ul.plain li { margin-bottom: 4px; }
+
+  .no-change-list {
+    display: grid;
+    gap: 6px;
+  }
+
+  .no-change-item {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+  }
+
+  .check {
+    color: #2f6f4f;
+    font-weight: 700;
+  }
+
+  .side-by-side {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8mm;
+    align-items: start;
+    page-break-inside: avoid;
+  }
+
+  .side-by-side figure { margin-top: 0; }
+
+  .ui-text {
+    font-style: italic;
+    color: #374151;
+  }
+
+  table.chain {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 6px 0 8px 0;
+    font-size: 12px;
+    page-break-inside: avoid;
+  }
+
+  table.chain th, table.chain td {
+    border: 1px solid #dfe3e0;
+    padding: 6px 8px;
+    text-align: left;
+    vertical-align: top;
+  }
+
+  table.chain th {
+    background: #f4f7f5;
+    color: #14251c;
+    font-weight: 700;
+  }
+
+  table.chain td.yes { color: #226240; font-weight: 700; }
+  table.chain td.no { color: #9a3412; font-weight: 700; }
+
+  footer.doc-footer {
+    text-align: center;
+    color: #9ca3af;
+    font-size: 10.5px;
+    margin-top: 2mm;
+  }
+</style>
+
+</head>
+<body>
+
+
+<div class="page">
+
+  <header class="cover">
+    <div class="eyebrow">Ticket 719 · Contabilidad · Centros de Costo</div>
+    <h1>Entradas y salidas por centro de costo</h1>
+    <p class="subtitle">Guía de presentación — qué pediste, dónde está el informe nuevo, cómo se lee, qué cuenta como entrada y como salida, y qué todavía no se imputa a un centro</p>
+  </header>
+
+  <section>
+    <h2>1. Qué pediste</h2>
+    <div class="quote">
+      “Centros de Costo — Tenemos que habilitar los movimientos Entradas y Salidas”
+      <cite>Elizabeth Perez, reunión del 16 y 17 de septiembre</cite>
+    </div>
+    <p>Hasta ahora los centros de costo estaban <strong>a mitad de camino</strong>. Los podías crear,
+    podías repartir cada línea de una factura entre varios centros por porcentaje (eso lo entregamos
+    en el ticket 583), podías asignarle un centro a un empleado o a un equipo… y después
+    <strong>no había ningún lugar donde ver qué se le imputó a cada uno</strong>. El dato se
+    guardaba y no se podía leer: la pantalla de Empresa → Centros de Costo era una lista de nombres
+    y nada más, y ningún informe contable miraba el centro de costo.</p>
+    <div class="before-after">
+      <div class="card before">
+        <h3>Antes</h3>
+        <p>Cargabas el centro de costo en la factura y ahí moría. Para saber cuánto le entró y
+        cuánto le salió a “Logística” había que abrir los asientos uno por uno, o pedirlo por fuera
+        del sistema.</p>
+      </div>
+      <div class="card after">
+        <h3>Ahora</h3>
+        <p>Un informe nuevo, <strong>Movimientos por Centro de Costo</strong>, con las entradas, las
+        salidas y el saldo de cada centro en el período que elijas, el detalle movimiento por
+        movimiento y exportación a Excel.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="allow-break">
+    <h2>2. Dónde está</h2>
+    <p>El informe vive con los demás informes contables, que es donde vas a querer cruzarlo contra
+    el Libro Mayor:</p>
+    <p style="margin-top:6px"><strong>Contabilidad → Informes → Movimientos por Centro de Costo</strong></p>
+    <p>Y además tiene un <strong>atajo</strong>: en <strong>Empresa → Centros de Costo</strong>, el
+    menú de los tres puntos de cada centro ahora tiene <span class="ui-text">Ver movimientos</span>.
+    Hacés clic y se abre el informe <strong>ya filtrado por ese centro</strong> y ya consultado, sin
+    que tengas que elegir nada.</p>
+    <div class="side-by-side">
+      <figure>
+        <img src="assets/tsk719-09a-menu-ver-movimientos.png" alt="Pantalla Empresa → Centros de Costo con la lista Administración, Logística y Mantenimiento; el menú de los tres puntos de Logística abierto con las opciones Ver movimientos, Editar y Eliminar" />
+        <figcaption>El menú de cada centro: <span class="ui-text">Ver movimientos</span> arriba de
+        Editar y Eliminar. Aparece solo si el usuario tiene permiso sobre los informes contables.</figcaption>
+      </figure>
+      <figure>
+        <img src="assets/tsk719-09-deep-link.png" alt="Informes Contables con Movimientos por Centro de Costo seleccionado en la lista de la izquierda y el informe de Logística ya generado a la derecha" />
+        <figcaption>Lo que se abre al hacer clic: el informe seleccionado en la lista, el centro ya
+        elegido y los números en pantalla.</figcaption>
+      </figure>
+    </div>
+    <div class="callout config">
+      <h3>Una cosa a tener en cuenta con el atajo</h3>
+      <p>El atajo abre el informe con el <strong>mes en curso</strong>. Si el movimiento que buscás
+      es de un mes anterior vas a ver ceros: cambiá <span class="ui-text">Desde</span> y
+      <span class="ui-text">Hasta</span> y apretá <span class="ui-text">Generar</span>.</p>
+    </div>
+  </section>
+
+  <section class="allow-break">
+    <h2>3. Cómo se lee</h2>
+    <p>Elegís el <strong>centro de costo</strong>, el <strong>período</strong> y apretás
+    <span class="ui-text">Generar</span>. Arriba siempre ves las tres tarjetas del período:
+    <strong>Entradas</strong>, <strong>Salidas</strong> y <strong>Saldo</strong> (entradas menos
+    salidas; en verde si el centro aporta, en rojo si consume).</p>
+    <figure class="totals">
+      <img src="assets/tsk719-03-totales.png" alt="Tres tarjetas: Entradas $ 250.000,00, Salidas $ 150.000,00, Saldo del período $ 100.000,00 en verde" />
+      <figcaption>Las tarjetas de totales del período consultado.</figcaption>
+    </figure>
+
+    <p style="margin-top:6px">El selector de centro tiene <strong>tres modos</strong>:</p>
+
+    <h3 class="sub">Un centro: el detalle, con saldo acumulado</h3>
+    <p>Movimiento por movimiento, en orden de fecha: fecha, número de asiento, cuenta, el detalle de
+    la línea, cuánto entró, cuánto salió y cómo va quedando el saldo acumulado fila por fila.</p>
+    <figure class="report-wide">
+      <img src="assets/tsk719-02-detalle-centro.png" alt="Informe del centro Logística en septiembre de 2026: totales 250.000 de entradas, 150.000 de salidas, 100.000 de saldo, y tres filas de detalle con el saldo acumulado 300.000, 150.000 y 100.000" />
+      <figcaption>Logística en septiembre: entra una venta de $ 300.000, sale combustible por
+      $ 150.000 y una devolución resta $ 50.000. El saldo acumulado va 300.000 → 150.000 → 100.000.
+      Los datos son de demostración.</figcaption>
+    </figure>
+
+    <div class="block">
+      <h3 class="sub">Todos los centros: la comparativa</h3>
+      <p>Una fila por centro con sus entradas, sus salidas y su saldo, para responder de un vistazo
+      cuál aporta y cuál consume. Cada fila <strong>se despliega</strong> con la flecha de la
+      izquierda y muestra su propio detalle, con su saldo acumulado arrancando de cero.</p>
+      <figure class="report-wide">
+        <img src="assets/tsk719-04-todos-los-centros.png" alt="Modo Todos los centros: filas de Administración, Logística, Mantenimiento y (Sin centro de costo); Mantenimiento está desplegado mostrando sus dos movimientos" />
+        <figcaption>Los tres centros comparados más la fila
+        <span class="ui-text">(Sin centro de costo)</span>. Acá está desplegado Mantenimiento.</figcaption>
+      </figure>
+    </div>
+
+    <div class="block">
+      <h3 class="sub">(Sin centro de costo): lo que quedó sin imputar</h3>
+      <p>Los ingresos y los gastos que <strong>no tienen ningún centro asignado</strong>. Es el
+      control que te dice qué se está escapando del análisis por centro: si esa cifra es grande, hay
+      facturas que se cargaron sin repartir.</p>
+      <figure class="report-wide">
+        <img src="assets/tsk719-05-sin-centro.png" alt="Modo (Sin centro de costo): salidas por $ 57.000,00 con dos líneas, Gastos Varios $ 45.000 y Librería y Papelería $ 12.000" />
+        <figcaption>Solo aparecen cuentas de ingresos y gastos. Los saldos de caja, banco, IVA o
+        cuentas corrientes <strong>no</strong> entran acá: no son plata que entre o salga de un centro.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="allow-break">
+    <h2>4. Qué es entrada y qué es salida</h2>
+    <p>Esta es la parte que conviene leer despacio, porque es lo que hace que los números cierren.</p>
+    <p><strong>Entrada y salida no se deciden por el Debe y el Haber, sino por el tipo de
+    cuenta.</strong> Si la línea va a una cuenta de <strong>ingresos</strong>, es una
+    <strong>entrada</strong> del centro. Si va a una cuenta de <strong>gastos</strong>, es una
+    <strong>salida</strong>. Y el <strong>saldo</strong> del centro es entradas menos salidas.</p>
+    <p>¿Por qué importa la distinción? Por las <strong>notas de crédito</strong>. Cuando le hacés una
+    nota de crédito a un cliente, contablemente eso va al Debe de una cuenta de ventas. Si el
+    informe mirara solo el Debe y el Haber, esa devolución aparecería como una
+    <strong>salida</strong> del centro —como si fuera un gasto— y el centro quedaría con más
+    entradas y más salidas de las que tuvo. Lo que hace el informe es lo correcto: la deja del lado
+    de las entradas, <strong>en negativo</strong>, restando.</p>
+    <figure class="report-wide">
+      <img src="assets/tsk719-08-nota-de-credito.png" alt="El mismo informe de Logística; la tercera fila, del 12/09/2026, asiento 32, Devolución servicio de logística, muestra una entrada de -$ 50.000,00 y el saldo acumulado baja de 150.000 a 100.000" />
+      <figcaption>La misma pantalla del punto 3, mirando la <strong>tercera fila</strong>: la
+      devolución del 12/09 figura como entrada de <strong>–$ 50.000,00</strong>, no como salida, y el
+      saldo acumulado baja de 150.000 a 100.000. La venta del centro queda en 300.000 − 50.000 =
+      $ 250.000, que es exactamente lo que muestra el Libro Mayor para esa cuenta.</figcaption>
+    </figure>
+    <div class="callout config">
+      <h3>Cuadra con el Libro Mayor</h3>
+      <p>Lo verificamos cuenta por cuenta: para cada cuenta de ingresos o gastos, lo que muestra el
+      Libro Mayor es igual a la suma de todos los centros <strong>más</strong> la fila
+      <span class="ui-text">(Sin centro de costo)</span>. Nada se pierde y nada se cuenta dos veces.</p>
+    </div>
+  </section>
+
+  <section class="allow-break">
+    <h2>5. Los asientos en borrador</h2>
+    <p>Este es el mismo tema que te contamos en los tickets 717 y 721. Vale la pena repetirlo una vez
+    más, con calma, porque es lo primero que te va a pasar con este informe.</p>
+    <p>Cuando confirmás una factura, el sistema <strong>genera el asiento contable pero lo deja en
+    Borrador</strong>. Un asiento en borrador todavía no es contabilidad: no suma en el Libro Mayor,
+    no suma en el Balance y <strong>no suma en este informe</strong>. Recién cuenta cuando alguien lo
+    <strong>registra</strong> desde <strong>Contabilidad → Asientos</strong>. Es a propósito: le da a
+    tu contador la última palabra antes de que algo entre a los libros.</p>
+    <div class="block">
+      <p>Por eso puede pasar que cargues todo bien y el informe te muestre ceros. Para que eso no
+      parezca un error, <strong>el informe te lo dice</strong>: cuando en el período quedan asientos
+      en borrador que tocan lo que estás consultando, aparece un aviso naranja con
+      <strong>cuántos son y por cuánto</strong>.</p>
+      <figure class="report-wide">
+        <img src="assets/tsk719-01-solo-borradores.png" alt="Informe de Logística en agosto: las tres tarjetas en $ 0,00, el aviso naranja Hay 1 asiento en borrador con movimientos de este centro por $ 60.000,00 en salidas que no están incluidos, y el texto No hay movimientos registrados en el período" />
+        <figcaption>Todo en cero, pero el informe no te deja adivinando: hay un asiento en borrador
+        por $ 60.000 que todavía no cuenta.</figcaption>
+      </figure>
+    </div>
+    <p style="margin-top:6px">Tenés <strong>dos caminos</strong>, y son distintos:</p>
+    <ol class="steps">
+      <li>
+        <div class="step-body"><strong>Registrar los asientos</strong> (lo que hay que hacer).
+        Andá a <strong>Contabilidad → Asientos</strong>, buscá los que están en
+        <span class="ui-text">Borrador</span> y usá <span class="ui-text">Registrar</span> en el menú
+        de cada uno. A partir de ahí el movimiento cuenta en este informe, en el Mayor y en el
+        Balance, igual que para todo el resto del sistema.</div>
+      </li>
+      <li>
+        <div class="step-body"><strong>Activar “Incluir borradores”</strong> (para mirar, no para
+        cerrar). El switch de arriba suma los borradores al informe y agrega una columna
+        <span class="ui-text">Estado</span> que marca cada línea como
+        <span class="ui-text">Registrado</span> o <span class="ui-text">Borrador</span>. Sirve para
+        ver cómo va a quedar el centro cuando se registre todo; <strong>no</strong> reemplaza al paso
+        1, y esos números no van a coincidir con el Libro Mayor.</div>
+      </li>
+    </ol>
+    <div class="side-by-side">
+      <figure>
+        <img src="assets/tsk719-07-aviso-borradores.png" alt="Mantenimiento en septiembre con el switch apagado: salidas $ 90.000,00, saldo $ 110.000,00, y el aviso de 1 asiento en borrador por $ 80.000,00 en salidas" />
+        <figcaption>Con el switch <strong>apagado</strong>: salidas $ 90.000 y el aviso de que falta
+        un borrador de $ 80.000.</figcaption>
+      </figure>
+      <figure>
+        <img src="assets/tsk719-06-con-borradores.png" alt="El mismo centro con Incluir borradores activado: salidas $ 170.000,00, saldo $ 30.000,00, y una columna Estado con los badges Registrado, Registrado y Borrador" />
+        <figcaption>Con el switch <strong>encendido</strong>: salidas $ 170.000 y la columna
+        <span class="ui-text">Estado</span> marcando cuál es cuál.</figcaption>
+      </figure>
+    </div>
+    <div class="callout warning">
+      <h3>Si el aviso te muestra una cifra enorme</h3>
+      <p>En <span class="ui-text">Todos los centros</span> el aviso suma <strong>todos</strong> los
+      borradores del período, incluidos los que no tienen centro asignado. Si en tu empresa hay
+      asientos viejos sin registrar, la cifra va a ser grande. No es un error del informe: es el
+      tamaño real de lo que falta registrar.</p>
+    </div>
+  </section>
+
+  <section class="allow-break">
+    <h2>6. Qué imputa centro de costo hoy, y qué no</h2>
+    <p><strong>Esto es importante para que no busques en el informe algo que todavía no va a
+    aparecer.</strong> El informe muestra fielmente lo que el sistema imputa a un centro de costo, y
+    hoy eso son <strong>las facturas de venta y de compra</strong>. Nada más.</p>
+    <table class="chain">
+      <thead>
+        <tr>
+          <th style="width:52%">Movimiento</th>
+          <th style="width:16%">¿Va al centro?</th>
+          <th>Detalle</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Facturas de venta</strong></td>
+          <td class="yes">Sí</td>
+          <td>Por el reparto por porcentaje de cada línea, o por el centro por defecto del artículo</td>
+        </tr>
+        <tr>
+          <td><strong>Facturas de compra</strong> (y sus notas de crédito y débito)</td>
+          <td class="yes">Sí</td>
+          <td>Igual que las de venta</td>
+        </tr>
+        <tr>
+          <td><strong>Movimientos de fondos</strong> (caja, bancos, transferencias)</td>
+          <td class="no">Todavía no</td>
+          <td rowspan="5">Estos asientos se generan sin centro de costo. Si los buscás en el informe,
+          no están: ni en el centro, ni en la fila
+          <span class="ui-text">(Sin centro de costo)</span> cuando no son cuentas de ingresos o
+          gastos</td>
+        </tr>
+        <tr>
+          <td><strong>Amortización de equipos</strong></td>
+          <td class="no">Todavía no</td>
+        </tr>
+        <tr>
+          <td><strong>Recibos de cobro</strong></td>
+          <td class="no">Todavía no</td>
+        </tr>
+        <tr>
+          <td><strong>Órdenes de pago</strong></td>
+          <td class="no">Todavía no</td>
+        </tr>
+        <tr>
+          <td><strong>Egresos</strong> (gastos cargados a mano)</td>
+          <td class="no">Todavía no</td>
+        </tr>
+        <tr>
+          <td><strong>Centro de costo del legajo del empleado</strong></td>
+          <td class="no">Es informativo</td>
+          <td>Queda en la ficha del empleado; no llega a ningún asiento. No hay liquidación de
+          sueldos que lo lleve</td>
+        </tr>
+        <tr>
+          <td><strong>Centro de costo de la ficha del equipo</strong></td>
+          <td class="no">Es informativo</td>
+          <td>Queda en la ficha del equipo; la amortización no lo usa</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>En criollo: el centro <strong>Logística</strong> te va a mostrar el combustible
+    <em>facturado</em> a ese centro, pero <strong>no</strong> el pago de ese combustible cargado como
+    egreso, ni la amortización del camión, ni los sueldos del sector.</p>
+    <div class="callout config">
+      <h3>Lo anotamos como próxima mejora</h3>
+      <p>Extender el centro de costo a los egresos y a la amortización de equipos es el paso
+      siguiente natural, y lo dejamos anotado. <strong>Decinos cuál te sirve primero</strong> y lo
+      priorizamos: no hace falta esperar a que estén todos.</p>
+      <p>También queda pendiente poder elegir el centro de costo al cargar un
+      <strong>asiento manual</strong>: el sistema lo guarda si viene cargado, pero la pantalla de
+      alta todavía no te ofrece el campo.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>7. El Excel</h2>
+    <p>El botón de descarga al lado de <span class="ui-text">Generar</span> baja lo que estás viendo
+    a una planilla, con una hoja llamada <strong>Movimientos por Centro</strong>. Trae una fila por
+    movimiento y una fila <strong>TOTAL</strong> por centro, con estas columnas:</p>
+    <p style="margin-top:4px"><strong>Centro · Fecha · Asiento · Código · Cuenta · Descripción ·
+    Debe · Haber · Entrada · Salida · Saldo</strong> (y <strong>Estado</strong> si bajaste el informe
+    con los borradores incluidos).</p>
+    <p><strong>Debe</strong> y <strong>Haber</strong> están solo en el Excel, no en la pantalla: es
+    ahí donde tu contador va a querer cruzar línea por línea contra el Libro Mayor, y en la pantalla
+    ocupaban lugar sin agregar nada para el uso del día a día.</p>
+  </section>
+
+  <section>
+    <h2>8. Qué no cambió</h2>
+    <div class="no-change-list">
+      <div class="no-change-item">
+        <span class="check">✓</span>
+        <span>La forma de <strong>cargar</strong> el centro de costo en una factura es exactamente la
+        misma que entregamos en el ticket 583: el reparto por porcentaje por línea, o el centro por
+        defecto del artículo. Este ticket solo agrega la forma de <strong>verlo</strong>.</span>
+      </div>
+      <div class="no-change-item">
+        <span class="check">✓</span>
+        <span>Los <strong>centros de costo</strong> siguen siendo lo que eran: un nombre. No les
+        agregamos código, ni jerarquía de centros dentro de centros, ni responsable, ni presupuesto
+        propio. Se crean, se editan y se eliminan igual que antes.</span>
+      </div>
+      <div class="no-change-item">
+        <span class="check">✓</span>
+        <span>El switch <strong>“Exigir centro de costo”</strong> de Contabilidad → Configuración
+        funciona igual. Si lo tenés apagado, seguís pudiendo confirmar facturas sin repartir: esas
+        líneas van a aparecer en la fila <span class="ui-text">(Sin centro de costo)</span>.</span>
+      </div>
+      <div class="no-change-item">
+        <span class="check">✓</span>
+        <span>Los <strong>asientos ya cargados</strong> no se tocaron ni se regeneraron. El informe
+        lee lo que ya estaba: si una factura vieja se confirmó sin centro, sigue sin centro.</span>
+      </div>
+      <div class="no-change-item">
+        <span class="check">✓</span>
+        <span>Los <strong>permisos</strong> son los de siempre. El informe pide permiso de
+        <strong>Informes contables</strong>; el atajo <span class="ui-text">Ver movimientos</span> no
+        aparece para quien no lo tenga, y tampoco si tu empresa tiene desactivado el módulo de
+        Contabilidad.</span>
+      </div>
+      <div class="no-change-item">
+        <span class="check">✓</span>
+        <span>El resto de los informes contables —Mayor, Diario, Balance, Estado de Resultados—
+        siguen mostrando <strong>solo asientos registrados</strong>, sin opción de incluir
+        borradores. El único que la tiene es este.</span>
+      </div>
+    </div>
+  </section>
+
+  <footer class="doc-footer">
+    TSK-719 — Entradas y salidas por centro de costo · Contabilidad → Informes → Movimientos por Centro de Costo · Empresa → Centros de Costo → Ver movimientos
+  </footer>
+
+</div>
+
+</body>
+</html>

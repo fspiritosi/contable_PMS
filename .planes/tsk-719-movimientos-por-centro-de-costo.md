@@ -3,7 +3,7 @@
 **Fecha de inicio:** 2026-09-22
 **Ticket:** [719] "Centros de Costo — Tenemos que habilitar los movimientos Entradas y Salidas"
 **Origen:** reunión con Elizabeth Perez del 16-17/09 (nota interna)
-**Estado:** Implementación en progreso (Fases 1-5 de 7 completadas)
+**Estado:** Verificación completada (pendientes solo los permisos con usuarios demo y la consulta en producción, post-deploy)
 
 ---
 
@@ -970,7 +970,7 @@ preexistentes.
   (riesgo 1.6-2: sueldos y equipos no imputan centro de costo), y que la clienta reciba el PDF con
   capturas reales (memoria `guia-presentacion-cliente-por-ticket`).
 - **Tareas:**
-  - [ ] `src/modules/help/features/guide/components/_AccountingGuide.tsx`: agregar después del
+  - [x] `src/modules/help/features/guide/components/_AccountingGuide.tsx`: agregar después del
         ítem "Libro Mayor" (`:442-444`, antes del `</ul>` de `:445`) el `<li>`
         *"**Movimientos por Centro de Costo**: entradas, salidas y saldo de cada centro; se puede
         ver un centro, todos comparados o las líneas sin centro asignado"*. Y, debajo de la lista
@@ -983,12 +983,12 @@ preexistentes.
         centro del legajo y el del equipo son informativos); (3) **borradores**: el informe
         muestra asientos **registrados**; los que están en borrador aparecen en el aviso y solo
         se suman activando "Incluir borradores".
-  - [ ] `_CompanyGuide.tsx:300` (bullet "Centros de costo" del catálogo de Empleados): cambiarlo
+  - [x] `_CompanyGuide.tsx:300` (bullet "Centros de costo" del catálogo de Empleados): cambiarlo
         por *"Centros de costo (con «Ver movimientos» para abrir el informe contable del centro)"*.
         Y en la lista "Relación con otros módulos" (`:522-530`), agregar un `<li>` **Contabilidad**:
         *"el informe «Movimientos por Centro de Costo» muestra lo imputado a cada centro; requiere
         permiso de Informes contables"*.
-  - [ ] `docs/modules/accounting.md`: fila nueva en la tabla de Reportes Financieros después de
+  - [x] `docs/modules/accounting.md`: fila nueva en la tabla de Reportes Financieros después de
         Libro Mayor (`:145`): `| Movimientos por Centro de Costo | Entradas, salidas y saldo por
         centro (TSK-719); comparativa de todos los centros expandible al detalle |`. Debajo de la
         tabla, una subsección `#### Movimientos por Centro de Costo (TSK-719)` con la regla de
@@ -997,11 +997,11 @@ preexistentes.
         helper puro `shared/utils/cost-center-movements.ts`. Matizar la frase
         *"Todos los reportes solo consideran asientos POSTED"* (`:162`) con "salvo Movimientos por
         Centro de Costo, que puede incluir borradores a pedido y avisa cuando los excluye".
-  - [ ] `docs/architecture/data-model.md:466`: completar la fila de `JournalEntryLine` — hoy dice
+  - [x] `docs/architecture/data-model.md:466`: completar la fila de `JournalEntryLine` — hoy dice
         solo `accountId, debit, credit, description` y le faltan los auxiliares: agregar
         `customerId?, supplierId?, costCenterId?` y los índices nuevos
         (`@@index([costCenterId])`, `@@index([entryId])`, TSK-719).
-  - [ ] Crear `scripts/guia-presentacion/capturas-tsk719.mjs` (molde `capturas-tsk721.mjs` y
+  - [x] Crear `scripts/guia-presentacion/capturas-tsk719.mjs` (molde `capturas-tsk721.mjs` y
         `capturas-tsk728.mjs:1-45`: `baseUrl` por argumento, login con las credenciales de la
         memoria `dev-local-capturas-y-login`, `psql` vía `docker exec contable-pms-db`,
         `hideNextBadge`, restauración al final). Siembra en "Empresa de Prueba 01 SA" lo que la
@@ -1014,7 +1014,7 @@ preexistentes.
         abierto (o la fila de descarga); (8) el menú "Ver movimientos" en Empresa → Centros de
         Costo; (9) el informe abierto por deep-link ya filtrado. Borrar los datos `TSK719-*` al
         terminar.
-  - [ ] Crear `scripts/guia-presentacion/tsk-719.html` (estructura de `tsk-728.html`): "Qué pedía
+  - [x] Crear `scripts/guia-presentacion/tsk-719.html` (estructura de `tsk-728.html`): "Qué pedía
         el ticket" (en palabras de Elizabeth: *"habilitar los movimientos Entradas y Salidas"*),
         "Qué cambió" (antes/después con capturas), "Cómo se usa paso a paso", "Qué significan
         Entrada y Salida" (con el ejemplo de la nota de crédito), **"Qué NO imputa centro de
@@ -1304,7 +1304,23 @@ _Pendiente - ejecutar `/disenar tsk-719-movimientos-por-centro-de-costo`_
   - El `<Suspense>` es obligatorio: sin él `npm run build` falla con *"useSearchParams() should be wrapped in a suspense boundary"*. Verificado con `npm run build` (compila).
 
 ### Fase 6: Documentación
-- **Estado:** Pendiente
+- **Estado:** Completada (2026-09-22)
+- **Archivos creados:**
+  - `scripts/guia-presentacion/tsk-719.html` — guía de presentación al cliente, estructura y estilos de `tsk-728.html`.
+  - `docs/presentaciones/TSK-719-movimientos-centro-de-costo.pdf` — 7 páginas, 728 KB, generado con `node scripts/guia-presentacion/generar-pdf.mjs`.
+  - (`scripts/guia-presentacion/capturas-tsk719.mjs` y las 12 capturas ya se habían creado en la fase 7, que se ejecutó antes que esta.)
+- **Archivos modificados:**
+  - `src/modules/help/features/guide/components/_AccountingGuide.tsx` — `<li>` del informe en la lista de Reportes financieros (con los tres modos del selector) y, debajo de la lista, el bloque "Cómo leer Movimientos por Centro de Costo" con los tres malentendidos: entrada/salida por tipo de cuenta (con la NC que resta), qué imputa centro de costo hoy y qué no, y borradores + switch + Excel.
+  - `_CompanyGuide.tsx` — el bullet "Centros de costo" del catálogo de Empleados ahora menciona "Ver movimientos", y la lista "Relación con otros módulos" suma un `<li>` **Contabilidad** con el informe, el permiso y el límite de qué imputa centro de costo.
+  - `docs/modules/accounting.md` — fila en la tabla de Reportes Financieros + subsección `#### Movimientos por Centro de Costo (TSK-719)` (regla de signo por `nature` en bloque de código, tabla de las dos actions con firma y payload, los tres valores de `costCenterId`, la restricción del bucket "sin centro" a cuentas de resultado, la decisión de una sola query con corte en memoria, permisos y validación de `companyId`, deep-link, qué imputa centro de costo hoy, columnas del Excel); y la frase "Todos los reportes solo consideran asientos POSTED" matizada.
+  - `docs/architecture/data-model.md` — fila de `JournalEntryLine` con los auxiliares (`customerId?`, `supplierId?`, `costCenterId?`) y los índices, más un bloque nuevo **Índices de `journal_entry_lines` (TSK-719)** que explica por qué entraron `[costCenterId]` y `[entryId]` y por qué `[accountId]` quedó afuera.
+  - `docs/modules/company.md` — la fila del catálogo Centros de Costo suma la relación con `JournalEntryLine`, y un bloque nuevo documenta el acceso "Ver movimientos" (URL, doble condición de permiso RBAC + módulo activo, y por qué `company` no importa de `accounting`).
+- **Notas:**
+  - **El PDF se apartó de la estructura literal que preveía el plan.** En vez de "Qué cambió / Cómo se usa paso a paso" quedaron 8 secciones pensadas para lo que la clienta va a hacer con el informe: (1) Qué pediste, con la cita del ticket; (2) Dónde está, con el atajo desde Centros de Costo; (3) Cómo se lee, con los tres modos del selector; (4) Qué es entrada y qué es salida, con la NC como entrada negativa; (5) Los asientos en borrador; (6) Qué imputa centro de costo hoy y qué no, en tabla; (7) El Excel; (8) Qué no cambió. Las secciones que el plan exigía (**"Qué NO imputa centro de costo"** y **"Borrador vs Registrado"**) están, con más peso: son las secciones 6 y 5, no un apartado al final.
+  - **Capturas usadas: 9 de las 12.** Quedaron afuera `01b-septiembre-previo` (estado intermedio de la siembra, no le dice nada a la clienta) y `10`/`10b` (build de producción: son evidencia de verificación, no material de presentación). `02-detalle-centro` y `08-nota-de-credito` son **el mismo archivo**; se usa dos veces a propósito, en la sección 3 para leer la tabla y en la 4 con el foco en la tercera fila, y el epígrafe lo dice.
+  - Se agregaron dos avisos que el plan no preveía y que salieron de los hallazgos de la fase 7: el atajo abre con el mes en curso (hallazgo 5) y el aviso de borradores puede mostrar cifras enormes en "Todos los centros" por los asientos viejos sin registrar (hallazgo 4).
+  - `prettier --check` sobre `_AccountingGuide.tsx` y `_CompanyGuide.tsx` **ya fallaba en `HEAD`** (verificado extrayendo los dos archivos de `HEAD` a un temporal): no se reformatearon enteros, por la misma razón que en las fases 3 y 4. `npx eslint` sobre los dos: 0 errores, 0 warnings.
+  - `npm run check-types`: **219** `error TS` (línea base intacta).
 
 ### Fase 7: Verificación final
 - **Estado:** Completada (2026-09-22)

@@ -136,7 +136,7 @@ features/{catalogo}/list/
 | Sindicatos | `/company/unions` | → CollectiveAgreement |
 | Convenios Colectivos | `/company/collective-agreements` | → JobCategory |
 | Categorias Laborales | `/company/job-categories` | → Employee |
-| Centros de Costo | `/company/cost-centers` | → Employee, Vehicle |
+| Centros de Costo | `/company/cost-centers` | → Employee, Vehicle, JournalEntryLine |
 
 **Equipos:**
 | Catalogo | Ruta | Relaciones |
@@ -152,3 +152,12 @@ features/{catalogo}/list/
 | Catalogo | Ruta |
 |----------|------|
 | Tipos de Documento | `/company/document-types` (gestionado por modulo Documents) |
+
+**Centros de Costo — acceso al informe contable (TSK-719):** el menu de cada centro incluye
+**"Ver movimientos"**, que navega por URL a
+`/dashboard/company/accounting/reports?report=cost-center-movements&costCenterId=<uuid>` (el modulo
+`company` no importa nada de `accounting`). El item se muestra solo si el usuario tiene
+`accounting.reports.view` (`getModulePermissions` en `CostCentersList.tsx`) **y** el modulo
+Contabilidad esta activo para la empresa (`isModuleActiveForCompany`, porque `getModulePermissions`
+resuelve RBAC pero no mira `activeModules`). Ver
+[Modulo Contabilidad](accounting.md#movimientos-por-centro-de-costo-tsk-719).

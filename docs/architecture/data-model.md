@@ -463,7 +463,7 @@ Reglas:
 |--------|-------------|--------------|
 | `Account` | Cuenta contable (arbol) | code (formato x.x.x/xx/xx), name, type, nature, parentId, isLeaf, isActive, disabledFrom, disabledFromFiscalYearId |
 | `JournalEntry` | Asiento contable | number, date, description, status, isAutomatic, reversedById |
-| `JournalEntryLine` | Linea de asiento | accountId, debit, credit, description |
+| `JournalEntryLine` | Linea de asiento | accountId, debit, credit, description, y los auxiliares opcionales customerId?, supplierId?, costCenterId?. Indices: `@@index([costCenterId])` y `@@index([entryId])` (TSK-719) |
 | `AccountingSettings` | Config contable | salesAccountId, purchasesAccountId (cuentas de ventas/compras **por defecto**: solo para lineas cuyo item no tiene cuenta propia, TSK-721), bankChargesAccountId? (gastos bancarios por defecto, FK SetNull, TSK-718), vatAccountId, fixedAssetAccountId, accumulatedDepreciationAccountId, depreciationExpenseAccountId (cuentas de Bienes de Uso **por defecto**: respaldo de `VehicleDepreciation` → `VehicleType`, TSK-724c), assetDisposalGainLossAccountId (resultado por venta/baja, unica), lockedUntilDate, productCodePrefix (default "PROD"), lastProductNumber (default 0), requireCostCenter (Boolean, default false, TSK-583), etc. |
 | `RecurringEntry` | Asiento recurrente | frequency, nextExecution, templateLines |
 | `RecurringEntryLine` | Linea de asiento recurrente | accountId, debitAmount, creditAmount |
@@ -473,6 +473,11 @@ Reglas:
 - `AccountNature`: DEBIT, CREDIT
 - `JournalEntryStatus`: DRAFT, POSTED, REVERSED
 - `RecurringFrequency`: DAILY, WEEKLY, MONTHLY, QUARTERLY, YEARLY
+
+**Indices de `journal_entry_lines` (TSK-719):** la tabla que mas crece del modulo tenia **solo la PK**. Se agregaron dos indices aditivos (migracion `20260922112920_tsk_719_journal_entry_lines_indexes`, dos `CREATE INDEX`, sin backfill):
+- `@@index([costCenterId])` — sin el, filtrar lineas por centro de costo (informe de Movimientos por Centro de Costo y el `EXISTS` del selector de centros con historia) es un seq scan sobre todas las lineas de la base.
+- `@@index([entryId])` — la FK a `JournalEntry` es `onDelete: Cascade` y **no tenia indice**: cada borrado de asiento (reversiones, borrado de borradores) obligaba a escanear la tabla hija entera. Ademas es el join de `include: { lines: true }` que usan Libro Diario, Libro Mayor, Estado de Resultados y Variacion Presupuestaria.
+- `@@index([accountId])` se dejo **afuera** a proposito: ninguna consulta filtra lineas por cuenta en SQL (el Mayor filtra en memoria) y las cuentas se dan de baja de forma logica. Cada indice se paga en cada escritura de asiento.
 
 **Cuentas imputables vs. de sumatoria (TSK-376):**
 - `isLeaf = true` → cuenta **imputable** (hoja): recibe movimientos de asientos y tiene saldo propio. Se mantiene automáticamente: una cuenta pasa a `isLeaf = false` al adquirir hijas.

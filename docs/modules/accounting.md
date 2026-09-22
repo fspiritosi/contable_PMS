@@ -143,6 +143,51 @@ MONTHLY, BIMONTHLY, QUARTERLY, SEMIANNUAL, ANNUAL
 | Estado de Resultados | Ingresos - Egresos = Resultado Neto |
 | Libro Diario | Todos los asientos POSTED en rango de fecha |
 | Libro Mayor | Movimientos por cuenta con saldo acumulado |
+| Movimientos por Centro de Costo | Entradas, salidas y saldo por centro (TSK-719); comparativa de todos los centros expandible al detalle |
+
+#### Movimientos por Centro de Costo (TSK-719)
+
+**Archivos:** `features/reports/actions.server.ts` (actions), `features/reports/components/_CostCenterMovementsReport.tsx` + `_CostCenterMovementsFilters/_CostCenterMovementsSummary/_CostCenterMovementsTable.tsx` + `cost-center-movements-excel.ts` (UI), `shared/utils/cost-center-movements.ts` (helper puro, con `cost-center-movements.test.ts` al lado).
+
+**Regla de signo — por `Account.nature`, no por tipo de cuenta ni por Debe/Haber a secas:**
+
+```
+nature = CREDIT (REVENUE, y LIABILITY/EQUITY si llegaran)
+    entrada = credit - debit     → la NC de venta debita Ventas y RESTA de las entradas
+nature = DEBIT  (EXPENSE, y ASSET)
+    salida  = debit - credit     → la NC de compra acredita el gasto y RESTA de las salidas
+
+saldo del grupo = Σ entradas − Σ salidas
+```
+
+Clasificar solo por `Account.type` haria que las notas de credito **sumaran** en vez de restar; firmar solo por Debe/Haber llamaria "salida" a cualquier Debe, incluso el de un activo. Verificado contra el Libro Mayor: para cada cuenta de resultado, `Mayor = Σ centros + (Sin centro de costo)`.
+
+**Actions:**
+
+| Action | Firma | Payload |
+|--------|-------|---------|
+| `getCostCenterMovements` | `(companyId, { costCenterId: string \| 'all' \| 'none', fromDate, toDate, includeDrafts })` | `{ groups: CostCenterMovementGroup[], totals: { entradas, salidas, saldo }, draftsExcluded: { entryCount, saldo }, includeDrafts }` |
+| `getCostCentersForMovementsReport` | `(companyId)` | `{ id, name, isActive }[]` — activos **mas** inactivos con movimientos (el borrado es logico; si no, el historico de un centro dado de baja queda inalcanzable) |
+
+`groups` es **siempre** un array, aun para un centro puntual (array de 1): la comparativa de "Todos", el detalle de un centro, el aplanado a Excel y los tests comparten forma. Cada grupo trae sus `rows` con `entrada`, `salida` y `saldo` acumulado ya calculados; el Client Component no recalcula nada (una sola fuente de verdad del saldo).
+
+**Filtro `costCenterId`:**
+
+- Un UUID → solo ese centro, **sin** filtrar por tipo de cuenta (si un asiento manual imputa un activo a un centro, tiene que verse).
+- `'all'` → un grupo por centro **mas** el bucket `(Sin centro de costo)`.
+- `'none'` → solo el bucket sin imputar.
+
+El bucket **"(Sin centro de costo)" se restringe a cuentas de resultado** (`REVENUE`/`EXPENSE`), tanto elegido explicitamente como dentro de `'all'`: sin esa restriccion caeria adentro toda linea de caja, banco, IVA y cuentas corrientes y el informe seria ilegible.
+
+**Borradores (una sola query, corte en memoria).** La query trae siempre `status IN (DRAFT, POSTED)` y el corte por estado se hace en memoria: las POSTED arman el reporte y las DRAFT el aviso. Asi los numeros del aviso **no pueden discrepar** de los de la tabla, y activar el switch "Incluir borradores" no dispara otra consulta. `REVERSED` nunca entra. Con el switch apagado (default) el informe muestra solo POSTED y `draftsExcluded` alimenta el aviso *"Hay N asientos en borrador con movimientos … que no estan incluidos"*; con el switch encendido se suman las DRAFT y aparece la columna Estado.
+
+**Permisos y alcance.** Las dos actions hacen `checkPermission('accounting.reports', 'view', { redirect: true })` y **validan `companyId` contra `getActiveCompanyId()`** (los 12 reportes viejos no lo hacen: agujero anotado como seguimiento, no corregido aca).
+
+**Acceso.** Ademas del selector de Informes, se abre por deep-link desde **Empresa → Centros de Costo → Ver movimientos** (`?report=cost-center-movements&costCenterId=<uuid>`): `_ReportsContent` **lee** esos parametros de `useSearchParams()` con fallback `'trial-balance'`, y no los escribe al cambiar de informe. Requiere `<Suspense>` alrededor de `_ReportsContent` o el build falla.
+
+**Que imputa centro de costo hoy:** solo las lineas de facturas de **venta** y de **compra** (reparto por porcentaje de TSK-583 o `Product.defaultCostCenterId`) y los asientos manuales que lo lleven. **No** lo imputan los movimientos de fondos, las amortizaciones de equipos, los recibos, las ordenes de pago, los egresos ni el CMV; `Employee.costCenterId` y `Vehicle.costCenterId` son informativos y no llegan al asiento.
+
+**Excel:** `exportToExcel` con las columnas Centro, Fecha, Asiento, Codigo, Cuenta, Descripcion, **Debe, Haber**, Entrada, Salida, Saldo (+ Estado si se incluyeron borradores) y fila `TOTAL` por centro. Debe y Haber van solo al Excel — no entran en la tabla — porque es donde el contador cruza contra el Libro Mayor.
 
 ### Reportes de Bienes de Uso
 
@@ -159,7 +204,8 @@ MONTHLY, BIMONTHLY, QUARTERLY, SEMIANNUAL, ANNUAL
 | Registro de Reversiones | Asientos REVERSED con metadata de reversion |
 | Trazabilidad Doc-Asiento | Cruce entre documentos comerciales y sus asientos |
 
-Todos los reportes solo consideran asientos POSTED.
+Todos los reportes solo consideran asientos POSTED, salvo **Movimientos por Centro de Costo**, que puede
+incluir borradores a pedido (switch apagado por defecto) y avisa cuantos excluye y por que importe.
 
 ---
 
