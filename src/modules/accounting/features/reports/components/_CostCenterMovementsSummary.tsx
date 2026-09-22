@@ -13,7 +13,16 @@ interface CostCenterMovementsSummaryProps {
   draftsExcluded: DraftsSummary;
   /** `true` cuando hay al menos una fila de detalle en algún grupo. */
   hasRows: boolean;
+  /** Qué se eligió en el selector, para redactar el aviso sin mentir el alcance. */
+  scope: 'one' | 'all' | 'none';
 }
+
+/** Cómo nombrar lo consultado en los textos, según el selector. */
+const SCOPE_LABELS: Record<CostCenterMovementsSummaryProps['scope'], string> = {
+  one: 'de este centro',
+  all: 'de los centros de costo',
+  none: 'sin centro de costo',
+};
 
 /** Cómo impactan los borradores excluidos, para redactar el aviso. */
 function draftsImpact(saldo: number): string {
@@ -31,6 +40,7 @@ export function _CostCenterMovementsSummary({
   totals,
   draftsExcluded,
   hasRows,
+  scope,
 }: CostCenterMovementsSummaryProps) {
   const { entryCount, saldo: draftsSaldo } = draftsExcluded;
 
@@ -69,10 +79,10 @@ export function _CostCenterMovementsSummary({
         >
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           <span>
-            Hay {entryCount} {entryCount === 1 ? 'asiento' : 'asientos'} en borrador con movimientos
-            de este centro {draftsImpact(draftsSaldo)} que no están incluidos. Registralos desde
-            Contabilidad → Asientos para que impacten, o activá «Incluir borradores» para verlos
-            acá.
+            Hay {entryCount} {entryCount === 1 ? 'asiento' : 'asientos'} en borrador con movimientos{' '}
+            {SCOPE_LABELS[scope]} {draftsImpact(draftsSaldo)} que no están incluidos. Registralos
+            desde Contabilidad → Asientos para que impacten, o activá «Incluir borradores» para
+            verlos acá.
           </span>
         </div>
       )}
@@ -84,9 +94,13 @@ export function _CostCenterMovementsSummary({
         >
           {entryCount > 0
             ? entryCount === 1
-              ? 'No hay movimientos registrados en el período; el asiento en borrador de arriba es el único que toca este centro.'
-              : `No hay movimientos registrados en el período; los ${entryCount} asientos en borrador de arriba son los únicos que tocan este centro.`
-            : 'El centro no tiene movimientos en el período.'}
+              ? `No hay movimientos registrados en el período; el asiento en borrador de arriba es el único ${scope === 'none' ? 'sin centro de costo' : 'que corresponde'}.`
+              : `No hay movimientos registrados en el período; los ${entryCount} asientos en borrador de arriba son los únicos ${scope === 'none' ? 'sin centro de costo' : 'que corresponden'}.`
+            : scope === 'none'
+              ? 'No hay movimientos sin centro de costo en el período.'
+              : scope === 'all'
+                ? 'No hay movimientos en el período.'
+                : 'El centro no tiene movimientos en el período.'}
         </p>
       )}
     </div>

@@ -44,11 +44,10 @@ export function _CostCenterMovementsTable({
             <th className="py-3 pl-4 text-left" colSpan={3}>
               Centro de costo
             </th>
-            <th className="hidden sm:table-cell" />
             {includeDrafts && <th className="text-left">Estado</th>}
-            <th className="py-3 text-right">Entradas</th>
-            <th className="py-3 text-right">Salidas</th>
-            <th className="py-3 pr-4 text-right">Saldo</th>
+            <th className="py-3 pl-3 text-right whitespace-nowrap">Entradas</th>
+            <th className="py-3 pl-3 text-right whitespace-nowrap">Salidas</th>
+            <th className="py-3 pr-4 pl-3 text-right whitespace-nowrap">Saldo</th>
           </tr>
         </thead>
         <tbody>
@@ -80,11 +79,14 @@ export function _CostCenterMovementsTable({
                       <span className="ml-2 font-medium">{group.costCenterName}</span>
                     </div>
                   </td>
-                  <td className="hidden sm:table-cell" />
                   {includeDrafts && <td />}
-                  <td className="text-right">{formatAmount(group.totalEntradas)}</td>
-                  <td className="text-right">{formatAmount(group.totalSalidas)}</td>
-                  <td className="py-2 pr-4 text-right">
+                  <td className="pl-3 text-right whitespace-nowrap">
+                    {formatAmount(group.totalEntradas)}
+                  </td>
+                  <td className="pl-3 text-right whitespace-nowrap">
+                    {formatAmount(group.totalSalidas)}
+                  </td>
+                  <td className="py-2 pr-4 pl-3 text-right whitespace-nowrap">
                     <span className={amountClass(group.saldo)}>{formatAmount(group.saldo)}</span>
                   </td>
                 </tr>
@@ -92,13 +94,12 @@ export function _CostCenterMovementsTable({
                 {isExpanded && (
                   <tr className="bg-muted/50 text-xs text-muted-foreground">
                     <td className="py-2 pl-6">Fecha</td>
-                    <td className="py-2">Asiento N°</td>
+                    <td className="py-2 pr-3 whitespace-nowrap">Asiento</td>
                     <td className="py-2">Cuenta</td>
-                    <td className="hidden py-2 sm:table-cell">Descripción</td>
                     {includeDrafts && <td className="py-2">Estado</td>}
-                    <td className="py-2 text-right">Entrada</td>
-                    <td className="py-2 text-right">Salida</td>
-                    <td className="py-2 pr-4 text-right">Saldo acumulado</td>
+                    <td className="py-2 pl-3 text-right whitespace-nowrap">Entrada</td>
+                    <td className="py-2 pl-3 text-right whitespace-nowrap">Salida</td>
+                    <td className="py-2 pr-4 pl-3 text-right whitespace-nowrap">Saldo</td>
                   </tr>
                 )}
 
@@ -107,14 +108,21 @@ export function _CostCenterMovementsTable({
                     // Las filas se identifican por lineId: dos líneas del mismo
                     // asiento en el mismo centro colisionarían por número.
                     <tr key={row.lineId} className="bg-muted/30">
-                      <td className="py-2 pl-6 whitespace-nowrap">{formatDateUtc(row.date)}</td>
-                      <td className="py-2">{row.entryNumber}</td>
-                      <td className="py-2">
-                        <span className="font-mono text-xs">{row.accountCode}</span>
-                        <span className="ml-2">{row.accountName}</span>
+                      <td className="py-2 pr-3 pl-6 whitespace-nowrap">
+                        {formatDateUtc(row.date)}
                       </td>
-                      <td className="hidden max-w-[220px] truncate py-2 sm:table-cell">
-                        {row.lineDescription || row.entryDescription}
+                      <td className="py-2 pr-3 whitespace-nowrap">{row.entryNumber}</td>
+                      <td className="max-w-[220px] py-2 pr-3">
+                        <div className="truncate" title={`${row.accountCode} ${row.accountName}`}>
+                          <span className="font-mono text-xs">{row.accountCode}</span>
+                          <span className="ml-2">{row.accountName}</span>
+                        </div>
+                        <div
+                          className="truncate text-xs text-muted-foreground"
+                          title={row.lineDescription || row.entryDescription}
+                        >
+                          {row.lineDescription || row.entryDescription}
+                        </div>
                       </td>
                       {includeDrafts && (
                         <td className="py-2">
@@ -123,13 +131,13 @@ export function _CostCenterMovementsTable({
                           </Badge>
                         </td>
                       )}
-                      <td className="py-2 text-right">
+                      <td className="py-2 pl-3 text-right whitespace-nowrap">
                         {row.entrada !== 0 ? formatAmount(row.entrada) : ''}
                       </td>
-                      <td className="py-2 text-right">
+                      <td className="py-2 pl-3 text-right whitespace-nowrap">
                         {row.salida !== 0 ? formatAmount(row.salida) : ''}
                       </td>
-                      <td className="py-2 pr-4 text-right">
+                      <td className="py-2 pr-4 pl-3 text-right whitespace-nowrap">
                         <span className={amountClass(row.saldo)}>{formatAmount(row.saldo)}</span>
                       </td>
                     </tr>
@@ -137,7 +145,7 @@ export function _CostCenterMovementsTable({
 
                 {isExpanded && group.rows.length === 0 && (
                   <tr className="bg-muted/30">
-                    <td className="py-3 pl-6 text-muted-foreground" colSpan={includeDrafts ? 8 : 7}>
+                    <td className="py-3 pl-6 text-muted-foreground" colSpan={includeDrafts ? 7 : 6}>
                       Sin movimientos en el período.
                     </td>
                   </tr>

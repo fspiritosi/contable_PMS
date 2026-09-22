@@ -1039,54 +1039,56 @@ preexistentes.
 - **Objetivo:** evidencia de que funciona sobre datos reales, incluido el caso "solo borradores",
   que es el que la clienta se va a encontrar primero.
 - **Tareas:**
-  - [ ] `npm run check-types` → **219** (línea base); `npm run lint` sin errores nuevos en los
+  - [x] `npm run check-types` → **219** (línea base); `npm run lint` sin errores nuevos en los
         archivos tocados; `npm run test` en verde (el unitario de la fase 2 y el de integración de
         la fase 3, verificando que el `afterAll` deja `count` 0 de `TSK719-TEST-*`).
-  - [ ] `npm run build` (la fase 5 toca `useSearchParams`: el build es el único que detecta el
+  - [x] `npm run build` (la fase 5 toca `useSearchParams`: el build es el único que detecta el
         error de Suspense).
-  - [ ] Levantar dev según la memoria `dev-local-capturas-y-login`:
+  - [x] Levantar dev según la memoria `dev-local-capturas-y-login`:
         `NEXT_PUBLIC_APP_URL=http://localhost:3010 npm run dev -- -p 3010`, usuario
         `fspiritosi@codecontrol.com.ar`, empresa activa **"Empresa de Prueba 01 SA"** (es la que
         tiene el plan de cuentas y las dos líneas con centro).
-  - [ ] **Estado inicial, antes de sembrar** (1.2.6: 8 centros, 2 líneas con centro, 22 asientos
+  - [x] **Estado inicial, antes de sembrar** (1.2.6: 8 centros, 2 líneas con centro, 22 asientos
         y todos DRAFT): abrir el informe con "Todos los centros" y el período que cubre el
         asiento N° 8 → debe salir **vacío con el aviso** "Hay 1 asiento en borrador… por
         $100.000"; activar "Incluir borradores" → aparecen Logística $60.000 y Mantenimiento
         $40.000 como **salidas**. Capturar: es la prueba del riesgo 1.6-1.
-  - [ ] Sembrar y **registrar** (POSTED) desde la app, no por SQL, para ejercitar el circuito
+  - [~] Sembrar y **registrar** (POSTED) desde la app, no por SQL, para ejercitar el circuito
         real: (1) una factura de **venta** con dos líneas repartidas entre Logística y
         Mantenimiento; (2) una factura de **compra** ídem; (3) una **nota de crédito** de venta
         sobre la primera; (4) registrar los asientos desde Contabilidad → Asientos (permiso
         `accounting.entries` acción `approve`); (5) dejar una cuarta factura confirmada **sin**
         registrar.
-  - [ ] Pasos manuales:
-    1. Un centro con período que incluye todo → entradas, salidas y saldo correctos; la NC
+  - [~] Pasos manuales:
+    1. [x] Un centro con período que incluye todo → entradas, salidas y saldo correctos; la NC
        **resta** de las entradas (verificar el número a mano contra el Libro Mayor).
-    2. "Todos los centros" → una fila por centro; expandir dos y ver el detalle con el saldo
+    2. [x] "Todos los centros" → una fila por centro; expandir dos y ver el detalle con el saldo
        acumulado reiniciando en cada grupo.
-    3. "(Sin centro de costo)" → aparecen las líneas de resultado no imputadas y **no** aparecen
+    3. [x] "(Sin centro de costo)" → aparecen las líneas de resultado no imputadas y **no** aparecen
        Cuentas por Cobrar/Pagar ni IVA.
-    4. Aviso de borradores con el importe de la factura sin registrar; activarlo y ver la fila
+    4. [x] Aviso de borradores con el importe de la factura sin registrar; activarlo y ver la fila
        con el badge Borrador.
-    5. Período sin movimientos → empty state correcto (el de "sin movimientos", no el de
+    5. [x] Período sin movimientos → empty state correcto (el de "sin movimientos", no el de
        borradores).
-    6. Un centro **eliminado** (dar de baja uno con historia desde el ABM) sigue disponible en el
+    6. [x] Un centro **eliminado** (dar de baja uno con historia desde el ABM) sigue disponible en el
        selector con "(inactivo)" y muestra sus movimientos.
-    7. Export a Excel: abre, trae Debe y Haber además de Entrada/Salida, y los totales por centro
+    7. [x] Export a Excel: abre, trae Debe y Haber además de Entrada/Salida, y los totales por centro
        coinciden con la pantalla.
-    8. Deep-link: "Ver movimientos" desde Empresa → Centros de Costo abre el informe filtrado y
+    8. [x] Deep-link: "Ver movimientos" desde Empresa → Centros de Costo abre el informe filtrado y
        cargado.
-    9. Permisos: con un usuario `@demo.local` sin `accounting.reports` el ítem "Ver movimientos"
+    9. [ ] Permisos: con un usuario `@demo.local` sin `accounting.reports` el ítem "Ver movimientos"
        no aparece y la ruta de informes redirige; con `accounting.reports` pero sin
        `company.cost-centers`, el informe funciona igual (el selector es del módulo contable).
-  - [ ] Cruzar el reporte contra el **Libro Mayor** del mismo período y las mismas cuentas: el
+       **No ejecutado** (ver Hallazgos de la fase 7).
+  - [x] Cruzar el reporte contra el **Libro Mayor** del mismo período y las mismas cuentas: el
         total de una cuenta de resultado tiene que coincidir con la suma de los centros más el
         bucket "(Sin centro de costo)". Si no cuadra, hay un filtro de más (riesgo 1.6-7).
   - [ ] Consulta en producción (`psql` según memoria `produccion-dokploy-scripts-db`) para dejar
         registrado cuántos centros, cuántas líneas con centro y cuántos asientos POSTED/DRAFT hay
         en la base de la clienta, y así anticipar si el informe le va a salir vacío el primer día.
-        Anotar el resultado en la sección 5.
-  - [ ] Documentar todo en la sección 5 con los conteos, los asientos generados y las capturas.
+        Anotar el resultado en la sección 5. **No ejecutado**: el host `srv1770325` no resuelve
+        desde este entorno y no hay alias en `~/.ssh/config`.
+  - [x] Documentar todo en la sección 5 con los conteos, los asientos generados y las capturas.
 - **Archivos:** ninguno nuevo (sección 5 del documento).
 - **Criterio de completitud:** los nueve pasos manuales pasan, el cruce con el Libro Mayor cuadra,
   tests y tipos en línea base, build en verde, sección 5 completa con la consulta de producción.
@@ -1305,7 +1307,90 @@ _Pendiente - ejecutar `/disenar tsk-719-movimientos-por-centro-de-costo`_
 - **Estado:** Pendiente
 
 ### Fase 7: Verificación final
-- **Estado:** Pendiente
+- **Estado:** Completada (2026-09-22)
+- **Archivos creados:**
+  - `scripts/guia-presentacion/capturas-tsk719.mjs` (siembra idempotente + 12 capturas + modos `--seed`, `--no-seed`, `--cruce`, `--prod`).
+  - `scripts/guia-presentacion/assets/tsk719-*.png` (12 capturas).
+- **Cómo se verificó:**
+  - Dev relanzado según la memoria `dev-local-capturas-y-login` (`npm run db:generate` primero, porque el server que estaba levantado tenía cliente Prisma viejo), `NEXT_PUBLIC_APP_URL=http://localhost:3010 BETTER_AUTH_URL=http://localhost:3010 npm run dev -- -p 3010`.
+  - **Siembra por SQL** (no por UI: una factura de venta + una de compra + una NC por pantalla salían mucho más caras que el valor que agregaban, porque lo que se verifica es el *lector* de `journal_entry_lines`, no el generador de TSK-583). Seis asientos bien formados y balanceados, marcados con el prefijo `TSK719-demo` en la descripción, en septiembre de 2026, sobre "Empresa de Prueba 01 SA":
+    | N° | Fecha | Asiento | Estado |
+    |---|---|---|---|
+    | 30 | 03/09 | Venta: Debe Deudores 605.000 / Haber Ventas 300.000 (Logística) + 200.000 (Mantenimiento) + IVA DF 105.000 | DRAFT → **POSTED desde la UI** |
+    | 31 | 05/09 | Compra: Debe Combustibles 150.000 (Logística) + Mantenimiento 90.000 (Mantenimiento) + IVA CF 50.400 / Haber Acreedores 290.400 | POSTED |
+    | 32 | 12/09 | **NC de venta**: Debe Ventas 50.000 (Logística) + IVA DF 10.500 / Haber Deudores 60.500 | POSTED |
+    | 33 | 10/09 | Gastos **sin centro**: Debe Gastos Varios 45.000 + Librería 12.000 / Haber Acreedores 57.000 | POSTED |
+    | 34 | 15/09 | Energía 35.000 (Administración) / Haber Acreedores | POSTED |
+    | 35 | 18/09 | Compra **sin registrar**: Debe Mantenimiento 80.000 (Mantenimiento) / Haber Acreedores | DRAFT |
+    Más un tercer centro de costo, **"Administración"**, para que la comparativa tenga más de dos filas.
+  - El paso que sí se hizo **por UI** es el que el plan pedía ejercitar: Contabilidad → Asientos → menú … → **Registrar** sobre el asiento 30. Diálogo: *"¿Registrar asiento contable? Estás por registrar el asiento N° 30. Una vez registrado, el asiento no podrá ser modificado. Solo podrá ser anulado mediante un asiento de reversión."* → toast *"Asiento registrado correctamente"* y `status = POSTED` en base.
+  - La limpieza de una corrida anterior borra los `TSK719-demo*` incluso POSTED, con `begin; set local session_replication_role='replica'; … commit;` (mismo recurso que el `afterAll` de la fase 3, por el trigger `trg_journal_entry_immutable`).
+- **Resultados:** ver la tabla de la sección 5. Todos los casos del encargo pasaron; el cruce contra el Libro Mayor cuadra al peso.
+- **Hallazgos (no corregidos, son de UI/copy, no de cálculo):**
+  1. **La columna "Saldo acumulado" queda cortada.** En el layout de Informes la card del informe mide ~750 px (la lista de informes ocupa 1/3), y la tabla necesita ~850 px; con `overflow-x-auto` el usuario *puede* scrollear, pero **el número que vino a ver arranca fuera de pantalla** incluso en un monitor de 1500 px. Con "Incluir borradores" (una columna más) se corta también "Salidas". Visible en `tsk719-02`, `tsk719-04`, `tsk719-06`, `tsk719-09`. Archivo probable: `_CostCenterMovementsTable.tsx` (el `min-w-[640px]` no alcanza; habría que acortar la columna Cuenta, ocultar el código en pantallas chicas o dar al informe el ancho completo en `_ReportsContent.tsx`).
+  2. **Fecha y Asiento N° se pegan**: se lee `03/09/202630` (fecha 03/09/2026 + asiento 30). Falta padding/`pr-*` en la celda de Fecha del detalle (`_CostCenterMovementsTable.tsx`).
+  3. **El aviso de borradores dice "de este centro" también cuando no hay un centro elegido.** Con "Todos los centros" muestra *"Hay 6 asientos en borrador con movimientos de este centro…"* y con "(Sin centro de costo)" lo mismo. El número es correcto (son los borradores que caen dentro del filtro), pero el texto miente. Archivo: `_CostCenterMovementsSummary.tsx` (el componente no recibe qué se seleccionó).
+  4. **El aviso de borradores arrastra los 22 asientos viejos de la base de dev**: con "Todos los centros" en septiembre avisa por **$38.235.000** porque cuenta todas las líneas de resultado sin centro de los asientos demo preexistentes. Es el comportamiento diseñado (el bucket "sin centro" entra en "Todos"), pero conviene saberlo: en una base con muchos borradores el aviso va a mostrar cifras enormes.
+  5. **El deep-link no lleva el período**: abre con el mes en curso (01/09–22/09). No es un defecto, pero si el movimiento del centro es de un mes anterior el usuario ve cero y tiene que cambiar las fechas. Seguimiento posible.
+  6. **Paso manual 9 (permisos) no ejecutado** y **consulta a la base de producción no ejecutada** (el host `srv1770325` de la memoria `produccion-dokploy-scripts-db` no resuelve desde este entorno). Quedan como pendientes reales de la fase.
+- **Estado de la base al terminar:** los datos de demo **quedan** (los POSTED no se pueden borrar sin desactivar el trigger): centro de costo "Administración" activo y los 6 asientos `TSK719-demo *` N° 30-35 (5 POSTED, 1 DRAFT). Total de la empresa: 5 POSTED / 23 DRAFT. Para removerlos: `node scripts/guia-presentacion/capturas-tsk719.mjs --seed` los recrea, y `wipeDemoEntries()` dentro del script es el borrado.
 
 ## 5. Verificación
-_Pendiente - ejecutar `/verificar tsk-719-movimientos-por-centro-de-costo`_
+
+**Fecha:** 2026-09-22 · **Entorno:** dev `:3010` (Empresa de Prueba 01 SA) y build de producción `:3011` ·
+**Script:** `node scripts/guia-presentacion/capturas-tsk719.mjs`
+
+### Automático
+
+| Comando | Esperado | Resultado |
+|---|---|---|
+| `npx vitest run` | verde | ✅ **48 archivos / 595 tests** en verde |
+| `npm run check-types` | 219 (línea base) | ✅ **219** `error TS` |
+| `npx eslint` sobre lo tocado en las fases 1-5 | sin errores nuevos | ✅ 0 errores; 2 warnings preexistentes (`TrialBalanceResult`, `JournalBookEntry` sin usar en `actions.server.ts`, líneas 34 y 47, anteriores al ticket) |
+| `NEXT_PUBLIC_APP_URL=http://localhost:3011 npm run build` | compila (Suspense de `useSearchParams`) | ✅ *Compiled successfully in 28.7s*, exit 0, sin warnings |
+
+### Casos en navegador
+
+| # | Caso | Resultado | Captura |
+|---|---|---|---|
+| 1 | Sin nada registrado (agosto, Logística): empty state + aviso | ✅ Totales en $0; aviso *"Hay 1 asiento en borrador con movimientos de este centro por $ 60.000,00 en salidas…"*; empty *"No hay movimientos registrados en el período; el asiento en borrador de arriba es el único que toca este centro."* | `tsk719-01-solo-borradores.png` |
+| 1b | Septiembre con los POSTED sembrados, antes de registrar la venta | ✅ Entradas $-50.000 → tras registrar el asiento 30, $450.000 | `tsk719-01b-septiembre-previo.png` |
+| — | Registrar por UI (Contabilidad → Asientos → … → Registrar) | ✅ Diálogo de confirmación + toast *"Asiento registrado correctamente"*; `status=POSTED` en base | — |
+| 2 | Detalle de un centro (Logística): Fecha \| Asiento N° \| Cuenta \| Descripción \| Entrada \| Salida \| Saldo acumulado | ✅ 3 filas; saldo acumulado 300.000 → 150.000 → 100.000 | `tsk719-02-detalle-centro.png` |
+| 3 | Tarjetas de totales | ✅ Entradas $250.000 · Salidas $150.000 · Saldo $100.000 (verde) | `tsk719-03-totales.png` |
+| 4 | "Todos los centros" con una fila expandida | ✅ 4 filas (Administración, Logística, Mantenimiento, "(Sin centro de costo)"); Mantenimiento expandido, saldo acumulado reiniciando en 200.000 | `tsk719-04-todos-los-centros.png` |
+| 5 | "(Sin centro de costo)" | ✅ Solo las 2 líneas de resultado no imputadas (Gastos Varios 45.000, Librería 12.000). **No** aparecen Acreedores ni IVA | `tsk719-05-sin-centro.png` |
+| 6 | "Incluir borradores" ON | ✅ Salidas $90.000 → **$170.000**, saldo $110.000 → **$30.000**; aparece la columna Estado con badges Registrado/Borrador | `tsk719-06-con-borradores.png` |
+| 7 | "Incluir borradores" OFF sobre el mismo centro | ✅ Aviso *"Hay 1 asiento en borrador con movimientos de este centro por $ 80.000,00 en salidas que no están incluidos. Registralos desde Contabilidad → Asientos para que impacten, o activá «Incluir borradores» para verlos acá."* | `tsk719-07-aviso-borradores.png` |
+| 8 | **Nota de crédito**: resta de las entradas | ✅ SQL: asiento 32, `4.1.1/01/01` (nature CREDIT) con **debe 50.000** y centro Logística. En pantalla: fila *Devolución servicio de logística* con **Entrada `-$ 50.000,00`** (no salida), y el saldo acumulado cae de 150.000 a 100.000 | `tsk719-08-nota-de-credito.png` |
+| 9 | Deep-link "Ver movimientos" desde Empresa → Centros de Costo | ✅ Navega a `…/accounting/reports?report=cost-center-movements&costCenterId=6e55da8e-…`, el informe queda seleccionado en la lista y **se consulta solo** | `tsk719-09a-menu-ver-movimientos.png`, `tsk719-09-deep-link.png` |
+| 10 | **Build de producción** `:3011`: informe + deep-link | ✅ Misma URL con `?costCenterId=`, mismos números, **sin el error de Suspense** y sin errores en el log del server | `tsk719-10-prod-deep-link.png`, `tsk719-10b-prod-periodo.png` |
+| — | Export a Excel | ✅ Descarga `movimientos-centro-costo-2026-09-22.xlsx`. Columnas: **Centro, Fecha, Asiento, Codigo, Cuenta, Descripcion, Debe, Haber, Entrada, Salida, Saldo** + fila `TOTAL` por centro. Los totales coinciden con la pantalla (Logística 250.000 / 150.000 / 100.000) | — |
+| — | Centro inactivo con historia | ✅ Al desactivar "Administración" el selector sigue ofreciéndolo como **"Administración (inactivo)"** | — |
+| — | Período sin movimientos (enero) | ✅ *"El centro no tiene movimientos en el período."* (el empty state limpio, no el de borradores) | — |
+| — | Permisos (paso 9 del plan) | ⬜ **No ejecutado** | — |
+| — | Conteos en la base de producción | ⬜ **No ejecutado** (host no alcanzable desde este entorno) | — |
+
+### Cruce de consistencia (septiembre 2026, solo POSTED)
+
+Libro Mayor de la misma empresa y período, contra el informe:
+
+| Cuenta | Mayor (Debe / Haber / Saldo) | Informe |
+|---|---|---|
+| `4.1.1/01/01` Ventas de Serv. Liq Sueldos | 50.000 / 300.000 / **250.000** | Logística **entradas 250.000** |
+| `4.1.1/01/02` Venta Serv.Control Doc | 0 / 200.000 / **200.000** | Mantenimiento **entradas 200.000** |
+| `4.2.1/02/23` Combustibles y Lubricantes | 150.000 / 0 / **150.000** | Logística **salidas 150.000** |
+| `4.2.1/02/22` Mantenimiento - Explotación | 90.000 / 0 / **90.000** | Mantenimiento **salidas 90.000** |
+| `4.2.1/02/03` Energía - Explotación | 35.000 / 0 / **35.000** | Administración **salidas 35.000** |
+| `4.2.1/03/10` + `4.2.1/03/07` | 57.000 / 0 / **57.000** | **(Sin centro de costo) salidas 57.000** |
+| **Suma de resultados** | ingresos **450.000**, gastos **332.000** | tarjetas: Entradas **$450.000**, Salidas **$332.000**, Saldo **$118.000** |
+
+La identidad que pedía el plan se cumple: para cada cuenta de resultado, **Mayor = Σ centros + "(Sin centro de costo)"**, y la NC no distorsiona nada porque entra como entrada negativa (`4.1.1/01/01`: 300.000 − 50.000 = 250.000, exactamente el saldo del Mayor).
+
+Reproducible con `node scripts/guia-presentacion/capturas-tsk719.mjs --cruce`.
+
+### Pendientes de la verificación
+
+1. Paso manual 9 (permisos con usuarios `@demo.local`).
+2. Conteos en la base de producción (`srv1770325` no resuelve desde este entorno).
+3. Los cuatro hallazgos de UI/copy anotados en la fase 7 (columna Saldo cortada, Fecha/Asiento pegados, el aviso que dice "de este centro" sin centro elegido, deep-link sin período).

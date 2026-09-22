@@ -142,6 +142,7 @@ export function _CostCenterMovementsReport({
               totals={data.totals}
               draftsExcluded={data.draftsExcluded}
               hasRows={hasRows}
+              scope={costCenterId === 'all' ? 'all' : costCenterId === 'none' ? 'none' : 'one'}
             />
 
             {hasRows && (
