@@ -12,6 +12,13 @@ import {
   verifyAccountingEquation,
 } from '../../shared/utils/balances';
 import { isCreditNote } from '@/modules/commercial/shared/voucher-utils';
+import { getActiveCompanyId } from '@/shared/lib/company';
+import {
+  groupByCostCenter,
+  summarizeDrafts,
+  sumGroupTotals,
+  type CostCenterMovementLine,
+} from '../../shared/utils/cost-center-movements';
 
 interface AccountBalance {
   accountId: string;
@@ -1527,3 +1534,149 @@ export async function getMonthlyVATReport(
     throw error;
   }
 }
+
+/**
+ * Movimientos por Centro de Costo (TSK-719).
+ *
+ * "Entradas y salidas" de cada centro: las líneas de asiento imputadas a él,
+ * clasificadas por `Account.nature` y firmadas por Debe/Haber en el helper puro
+ * `shared/utils/cost-center-movements.ts` (ahí vive la regla y sus tests).
+ *
+ * Decisiones de esta action:
+ * - **Una sola query con `status IN (DRAFT, POSTED)`** y el corte por estado en
+ *   memoria: las POSTED arman el reporte y las DRAFT el aviso, así los números
+ *   del aviso no pueden discrepar de los de la tabla y activar "Incluir
+ *   borradores" no dispara otra consulta. `REVERSED` nunca entra.
+ * - El bucket "(Sin centro de costo)" se restringe a cuentas de RESULTADO: sin
+ *   eso, toda línea de caja, banco, IVA y cuentas corrientes caería adentro y
+ *   el informe sería ilegible. Los centros CON nombre no filtran por tipo.
+ * - Se valida que el `companyId` que manda el cliente sea el de la empresa
+ *   activa. Los reportes viejos no lo hacen (agujero anotado como seguimiento);
+ *   el código nuevo no repite el error.
+ */
+export async function getCostCenterMovements(
+  companyId: string,
+  filters: {
+    costCenterId: string | 'all' | 'none';
+    fromDate: Date;
+    toDate: Date;
+    includeDrafts: boolean;
+  }
+) {
+  const userId = await getCurrentUserId();
+  if (!userId) throw new Error('No autenticado');
+  await checkPermission('accounting.reports', 'view', { redirect: true });
+
+  const activeCompanyId = await getActiveCompanyId();
+  if (companyId !== activeCompanyId) throw new Error('Empresa inválida');
+
+  const from = startOfDay(filters.fromDate);
+  const to = endOfDay(filters.toDate);
+
+  const resultAccounts = { type: { in: [AccountType.REVENUE, AccountType.EXPENSE] } };
+  const costCenterWhere: Prisma.JournalEntryLineWhereInput =
+    filters.costCenterId === 'all'
+      ? { OR: [{ costCenterId: { not: null } }, { costCenterId: null, account: resultAccounts }] }
+      : filters.costCenterId === 'none'
+        ? { costCenterId: null, account: resultAccounts }
+        : { costCenterId: filters.costCenterId };
+
+  try {
+    const lines = await prisma.journalEntryLine.findMany({
+      where: {
+        entry: {
+          companyId,
+          status: { in: [JournalEntryStatus.DRAFT, JournalEntryStatus.POSTED] },
+          date: { gte: from, lte: to },
+        },
+        ...costCenterWhere,
+      },
+      select: {
+        id: true,
+        description: true,
+        debit: true,
+        credit: true,
+        costCenterId: true,
+        costCenter: { select: { name: true } },
+        entry: { select: { id: true, number: true, date: true, description: true, status: true } },
+        account: { select: { code: true, name: true, nature: true } },
+      },
+      orderBy: [{ entry: { date: 'asc' } }, { entry: { number: 'asc' } }],
+    });
+
+    // Decimal → Number acá (regla 9): el helper y el Client Component trabajan
+    // siempre con `number`.
+    const movements: CostCenterMovementLine[] = lines.map((line) => ({
+      lineId: line.id,
+      entryId: line.entry.id,
+      entryNumber: line.entry.number,
+      date: line.entry.date,
+      entryDescription: line.entry.description,
+      lineDescription: line.description,
+      status: line.entry.status === JournalEntryStatus.DRAFT ? 'DRAFT' : 'POSTED',
+      accountCode: line.account.code,
+      accountName: line.account.name,
+      accountNature: line.account.nature === AccountNature.DEBIT ? 'DEBIT' : 'CREDIT',
+      debit: Number(line.debit),
+      credit: Number(line.credit),
+      costCenterId: line.costCenterId,
+      costCenterName: line.costCenter?.name ?? null,
+    }));
+
+    const drafts = movements.filter((movement) => movement.status === 'DRAFT');
+    const posted = movements.filter((movement) => movement.status === 'POSTED');
+
+    const groups = groupByCostCenter(filters.includeDrafts ? movements : posted);
+    const draftsExcluded = filters.includeDrafts
+      ? { entryCount: 0, saldo: 0 }
+      : summarizeDrafts(drafts);
+
+    return {
+      groups,
+      totals: sumGroupTotals(groups),
+      draftsExcluded,
+      includeDrafts: filters.includeDrafts,
+    };
+  } catch (error) {
+    logger.error('Error al obtener movimientos por centro de costo', {
+      data: { error, companyId, filters, userId },
+    });
+    throw error;
+  }
+}
+
+export type CostCenterMovementsResult = Awaited<ReturnType<typeof getCostCenterMovements>>;
+
+/**
+ * Centros de costo para el selector del informe: los activos **más** los
+ * inactivos que conservan movimientos, porque el borrado es lógico y si no
+ * el histórico de un centro dado de baja se vuelve inalcanzable.
+ *
+ * No se reusa `getCostCentersForSelect` de `company/features/cost-centers`:
+ * filtra `isActive: true`, no verifica permisos y está compartido por tres
+ * módulos; además accounting no puede importar de company
+ * (`module-communication.md`).
+ */
+export async function getCostCentersForMovementsReport(companyId: string) {
+  const userId = await getCurrentUserId();
+  if (!userId) throw new Error('No autenticado');
+  await checkPermission('accounting.reports', 'view', { redirect: true });
+
+  const activeCompanyId = await getActiveCompanyId();
+  if (companyId !== activeCompanyId) throw new Error('Empresa inválida');
+
+  try {
+    return await prisma.costCenter.findMany({
+      where: { companyId, OR: [{ isActive: true }, { journalEntryLines: { some: {} } }] },
+      select: { id: true, name: true, isActive: true },
+      orderBy: { name: 'asc' },
+    });
+  } catch (error) {
+    logger.error('Error al obtener centros de costo del informe de movimientos', {
+      data: { error, companyId, userId },
+    });
+    throw error;
+  }
+}
+
+export type CostCenterOption = Awaited<ReturnType<typeof getCostCentersForMovementsReport>>[number];

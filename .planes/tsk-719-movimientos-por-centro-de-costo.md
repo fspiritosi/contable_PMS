@@ -3,7 +3,7 @@
 **Fecha de inicio:** 2026-09-22
 **Ticket:** [719] "Centros de Costo — Tenemos que habilitar los movimientos Entradas y Salidas"
 **Origen:** reunión con Elizabeth Perez del 16-17/09 (nota interna)
-**Estado:** Implementación en progreso (Fase 1 de 7 completada)
+**Estado:** Implementación en progreso (Fases 1-3 de 7 completadas)
 
 ---
 
@@ -660,7 +660,7 @@ preexistentes.
   donde se cierra el bug silencioso de la nota de crédito (riesgo 1.6-4) y la doble fuente de
   verdad del export (riesgo 1.6-8).
 - **Tareas:**
-  - [ ] Escribir **primero** `src/modules/accounting/shared/utils/cost-center-movements.test.ts`
+  - [x] Escribir **primero** `src/modules/accounting/shared/utils/cost-center-movements.test.ts`
         (Vitest puro, estilo `account-subtree.test.ts`, sin Prisma ni `DATABASE_URL`). Casos
         mínimos (14):
     - `splitLineAmount` con `nature: 'CREDIT'` y `credit: 1000, debit: 0` → `{ entrada: 1000,
@@ -689,7 +689,7 @@ preexistentes.
       salida, saldo, y `estado` solo si `includeStatus`) + una fila `TOTAL` por grupo; el orden
       es grupo por grupo; con `includeStatus: false` las filas no traen la clave `estado`.
         Debe fallar en rojo porque el módulo no existe.
-  - [ ] Crear `src/modules/accounting/shared/utils/cost-center-movements.ts` (puro: sin Prisma,
+  - [x] Crear `src/modules/accounting/shared/utils/cost-center-movements.ts` (puro: sin Prisma,
         sin `@/modules/*`, sin React; < 180 líneas). Encabezado con el porqué (TSK-719: "entradas
         y salidas" es el vocabulario de la clienta para ingresos y egresos imputados al centro; se
         clasifica por `Account.nature` y se firma por debe/haber, opción (c) de 1.2.4, para que
@@ -712,7 +712,7 @@ preexistentes.
         Redondear a 2 decimales con el helper que ya existe en la carpeta
         (`shared/utils/decimal.ts`) si expone algo aplicable; si no, `Math.round(x * 100) / 100`
         en los totales, **no** en cada fila. Test en verde.
-  - [ ] Exportar lo necesario desde `src/modules/accounting/shared/utils/index.ts` si ese barrel
+  - [x] Exportar lo necesario desde `src/modules/accounting/shared/utils/index.ts` si ese barrel
         reexporta los demás helpers (verificar cómo están `account-code` y `balances`; si el
         barrel no los reexporta, importar por ruta directa y no tocarlo).
 - **Archivos:**
@@ -728,7 +728,7 @@ preexistentes.
   comparativa por centro con su detalle, los totales, y el resumen de los borradores excluidos;
   y que el selector ofrezca los centros activos **más** los inactivos con historia.
 - **Tareas:**
-  - [ ] **Test de integración (rojo primero).** Crear
+  - [x] **Test de integración (rojo primero).** Crear
         `src/modules/accounting/features/reports/cost-center-movements.integration.test.ts` con el
         andamiaje de `purchase-invoice-tributes.integration.test.ts:22-70`: `import
         'dotenv/config'`, chequeo `dbAvailable` con `await prisma.$queryRaw\`SELECT 1\``,
@@ -772,7 +772,7 @@ preexistentes.
       row.debit).toBe('number')` en una fila, que es la regla 9 del CLAUDE.md.
         `afterAll`: borrar en orden `journalEntryLine` → `journalEntry` → `costCenter` →
         `account` → `company` por prefijo y verificar `count` 0 en cada tabla.
-  - [ ] **`getCostCenterMovements`** en `src/modules/accounting/features/reports/actions.server.ts`
+  - [x] **`getCostCenterMovements`** en `src/modules/accounting/features/reports/actions.server.ts`
         (al final del archivo, después del último reporte; el archivo tiene 1529 líneas y empieza
         con BOM + `'use server'`). Firma:
         `export async function getCostCenterMovements(companyId: string, filters: {
@@ -804,17 +804,17 @@ preexistentes.
       draftsExcluded, includeDrafts }`.
     - `try/catch` con `logger.error('Error al obtener movimientos por centro de costo', { data: {
       error, companyId, filters } }); throw error;` igual que `:333-336`.
-  - [ ] **`getCostCentersForMovementsReport(companyId)`** en el mismo archivo, con el mismo
+  - [x] **`getCostCentersForMovementsReport(companyId)`** en el mismo archivo, con el mismo
         preámbulo de permiso y empresa activa:
         `prisma.costCenter.findMany({ where: { companyId, OR: [{ isActive: true }, {
         journalEntryLines: { some: {} } }] }, select: { id: true, name: true, isActive: true },
         orderBy: { name: 'asc' } })`. Comentario explicando por qué no se reusa
         `getCostCentersForSelect` (permiso distinto, filtra `isActive`, y accounting no puede
         importar de company).
-  - [ ] Exportar los tipos inferidos al final del archivo si la carpeta lo acostumbra
+  - [x] Exportar los tipos inferidos al final del archivo si la carpeta lo acostumbra
         (`export type CostCenterMovementsResult = Awaited<ReturnType<typeof
         getCostCenterMovements>>`) para que el componente los use sin redeclarar.
-  - [ ] `npm run check-types` → 219. `npm run test` → verde.
+  - [x] `npm run check-types` → 219. `npm run test` → verde.
 - **Archivos:**
   - Crear: `src/modules/accounting/features/reports/cost-center-movements.integration.test.ts`
   - Modificar: `src/modules/accounting/features/reports/actions.server.ts`
@@ -1243,10 +1243,28 @@ _Pendiente - ejecutar `/disenar tsk-719-movimientos-por-centro-de-costo`_
 - **Notas:** `\d journal_entry_lines` en dev lista los dos índices nuevos además de la PK. check-types 219 = base. En producción la migración la aplica el `docker-entrypoint.sh` al deployar. `CREATE INDEX` sin `CONCURRENTLY` bloquea escrituras mientras corre: con el volumen actual es instantáneo; si la tabla creciera a millones de filas habría que hacerlo a mano con `CONCURRENTLY`.
 
 ### Fase 2: Helper puro de movimientos por centro
-- **Estado:** Pendiente
+- **Estado:** Completada (2026-09-22)
+- **Archivos creados:**
+  - `src/modules/accounting/shared/utils/cost-center-movements.test.ts` - 15 tests (los 14 del plan + "sin borradores devuelve el resumen en cero"), escritos primero y en rojo.
+  - `src/modules/accounting/shared/utils/cost-center-movements.ts` - módulo puro (sin Prisma, sin `@/modules/*`, sin React). Exporta `NO_COST_CENTER_LABEL`, `splitLineAmount`, `buildMovementRows`, `groupByCostCenter`, `sumGroupTotals`, `summarizeDrafts`, `buildExcelRows` y los tipos `CostCenterMovementLine/Row/Group/Totals` y `DraftsSummary`.
+- **Notas:**
+  - Se agregó `sumGroupTotals(groups)` -no previsto en el plan- para que los totales generales se calculen y redondeen en el mismo lugar que los de cada grupo y la action no duplique la suma.
+  - `shared/utils/index.ts` **no se tocó**: ese barrel solo reexporta `balances`; `account-code` y `account-subtree` se importan por ruta directa, así que el helper nuevo sigue la misma convención.
+  - `shared/utils/decimal.ts` no se reusó: sus helpers son para `Decimal` de Prisma y usan `any`. El redondeo a 2 decimales es un `round2` local aplicado **solo a totales** (no a cada fila), como pedía el plan.
+  - 228 líneas contra las "<180" del plan: la diferencia es el encabezado y los JSDoc que documentan la regla de signo; el código ejecutable son ~130 líneas.
 
 ### Fase 3: Actions del reporte
-- **Estado:** Pendiente
+- **Estado:** Completada (2026-09-22)
+- **Archivos creados:**
+  - `src/modules/accounting/features/reports/cost-center-movements.integration.test.ts` - 11 tests contra la base real (rojos primero), con los tres `vi.mock` de frontera y prefijo `TSK719-TEST-`.
+- **Archivos modificados:**
+  - `src/modules/accounting/features/reports/actions.server.ts` - `getCostCenterMovements(companyId, { costCenterId, fromDate, toDate, includeDrafts })` y `getCostCentersForMovementsReport(companyId)`, más los tipos `CostCenterMovementsResult` y `CostCenterOption`; nuevos imports de `getActiveCompanyId` y del helper puro.
+- **Notas:**
+  - Payload de `getCostCenterMovements`: `{ groups, totals: { entradas, salidas, saldo }, draftsExcluded: { entryCount, saldo }, includeDrafts }`, con `groups` **siempre** un array (un centro puntual es un array de 1).
+  - Una sola query `status IN (DRAFT, POSTED)` con el corte por estado en memoria, `select` mínimo y `Decimal → Number` en el map (regla 9). `REVERSED` nunca entra.
+  - Las dos actions validan `companyId` contra `getActiveCompanyId()` y hacen `checkPermission('accounting.reports','view',{ redirect: true })`.
+  - **Limpieza de la siembra:** los asientos POSTED y REVERSED son inmutables por el trigger `trg_journal_entry_immutable` (migración `20260624100000_accounting_constraints`), así que el `afterAll` borra dentro de una transacción con `SET LOCAL session_replication_role = 'replica'`. Es el alcance más chico posible (esa conexión y ese bloque) en vez de un `ALTER TABLE ... DISABLE TRIGGER`, que afectaría a toda la tabla mientras corren otros tests en paralelo. Verificado: 0 filas `TSK719-TEST-*` en `companies`, `cost_centers`, `accounts` y `journal_entries`.
+  - `prettier --check` sobre `actions.server.ts` ya fallaba en `HEAD` (el plugin `organize-imports` reordena imports viejos): no se reformateó el archivo entero para no ensuciar el diff; el bloque nuevo sí está prettier-limpio.
 
 ### Fase 4: UI del reporte
 - **Estado:** Pendiente
