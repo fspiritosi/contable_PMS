@@ -3,7 +3,7 @@
 **Fecha de inicio:** 2026-09-22
 **Ticket:** [719] "Centros de Costo — Tenemos que habilitar los movimientos Entradas y Salidas"
 **Origen:** reunión con Elizabeth Perez del 16-17/09 (nota interna)
-**Estado:** Implementación en progreso (Fases 1-3 de 7 completadas)
+**Estado:** Implementación en progreso (Fases 1-5 de 7 completadas)
 
 ---
 
@@ -828,20 +828,20 @@ preexistentes.
   centro (o "Todos", o "Sin centro de costo") y un período, y vea entradas, salidas y saldo, con
   el detalle expandible, el aviso de lo que quedó en borrador y el botón de Excel.
 - **Tareas:**
-  - [ ] `components/_ReportsSelector.tsx:7-19`: agregar `| 'cost-center-movements'` al union
+  - [x] `components/_ReportsSelector.tsx:7-19`: agregar `| 'cost-center-movements'` al union
         `ReportType`. En el array `financialReports` (`:26-57`), después de `general-ledger`
         (`:51-56`): `{ id: 'cost-center-movements' as const, name: 'Movimientos por Centro de
         Costo', description: 'Entradas, salidas y saldo por centro', icon: Wallet }` — sumar
         `Wallet` (o `PieChart`, cualquiera de `lucide-react` que no esté ya en uso) al import de
         `:5`.
-  - [ ] Mismo archivo: exportar `export const REPORT_TYPES = [...] as const` (o un
+  - [x] Mismo archivo: exportar `export const REPORT_TYPES = [...] as const` (o un
         `isReportType(value: string): value is ReportType`) con los 13 ids, para que
         `_ReportsContent` pueda validar el parámetro de URL de la fase 5 sin duplicar la lista.
-  - [ ] `components/_ReportsContent.tsx`: importar `_CostCenterMovementsReport` (junto al resto,
+  - [x] `components/_ReportsContent.tsx`: importar `_CostCenterMovementsReport` (junto al resto,
         `:5-16`) y agregar el render condicional después del de `budget-variance` (`:96-98`):
         `{selectedReport === 'cost-center-movements' && (<_CostCenterMovementsReport
         companyId={companyId} />)}`. (La prop `initialCostCenterId` se agrega en la fase 5.)
-  - [ ] Crear `components/_CostCenterMovementsReport.tsx` (`'use client'`, < 200 líneas; molde
+  - [x] Crear `components/_CostCenterMovementsReport.tsx` (`'use client'`, < 200 líneas; molde
         `_GeneralLedgerReport.tsx:29-55` para el estado y el submit, `_BudgetVarianceReport.tsx:
         43-48` y `:164-167` para el selector con `useQuery` + `<Select>`):
     - Estado: `costCenterId` (`useState<string>('all')`), `fromDate` /`toDate` con
@@ -879,7 +879,7 @@ preexistentes.
       'YYYY-MM-DD')}\`, sheetName: 'Movimientos por Centro', title: 'Movimientos por Centro de
       Costo', includeDate: true })`. **El componente no recalcula nada**: solo pinta y exporta lo
       que vino de la action (riesgo 1.6-8).
-  - [ ] Crear `components/_CostCenterMovementsTable.tsx` (`'use client'`): recibe `groups`,
+  - [x] Crear `components/_CostCenterMovementsTable.tsx` (`'use client'`): recibe `groups`,
         `expandedRows`, `onToggle` e `includeDrafts`. Tabla HTML plana (no `DataTable`, como el
         resto de la carpeta) con una fila por centro — chevron, nombre, Entradas, Salidas, Saldo —
         y, al expandir, el encabezado del detalle y las filas **Fecha | Asiento N° | Cuenta
@@ -892,7 +892,7 @@ preexistentes.
     - Responsive (regla del checklist): envolver la tabla en `overflow-x-auto` y ocultar
       Descripción en `sm` con `hidden sm:table-cell`; son 7 columnas dentro de la card de 2/3 de
       ancho de `_ReportsContent.tsx:51`.
-  - [ ] `npm run lint` y `npm run check-types` (219) sobre los archivos nuevos; revisar que
+  - [x] `npm run lint` y `npm run check-types` (219) sobre los archivos nuevos; revisar que
         ninguno pase de 200 líneas y que no haya `:any` ni `console.*`.
 - **Archivos:**
   - Crear: `src/modules/accounting/features/reports/components/_CostCenterMovementsReport.tsx`,
@@ -911,7 +911,7 @@ preexistentes.
   el listado de centros que abre el informe **ya filtrado** por ese centro, sin mostrárselo a
   quien no tiene permiso de informes contables.
 - **Tareas:**
-  - [ ] `components/_ReportsContent.tsx`: importar `useSearchParams` de `next/navigation` y
+  - [x] `components/_ReportsContent.tsx`: importar `useSearchParams` de `next/navigation` y
         cambiar `:24` por
         `const searchParams = useSearchParams(); const reportParam = searchParams.get('report');
         const [selectedReport, setSelectedReport] = useState<ReportType>(isReportType(reportParam)
@@ -921,32 +921,32 @@ preexistentes.
         reporte nuevo: `<_CostCenterMovementsReport companyId={companyId}
         initialCostCenterId={initialCostCenterId} />`. **No** se escribe la URL al cambiar de
         informe (decisión arriba; seguimiento en 2.4).
-  - [ ] `components/_CostCenterMovementsReport.tsx`: aceptar `initialCostCenterId?: string | null`
+  - [x] `components/_CostCenterMovementsReport.tsx`: aceptar `initialCostCenterId?: string | null`
         y usarlo como valor inicial de `useState` (`initialCostCenterId ?? 'all'`). Si viene un
         id, **disparar la consulta automáticamente** al montar (un `useEffect` con dependencia
         vacía que llame al mismo `handleSubmit`), para que el link no deje al usuario frente a un
         formulario vacío. Si el id no está entre los centros que devuelve el selector (centro de
         otra empresa o borrado), el `<Select>` cae a `'all'` y se muestra un `toast.info`.
-  - [ ] `ReportsList.tsx:9-13`: envolver `<_ReportsContent />` en `<Suspense fallback={null}>`
+  - [x] `ReportsList.tsx:9-13`: envolver `<_ReportsContent />` en `<Suspense fallback={null}>`
         (import de `react`). `useSearchParams` en un Client Component obliga a un límite de
         Suspense o `npm run build` falla con *"useSearchParams() should be wrapped in a suspense
         boundary"*; verificarlo corriendo el build, no solo el dev server.
-  - [ ] `cost-centers/list/CostCentersList.tsx:13-16`: sumar
+  - [x] `cost-centers/list/CostCentersList.tsx:13-16`: sumar
         `getModulePermissions('accounting.reports')` al `Promise.all` y pasar
         `canViewAccountingReports={reportPermissions.canView}` a `_CostCentersDataTable`
         (`:28-33`).
-  - [ ] `cost-centers/list/components/_CostCentersDataTable.tsx:31-36` y `:81-84`: aceptar la prop
+  - [x] `cost-centers/list/components/_CostCentersDataTable.tsx:31-36` y `:81-84`: aceptar la prop
         nueva, pasarla a `getColumns` y agregarla a las dependencias del `useMemo`. El handler
         navega con el `router` que el componente ya tiene (`:39`):
         `router.push(\`/dashboard/company/accounting/reports?report=cost-center-movements&costCenterId=${id}\`)`.
-  - [ ] `cost-centers/list/columns.tsx:18-22` y `:42-85`: agregar `canViewReports: boolean` y
+  - [x] `cost-centers/list/columns.tsx:18-22` y `:42-85`: agregar `canViewReports: boolean` y
         `onViewMovements: (costCenter: CostCenterListItem) => void` a `ColumnsProps`; incluir
         `canViewReports` en el cálculo de `hasAnyAction` (`:26`) para que la columna de acciones
         aparezca aunque el usuario solo tenga informes; y agregar el `DropdownMenuItem` "Ver
         movimientos" (icono `BarChart3` de `lucide-react`, `data-testid=
         \`cost-center-movements-${costCenter.id}\``) **arriba** de Editar, condicionado a
         `canViewReports`.
-  - [ ] Verificar que el link tolera que el módulo Contabilidad esté **desactivado** para la
+  - [x] Verificar que el link tolera que el módulo Contabilidad esté **desactivado** para la
         empresa (1.4): si `accounting` no está en `activeModules`, la ruta de informes redirige;
         comprobar si `getModulePermissions` ya devuelve `canView: false` en ese caso (leer
         `src/shared/lib/permissions/getModulePermissions.server.ts:45-90` y el filtrado de
@@ -1267,10 +1267,39 @@ _Pendiente - ejecutar `/disenar tsk-719-movimientos-por-centro-de-costo`_
   - `prettier --check` sobre `actions.server.ts` ya fallaba en `HEAD` (el plugin `organize-imports` reordena imports viejos): no se reformateó el archivo entero para no ensuciar el diff; el bloque nuevo sí está prettier-limpio.
 
 ### Fase 4: UI del reporte
-- **Estado:** Pendiente
+- **Estado:** Completada (2026-09-22)
+- **Archivos creados:**
+  - `.../reports/components/_CostCenterMovementsReport.tsx` (160 líneas) - filtros, llamada a la action, orquestación.
+  - `.../reports/components/_CostCenterMovementsFilters.tsx` (131) - selector de centro, período y switch de borradores.
+  - `.../reports/components/_CostCenterMovementsSummary.tsx` (94) - tarjetas de totales, aviso de borradores y empty state.
+  - `.../reports/components/_CostCenterMovementsTable.tsx` (152) - comparativa por centro con detalle expandible.
+  - `.../reports/components/cost-center-movements-excel.ts` (64) - columnas y export a Excel.
+- **Archivos modificados:**
+  - `.../reports/components/_ReportsSelector.tsx` - `REPORT_TYPES`, `isReportType`, entrada en `financialReports` (ícono `Wallet`).
+  - `.../reports/components/_ReportsContent.tsx` - render condicional del informe nuevo.
+- **Notas:**
+  - **Cinco archivos en vez de dos.** El plan preveía `_Report` + `_Table`; con los filtros, las tarjetas, el aviso, el empty state y las 12 columnas del Excel, el componente principal daba 271 líneas. Se partió en Filters, Summary (molde `_BudgetVarianceSummary`, que ya existe en la carpeta) y un módulo `cost-center-movements-excel.ts` (precedente: `accounting/features/accounts/components/actions.ts`). Todos quedan bajo 200 líneas.
+  - `ReportType` **se deriva** de `REPORT_TYPES` (`(typeof REPORT_TYPES)[number]`) en vez de duplicar la lista de 13 ids: el union y la validación de la URL no pueden desincronizarse.
+  - Defectos del molde corregidos **solo acá**: la `key` va en un `<Fragment key=...>` externo y las filas del detalle se identifican por `lineId`.
+  - Responsive: `overflow-x-auto` + `min-w-[640px]`; Descripción con `hidden sm:table-cell`, y para que el `colSpan` no desalinee en mobile la fila de grupo emite su propia celda `hidden sm:table-cell` en lugar de un `colSpan` único.
+  - Con un solo grupo el detalle se expande solo (es lo que el usuario vino a ver); con "Todos" arranca contraído.
+  - El aviso dice, literal: *"Hay N asientos en borrador con movimientos de este centro por $X en entradas|salidas que no están incluidos. Registralos desde Contabilidad → Asientos para que impacten, o activá «Incluir borradores» para verlos acá."* (con `sin impacto neto en el saldo` cuando el neto da 0). Empty states: *"No hay movimientos registrados en el período; los N asientos en borrador de arriba son los únicos que tocan este centro."* / *"El centro no tiene movimientos en el período."*
+  - `prettier --check` **ya fallaba en `HEAD`** para `_ReportsSelector.tsx`, `_ReportsContent.tsx` y `ReportsList.tsx` (igual que `actions.server.ts` en la fase 3): no se reformatearon enteros; los archivos nuevos sí están prettier-limpios.
 
 ### Fase 5: Deep-link y acceso desde Centros de Costo
-- **Estado:** Pendiente
+- **Estado:** Completada (2026-09-22)
+- **Archivos modificados:**
+  - `.../reports/components/_ReportsContent.tsx` - `useSearchParams()` (solo lectura) para `?report=` con fallback `'trial-balance'` vía `isReportType`, y `?costCenterId=` como `initialCostCenterId`.
+  - `.../reports/ReportsList.tsx` - `<Suspense fallback={null}>` alrededor de `_ReportsContent`.
+  - `.../reports/components/_CostCenterMovementsReport.tsx` - prop `initialCostCenterId`, auto-consulta al montar y caída a "Todos" con `toast.info` si el centro del enlace no está en el selector.
+  - `company/features/cost-centers/list/CostCentersList.tsx` - `getModulePermissions('accounting.reports')` + `getActiveCompany()` en el `Promise.all`.
+  - `company/features/cost-centers/list/components/_CostCentersDataTable.tsx` - prop nueva y `router.push` al informe filtrado.
+  - `company/features/cost-centers/list/columns.tsx` - ítem "Ver movimientos" (ícono `BarChart3`, `data-testid="cost-center-movements-<id>"`) arriba de Editar, y `canViewReports` sumado a `hasAnyAction`.
+- **Notas:**
+  - **Verificación pedida por el plan (módulo Contabilidad desactivado): `getModulePermissions` NO contempla los módulos activos.** Resuelve solo RBAC (`getModulePermissions.server.ts:45-80`); el filtrado por `activeModules` vive únicamente en `shared/actions/sidebar.ts:61-66`. Por eso `CostCentersList` suma `getActiveCompany()` y exige también `isModuleActiveForCompany('accounting.reports', activeCompany?.activeModules ?? [])` (el prefijo `accounting` está en `PERMISSION_MODULE_MAP`, y `activeModules` vacío = todos activos).
+  - El enlace navega por URL (`router.push`): `company` no importa nada de `accounting` (`module-communication.md`).
+  - `_ReportsContent` **no escribe** la URL al cambiar de informe (queda como seguimiento en 2.4).
+  - El `<Suspense>` es obligatorio: sin él `npm run build` falla con *"useSearchParams() should be wrapped in a suspense boundary"*. Verificado con `npm run build` (compila).
 
 ### Fase 6: Documentación
 - **Estado:** Pendiente

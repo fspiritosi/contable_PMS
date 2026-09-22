@@ -1,7 +1,7 @@
 'use client';
 
 import type { ColumnDef } from '@tanstack/react-table';
-import { MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import { BarChart3, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 
 import { Button } from '@/shared/components/ui/button';
 import {
@@ -18,12 +18,23 @@ import type { CostCenterListItem } from './actions.server';
 interface ColumnsProps {
   onEdit: (costCenter: CostCenterListItem) => void;
   onDelete: (costCenter: CostCenterListItem) => void;
+  /** Abre el informe de movimientos del centro (TSK-719). */
+  onViewMovements: (costCenter: CostCenterListItem) => void;
   permissions: ModulePermissions;
+  /** Permiso de Informes contables: sin él no se ofrece "Ver movimientos". */
+  canViewReports: boolean;
 }
 
-export function getColumns({ onEdit, onDelete, permissions }: ColumnsProps): ColumnDef<CostCenterListItem>[] {
+export function getColumns({
+  onEdit,
+  onDelete,
+  onViewMovements,
+  permissions,
+  canViewReports,
+}: ColumnsProps): ColumnDef<CostCenterListItem>[] {
   const { canUpdate, canDelete } = permissions;
-  const hasAnyAction = canUpdate || canDelete;
+  // Un usuario que solo tiene Informes contables igual necesita la columna.
+  const hasAnyAction = canUpdate || canDelete || canViewReports;
 
   const baseColumns: ColumnDef<CostCenterListItem>[] = [
     // Nombre
@@ -58,6 +69,15 @@ export function getColumns({ onEdit, onDelete, permissions }: ColumnsProps): Col
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              {canViewReports && (
+                <DropdownMenuItem
+                  onClick={() => onViewMovements(costCenter)}
+                  data-testid={`cost-center-movements-${costCenter.id}`}
+                >
+                  <BarChart3 className="mr-2 h-4 w-4" />
+                  Ver movimientos
+                </DropdownMenuItem>
+              )}
               {canUpdate && (
                 <DropdownMenuItem
                   onClick={() => onEdit(costCenter)}

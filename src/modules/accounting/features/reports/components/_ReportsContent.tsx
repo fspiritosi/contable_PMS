@@ -1,7 +1,7 @@
 'use client';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/card';
-import { _ReportsSelector, type ReportType } from './_ReportsSelector';
+import { _ReportsSelector, isReportType, type ReportType } from './_ReportsSelector';
 import { _TrialBalanceReport } from './_TrialBalanceReport';
 import { _BalanceSheetReport } from './_BalanceSheetReport';
 import { _IncomeStatementReport } from './_IncomeStatementReport';
@@ -14,6 +14,8 @@ import { _FixedAssetsReport } from './_FixedAssetsReport';
 import { _PeriodDepreciationsReport } from './_PeriodDepreciationsReport';
 import { _BudgetVarianceReport } from './_BudgetVarianceReport';
 import { _MonthlyVATReport } from './_MonthlyVATReport';
+import { _CostCenterMovementsReport } from './_CostCenterMovementsReport';
+import { useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 
 interface ReportsContentProps {
@@ -21,7 +23,17 @@ interface ReportsContentProps {
 }
 
 export function _ReportsContent({ companyId }: ReportsContentProps) {
-  const [selectedReport, setSelectedReport] = useState<ReportType>('trial-balance');
+  // Deep-link (TSK-719): se LEE la URL para elegir el informe inicial y el
+  // centro de costo, pero no se escribe al cambiar de informe. El fallback a
+  // 'trial-balance' es obligatorio: un `?report=` desconocido no puede romper
+  // la pantalla que comparten los 13 informes.
+  const searchParams = useSearchParams();
+  const reportParam = searchParams.get('report');
+  const initialCostCenterId = searchParams.get('costCenterId');
+
+  const [selectedReport, setSelectedReport] = useState<ReportType>(
+    isReportType(reportParam) ? reportParam : 'trial-balance'
+  );
 
   return (
     <div className="flex flex-1 flex-col gap-4">
@@ -67,6 +79,13 @@ export function _ReportsContent({ companyId }: ReportsContentProps) {
 
           {selectedReport === 'general-ledger' && (
             <_GeneralLedgerReport companyId={companyId} />
+          )}
+
+          {selectedReport === 'cost-center-movements' && (
+            <_CostCenterMovementsReport
+              companyId={companyId}
+              initialCostCenterId={initialCostCenterId}
+            />
           )}
 
           {selectedReport === 'monthly-vat' && (

@@ -1,5 +1,7 @@
 import type { DataTableSearchParams } from '@/shared/components/common/DataTable';
 import { PermissionGuard } from '@/shared/components/common/PermissionGuard';
+import { getActiveCompany } from '@/shared/lib/company';
+import { isModuleActiveForCompany } from '@/shared/lib/modules';
 import { getModulePermissions } from '@/shared/lib/permissions';
 
 import { getCostCentersPaginated } from './actions.server';
@@ -10,10 +12,20 @@ interface Props {
 }
 
 export async function CostCentersList({ searchParams }: Props) {
-  const [{ data, total }, permissions] = await Promise.all([
+  const [{ data, total }, permissions, reportPermissions, activeCompany] = await Promise.all([
     getCostCentersPaginated(searchParams),
     getModulePermissions('company.cost-centers'),
+    getModulePermissions('accounting.reports'),
+    getActiveCompany(),
   ]);
+
+  // "Ver movimientos" lleva a Contabilidad → Informes, que es otro permiso
+  // (TSK-719). `getModulePermissions` solo resuelve RBAC y no mira los módulos
+  // activos de la empresa —eso lo hace el sidebar—, así que acá se exigen las
+  // dos condiciones: si Contabilidad está desactivada, el enlace no se muestra.
+  const canViewAccountingReports =
+    reportPermissions.canView &&
+    isModuleActiveForCompany('accounting.reports', activeCompany?.activeModules ?? []);
 
   return (
     <PermissionGuard module="company.cost-centers" action="view" redirect>
@@ -30,6 +42,7 @@ export async function CostCentersList({ searchParams }: Props) {
           totalRows={total}
           searchParams={searchParams}
           permissions={permissions}
+          canViewAccountingReports={canViewAccountingReports}
         />
       </div>
     </PermissionGuard>
