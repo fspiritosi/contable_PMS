@@ -459,6 +459,8 @@ model JournalEntryLine {
   supplier   Supplier?    @relation(fields: [supplierId], references: [id])
   costCenter CostCenter?  @relation(fields: [costCenterId], references: [id])
 
+  @@index([costCenterId]) // TSK-719: filtro del reporte de movimientos por centro
+  @@index([entryId]) // FK sin índice: el Cascade de JournalEntry y los include de lines la escaneaban entera
   @@map("journal_entry_lines")
 }
 
