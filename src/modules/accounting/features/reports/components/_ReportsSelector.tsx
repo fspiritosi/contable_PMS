@@ -2,21 +2,34 @@
 
 import { Button } from '@/shared/components/ui/button';
 import { cn } from '@/shared/lib/utils';
-import { FileText, Book, BookOpen, Scale, TrendingUp, AlertTriangle, RotateCcw, ArrowLeftRight, Calculator, CalendarRange, Target, Receipt } from 'lucide-react';
+import { FileText, Book, BookOpen, Scale, TrendingUp, AlertTriangle, RotateCcw, ArrowLeftRight, Calculator, CalendarRange, Target, Receipt, Wallet } from 'lucide-react';
 
-export type ReportType =
-  | 'trial-balance'
-  | 'journal-book'
-  | 'general-ledger'
-  | 'balance-sheet'
-  | 'income-statement'
-  | 'monthly-vat'
-  | 'entries-without-documents'
-  | 'reversal-log'
-  | 'document-traceability'
-  | 'fixed-assets'
-  | 'period-depreciations'
-  | 'budget-variance';
+/**
+ * Ids de todos los informes. Es la única lista: el union type se deriva de acá
+ * y `isReportType` la usa para validar el parámetro `?report=` de la URL
+ * (TSK-719), sin duplicarla en `_ReportsContent`.
+ */
+export const REPORT_TYPES = [
+  'trial-balance',
+  'journal-book',
+  'general-ledger',
+  'cost-center-movements',
+  'balance-sheet',
+  'income-statement',
+  'monthly-vat',
+  'entries-without-documents',
+  'reversal-log',
+  'document-traceability',
+  'fixed-assets',
+  'period-depreciations',
+  'budget-variance',
+] as const;
+
+export type ReportType = (typeof REPORT_TYPES)[number];
+
+export function isReportType(value: string | null | undefined): value is ReportType {
+  return typeof value === 'string' && (REPORT_TYPES as readonly string[]).includes(value);
+}
 
 interface ReportsSelectorProps {
   selectedReport: ReportType;
@@ -53,6 +66,12 @@ const financialReports = [
     name: 'Libro Mayor',
     description: 'Muestra los movimientos por cuenta',
     icon: BookOpen,
+  },
+  {
+    id: 'cost-center-movements' as const,
+    name: 'Movimientos por Centro de Costo',
+    description: 'Entradas, salidas y saldo por centro',
+    icon: Wallet,
   },
 ];
 

@@ -442,7 +442,54 @@ export function _AccountingGuide() {
             <li>
               <strong>Libro Mayor</strong>: movimientos agrupados por cuenta
             </li>
+            <li>
+              <strong>Movimientos por Centro de Costo</strong>: entradas,
+              salidas y saldo de cada centro; se puede ver{' '}
+              <strong>un centro</strong> con su detalle y saldo acumulado,{' '}
+              <strong>Todos los centros</strong> comparados (cada fila se
+              expande al detalle) o{' '}
+              <strong>(Sin centro de costo)</strong>, que muestra las líneas de
+              ingresos y gastos que quedaron sin imputar
+            </li>
           </ul>
+
+          <div className="rounded-md border p-3 text-sm text-muted-foreground space-y-2 mt-3">
+            <p className="font-medium text-foreground">
+              Cómo leer Movimientos por Centro de Costo
+            </p>
+            <p>
+              <strong>Entrada y salida se definen por el tipo de cuenta</strong>
+              , no por el Debe y el Haber: una venta imputada al centro suma en{' '}
+              <strong>Entradas</strong> y un gasto suma en{' '}
+              <strong>Salidas</strong>. Por eso una{' '}
+              <strong>nota de crédito</strong> de venta aparece como una entrada{' '}
+              <strong>negativa</strong> (resta de las entradas) y no como una
+              salida. El <strong>saldo</strong> del centro es Entradas menos
+              Salidas.
+            </p>
+            <p>
+              <strong>Qué imputa centro de costo hoy</strong>: solo las líneas
+              de las <strong>facturas de venta y de compra</strong> (por el
+              reparto por porcentaje de cada línea o por el centro por defecto
+              del ítem) y los asientos manuales que lo lleven cargado.{' '}
+              <strong>Todavía no</strong> imputan centro de costo los
+              movimientos de fondos, la amortización de equipos, los recibos,
+              las órdenes de pago ni los egresos. El centro de costo del legajo
+              del empleado y el de la ficha del equipo son{' '}
+              <strong>informativos</strong>: no llegan a ningún asiento.
+            </p>
+            <p>
+              <strong>Borradores</strong>: el informe muestra los asientos{' '}
+              <strong>registrados</strong>. Si en el período quedan asientos en
+              borrador que tocan lo consultado, un aviso indica{' '}
+              <strong>cuántos son y por qué importe</strong>; se registran desde{' '}
+              <strong>Contabilidad → Asientos</strong>, o se los puede sumar al
+              informe activando <strong>Incluir borradores</strong> (que agrega
+              la columna Estado). El informe también se exporta a{' '}
+              <strong>Excel</strong>, con Debe y Haber además de Entrada, Salida
+              y Saldo.
+            </p>
+          </div>
 
           <p className="mt-3">
             <strong>Reportes de auditoría:</strong>

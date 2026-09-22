@@ -33,9 +33,17 @@ interface Props {
   totalRows: number;
   searchParams: DataTableSearchParams;
   permissions: ModulePermissions;
+  /** Permiso de Informes contables + módulo Contabilidad activo (TSK-719). */
+  canViewAccountingReports: boolean;
 }
 
-export function _CostCentersDataTable({ data, totalRows, searchParams, permissions }: Props) {
+export function _CostCentersDataTable({
+  data,
+  totalRows,
+  searchParams,
+  permissions,
+  canViewAccountingReports,
+}: Props) {
   const router = useRouter();
 
   // Modal states
@@ -72,6 +80,14 @@ export function _CostCentersDataTable({ data, totalRows, searchParams, permissio
     setDeleteDialogOpen(true);
   };
 
+  // Deep-link al informe de movimientos ya filtrado por este centro. Se navega
+  // por URL: `company` no puede importar nada de `accounting`.
+  const handleViewMovements = (costCenter: CostCenterListItem) => {
+    router.push(
+      `/dashboard/company/accounting/reports?report=cost-center-movements&costCenterId=${costCenter.id}`
+    );
+  };
+
   const handleFormModalClose = (open: boolean) => {
     setFormModalOpen(open);
     if (!open) setSelectedCostCenter(null);
@@ -79,8 +95,16 @@ export function _CostCentersDataTable({ data, totalRows, searchParams, permissio
 
   // Memoize columns with handlers
   const columns = useMemo(
-    () => getColumns({ onEdit: handleEdit, onDelete: handleDelete, permissions }),
-    [permissions]
+    () =>
+      getColumns({
+        onEdit: handleEdit,
+        onDelete: handleDelete,
+        onViewMovements: handleViewMovements,
+        permissions,
+        canViewReports: canViewAccountingReports,
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [permissions, canViewAccountingReports]
   );
 
   return (
