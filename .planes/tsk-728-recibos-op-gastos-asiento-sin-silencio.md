@@ -1356,14 +1356,18 @@ base) y en los tres tests de integración contra la base de dev (fases 2-4): el 
 - **Objetivo:** evidencia de que todo funciona en dev **y en build de producción** (el toast con
   el mensaje real, no el digest; memoria `errores-negocio-server-actions`).
 - **Tareas:**
-  - [ ] `npm run check-types` → **219** (línea base); `npm run lint` sin errores nuevos en los
+  - [x] `npm run check-types` → **219** (línea base); `npm run lint` sin errores nuevos en los
         archivos tocados; `npm run test` en verde: unitarios (labels, settings-accounts,
         payment-accounts, validators de tesorería, validators de settings, asset-accounts) y los
         tres de integración nuevos contra la base de dev, más los previos sin regresión; verificar
         que los `afterAll` dejan `count` 0 de `TSK728-*` en `companies`, `accounts`, `receipts`,
         `payment_orders`, `expenses`.
-  - [ ] Prueba manual en `npm run dev` (puerto 3010, memoria `dev-local-capturas-y-login`), con
-        los datos sembrados por `capturas-tsk728.mjs` o a mano:
+  - [x] Prueba manual en `npm run dev` (puerto 3010, memoria `dev-local-capturas-y-login`), con
+        los datos sembrados por `capturas-tsk728.mjs` o a mano (cubiertos en navegador: 1, 2 —en
+        su versión OP—, 3 y 4 —con cheque propio en OP—, 5, 6 —efectivo/transferencia—, 7 y 9
+        —Efectivo sin caja—; los sub-casos con tarjeta de socio, tarjeta de crédito sola, OP a
+        socio, presupuesto excedido, período cerrado y las otras dos reglas Zod quedan cubiertos
+        por los tests de integración/unitarios de las fases 1-4, ver sección 4 · Fase 7):
     1. Recibo con efectivo en caja con cuenta → confirma; asiento Caja/Cobrar; toast verde sin
        avisos.
     2. Recibo con transferencia a banco sin cuenta y sin "Banco por Defecto" → el diálogo
@@ -1383,15 +1387,18 @@ base) y en los tres tests de integración contra la base de dev (fases 2-4): el 
        (antes los tres llegaban redactados en prod).
     9. Modal de recibo nuevo: Efectivo sin caja → "Debe seleccionar la caja"; Transferencia sin
        banco → "Debe seleccionar la cuenta bancaria"; Cheque sin banco → se guarda.
-  - [ ] **Build de producción**: `npm run build && NEXT_PUBLIC_APP_URL=http://localhost:3011 npm
+  - [x] **Build de producción**: `npm run build && NEXT_PUBLIC_APP_URL=http://localhost:3011 npm
         run start -- -p 3011`; repetir 2, 5, 6 (tarjeta de crédito sola) y 7 y confirmar que el
         toast muestra el mensaje de negocio y que el toast ámbar de avisos (3) también llega, no
-        "An error occurred in the Server Components render".
+        "An error occurred in the Server Components render" (hecho con 7 —egreso sin cuenta— y
+        5 en su versión OP —bloqueo por Ajustes + confirmación OK—; el toast ámbar viaja como
+        dato en `warnings`, no como `throw`, así que no depende del build).
   - [ ] Correr el SQL 1) y 3) del script en producción (`psql` según memoria
         `produccion-dokploy-scripts-db`) para registrar cuántos recibos/OP/gastos históricos hay
         sin asiento y qué medios de pago se usan; anotar el resultado en la sección 5 y en el
-        ticket de seguimiento 2.4-1.
-  - [ ] Documentar todo en la sección 5 con los conteos, los asientos generados y las capturas
+        ticket de seguimiento 2.4-1. _(Pendiente: requiere acceso a la base de producción; queda
+        para el post-deploy, como en 721.)_
+  - [x] Documentar todo en la sección 5 con los conteos, los asientos generados y las capturas
         del build de producción.
 - **Archivos:** ninguno nuevo (sección 5 del documento).
 - **Criterio de completitud:** los nueve pasos manuales pasan, el build de producción muestra los
@@ -1775,7 +1782,100 @@ ya pasaba); `check-types` en 219; ESLint sin errores en lo tocado; Prettier limp
 
 ### Fase 7: Verificación final
 
-**Estado:** Pendiente.
+**Estado:** Completada (2026-09-22), salvo el conteo en producción (post-deploy).
+
+**Cómo:**
+- `npx vitest run` → **569/569** (46 archivos); sin restos `TSK728-*` en `companies`.
+- `npm run check-types 2>&1 | grep -c "error TS"` → **219** (línea base).
+- `npx eslint src/modules/commercial/features/treasury src/modules/commercial/features/expenses
+  src/modules/accounting/features/integrations/commercial` → 14 errores / 27 warnings, **todos
+  previos** al ticket (verificado con `git blame`): los dos `:any` de `getPaymentOrders` (`:827`) y
+  `getReceipts` (`:469`) son de `81faabe0`; el resto está en `pdf/data-mapper.ts`, `import-export`,
+  modales y detalles no tocados. Ningún hallazgo en `entry-preflight.ts`, `_ConfirmEntryDialog`,
+  `_EntryPreviewNotice`, `payment-accounts.ts`, `settings-accounts.ts` ni en los tests nuevos.
+- Dev server relanzado en `:3010` (el que corría tenía código anterior al commit `3742e48`).
+- Script nuevo `scripts/guia-presentacion/capturas-tsk728.mjs` (molde de `capturas-tsk724c.mjs`):
+  siembra por SQL en la Empresa de Prueba 01 SA lo que la base de dev no tenía —caja `CAJA-01`
+  "Caja Principal" con cuenta 1.1.1/01/01 y sesión abierta, categoría "Servicios generales",
+  cliente "Cliente Demo SA" + punto de venta 1 + factura de venta `0001-00000001` CONFIRMED
+  (insertada por SQL, sin asiento), y los comprobantes demo marcados con `notes='TSK728-demo'`:
+  OP-00001 (transferencia $50.000), OP-00002 (transferencia $30.000 + cheque propio N° 10001
+  $20.000), OP-00003 (solo cheque propio N° 10002 $10.000), OP-00004 (transferencia $5.000, para
+  prod), R-00001 (efectivo $20.000 en Caja Principal contra la FA), GTO-00001/00002/00003 ($15.000
+  / $8.500 / $15.000, proveedor Distribuidora de Combustibles SRL). Cambia temporalmente
+  `payables/receivables/expenses_account_id`, `default_bank_account_id` y el `account_id` del
+  Banco Santander, y **restaura todo en `finally`**. Modos: completo, `--prod` (13-15), `--solo-zod`
+  (12), `--solo-egreso` (10-11 con GTO-00003), `--restore`. Es idempotente: al empezar borra los
+  comprobantes demo con sus asientos, movimientos bancarios (devolviendo el saldo), cheques y
+  movimientos de caja.
+- **Build de producción**: `NEXT_PUBLIC_APP_URL=http://localhost:3011 npm run build` (exit 0) +
+  `NEXT_PUBLIC_APP_URL=http://localhost:3011 BETTER_AUTH_URL=http://localhost:3011 npm run start
+  -- -p 3011`; script en modo `--prod`; server de prod matado por PID al terminar.
+
+**Resultados:** ver la tabla de la sección 5. Los 15 casos del navegador pasaron: notices con el
+label literal de Ajustes, bloqueo que nombra el banco y dónde configurarlo, notice ámbar + toast
+de avisos para el cheque propio, bloqueo de "una sola línea", Zod "Debe seleccionar la caja", y en
+prod el toast de error llega con el **mensaje completo** (no el digest). Asientos generados
+(número · Debe / Haber): OP-00001 → nº 25 Acreedores Locales (Ctes.) 50.000 / Banco Santander Río
+c/c 50.000; OP-00002 → nº 26 Acreedores 30.000 / Banco 30.000 (Pagar por total − cheque; cheque
+10001 `OWN/DELIVERED` $20.000); R-00001 → nº 27 Caja 20.000 / Deudores locales 20.000 (FA pasa a
+`PARTIAL_PAID`, sesión de caja +20.000); GTO-00003 → nº 28 Gastos Varios - Administración 15.000 /
+Acreedores 15.000; OP-00004 (prod) → nº 29 Acreedores 5.000 / Banco 5.000. Comprobantes bloqueados
+quedaron en `DRAFT` con `journal_entry_id NULL` y sin movimientos. Diagnóstico
+(`diagnose-invoices-without-entry.ts`): 0 recibos/OP/gastos confirmados sin asiento; medios usados
+OP CHECK 1 ($20.000) / TRANSFER 3 ($85.000), RECIBO CASH 1 ($20.000); "con algún pago sin cuenta":
+OP 1 (la mixta, esperado).
+
+**Hallazgos (no se corrigió nada):**
+- El **modal de nueva OP abre en la pestaña "Gastos"** cuando no viene prellenado
+  (`_CreatePaymentOrderModal.tsx:369`, `defaultTab = hasInvoicesPrefilled ? 'invoices' :
+  'expenses'`), así que para pagar facturas hay que cambiar de pestaña a mano. Es previo al ticket
+  (`226692d`); anotado como posible mejora de UX, no bloquea.
+- Los toasts de error/éxito/aviso de Sonner van **sin `richColors`**: el "rojo" es el ícono ⊗ con
+  fondo neutro (igual que en 721/724c). Los notices dentro del diálogo sí son rojo/ámbar/neutro.
+- Los asientos generados quedan en estado **"Borrador"** en Contabilidad → Asientos, como todos
+  los automáticos del sistema (facturas, fund-movements, equipos): comportamiento previo, fuera
+  del ticket.
+- La factura de venta `0001-00000001` sembrada por SQL aparece en el diagnóstico como "VENTA sin
+  asiento": es un artefacto de la siembra (se insertó CONFIRMED sin pasar por `confirmInvoice`),
+  no un caso del ticket. Sirve de control de que el script la detecta.
+- Con toasts de 4 s, capturar después de `waitForTimeout(3500)` los pierde: el script espera la
+  aparición del toast (`waitForSelector`) y los captura enseguida, con `hover` para desplegar la
+  pila (éxito + avisos).
 
 ## 5. Verificación
-_Pendiente - ejecutar `/verificar tsk-728-recibos-op-gastos-asiento-sin-silencio`_
+
+**Fecha:** 2026-09-22 · rama `fix/tsk-728-asientos-sin-silencio` · `npx vitest run` 569/569 ·
+`check-types` 219 (línea base) · ESLint sin hallazgos nuevos en lo tocado.
+
+| # | Caso (dev `:3010`, Empresa de Prueba 01 SA) | Resultado | Texto literal / evidencia | Captura |
+|---|---|---|---|---|
+| 1 | OP-00001 (transferencia) con "Cuentas por Pagar" en NULL | PASA: notice rojo, **Confirmar deshabilitado**, OP sigue `DRAFT` | «No se va a poder confirmar» · «No se puede confirmar la orden de pago OP-00001: falta configurar "Cuentas por Pagar" en Contabilidad → Configuración.» | `tsk728-01-op-bloqueada-ajustes.png` |
+| 2 | OP-00001 con Banco Santander sin `account_id` y sin "Banco por Defecto" | PASA: notice rojo, botón deshabilitado, `DRAFT`, saldo bancario intacto | «No se puede confirmar la orden de pago OP-00001: la cuenta bancaria "Banco Santander 1085628-1" no tiene cuenta contable asociada. Configurala en Tesorería → Cuentas Bancarias o definí el "Banco por Defecto" en Contabilidad → Configuración.» | `tsk728-02-op-bloqueada-banco-sin-cuenta.png` |
+| 3 | OP-00001 con todo configurado | PASA: notice neutro con las cuentas; toast `success` «Orden de pago confirmada correctamente»; `CONFIRMED` con asiento | «El asiento contable se genera con estas cuentas:» · Cuentas por Pagar: `2.1.1/02/01 - Acreedores Locales (Ctes.)` · Banco "Banco Santander 1085628-1": `1.1.1/02/01 - Banco Santander Río c/c en pesos` | `tsk728-03-op-ok-cuentas.png` |
+| 4 | Asiento de OP-00001 en Contabilidad → Asientos | PASA: fila «Orden de pago OP-00001» expandida, origen «Orden Pago» | SQL nº 25: `2.1.1/02/01` Debe 50.000,00 / `1.1.1/02/01` Haber 50.000,00 | `tsk728-04-op-asiento.png` |
+| 5 | OP-00002 mixta: transferencia $30.000 + cheque propio N° 10001 $20.000 | PASA: notice ámbar + notice neutro, botón habilitado | «Avisos del asiento contable» · «Cheque N° 10001 por $ 20.000,00 no genera línea en el asiento contable: los cheques todavía no tienen cuenta asignada en el sistema. Ese importe queda pendiente en Cuentas por Pagar hasta que se regularice.» | `tsk728-05-op-mixta-aviso-cheque.png` |
+| 6 | Confirmar OP-00002 | PASA: toast `success` + toast `warning` con el aviso; `CONFIRMED` con asiento; cheque 10001 `OWN/DELIVERED` | «La orden de pago se confirmó con avisos contables» + el texto del cheque · SQL nº 26: Acreedores Debe **30.000,00** (total − cheque) / Banco Haber 30.000,00 | `tsk728-06-op-mixta-toast-avisos.png` |
+| 7 | OP-00003 solo con cheque propio N° 10002 $10.000 | PASA: notice rojo de una sola línea, botón deshabilitado, `DRAFT` | «No se puede confirmar la orden de pago OP-00003: ningún pago genera línea contable (Cheque N° 10002 por $ 10.000,00) y no hay retenciones, así que el asiento quedaría con una sola línea. Agregá un pago en efectivo, transferencia, débito de la empresa o e-cheq, o una retención.» | `tsk728-07-op-solo-cheque-bloqueada.png` |
+| 8 | R-00001 efectivo $20.000 en "Caja Principal" (cuenta 1.1.1/01/01, sesión abierta), "Cuentas por Cobrar" = 1.1.3/01/01 | PASA: notice neutro; toast «Recibo confirmado correctamente»; `CONFIRMED` con asiento; FA `0001-00000001` → `PARTIAL_PAID`; sesión de caja +20.000 | Cuentas por Cobrar: `1.1.3/01/01 - Deudores locales` · Caja "Caja Principal": `1.1.1/01/01 - Caja` · SQL nº 27: Caja Debe 20.000,00 / Deudores locales Haber 20.000,00 | `tsk728-08-recibo-ok-cuentas.png` |
+| 9 | R-00001 con "Cuentas por Cobrar" en NULL (estado original de la empresa) | PASA: notice rojo, botón deshabilitado, `DRAFT` | «No se puede confirmar el recibo R-00001: falta configurar "Cuentas por Cobrar" en Contabilidad → Configuración.» | `tsk728-09-recibo-bloqueado-ajustes.png` |
+| 10 | Egreso GTO-00003 con "Cuenta de Gastos Operativos" en NULL | PASA: toast `error` con el label; sigue `DRAFT` sin asiento | «No se puede confirmar el gasto GTO-00003: falta configurar "Cuenta de Gastos Operativos" en Contabilidad → Configuración.» | `tsk728-10-egreso-sin-cuenta-toast.png` |
+| 11 | GTO-00003 con la cuenta 4.2.1/03/10 | PASA: toast «Egreso confirmado correctamente»; `CONFIRMED` con asiento | SQL nº 28: `4.2.1/03/10 - Gastos Varios - Administración` Debe 15.000,00 / `2.1.1/02/01` Haber 15.000,00 | `tsk728-11-egreso-ok-toast.png` |
+| 12 | Modal "Nueva Orden de Pago": pestaña Facturas → proveedor → factura → pago Efectivo (Resto) sin caja → "Crear Orden de Pago" | PASA: mensaje Zod bajo el select de caja; no se crea ninguna OP (count = 0) | «Debe seleccionar la caja» | `tsk728-12-nueva-op-efectivo-sin-caja.png` |
+| 13 | **Build de producción `:3011`**: GTO-00002 sin "Cuenta de Gastos Operativos" | PASA: el toast trae el **mensaje completo, no el digest**; `DRAFT` | «No se puede confirmar el gasto GTO-00002: falta configurar "Cuenta de Gastos Operativos" en Contabilidad → Configuración.» | `tsk728-13-prod-egreso-sin-cuenta-toast.png` |
+| 14 | **Prod**: OP-00004 con "Cuentas por Pagar" en NULL | PASA: notice rojo, botón deshabilitado | «No se puede confirmar la orden de pago OP-00004: falta configurar "Cuentas por Pagar" en Contabilidad → Configuración.» | `tsk728-14-prod-op-bloqueada-ajustes.png` |
+| 15 | **Prod**: OP-00004 restaurada y confirmada | PASA: toast «Orden de pago confirmada correctamente»; `CONFIRMED` con asiento | SQL nº 29: Acreedores Debe 5.000,00 / Banco Haber 5.000,00 | `tsk728-15-prod-op-confirmada-toast.png` |
+| — | Tests de integración (fases 2-4) | 12 recibos + 14 OP + 7 gastos en verde: cubren caja sin cuenta con/sin "Caja por Defecto", retenciones sin cuenta, cheque de tercero recibido, tarjeta de socio, tarjeta de crédito sola, OP a socio, presupuesto, período cerrado, Zod de transferencia/débito | `npx vitest run` 569/569 | — |
+| — | Conteo histórico en producción | **Pendiente post-deploy** (SQL 1) y 3) del header de `diagnose-invoices-without-entry.ts`, memoria `produccion-dokploy-scripts-db`) | — | — |
+
+**Estado final de la base de dev** (verificado por SQL al terminar): `accounting_settings` de la
+empresa `02885d43-…`: `receivables_account_id NULL`, `payables_account_id 7cbdad9a-…`
+(2.1.1/02/01), `expenses_account_id NULL`, `default_cash_account_id NULL`,
+`default_bank_account_id NULL`, `sales_account_id NULL`, `require_cost_center t` — idéntico al
+inicio. Banco Santander 1085628-1: `account_id 4233917c-…` (1.1.1/02/01) restaurado; saldo
+1.601.485 → **1.516.485** (−50.000 −30.000 −5.000 de las tres OP confirmadas). Quedan en la base
+(marcados `notes='TSK728-demo'`, el script los recicla): OP-00001/00002/00004 `CONFIRMED` con
+asiento, OP-00003 `DRAFT`, R-00001 `CONFIRMED` con asiento, GTO-00001/00002 `DRAFT`, GTO-00003
+`CONFIRMED` con asiento; más la caja `CAJA-01` con sesión abierta, "Cliente Demo SA" y la FA
+`0001-00000001` (`PARTIAL_PAID`, sin asiento por haberse sembrado por SQL). Comprobantes
+confirmados sin asiento (recibos/OP/gastos): **0**. Restos `TSK728-*` de los tests: 0.
