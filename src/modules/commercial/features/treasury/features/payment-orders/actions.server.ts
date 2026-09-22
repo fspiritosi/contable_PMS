@@ -15,6 +15,12 @@ import { partnerRepaymentSchema } from '../../shared/validators';
 import type { PendingPurchaseInvoice, PaymentOrderListItem, PaymentOrderWithDetails } from '../../shared/types';
 import { createJournalEntryForPaymentOrder } from '@/modules/accounting/features/integrations/commercial';
 import { checkPermission } from '@/shared/lib/permissions';
+import { BusinessError, toActionResult, type ActionResult } from '@/shared/lib/action-result';
+import {
+  assertEntryPreflight,
+  loadPaymentOrderEntryPreflight,
+  type EntryPreflight,
+} from '../../shared/entry-preflight';
 import { calculatePendingAmount, hasPendingBalance } from './shared/pending-invoices';
 
 /**
@@ -419,9 +425,29 @@ export async function createPaymentOrder(data: CreatePaymentOrderFormData) {
 }
 
 /**
- * Confirma una orden de pago (actualiza facturas y crea movimientos)
+ * Vista previa del asiento de una orden de pago: alimenta el diálogo de
+ * confirmación (TSK-728). No lanza: `error`/`warnings` viajan como dato.
+ * Mismo permiso que confirmar.
  */
-export async function confirmPaymentOrder(paymentOrderId: string) {
+export async function getPaymentOrderEntryPreview(paymentOrderId: string): Promise<EntryPreflight> {
+  await checkPermission('commercial.treasury.payment-orders', 'approve', { redirect: true });
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  return loadPaymentOrderEntryPreflight(companyId, paymentOrderId);
+}
+
+/**
+ * Confirma una orden de pago (actualiza facturas/gastos, crea movimientos y el asiento).
+ *
+ * Los errores esperables (OP ya confirmada, caja sin sesión, cheque endosado no
+ * disponible, cuenta contable faltante, período cerrado) vuelven como
+ * `{ success: false, error }`; `warnings` lista los pagos que quedaron fuera del
+ * asiento y el aviso de OP a socio (TSK-728).
+ */
+export async function confirmPaymentOrder(
+  paymentOrderId: string
+): Promise<ActionResult<{ id: string; warnings: string[] }>> {
   await checkPermission('commercial.treasury.payment-orders', 'approve', { redirect: true });
   const userId = await getCurrentUserId();
   if (!userId) throw new Error('No autenticado');
@@ -444,15 +470,21 @@ export async function confirmPaymentOrder(paymentOrderId: string) {
             expense: true,
           },
         },
-        payments: { include: { card: { include: { partner: true } } } },
+        // El nombre de la caja es para el error de sesión (TSK-728)
+        payments: {
+          include: { card: { include: { partner: true } }, cashRegister: { select: { name: true } } },
+        },
         withholdings: true,
         supplier: { select: { businessName: true, taxId: true } },
       },
     });
 
     if (!paymentOrder) {
-      throw new Error('Orden de pago no encontrada o ya confirmada');
+      throw new BusinessError('Orden de pago no encontrada o ya confirmada');
     }
+
+    // TSK-728: pre-validación fuera de la transacción: nada se mueve si va a fallar por configuración
+    const warnings = assertEntryPreflight(await loadPaymentOrderEntryPreflight(companyId, paymentOrderId));
 
     // Confirmar orden de pago y procesar en transacción
     await prisma.$transaction(async (tx) => {
@@ -527,7 +559,9 @@ export async function confirmPaymentOrder(paymentOrderId: string) {
           });
 
           if (!activeSession) {
-            throw new Error('No hay sesión abierta para la caja seleccionada');
+            throw new BusinessError(
+              `No hay sesión abierta para la caja "${payment.cashRegister?.name ?? 'seleccionada'}"`
+            );
           }
 
           // Movimiento de caja (EXPENSE)
@@ -598,7 +632,7 @@ export async function confirmPaymentOrder(paymentOrderId: string) {
               select: { id: true },
             });
             if (!endorsed) {
-              throw new Error('El cheque de tercero seleccionado ya no está disponible en cartera');
+              throw new BusinessError('El cheque de tercero seleccionado ya no está disponible en cartera');
             }
             await tx.check.update({
               where: { id: endorsed.id },
@@ -720,32 +754,20 @@ export async function confirmPaymentOrder(paymentOrderId: string) {
         });
       }
 
-      // Crear asiento contable automáticamente (solo OP a proveedor; las de devolución
-      // a socio no generan asiento de compra)
+      // Crear asiento contable (solo OP a proveedor; las de devolución a socio no
+      // generan asiento de compra: seguimiento del plan 728, 2.4-4). Si falla, la
+      // transacción entera se revierte. TSK-728: antes solo se relanzaba "período
+      // cerrado" y cualquier otro fallo dejaba la OP confirmada sin asiento.
       if (!paymentOrder.partnerId) {
-        try {
-          const journalEntryId = await createJournalEntryForPaymentOrder(paymentOrderId, companyId, tx);
+        const journalEntryId = await createJournalEntryForPaymentOrder(paymentOrderId, companyId, tx);
+        await tx.paymentOrder.update({
+          where: { id: paymentOrderId },
+          data: { journalEntryId },
+        });
 
-          if (journalEntryId) {
-            // Actualizar orden de pago con referencia al asiento contable
-            await tx.paymentOrder.update({
-              where: { id: paymentOrderId },
-              data: { journalEntryId },
-            });
-
-            logger.info('Asiento contable generado para orden de pago', {
-              data: { paymentOrderId, journalEntryId },
-            });
-          }
-        } catch (error) {
-          // Re-lanzar errores de período bloqueado (el usuario debe saberlo)
-          if (error instanceof Error && error.message.includes('período está cerrado')) {
-            throw error;
-          }
-          logger.warn('No se pudo generar asiento contable para orden de pago', {
-            data: { paymentOrderId, error },
-          });
-        }
+        logger.info('Asiento contable generado para orden de pago', {
+          data: { paymentOrderId, journalEntryId },
+        });
       }
     });
 
@@ -753,18 +775,20 @@ export async function confirmPaymentOrder(paymentOrderId: string) {
       data: {
         paymentOrderId,
         fullNumber: paymentOrder.fullNumber,
+        warnings,
       },
     });
 
     revalidatePath('/dashboard/commercial/treasury/payment-orders');
 
-    return { success: true };
+    return { success: true, id: paymentOrderId, warnings };
   } catch (error) {
-    logger.error('Error al confirmar orden de pago', { data: { error, paymentOrderId } });
-    if (error instanceof Error) {
-      throw error;
+    if (error instanceof BusinessError) {
+      logger.warn('Confirmación de orden de pago rechazada', {
+        data: { paymentOrderId, companyId, userId, motivo: error.message },
+      });
     }
-    throw new Error('Error al confirmar orden de pago');
+    return toActionResult(error, 'Error al confirmar orden de pago');
   }
 }
 

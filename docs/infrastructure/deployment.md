@@ -29,14 +29,23 @@ La imagen `runner` no incluye `tsx` ni `src/`, asi que los scripts de `prisma/sc
 corren dentro del contenedor de la app: se abre `psql` en el contenedor de Postgres y se pega el
 SQL que cada script documenta en su header.
 
-- **Facturas confirmadas sin asiento** (`prisma/scripts/diagnose-invoices-without-entry.ts`,
-  solo lectura). Conviene correrlo despues de deployar TSK-721: hasta ese ticket una factura de
-  venta o compra con una linea sin cuenta contable quedaba `CONFIRMED` con `journal_entry_id IS
-  NULL` en silencio; desde TSK-721 la confirmacion se bloquea, pero las historicas siguen en la
-  base. El header del script trae el SQL (detalle por empresa y fecha, resumen por empresa y
-  tipo, y la consulta de items sin cuenta). Si devuelve filas, se le avisa a la clienta: que hacer
-  con esos comprobantes (regenerar el asiento o asentarlos a mano) es una decision contable y va
-  en un ticket aparte.
+- **Comprobantes confirmados sin asiento (facturas TSK-721; recibos, OP y gastos TSK-728)**
+  (`prisma/scripts/diagnose-invoices-without-entry.ts`, solo lectura). Conviene correrlo despues
+  de deployar cada uno de esos tickets: hasta TSK-721 una factura de venta o compra con una linea
+  sin cuenta contable quedaba `CONFIRMED` con `journal_entry_id IS NULL` en silencio, y hasta
+  TSK-728 pasaba lo mismo con recibos, ordenes de pago y gastos (cuenta de Cobrar/Pagar, caja,
+  banco o retencion faltante, o medio de pago sin cuenta). Desde esos tickets la confirmacion se
+  bloquea (los medios sin cuenta —cheque, tarjeta de credito, tarjeta de socio, cuenta corriente—
+  se confirman con aviso y asiento parcial: el importe queda en Cobrar/Pagar), pero los historicos
+  siguen en la base. El header del script trae el SQL para `psql`:
+  1) detalle por empresa y fecha de los cinco tipos (VENTA, COMPRA, RECIBO, OP, GASTO; `status::text`
+  y `voucher_type::text` por el UNION), 2) las OP a socio sin asiento (no son problema: no generan
+  asiento por diseno), 3) resumen por empresa y tipo, 4) y 5) **que medios de pago se usan** en
+  recibos y OP confirmados (conteo e importe por `payment_method`, y cuantos comprobantes tienen
+  cheque fisico, tarjeta de credito o cuenta corriente: insumo del ticket de seguimiento "cuentas
+  para cheques/tarjetas"), y 6) la consulta de items sin cuenta. Si 1) devuelve filas, se le
+  avisa a la clienta: que hacer con esos comprobantes (regenerar el asiento o asentarlos a mano)
+  es una decision contable y va en un ticket aparte.
 
 - **Equipos y Bienes de Uso** (TSK-724c). Dos chequeos, uno en la UI y otro en la base:
   1. **Permisos de Equipos a roles personalizados.** `equipment` salio de `HIDDEN_MODULES`, y los roles

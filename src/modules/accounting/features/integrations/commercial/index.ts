@@ -2,7 +2,7 @@
  * Integración automática del módulo comercial con contabilidad
  *
  * Este módulo genera asientos contables automáticamente cuando se confirman
- * documentos comerciales (facturas, recibos, órdenes de pago).
+ * documentos comerciales (facturas, recibos, órdenes de pago, gastos).
  *
  * Esquema de asientos:
  *
@@ -22,16 +22,22 @@
  * devuelva con su mensaje tal cual.
  *
  * 3. Recibo de Cobro (confirmado):
- *    - Debe: Caja/Banco
- *    - Haber: Cuentas por Cobrar
+ *    - Debe: caja/banco de cada pago (cuenta propia o "Caja/Banco por Defecto") + retenciones sufridas
+ *    - Haber: Cuentas por Cobrar por el importe contabilizable
+ *    Los pagos con cheque, tarjeta o cuenta corriente no generan línea (aviso al usuario, TSK-728).
+ *    Pre-validado en confirmReceipt (`treasury/shared/entry-preflight.ts`); acá defensa en profundidad.
  *
  * 4. Orden de Pago (confirmada):
- *    - Debe: Cuentas por Pagar
- *    - Haber: Caja/Banco
+ *    - Debe: Cuentas por Pagar por el importe contabilizable
+ *    - Haber: caja/banco de cada pago (cuenta propia o "Caja/Banco por Defecto") + retenciones emitidas
+ *    Cheque propio/endosado, tarjeta de crédito, tarjeta de socio y cuenta corriente no generan
+ *    línea (aviso al usuario, TSK-728). Las OP a socios no generan asiento. Pre-validado en
+ *    confirmPaymentOrder; acá defensa en profundidad.
  *
  * 5. Gasto (confirmado):
  *    - Debe: Gastos Operativos
  *    - Haber: Cuentas por Pagar
+ *    Pre-validado en confirmExpense (TSK-728); acá defensa en profundidad.
  */
 
 import moment from 'moment';
@@ -48,6 +54,18 @@ import {
   findLinesMissingAccount,
   resolveLineAccount,
 } from '@/modules/commercial/shared/line-accounts';
+import {
+  buildMissingPaymentAccountMessage,
+  buildSingleLineEntryMessage,
+  classifyPayments,
+} from '@/modules/commercial/shared/payment-accounts';
+import {
+  buildMissingSettingsAccountsMessage,
+  findMissingSettingsAccounts,
+  withholdingSettingsField,
+  type WithholdingRole,
+  type WithholdingTaxTypeKey,
+} from '@/modules/commercial/shared/settings-accounts';
 
 // Tipo para el cliente de transacción de Prisma
 type PrismaTransactionClient = Omit<
@@ -103,7 +121,10 @@ async function getAccountingSettings(companyId: string, tx?: PrismaTransactionCl
   });
 
   if (!settings) {
-    throw new Error('No se encontró configuración contable para la empresa');
+    // BusinessError (TSK-728): la empresa sin Ajustes contables ve el motivo, no el mensaje genérico.
+    throw new BusinessError(
+      'No se encontró configuración contable para la empresa. Configurala en Contabilidad → Configuración.'
+    );
   }
 
   return settings;
@@ -147,24 +168,11 @@ function getPerceptionAccountId(
 
 function getWithholdingAccountId(
   settings: Awaited<ReturnType<typeof getAccountingSettings>>,
-  taxType: string,
-  role: 'emitted' | 'suffered'
+  taxType: WithholdingTaxTypeKey,
+  role: WithholdingRole
 ): string | null {
-  const map: Record<string, Record<string, string | null | undefined>> = {
-    emitted: {
-      IVA: settings.withholdingIvaEmittedAccountId,
-      GANANCIAS: settings.withholdingGananciasEmittedAccountId,
-      IIBB: settings.withholdingIibbEmittedAccountId,
-      SUSS: settings.withholdingSussEmittedAccountId,
-    },
-    suffered: {
-      IVA: settings.withholdingIvaSufferedAccountId,
-      GANANCIAS: settings.withholdingGananciasSufferedAccountId,
-      IIBB: settings.withholdingIibbSufferedAccountId,
-      SUSS: settings.withholdingSussSufferedAccountId,
-    },
-  };
-  return map[role]?.[taxType] ?? null;
+  // El mapa tipo × rol → campo de Ajustes vive en `commercial/shared/settings-accounts` (TSK-728).
+  return settings[withholdingSettingsField(taxType, role)] ?? null;
 }
 
 // ============================================
@@ -679,19 +687,9 @@ export async function createJournalEntryForReceipt(
   receiptId: string,
   companyId: string,
   tx: PrismaTransactionClient
-): Promise<string | null> {
+): Promise<string> {
   try {
-    const settings = await getAccountingSettings(companyId, tx);
-
-    // Verificar cuenta de cuentas por cobrar
-    if (!settings.receivablesAccountId) {
-      logger.warn('No se puede crear asiento para recibo: cuenta de cuentas por cobrar no configurada', {
-        data: { receiptId, companyId },
-      });
-      return null;
-    }
-
-    // Obtener recibo con sus pagos y retenciones
+    // Obtener recibo con sus pagos (caja/banco con su cuenta) y retenciones
     const receipt = await tx.receipt.findUnique({
       where: { id: receiptId },
       select: {
@@ -702,11 +700,13 @@ export async function createJournalEntryForReceipt(
         customer: { select: { name: true } },
         payments: {
           select: {
+            paymentMethod: true,
             amount: true,
             cashRegisterId: true,
             bankAccountId: true,
-            cashRegister: { select: { accountId: true } },
-            bankAccount: { select: { accountId: true } },
+            checkNumber: true,
+            cashRegister: { select: { name: true, accountId: true } },
+            bankAccount: { select: { bankName: true, accountNumber: true, accountId: true } },
           },
         },
         withholdings: {
@@ -719,48 +719,57 @@ export async function createJournalEntryForReceipt(
     });
 
     if (!receipt) {
-      throw new Error('Recibo de cobro no encontrado');
+      throw new BusinessError('Recibo de cobro no encontrado');
     }
 
-    const total = parseFloat(receipt.totalAmount.toString());
+    const documentLabel = `el recibo ${receipt.fullNumber}`;
+    const settings = await getAccountingSettings(companyId, tx);
+
+    // Cuentas obligatorias de Ajustes: Cuentas por Cobrar + una por tipo de retención sufrida.
+    // Pre-validado en confirmReceipt (TSK-728); acá defensa en profundidad.
+    const requiredFields = [
+      'receivablesAccountId' as const,
+      ...new Set(receipt.withholdings.map((w) => withholdingSettingsField(w.taxType, 'suffered'))),
+    ];
+    const missingSettings = findMissingSettingsAccounts(settings, requiredFields);
+    if (missingSettings.length > 0 || !settings.receivablesAccountId) {
+      throw new BusinessError(buildMissingSettingsAccountsMessage(documentLabel, missingSettings));
+    }
+
+    // Clasificar → bloquear por caja/banco sin cuenta → recién ahí restar los omitidos.
+    const { resolved, missing, omitted, omittedAmount } = classifyPayments(
+      receipt.payments.map((p) => ({ ...p, amount: Number(p.amount) })),
+      settings
+    );
+    if (missing.length > 0) {
+      throw new BusinessError(buildMissingPaymentAccountMessage(documentLabel, missing[0]));
+    }
+    if (resolved.length === 0 && receipt.withholdings.length === 0) {
+      throw new BusinessError(buildSingleLineEntryMessage(documentLabel, 'receipt', omitted));
+    }
+
+    const total = Number(receipt.totalAmount);
     const lines: JournalEntryLineInput[] = [];
 
-    // Haber: Cuentas por Cobrar (activo disminuye)
+    // Haber: Cuentas por Cobrar (activo disminuye) por el importe contabilizable.
+    // TSK-728: los pagos de medios sin cuenta (cheque, tarjeta, cuenta corriente) no entran
+    // al asiento; la cuenta por cobrar queda con ese saldo hasta regularizar (ver plan 2.4-1).
     lines.push({
       accountId: settings.receivablesAccountId,
       debit: 0,
-      credit: total,
+      credit: Math.round((total - omittedAmount) * 100) / 100,
       description: `Recibo de cobro ${receipt.fullNumber} - ${receipt.customer.name}`,
       customerId: receipt.customerId,
     });
 
-    // Debe: Caja/Banco (activo aumenta)
-    for (const payment of receipt.payments) {
-      const amount = parseFloat(payment.amount.toString());
-      let accountId: string | null = null;
-
-      if (payment.cashRegisterId && payment.cashRegister?.accountId) {
-        accountId = payment.cashRegister.accountId;
-      } else if (payment.bankAccountId && payment.bankAccount?.accountId) {
-        accountId = payment.bankAccount.accountId;
-      } else if (payment.cashRegisterId && settings.defaultCashAccountId) {
-        accountId = settings.defaultCashAccountId;
-      } else if (payment.bankAccountId && settings.defaultBankAccountId) {
-        accountId = settings.defaultBankAccountId;
-      }
-
-      if (!accountId) {
-        logger.warn('No se encontró cuenta contable para el pago', {
-          data: { receiptId, paymentCashRegisterId: payment.cashRegisterId, paymentBankAccountId: payment.bankAccountId },
-        });
-        continue;
-      }
-
+    // Debe: Caja/Banco (activo aumenta) por cada pago con cuenta
+    for (const { payment, accountId, source } of resolved) {
+      const isCash = source === 'cashRegister' || source === 'defaultCash';
       lines.push({
         accountId,
-        debit: amount,
+        debit: payment.amount,
         credit: 0,
-        description: payment.cashRegisterId
+        description: isCash
           ? `Cobro en efectivo - ${receipt.fullNumber}`
           : `Cobro bancario - ${receipt.fullNumber}`,
       });
@@ -768,29 +777,21 @@ export async function createJournalEntryForReceipt(
 
     // Debe: Retenciones Sufridas (activo, crédito fiscal)
     for (const withholding of receipt.withholdings) {
-      const whAmount = parseFloat(withholding.amount.toString());
       const accountId = getWithholdingAccountId(settings, withholding.taxType, 'suffered');
-
       if (!accountId) {
-        logger.warn('No se encontró cuenta contable para retención sufrida', {
-          data: { receiptId, taxType: withholding.taxType },
-        });
-        continue;
+        throw new BusinessError(
+          buildMissingSettingsAccountsMessage(documentLabel, [
+            withholdingSettingsField(withholding.taxType, 'suffered'),
+          ])
+        );
       }
 
       lines.push({
         accountId,
-        debit: whAmount,
+        debit: Number(withholding.amount),
         credit: 0,
         description: `Ret. ${withholding.taxType} sufrida - ${receipt.fullNumber}`,
       });
-    }
-
-    if (lines.length < 2) {
-      logger.warn('No se pudieron crear líneas suficientes para el recibo', {
-        data: { receiptId },
-      });
-      return null;
     }
 
     const entryId = await createJournalEntry(
@@ -820,19 +821,9 @@ export async function createJournalEntryForPaymentOrder(
   paymentOrderId: string,
   companyId: string,
   tx: PrismaTransactionClient
-): Promise<string | null> {
+): Promise<string> {
   try {
-    const settings = await getAccountingSettings(companyId, tx);
-
-    // Verificar cuenta de cuentas por pagar
-    if (!settings.payablesAccountId) {
-      logger.warn('No se puede crear asiento para orden de pago: cuenta de cuentas por pagar no configurada', {
-        data: { paymentOrderId, companyId },
-      });
-      return null;
-    }
-
-    // Obtener orden de pago con sus pagos y retenciones
+    // Obtener orden de pago con sus pagos (caja/banco/tarjeta con su cuenta) y retenciones
     const paymentOrder = await tx.paymentOrder.findUnique({
       where: { id: paymentOrderId },
       select: {
@@ -848,11 +839,15 @@ export async function createJournalEntryForPaymentOrder(
         },
         payments: {
           select: {
+            paymentMethod: true,
             amount: true,
             cashRegisterId: true,
             bankAccountId: true,
-            cashRegister: { select: { accountId: true } },
-            bankAccount: { select: { accountId: true } },
+            checkNumber: true,
+            endorsedCheckId: true,
+            cashRegister: { select: { name: true, accountId: true } },
+            bankAccount: { select: { bankName: true, accountNumber: true, accountId: true } },
+            card: { select: { name: true, ownerType: true } },
           },
         },
         withholdings: {
@@ -865,48 +860,58 @@ export async function createJournalEntryForPaymentOrder(
     });
 
     if (!paymentOrder) {
-      throw new Error('Orden de pago no encontrada');
+      throw new BusinessError('Orden de pago no encontrada');
     }
 
-    const total = parseFloat(paymentOrder.totalAmount.toString());
+    const documentLabel = `la orden de pago ${paymentOrder.fullNumber}`;
+    const settings = await getAccountingSettings(companyId, tx);
+
+    // Cuentas obligatorias de Ajustes: Cuentas por Pagar + una por tipo de retención emitida.
+    // Pre-validado en confirmPaymentOrder (TSK-728); acá defensa en profundidad.
+    const requiredFields = [
+      'payablesAccountId' as const,
+      ...new Set(paymentOrder.withholdings.map((w) => withholdingSettingsField(w.taxType, 'emitted'))),
+    ];
+    const missingSettings = findMissingSettingsAccounts(settings, requiredFields);
+    if (missingSettings.length > 0 || !settings.payablesAccountId) {
+      throw new BusinessError(buildMissingSettingsAccountsMessage(documentLabel, missingSettings));
+    }
+
+    // Clasificar → bloquear por caja/banco sin cuenta → recién ahí restar los omitidos.
+    // La tarjeta de socio se decide antes que el banco: la empresa no mueve fondos ahora.
+    const { resolved, missing, omitted, omittedAmount } = classifyPayments(
+      paymentOrder.payments.map((p) => ({ ...p, amount: Number(p.amount) })),
+      settings
+    );
+    if (missing.length > 0) {
+      throw new BusinessError(buildMissingPaymentAccountMessage(documentLabel, missing[0]));
+    }
+    if (resolved.length === 0 && paymentOrder.withholdings.length === 0) {
+      throw new BusinessError(buildSingleLineEntryMessage(documentLabel, 'paymentOrder', omitted));
+    }
+
+    const total = Number(paymentOrder.totalAmount);
     const lines: JournalEntryLineInput[] = [];
 
-    // Debe: Cuentas por Pagar (pasivo disminuye)
+    // Debe: Cuentas por Pagar (pasivo disminuye) por el importe contabilizable.
+    // TSK-728: cheque propio/endosado, tarjeta de crédito, tarjeta de socio y cuenta corriente
+    // no entran al asiento; la cuenta por pagar queda con ese saldo hasta regularizar (plan 2.4-1).
     lines.push({
       accountId: settings.payablesAccountId,
-      debit: total,
+      debit: Math.round((total - omittedAmount) * 100) / 100,
       credit: 0,
       description: `Orden de pago ${paymentOrder.fullNumber}${paymentOrder.supplier ? ` - ${paymentOrder.supplier.tradeName || paymentOrder.supplier.businessName}` : ''}`,
       supplierId: paymentOrder.supplierId ?? undefined,
     });
 
-    // Haber: Caja/Banco (activo disminuye)
-    for (const payment of paymentOrder.payments) {
-      const amount = parseFloat(payment.amount.toString());
-      let accountId: string | null = null;
-
-      if (payment.cashRegisterId && payment.cashRegister?.accountId) {
-        accountId = payment.cashRegister.accountId;
-      } else if (payment.bankAccountId && payment.bankAccount?.accountId) {
-        accountId = payment.bankAccount.accountId;
-      } else if (payment.cashRegisterId && settings.defaultCashAccountId) {
-        accountId = settings.defaultCashAccountId;
-      } else if (payment.bankAccountId && settings.defaultBankAccountId) {
-        accountId = settings.defaultBankAccountId;
-      }
-
-      if (!accountId) {
-        logger.warn('No se encontró cuenta contable para el pago', {
-          data: { paymentOrderId, paymentCashRegisterId: payment.cashRegisterId, paymentBankAccountId: payment.bankAccountId },
-        });
-        continue;
-      }
-
+    // Haber: Caja/Banco (activo disminuye) por cada pago con cuenta
+    for (const { payment, accountId, source } of resolved) {
+      const isCash = source === 'cashRegister' || source === 'defaultCash';
       lines.push({
         accountId,
         debit: 0,
-        credit: amount,
-        description: payment.cashRegisterId
+        credit: payment.amount,
+        description: isCash
           ? `Pago en efectivo - ${paymentOrder.fullNumber}`
           : `Pago bancario - ${paymentOrder.fullNumber}`,
       });
@@ -914,29 +919,21 @@ export async function createJournalEntryForPaymentOrder(
 
     // Haber: Retenciones Emitidas (pasivo, por pagar a AFIP)
     for (const withholding of paymentOrder.withholdings) {
-      const whAmount = parseFloat(withholding.amount.toString());
       const accountId = getWithholdingAccountId(settings, withholding.taxType, 'emitted');
-
       if (!accountId) {
-        logger.warn('No se encontró cuenta contable para retención emitida', {
-          data: { paymentOrderId, taxType: withholding.taxType },
-        });
-        continue;
+        throw new BusinessError(
+          buildMissingSettingsAccountsMessage(documentLabel, [
+            withholdingSettingsField(withholding.taxType, 'emitted'),
+          ])
+        );
       }
 
       lines.push({
         accountId,
         debit: 0,
-        credit: whAmount,
+        credit: Number(withholding.amount),
         description: `Ret. ${withholding.taxType} emitida - ${paymentOrder.fullNumber}`,
       });
-    }
-
-    if (lines.length < 2) {
-      logger.warn('No se pudieron crear líneas suficientes para la orden de pago', {
-        data: { paymentOrderId },
-      });
-      return null;
     }
 
     const entryId = await createJournalEntry(
@@ -966,18 +963,8 @@ export async function createJournalEntryForExpense(
   expenseId: string,
   companyId: string,
   tx: PrismaTransactionClient
-): Promise<string | null> {
+): Promise<string> {
   try {
-    const settings = await getAccountingSettings(companyId, tx);
-
-    // Verificar que estén configuradas las cuentas necesarias
-    if (!settings.expensesAccountId || !settings.payablesAccountId) {
-      logger.warn('No se puede crear asiento para gasto: cuentas no configuradas', {
-        data: { expenseId, companyId },
-      });
-      return null;
-    }
-
     // Obtener gasto
     const expense = await tx.expense.findUnique({
       where: { id: expenseId },
@@ -992,7 +979,17 @@ export async function createJournalEntryForExpense(
     });
 
     if (!expense) {
-      throw new Error('Gasto no encontrado');
+      throw new BusinessError('Gasto no encontrado');
+    }
+
+    const settings = await getAccountingSettings(companyId, tx);
+
+    // Cuentas obligatorias de Ajustes. Pre-validado en confirmExpense (TSK-728); acá defensa en profundidad.
+    const missingSettings = findMissingSettingsAccounts(settings, ['expensesAccountId', 'payablesAccountId']);
+    if (missingSettings.length > 0 || !settings.expensesAccountId || !settings.payablesAccountId) {
+      throw new BusinessError(
+        buildMissingSettingsAccountsMessage(`el gasto ${expense.fullNumber}`, missingSettings)
+      );
     }
 
     const amount = parseFloat(expense.amount.toString());

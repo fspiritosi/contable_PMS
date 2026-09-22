@@ -1106,12 +1106,12 @@ export function _CommercialGuide() {
         </CardContent>
       </Card>
 
-      {/* Gastos */}
+      {/* Egresos (gastos) */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Banknote className="h-5 w-5" />
-            Gastos
+            Egresos
           </CardTitle>
           <CardDescription>
             Registro de gastos operativos del negocio
@@ -1119,19 +1119,19 @@ export function _CommercialGuide() {
         </CardHeader>
         <CardContent className="space-y-3">
           <p>
-            Los gastos permiten registrar erogaciones del negocio que no se
+            Los egresos permiten registrar gastos del negocio que no se
             vinculan a una factura de compra (alquileres, servicios, viáticos,
             etc.).
           </p>
           <p>
-            <strong>Crear un gasto:</strong>
+            <strong>Crear un egreso:</strong>
           </p>
           <ol className="list-decimal pl-6 space-y-2 text-muted-foreground">
             <li>
-              Ve a <strong>Comercial → Gastos</strong>
+              Ve a <strong>Comercial → Egresos</strong>
             </li>
             <li>
-              Haz clic en <strong>Nuevo Gasto</strong>
+              Haz clic en <strong>Nuevo Egreso</strong>
             </li>
             <li>
               Completa:
@@ -1180,11 +1180,31 @@ export function _CommercialGuide() {
             </li>
           </ul>
 
+          <p className="font-medium mt-3">Qué revisa el sistema al confirmar</p>
+          <p className="text-muted-foreground">
+            Al confirmar un egreso se genera su asiento contable:{' '}
+            <strong>Cuenta de Gastos Operativos</strong> contra{' '}
+            <strong>Cuentas por Pagar</strong>. Las dos se cargan en{' '}
+            <strong>Contabilidad → Configuración</strong>. Si falta alguna (o la
+            cuenta cargada está dada de baja), el egreso{' '}
+            <strong>no se confirma</strong> y el mensaje nombra la cuenta y
+            dónde configurarla; queda en Borrador hasta que lo corrijas.
+          </p>
+          <p className="text-sm text-muted-foreground">
+            Antes, un egreso con una de esas cuentas sin configurar podía
+            quedar confirmado <strong>sin asiento contable</strong> y sin
+            ningún aviso. Eso ya no pasa: o se confirma con su asiento, o no se
+            confirma y te dice por qué. El aviso de presupuesto (cuando el
+            egreso lleva la Cuenta de Gastos Operativos al 80% o más de lo
+            presupuestado en el mes) sigue siendo solo un aviso: no frena la
+            confirmación.
+          </p>
+
           <p className="text-sm text-muted-foreground mt-3">
             Las <strong>categorías de gasto</strong> se gestionan desde el botón
-            de configuración en la lista de gastos. Los pagos se registran desde{' '}
+            de configuración en la lista de egresos. Los pagos se registran desde{' '}
             <strong>Tesorería → Órdenes de Pago</strong> donde puedes
-            seleccionar gastos pendientes.
+            seleccionar egresos pendientes.
           </p>
         </CardContent>
       </Card>
@@ -1398,9 +1418,11 @@ export function _CommercialGuide() {
               de pago) se gestionan desde Tesorería
             </li>
             <li>
-              <strong>Contabilidad</strong>: al confirmar facturas, recibos y
-              órdenes de pago se generan asientos contables automáticamente
-              (requiere configurar la integración en Contabilidad → Configuración)
+              <strong>Contabilidad</strong>: al confirmar facturas, recibos,
+              órdenes de pago y egresos se generan asientos contables
+              automáticamente (requiere configurar la integración en
+              Contabilidad → Configuración). Si falta una cuenta, la
+              confirmación se rechaza y el mensaje dice cuál
             </li>
             <li>
               <strong>Órdenes de Compra</strong>: el flujo completo es OC →

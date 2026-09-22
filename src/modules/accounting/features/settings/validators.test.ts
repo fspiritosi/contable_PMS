@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
+import {
+  ACCOUNTING_SETTINGS_ACCOUNT_FIELDS,
+  ACCOUNTING_SETTINGS_ACCOUNT_LABELS,
+} from '@/shared/lib/accounts/settings-account-labels';
+
 import { accountField, commercialIntegrationSchema } from './validators';
 
 const CUENTA = '3f2504e0-4f89-11d3-9a0c-0305e82c3301';
@@ -79,6 +84,24 @@ describe('commercialIntegrationSchema', () => {
       key.endsWith('AccountId')
     );
     expect(cuentas).toHaveLength(31);
+  });
+
+  /**
+   * TSK-728: los mensajes de error de recibos, OP y gastos nombran el campo de
+   * Ajustes con su texto exacto, y ese texto vive en `shared/lib` para que lo
+   * lean `accounting` (el formulario) y `commercial` (los mensajes) sin
+   * importarse entre sí. Si se agrega una cuenta al schema, tiene que tener label.
+   */
+  it('cada cuenta configurable tiene label en shared/lib/accounts/settings-account-labels', () => {
+    const cuentas = Object.keys(commercialIntegrationSchema.shape).filter((key) =>
+      key.endsWith('AccountId')
+    );
+
+    expect([...ACCOUNTING_SETTINGS_ACCOUNT_FIELDS].sort()).toEqual([...cuentas].sort());
+    for (const campo of ACCOUNTING_SETTINGS_ACCOUNT_FIELDS) {
+      expect(ACCOUNTING_SETTINGS_ACCOUNT_LABELS[campo]).toBeTypeOf('string');
+      expect(ACCOUNTING_SETTINGS_ACCOUNT_LABELS[campo].length).toBeGreaterThan(0);
+    }
   });
 
   it('acepta la cuenta de gastos bancarios por defecto vacía o con un id (TSK-718)', () => {

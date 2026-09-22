@@ -15,6 +15,18 @@ import {
 } from '@/modules/accounting/features/integrations/commercial';
 import moment from 'moment';
 import { checkPermission } from '@/shared/lib/permissions';
+import { BusinessError, toActionResult, type ActionResult } from '@/shared/lib/action-result';
+import { buildImputableAccountsWhere } from '@/shared/lib/accounts/imputable-accounts';
+import {
+  ACCOUNTING_SETTINGS_PATH,
+  settingsAccountLabel,
+  type AccountingSettingsAccountField,
+} from '@/shared/lib/accounts/settings-account-labels';
+import { formatAccountLabel } from '@/modules/commercial/shared/line-accounts';
+import {
+  buildMissingSettingsAccountsMessage,
+  findMissingSettingsAccounts,
+} from '@/modules/commercial/shared/settings-accounts';
 
 /**
  * Normaliza una fecha @db.Date (medianoche UTC) a mediodía UTC
@@ -471,15 +483,61 @@ export async function updateExpense(id: string, data: ExpenseFormInput) {
   }
 }
 
+/** Cuentas de Ajustes que usa el asiento del gasto: Debe Gastos Operativos / Haber Cuentas por Pagar. */
+const EXPENSE_ENTRY_FIELDS = ['expensesAccountId', 'payablesAccountId'] as const satisfies readonly AccountingSettingsAccountField[];
+type ExpenseEntryField = (typeof EXPENSE_ENTRY_FIELDS)[number];
+
+/**
+ * Pre-validación del asiento del gasto (TSK-728): las dos cuentas de Ajustes
+ * cargadas e imputables. Lanza `BusinessError` con el label real del campo.
+ */
+async function assertExpenseEntryAccounts(
+  companyId: string,
+  documentLabel: string,
+  settings: { expensesAccountId: string | null; payablesAccountId: string | null }
+): Promise<void> {
+  const missing = findMissingSettingsAccounts(settings, EXPENSE_ENTRY_FIELDS);
+  if (missing.length > 0) {
+    throw new BusinessError(buildMissingSettingsAccountsMessage(documentLabel, missing));
+  }
+
+  const toCheck: { field: ExpenseEntryField; accountId: string }[] = [];
+  for (const field of EXPENSE_ENTRY_FIELDS) {
+    const accountId = settings[field];
+    if (accountId) toCheck.push({ field, accountId });
+  }
+  const ids = toCheck.map((a) => a.accountId);
+  const [imputable, all] = await Promise.all([
+    prisma.account.findMany({
+      where: { ...buildImputableAccountsWhere({ companyId }), id: { in: ids } },
+      select: { id: true },
+    }),
+    prisma.account.findMany({ where: { id: { in: ids } }, select: { id: true, code: true, name: true } }),
+  ]);
+  const imputableIds = new Set(imputable.map((a) => a.id));
+  const failed = toCheck.find((a) => !imputableIds.has(a.accountId));
+  if (!failed) return;
+
+  const info = all.find((a) => a.id === failed.accountId);
+  const cuenta = info
+    ? `la cuenta ${formatAccountLabel(info)} (configurada como ${settingsAccountLabel(failed.field)}) no está activa o no es imputable`
+    : `la cuenta configurada como ${settingsAccountLabel(failed.field)} ya no existe en el plan de cuentas`;
+  throw new BusinessError(
+    `No se puede confirmar ${documentLabel}: ${cuenta}. Corregila en ${ACCOUNTING_SETTINGS_PATH}.`
+  );
+}
+
 /**
  * Confirma un gasto.
  * Antes de confirmar, verifica si el gasto excede el presupuesto mensual
  * de la cuenta de gastos. Si lo excede, retorna un budgetWarning (no bloqueante).
+ *
+ * Los errores esperables (gasto ya confirmado, cuenta de Ajustes faltante o no
+ * imputable, período cerrado) vuelven como `{ success: false, error }` (TSK-728).
  */
-export async function confirmExpense(id: string): Promise<{
-  success: true;
-  budgetWarning?: { message: string; executedPercent: number };
-}> {
+export async function confirmExpense(
+  id: string
+): Promise<ActionResult<{ budgetWarning?: { message: string; executedPercent: number } }>> {
   await checkPermission('commercial.expenses', 'approve', { redirect: true });
   const userId = await getCurrentUserId();
   if (!userId) throw new Error('No autenticado');
@@ -490,20 +548,27 @@ export async function confirmExpense(id: string): Promise<{
   try {
     const expense = await prisma.expense.findFirst({
       where: { id, companyId, status: 'DRAFT' },
-      select: { id: true, description: true, amount: true, categoryId: true, date: true },
+      select: { id: true, fullNumber: true, description: true, amount: true, categoryId: true, date: true },
     });
 
-    if (!expense) throw new Error('Gasto no encontrado o ya confirmado');
+    if (!expense) throw new BusinessError('Gasto no encontrado o ya confirmado');
+
+    // TSK-728: pre-validación fuera de la transacción: nada cambia si va a fallar por configuración
+    const settings = await prisma.accountingSettings.findUnique({
+      where: { companyId },
+      select: { expensesAccountId: true, payablesAccountId: true },
+    });
+    if (!settings) {
+      throw new BusinessError(
+        `No se encontró configuración contable para la empresa. Configurala en ${ACCOUNTING_SETTINGS_PATH}.`
+      );
+    }
+    await assertExpenseEntryAccounts(companyId, `el gasto ${expense.fullNumber}`, settings);
 
     // Verificación presupuestaria (no bloqueante)
     let budgetWarning: { message: string; executedPercent: number } | undefined;
     try {
-      const settings = await prisma.accountingSettings.findUnique({
-        where: { companyId },
-        select: { expensesAccountId: true },
-      });
-
-      if (settings?.expensesAccountId) {
+      if (settings.expensesAccountId) {
         const check = await checkBudgetForExpense(
           settings.expensesAccountId,
           Number(expense.amount),
@@ -529,24 +594,14 @@ export async function confirmExpense(id: string): Promise<{
         data: { status: 'CONFIRMED' },
       });
 
-      // Crear asiento contable automático
-      try {
-        const entryId = await createJournalEntryForExpense(id, companyId, tx);
-        if (entryId) {
-          await tx.expense.update({
-            where: { id },
-            data: { journalEntryId: entryId },
-          });
-        }
-      } catch (error) {
-        // Re-lanzar errores de período bloqueado (el usuario debe saberlo)
-        if (error instanceof Error && error.message.includes('período está cerrado')) {
-          throw error;
-        }
-        logger.warn('No se pudo crear asiento contable para gasto', {
-          data: { expenseId: id, error },
-        });
-      }
+      // Crear asiento contable. Si falla, la transacción entera se revierte.
+      // TSK-728: antes solo se relanzaba "período cerrado" y cualquier otro fallo
+      // dejaba el gasto confirmado sin asiento.
+      const entryId = await createJournalEntryForExpense(id, companyId, tx);
+      await tx.expense.update({
+        where: { id },
+        data: { journalEntryId: entryId },
+      });
     });
 
     logger.info('Gasto confirmado', { data: { expenseId: id } });
@@ -554,9 +609,12 @@ export async function confirmExpense(id: string): Promise<{
 
     return { success: true, budgetWarning };
   } catch (error) {
-    logger.error('Error al confirmar gasto', { data: { error, id } });
-    if (error instanceof Error) throw error;
-    throw new Error('Error al confirmar gasto');
+    if (error instanceof BusinessError) {
+      logger.warn('Confirmación de gasto rechazada', {
+        data: { expenseId: id, companyId, userId, motivo: error.message },
+      });
+    }
+    return toActionResult(error, 'Error al confirmar gasto');
   }
 }
 

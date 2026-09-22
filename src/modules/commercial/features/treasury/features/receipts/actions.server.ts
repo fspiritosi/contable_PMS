@@ -18,6 +18,12 @@ import type { CreateReceiptFormData } from '../../shared/validators';
 import type { PendingInvoice, ReceiptListItem, ReceiptWithDetails } from '../../shared/types';
 import { createJournalEntryForReceipt } from '@/modules/accounting/features/integrations/commercial';
 import { checkPermission } from '@/shared/lib/permissions';
+import { BusinessError, toActionResult, type ActionResult } from '@/shared/lib/action-result';
+import {
+  assertEntryPreflight,
+  loadReceiptEntryPreflight,
+  type EntryPreflight,
+} from '../../shared/entry-preflight';
 
 /**
  * Obtiene las facturas pendientes de cobro de un cliente
@@ -214,9 +220,28 @@ export async function createReceipt(data: CreateReceiptFormData) {
 }
 
 /**
- * Confirma un recibo de cobro (actualiza facturas y crea movimientos)
+ * Vista previa del asiento de un recibo: alimenta el diálogo de confirmación
+ * (TSK-728). No lanza: `error`/`warnings` viajan como dato. Mismo permiso que
+ * confirmar.
  */
-export async function confirmReceipt(receiptId: string) {
+export async function getReceiptEntryPreview(receiptId: string): Promise<EntryPreflight> {
+  await checkPermission('commercial.treasury.receipts', 'approve', { redirect: true });
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  return loadReceiptEntryPreflight(companyId, receiptId);
+}
+
+/**
+ * Confirma un recibo de cobro (actualiza facturas, crea movimientos y el asiento).
+ *
+ * Los errores esperables (recibo ya confirmado, caja sin sesión, cuenta
+ * contable faltante, período cerrado) vuelven como `{ success: false, error }`;
+ * `warnings` lista los pagos que quedaron fuera del asiento (TSK-728).
+ */
+export async function confirmReceipt(
+  receiptId: string
+): Promise<ActionResult<{ id: string; warnings: string[] }>> {
   await checkPermission('commercial.treasury.receipts', 'approve', { redirect: true });
   const userId = await getCurrentUserId();
   if (!userId) throw new Error('No autenticado');
@@ -238,14 +263,18 @@ export async function confirmReceipt(receiptId: string) {
             invoice: true,
           },
         },
-        payments: true,
+        // `include` (no `select`): 3b usa los escalares del cheque; el nombre de la caja es para el error de sesión
+        payments: { include: { cashRegister: { select: { name: true } } } },
         withholdings: true,
       },
     });
 
     if (!receipt) {
-      throw new Error('Recibo no encontrado o ya confirmado');
+      throw new BusinessError('Recibo no encontrado o ya confirmado');
     }
+
+    // TSK-728: pre-validación fuera de la transacción: nada se mueve si va a fallar por configuración
+    const warnings = assertEntryPreflight(await loadReceiptEntryPreflight(companyId, receiptId));
 
     // Confirmar recibo y procesar en transacción
     await prisma.$transaction(async (tx) => {
@@ -299,7 +328,9 @@ export async function confirmReceipt(receiptId: string) {
           });
 
           if (!activeSession) {
-            throw new Error('No hay sesión abierta para la caja seleccionada');
+            throw new BusinessError(
+              `No hay sesión abierta para la caja "${payment.cashRegister?.name ?? 'seleccionada'}"`
+            );
           }
 
           // Movimiento de caja
@@ -387,48 +418,38 @@ export async function confirmReceipt(receiptId: string) {
         }
       }
 
-      // Crear asiento contable automáticamente
-      try {
-        const journalEntryId = await createJournalEntryForReceipt(receiptId, companyId, tx);
+      // Crear asiento contable. Si falla, la transacción entera se revierte.
+      // TSK-728: antes solo se relanzaba "período cerrado" y cualquier otro fallo
+      // dejaba el recibo confirmado sin asiento.
+      const journalEntryId = await createJournalEntryForReceipt(receiptId, companyId, tx);
+      await tx.receipt.update({
+        where: { id: receiptId },
+        data: { journalEntryId },
+      });
 
-        if (journalEntryId) {
-          // Actualizar recibo con referencia al asiento contable
-          await tx.receipt.update({
-            where: { id: receiptId },
-            data: { journalEntryId },
-          });
-
-          logger.info('Asiento contable generado para recibo de cobro', {
-            data: { receiptId, journalEntryId },
-          });
-        }
-      } catch (error) {
-        // Re-lanzar errores de período bloqueado (el usuario debe saberlo)
-        if (error instanceof Error && error.message.includes('período está cerrado')) {
-          throw error;
-        }
-        logger.warn('No se pudo generar asiento contable para recibo', {
-          data: { receiptId, error },
-        });
-      }
+      logger.info('Asiento contable generado para recibo de cobro', {
+        data: { receiptId, journalEntryId },
+      });
     });
 
     logger.info('Recibo de cobro confirmado', {
       data: {
         receiptId,
         fullNumber: receipt.fullNumber,
+        warnings,
       },
     });
 
     revalidatePath('/dashboard/commercial/treasury/receipts');
 
-    return { success: true };
+    return { success: true, id: receiptId, warnings };
   } catch (error) {
-    logger.error('Error al confirmar recibo', { data: { error, receiptId } });
-    if (error instanceof Error) {
-      throw error;
+    if (error instanceof BusinessError) {
+      logger.warn('Confirmación de recibo rechazada', {
+        data: { receiptId, companyId, userId, motivo: error.message },
+      });
     }
-    throw new Error('Error al confirmar recibo');
+    return toActionResult(error, 'Error al confirmar recibo');
   }
 }
 

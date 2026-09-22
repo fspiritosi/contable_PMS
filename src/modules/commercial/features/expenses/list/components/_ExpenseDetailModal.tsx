@@ -93,7 +93,12 @@ export function _ExpenseDetailModal({ expenseId, open, onOpenChange, onSuccess }
 
     setIsProcessing(true);
     try {
+      // TSK-728: los errores de negocio llegan como dato (`result.error`), no como excepción
       const result = await confirmExpense(expense.id);
+      if (!result.success) {
+        toast.error(result.error);
+        return;
+      }
       toast.success('Egreso confirmado correctamente');
 
       // Mostrar advertencia presupuestaria si existe (no bloqueante)
@@ -108,8 +113,6 @@ export function _ExpenseDetailModal({ expenseId, open, onOpenChange, onSuccess }
       router.refresh();
       onSuccess?.();
       await loadExpense();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Error al confirmar egreso');
     } finally {
       setIsProcessing(false);
     }

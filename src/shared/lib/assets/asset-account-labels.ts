@@ -5,6 +5,8 @@
  * bajas) y `company` (ABM Tipos de Equipo). Sin Prisma, sin React: solo constantes.
  */
 
+import { ACCOUNTING_SETTINGS_ACCOUNT_LABELS } from '@/shared/lib/accounts/settings-account-labels';
+
 export const ASSET_ACCOUNT_KEYS = [
   'fixedAsset',
   'accumulatedDepreciation',
@@ -30,18 +32,24 @@ export const ASSET_ACCOUNT_FIELD_BY_KEY: Record<AssetAccountKey, keyof AssetAcco
   depreciationExpense: 'depreciationExpenseAccountId',
 };
 
-/** Cómo se llama cada cuenta en pantalla y cómo se llama su ajuste contable (fase 6). */
+/**
+ * Cómo se llama cada cuenta en pantalla y cómo se llama su ajuste contable (fase 6).
+ * El `settingLabel` es el mismo texto que muestra Contabilidad → Configuración (TSK-728).
+ */
 export const ASSET_ACCOUNT_LABELS: Record<
   AssetAccountKey,
   { field: string; settingLabel: string }
 > = {
-  fixedAsset: { field: 'Bienes de Uso', settingLabel: 'Cuenta de Bienes de Uso por defecto' },
+  fixedAsset: {
+    field: 'Bienes de Uso',
+    settingLabel: ACCOUNTING_SETTINGS_ACCOUNT_LABELS.fixedAssetAccountId,
+  },
   accumulatedDepreciation: {
     field: 'Amortización acumulada',
-    settingLabel: 'Amortización acumulada por defecto',
+    settingLabel: ACCOUNTING_SETTINGS_ACCOUNT_LABELS.accumulatedDepreciationAccountId,
   },
   depreciationExpense: {
     field: 'Gasto de amortización',
-    settingLabel: 'Gasto de amortización por defecto',
+    settingLabel: ACCOUNTING_SETTINGS_ACCOUNT_LABELS.depreciationExpenseAccountId,
   },
 };
