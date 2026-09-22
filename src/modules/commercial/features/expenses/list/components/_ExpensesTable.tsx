@@ -56,11 +56,20 @@ export function _ExpensesTable({ data, totalRows, searchParams, facetCounts, cat
 
     setIsProcessing(true);
     try {
-      await confirmExpense(selectedExpense.id);
+      // TSK-728: los errores de negocio llegan como dato (`result.error`), no como excepción
+      const result = await confirmExpense(selectedExpense.id);
+      if (!result.success) {
+        toast.error(result.error);
+        return;
+      }
       toast.success('Egreso confirmado correctamente');
+      if (result.budgetWarning) {
+        toast.warning('Advertencia de presupuesto', {
+          description: result.budgetWarning.message,
+          duration: 10000,
+        });
+      }
       router.refresh();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Error al confirmar egreso');
     } finally {
       setIsProcessing(false);
       setConfirmDialogOpen(false);

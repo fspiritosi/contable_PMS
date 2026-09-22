@@ -2,7 +2,7 @@
 
 **Fecha de inicio:** 2026-09-19
 **Ticket:** [728] "Recibos, órdenes de pago y gastos: el fallo del asiento se traga en silencio" · seguimiento de 721 y 724c
-**Estado:** Implementación en progreso (Fase 1 de 7 completada)
+**Estado:** Implementación en progreso (Fases 1, 2, 3, 4 y 5 de 7 completadas; faltan 6 y 7)
 
 ---
 
@@ -830,7 +830,7 @@ base) y en los tres tests de integración contra la base de dev (fases 2-4): el 
   bloquea; cualquier otro fallo del asiento revierte la transacción y llega legible en
   producción. Esta fase crea el loader que la fase 3 reutiliza.
 - **Tareas:**
-  - [ ] **Test de integración (rojo primero).** Crear
+  - [x] **Test de integración (rojo primero).** Crear
         `src/modules/commercial/features/treasury/features/receipts/receipt-journal-entry.integration.test.ts`
         con el andamiaje de `sales-invoice-line-accounts.integration.test.ts:19-45` (`dotenv/
         config`, los cuatro `vi.mock` con `importOriginal` en permisos, `describe.skipIf(!dbAvailable)`),
@@ -880,7 +880,7 @@ base) y en los tres tests de integración contra la base de dev (fases 2-4): el 
         bankAccount → receiptWithholding/receiptPayment/receiptItem → receipt → journalEntryLine/
         journalEntry → salesInvoice → contractor → accountingSettings → account → company` por
         `companyId`, y `count` 0 por prefijo en `company`, `account`, `receipt`.
-  - [ ] **Loader compartido.** Crear
+  - [x] **Loader compartido.** Crear
         `src/modules/commercial/features/treasury/shared/entry-preflight.ts` (`import
         'server-only'`, **sin** `'use server'`; molde `equipment/shared/asset-accounts-loader.ts:1-30`).
         Importa `prisma`, `BusinessError`, `buildImputableAccountsWhere`, los helpers de
@@ -916,7 +916,7 @@ base) y en los tres tests de integración contra la base de dev (fases 2-4): el 
     - `loadPaymentOrderEntryPreflight` se agrega en la fase 3 (dejar el archivo preparado con
       un `select` de pagos común: `PAYMENT_SELECT`).
         Sin test unitario propio: lo cubren los tests de integración (fases 2 y 3).
-  - [ ] **`confirmReceipt`** (`receipts/actions.server.ts:219-433`):
+  - [x] **`confirmReceipt`** (`receipts/actions.server.ts:219-433`):
     - Firma → `Promise<ActionResult<{ id: string; warnings: string[] }>>`; imports de
       `ActionResult`, `BusinessError`, `toActionResult` (`@/shared/lib/action-result`) y
       `loadReceiptEntryPreflight`/`assertEntryPreflight` (`../../shared/entry-preflight`).
@@ -937,7 +937,7 @@ base) y en los tres tests de integración contra la base de dev (fases 2-4): el 
     - `:423` → `return { success: true, id: receiptId, warnings }`.
     - `catch` externo (`:426-432`) → `if (error instanceof BusinessError) logger.warn(…) ; return
       toActionResult(error, 'Error al confirmar recibo')` (como `confirmInvoice`).
-  - [ ] **Integración** `createJournalEntryForReceipt` (`accounting/…/commercial/index.ts:678-811`):
+  - [x] **Integración** `createJournalEntryForReceipt` (`accounting/…/commercial/index.ts:678-811`):
     - Firma → `Promise<string>`. Import de `classifyPayments`, `buildMissingPaymentAccountMessage`,
       `buildSingleLineEntryMessage` (`@/modules/commercial/shared/payment-accounts`) y
       `findMissingSettingsAccounts`, `buildMissingSettingsAccountsMessage`,
@@ -970,13 +970,13 @@ base) y en los tres tests de integración contra la base de dev (fases 2-4): el 
       el importe contabilizable. Los pagos con cheque, tarjeta o cuenta corriente no generan
       línea (aviso al usuario, TSK-728). Pre-validado en confirmReceipt; acá defensa en
       profundidad.`
-  - [ ] **Vista previa.** En `receipts/actions.server.ts` agregar `export async function
+  - [x] **Vista previa.** En `receipts/actions.server.ts` agregar `export async function
         getReceiptEntryPreview(receiptId: string): Promise<EntryPreflight>` con
         `checkPermission('commercial.treasury.receipts', 'approve', { redirect: true })` (es el
         mismo permiso que confirmar), `getActiveCompanyId`, `return loadReceiptEntryPreflight(
         companyId, receiptId)` (no lanza: devuelve `error` como dato). JSDoc: alimenta el
         diálogo de confirmación.
-  - [ ] **Aviso en el diálogo.** Crear
+  - [x] **Aviso en el diálogo.** Crear
         `src/modules/commercial/features/treasury/shared/components/_EntryPreviewNotice.tsx`
         (Client Component, < 60 líneas, molde `equipment/shared/components/_TerminateEntryNotice.tsx`
         con `Alert` de shadcn e íconos `AlertTriangle`/`Info`). Props `{ preview: EntryPreflight
@@ -984,7 +984,7 @@ base) y en los tres tests de integración contra la base de dev (fases 2-4): el 
         contables…"; `error` → `Alert variant="destructive"` con el mensaje y el título "No se va
         a poder confirmar"; `warnings.length` → `Alert` ámbar "Pagos que no generan asiento
         contable" con una viñeta por aviso; sin nada → no renderiza.
-  - [ ] **`_ReceiptsTable.tsx`** (`receipts/list/components/_ReceiptsTable.tsx`, 211 líneas):
+  - [x] **`_ReceiptsTable.tsx`** (`receipts/list/components/_ReceiptsTable.tsx`, 211 líneas):
     - `handleConfirm` (`:44-58`) → `try/finally`: `const result = await confirmReceipt(id); if
       (!result.success) { toast.error(result.error); return; } toast.success('Recibo confirmado
       correctamente'); if (result.warnings.length) toast.warning('El recibo se confirmó con
@@ -1001,7 +1001,7 @@ base) y en los tres tests de integración contra la base de dev (fases 2-4): el 
       `disabled={isConfirming || previewQuery.isLoading || !!previewQuery.data?.error}`.
       Si el archivo supera 200 líneas, extraer el diálogo a `_ConfirmReceiptDialog.tsx` en la
       misma carpeta.
-  - [ ] Revisar que nada más consuma `confirmReceipt` (grep: solo `_ReceiptsTable`; `index.ts`
+  - [x] Revisar que nada más consuma `confirmReceipt` (grep: solo `_ReceiptsTable`; `index.ts`
         re-exporta `actions.server`).
 - **Archivos:**
   - Crear: `receipts/receipt-journal-entry.integration.test.ts`,
@@ -1027,7 +1027,7 @@ base) y en los tres tests de integración contra la base de dev (fases 2-4): el 
   tarjeta de crédito, tarjeta de socio y cuenta corriente omitidos con aviso; asiento de una
   sola línea bloqueado; OP a socio sin asiento por diseño pero con aviso en el resultado.
 - **Tareas:**
-  - [ ] **Test de integración (rojo primero).** Crear
+  - [x] **Test de integración (rojo primero).** Crear
         `src/modules/commercial/features/treasury/features/payment-orders/payment-order-journal-entry.integration.test.ts`,
         mismo andamiaje, prefijo `TSK728-OP-`. `beforeAll`: cuentas `Pagar` (LIABILITY), `Caja`,
         `Banco`, `Ret IIBB Emitida` (LIABILITY); settings con `payablesAccountId`,
@@ -1069,7 +1069,7 @@ base) y en los tres tests de integración contra la base de dev (fases 2-4): el 
         `cashMovement`, sesiones, cajas, `bankMovement`, bancos, `card`, `partner`, pagos/items/
         retenciones de OP, `paymentOrder`, asientos, `purchaseInvoice`, `supplier`, settings,
         cuentas, empresa) y `count` 0 por prefijo.
-  - [ ] **Loader.** En `treasury/shared/entry-preflight.ts` agregar
+  - [x] **Loader.** En `treasury/shared/entry-preflight.ts` agregar
         `loadPaymentOrderEntryPreflight(companyId, paymentOrderId, client = prisma)`: `select`
         de pagos = `PAYMENT_SELECT` + `endorsedCheckId` + `card: { select: { name, ownerType } }`;
         `partnerId`; settings con `payablesAccountId`, defaults y las 4 `withholding*EmittedAccountId`.
@@ -1078,7 +1078,7 @@ base) y en los tres tests de integración contra la base de dev (fases 2-4): el 
         por una sola línea. Si no → los cuatro chequeos como en recibos con
         `'payablesAccountId'`, `'emitted'`, `'paymentOrder'`; `documentLabel` = `la orden de pago
         OP-00001`.
-  - [ ] **`confirmPaymentOrder`** (`payment-orders/actions.server.ts:424-769`): firma
+  - [x] **`confirmPaymentOrder`** (`payment-orders/actions.server.ts:424-769`): firma
         `Promise<ActionResult<{ id: string; warnings: string[] }>>`; `:454` → `BusinessError`;
         pre-validación antes de `:458`; `:530` → `BusinessError` con el nombre de la caja
         (`include` de `payments` (`:447`) suma `cashRegister: { select: { name: true } }` junto al
@@ -1087,7 +1087,7 @@ base) y en los tres tests de integración contra la base de dev (fases 2-4): el 
         dentro del `if (!paymentOrder.partnerId)` (mantener el `if`, seguimiento 2.4-4), **sin**
         `try/catch`; `:760` → `return { success: true, id: paymentOrderId, warnings }`; `catch`
         externo → `toActionResult(error, 'Error al confirmar orden de pago')`.
-  - [ ] **Integración** `createJournalEntryForPaymentOrder` (`index.ts:819-957`): espejo exacto
+  - [x] **Integración** `createJournalEntryForPaymentOrder` (`index.ts:819-957`): espejo exacto
         de la fase 2 con `payablesAccountId` / `'emitted'` / `'paymentOrder'`: firma
         `Promise<string>`; guard `:827-833` → `BusinessError(buildMissingSettingsAccountsMessage)`;
         `select` de pagos (`:850-858`) suma `paymentMethod`, `checkNumber`, `endorsedCheckId`,
@@ -1097,17 +1097,17 @@ base) y en los tres tests de integración contra la base de dev (fases 2-4): el 
         `BusinessError(buildSingleLineEntryMessage(label, 'paymentOrder', omitted))`; `:868` →
         `BusinessError('Orden de pago no encontrada')`. Encabezado "4. Orden de Pago" con la
         misma nota que el recibo más «Las OP a socios no generan asiento».
-  - [ ] **Vista previa.** `getPaymentOrderEntryPreview(paymentOrderId)` en
+  - [x] **Vista previa.** `getPaymentOrderEntryPreview(paymentOrderId)` en
         `payment-orders/actions.server.ts` con permiso `commercial.treasury.payment-orders` /
         `approve`.
-  - [ ] **`_PaymentOrdersTable.tsx`** (`:53-67`, diálogo `:185-192`, 240 líneas): mismos cambios
+  - [x] **`_PaymentOrdersTable.tsx`** (`:53-67`, diálogo `:185-192`, 240 líneas): mismos cambios
         que `_ReceiptsTable` (`try/finally`, `result.error`, toast ámbar con `warnings`, `useQuery`
         de la vista previa, `_EntryPreviewNotice`, botón deshabilitado con `error`). Como ya
         tiene 240 líneas, extraer el diálogo a `_ConfirmPaymentOrderDialog.tsx` en
         `payment-orders/list/components/` (< 100 líneas) que reciba `{ paymentOrderId, open,
         onOpenChange, onConfirmed }` y encapsule `useQuery` + `confirmPaymentOrder` + toasts.
         Hacer lo mismo en recibos si en la fase 2 se optó por extraer.
-  - [ ] Revisar que nada más consuma `confirmPaymentOrder` (grep: solo `_PaymentOrdersTable`).
+  - [x] Revisar que nada más consuma `confirmPaymentOrder` (grep: solo `_PaymentOrdersTable`).
 - **Archivos:**
   - Crear: `payment-orders/payment-order-journal-entry.integration.test.ts`,
     `payment-orders/list/components/_ConfirmPaymentOrderDialog.tsx`
@@ -1127,7 +1127,7 @@ base) y en los tres tests de integración contra la base de dev (fases 2-4): el 
   presupuestario siga llegando en la rama de éxito; y que los dos consumidores lean
   `result.error`.
 - **Tareas:**
-  - [ ] **Test de integración (rojo primero).** Crear
+  - [x] **Test de integración (rojo primero).** Crear
         `src/modules/commercial/features/expenses/expense-journal-entry.integration.test.ts`,
         mismo andamiaje, prefijo `TSK728-GAS-`. `beforeAll`: empresa, cuentas `Gastos` (EXPENSE),
         `Pagar` (LIABILITY), `Gastos vieja` (EXPENSE); settings con `expensesAccountId: Gastos` y
@@ -1151,7 +1151,7 @@ base) y en los tres tests de integración contra la base de dev (fases 2-4): el 
     7. Confirmar dos veces → `'Gasto no encontrado o ya confirmado'`.
         `afterAll`: `expense → journalEntry → budget → expenseCategory → supplier → settings →
         account → company`, `count` 0 por prefijo.
-  - [ ] **`confirmExpense`** (`expenses/actions.server.ts:479-560`):
+  - [x] **`confirmExpense`** (`expenses/actions.server.ts:479-560`):
     - Firma → `Promise<ActionResult<{ budgetWarning?: { message: string; executedPercent:
       number } }>>`; imports de `action-result` y de `findMissingSettingsAccounts`,
       `buildMissingSettingsAccountsMessage` (`@/modules/commercial/shared/settings-accounts`),
@@ -1173,22 +1173,22 @@ base) y en los tres tests de integración contra la base de dev (fases 2-4): el 
       TSK-728.
     - `:554` → `return { success: true, budgetWarning }`; `catch` externo (`:556-560`) →
       `toActionResult(error, 'Error al confirmar gasto')`.
-  - [ ] **Integración** `createJournalEntryForExpense` (`index.ts:965-1032`): firma
+  - [x] **Integración** `createJournalEntryForExpense` (`index.ts:965-1032`): firma
         `Promise<string>`; guard `:974-979` → `throw new BusinessError(
         buildMissingSettingsAccountsMessage(\`el gasto ${fullNumber}\`, findMissingSettingsAccounts(
         settings, ['expensesAccountId', 'payablesAccountId'])))` (mover el `findUnique` del gasto
         antes del guard); `:995` → `BusinessError('Gasto no encontrado')`. Encabezado "5. Gasto":
         «Pre-validado en confirmExpense (TSK-728)».
-  - [ ] **`_ExpensesTable.tsx`** (`expenses/list/components/_ExpensesTable.tsx:54-68`):
+  - [x] **`_ExpensesTable.tsx`** (`expenses/list/components/_ExpensesTable.tsx:54-68`):
         `try/finally`; `const result = await confirmExpense(id); if (!result.success) {
         toast.error(result.error); return; } toast.success('Egreso confirmado correctamente');
         if (result.budgetWarning) toast.warning('Advertencia de presupuesto', { description:
         result.budgetWarning.message, duration: 10000 }); router.refresh();` (hoy la tabla
         **descarta** el `budgetWarning`; el detalle sí lo muestra: unificar).
-  - [ ] **`_ExpenseDetailModal.tsx`** (`:91-116`): `try/finally`; `if (!result.success) {
+  - [x] **`_ExpenseDetailModal.tsx`** (`:91-116`): `try/finally`; `if (!result.success) {
         toast.error(result.error); return; }` y el resto igual (`toast.success`, `budgetWarning`,
         `setConfirmDialogOpen(false)`, `router.refresh()`, `onSuccess`, `loadExpense`).
-  - [ ] Revisar que nada más consuma `confirmExpense` (grep: solo esos dos).
+  - [x] Revisar que nada más consuma `confirmExpense` (grep: solo esos dos).
 - **Archivos:**
   - Crear: `src/modules/commercial/features/expenses/expense-journal-entry.integration.test.ts`
   - Modificar: `src/modules/commercial/features/expenses/actions.server.ts`,
@@ -1576,15 +1576,141 @@ _Pendiente - ejecutar `/disenar tsk-728-recibos-op-gastos-asiento-sin-silencio`_
 
 ### Fase 2: Recibos de cobro
 
-**Estado:** Pendiente.
+**Estado:** Completada (2026-09-21).
+
+**Archivos creados:**
+- `src/modules/commercial/features/treasury/features/receipts/receipt-journal-entry.integration.test.ts`
+  (12 `it`, 13 casos del plan; el 2 y el 3 comparten recibo). Entra por `createReceipt`,
+  `confirmReceipt` y `getReceiptEntryPreview` reales; prefijo `TSK728-REC-`; mockea además
+  `server-only` (como los tests de 724c) porque el loader lo importa.
+- `src/modules/commercial/features/treasury/shared/entry-preflight.ts` (`import 'server-only'`):
+  `EntryPreflight { documentLabel, error, warnings, accounts }`, `EntryPreviewAccount { concept,
+  account }`, `loadReceiptEntryPreflight(companyId, receiptId, client = prisma)`,
+  `loadPaymentOrderEntryPreflight(companyId, paymentOrderId, client = prisma)` (ya escrito para la
+  fase 3), `assertEntryPreflight(preflight): string[]`. Núcleo genérico `runPreflight` con los cuatro
+  chequeos en orden (Ajustes → caja/banco `missing` → una sola línea → imputabilidad) y `PAYMENT_SELECT`
+  común.
+- `src/modules/commercial/features/treasury/shared/components/_EntryPreviewNotice.tsx` (75 líneas):
+  cargando «Verificando cuentas contables…»; `error` → `Alert destructive` «No se va a poder
+  confirmar»; `warnings` → `Alert` ámbar «Avisos del asiento contable» con viñetas; `accounts` →
+  `Alert` neutro «El asiento contable se genera con estas cuentas:» con `concepto: code - name`.
+- `src/modules/commercial/features/treasury/shared/components/_ConfirmEntryDialog.tsx` (112 líneas):
+  diálogo genérico para recibo y OP (`documentId`, `title`, `description`, `previewQueryKey`,
+  `loadPreview`, `confirm`, `successMessage`, `warningsTitle`, `onConfirmed`); `useQuery` al abrir,
+  botón deshabilitado con `error`, `toast.error(result.error)`, `toast.warning(warningsTitle, {
+  description: warnings.join(' '), duration: 10000 })`.
+
+**Archivos modificados:**
+- `receipts/actions.server.ts`: `confirmReceipt(receiptId): Promise<ActionResult<{ id: string;
+  warnings: string[] }>>` con pre-validación antes de `$transaction`, `BusinessError` en «no
+  encontrado o ya confirmado» y «No hay sesión abierta para la caja "X"» (`payments: { include: {
+  cashRegister: { select: { name } } } }`), asiento sin `try/catch`, `toActionResult` en el catch;
+  nueva `getReceiptEntryPreview(receiptId): Promise<EntryPreflight>` (permiso `approve`).
+- `accounting/features/integrations/commercial/index.ts`: `getAccountingSettings` lanza
+  `BusinessError` («… Configurala en Contabilidad → Configuración.»); `getWithholdingAccountId`
+  usa `withholdingSettingsField`; `createJournalEntryForReceipt(receiptId, companyId, tx):
+  Promise<string>` con `findMissingSettingsAccounts` + `classifyPayments` + `BusinessError` en
+  todos los `return null`/`continue`, Haber Cobrar por `total − omittedAmount`; encabezado «3.».
+- `_ReceiptsTable.tsx` (211 → 190 líneas): usa `_ConfirmEntryDialog`; descripción nueva del diálogo.
+
+**Desvíos respecto del plan:**
+- El diálogo se extrajo a un componente **genérico** en `treasury/shared/components/`
+  (`_ConfirmEntryDialog`) en vez de `_ConfirmReceiptDialog` + `_ConfirmPaymentOrderDialog` por módulo:
+  recibo y OP son idénticos salvo textos y actions, y la tabla de OP ya excede las 200 líneas.
+- `EntryPreflight` suma `accounts` (cuentas con las que se genera el asiento) para que el notice
+  tenga un estado «OK con cuentas listadas», como el de baja de equipos (724c). Se obtiene de la
+  misma query de imputabilidad, sin costo extra.
+- El título del aviso ámbar es «Avisos del asiento contable» (no «Pagos que no generan asiento
+  contable») porque el mismo notice muestra en OP el aviso «Las órdenes de pago a socios no generan
+  asiento contable», que no es un pago.
+- Los tres archivos preexistentes que se tocaron (`index.ts`, `receipts/actions.server.ts`,
+  `_ReceiptsTable.tsx`) ya no cumplían Prettier en HEAD; se respetó su estilo. Los nuevos sí cumplen.
+
+**Verificación:** `npx vitest run` 548/548 (536 + 12, escritos primero en rojo: 12 fallaban);
+`check-types` en 219; ESLint sin errores en lo tocado (los warnings restantes son previos, en
+archivos no tocados).
 
 ### Fase 3: Órdenes de pago
 
-**Estado:** Pendiente.
+**Estado:** Completada (2026-09-22).
+
+**Archivos creados:**
+- `payment-orders/payment-order-journal-entry.integration.test.ts` (14 casos, prefijo `TSK728-OP-`):
+  entra por `createPaymentOrder`, `createPartnerRepaymentOrder`, `confirmPaymentOrder` y
+  `getPaymentOrderEntryPreview` reales; tarjetas `Card` de empresa (crédito y débito) y de socio,
+  cheque de tercero en cartera para endosar, facturas de compra directas con Prisma.
+- `payment-orders/list/components/_DeletePaymentOrderDialog.tsx` (67 líneas): diálogo de eliminar
+  extraído tal cual de la tabla.
+
+**Archivos modificados:**
+- `treasury/shared/entry-preflight.ts`: `loadPaymentOrderEntryPreflight` (escrito en la fase 2, lo
+  cubre este test): `PAYMENT_SELECT` + `endorsedCheckId` + `card { name, ownerType }`; OP a socio →
+  `generatesEntry: false` (solo `missing` de caja/banco e imputabilidad) con
+  `buildPartnerOrderWarning()` como aviso y `accounts: []`.
+- `payment-orders/actions.server.ts`: `confirmPaymentOrder(paymentOrderId): Promise<ActionResult<{
+  id: string; warnings: string[] }>>` con pre-validación antes de `$transaction`, `BusinessError` en
+  «no encontrada o ya confirmada», «No hay sesión abierta para la caja "X"» (`payments.include` suma
+  `cashRegister { name }`) y «El cheque de tercero seleccionado ya no está disponible en cartera»,
+  asiento sin `try/catch` dentro del `if (!paymentOrder.partnerId)` (se mantiene), `toActionResult`;
+  nueva `getPaymentOrderEntryPreview(paymentOrderId): Promise<EntryPreflight>` (permiso `approve`).
+- `accounting/features/integrations/commercial/index.ts`: `createJournalEntryForPaymentOrder(
+  paymentOrderId, companyId, tx): Promise<string>`, espejo del recibo con `payablesAccountId` /
+  `'emitted'` / `'paymentOrder'`; el `select` de pagos suma `paymentMethod`, `checkNumber`,
+  `endorsedCheckId`, `card { name, ownerType }` y nombres de caja/banco; Debe Pagar por
+  `total − omittedAmount`; encabezado «4.».
+- `_PaymentOrdersTable.tsx` (240 → 176 líneas): `_ConfirmEntryDialog` (genérico de la fase 2) y
+  `_DeletePaymentOrderDialog`.
+
+**Desvíos respecto del plan:**
+- No se creó `_ConfirmPaymentOrderDialog.tsx`: se reutiliza `_ConfirmEntryDialog` de
+  `treasury/shared/components/` (ver Fase 2). Para bajar la tabla de 200 líneas se extrajo el diálogo
+  de **eliminar** (movimiento puro, sin cambio de comportamiento).
+- El test verifica además, en el caso 14, la lista `accounts` de la vista previa
+  (`['Cuentas por Pagar', 'Caja "…"']`).
+
+**Verificación:** `npx vitest run` 562/562 (548 + 14, escritos primero en rojo: 14 fallaban);
+`check-types` en 219; ESLint sin errores en lo tocado (`:any` en `getPaymentOrders` y warnings en
+modales no tocados son previos); Prettier limpio en los archivos nuevos; base sin restos `TSK728-`.
 
 ### Fase 4: Gastos (Egresos)
 
-**Estado:** Pendiente.
+**Estado:** Completada (2026-09-22).
+
+**Archivos creados:**
+- `src/modules/commercial/features/expenses/expense-journal-entry.integration.test.ts` (7 casos,
+  prefijo `TSK728-GAS-`, incluido el 5 con `prisma.budget.create` → `budgetWarning.executedPercent
+  ≥ 80`). Entra por `createExpense` y `confirmExpense` reales.
+
+**Archivos modificados:**
+- `expenses/actions.server.ts`: `confirmExpense(id): Promise<ActionResult<{ budgetWarning?: {
+  message: string; executedPercent: number } }>>`. El `accountingSettings.findUnique` sale del `try`
+  presupuestario y pasa a `select: { expensesAccountId, payablesAccountId }`; sin settings →
+  `BusinessError('No se encontró configuración contable para la empresa. Configurala en Contabilidad →
+  Configuración.')`; helper privado `assertExpenseEntryAccounts(companyId, documentLabel, settings)`
+  (`findMissingSettingsAccounts` + `buildMissingSettingsAccountsMessage` + imputabilidad con
+  `buildImputableAccountsWhere` → «la cuenta X - Y (configurada como "Cuenta de Gastos Operativos") no
+  está activa o no es imputable. Corregila en Contabilidad → Configuración.»); el bloque presupuestario
+  se mantiene tal cual leyendo `settings.expensesAccountId`; asiento sin `try/catch`; `toActionResult`.
+- `accounting/features/integrations/commercial/index.ts`: `createJournalEntryForExpense(expenseId,
+  companyId, tx): Promise<string>`; `findUnique` del gasto antes del guard; guard → `BusinessError(
+  buildMissingSettingsAccountsMessage(\`el gasto ${fullNumber}\`, missing))`; «Gasto no encontrado» →
+  `BusinessError`; encabezado «5.» y la lista de documentos del módulo suma «gastos».
+- `_ExpensesTable.tsx` y `_ExpenseDetailModal.tsx`: `try/finally`, `if (!result.success) {
+  toast.error(result.error); return; }`; la tabla ahora también muestra el `budgetWarning` en
+  `toast.warning('Advertencia de presupuesto', …)` (antes lo descartaba).
+
+**Desvíos respecto del plan:**
+- El caso 5 (presupuesto) se implementó (no quedó como manual). Para que `checkBudgetForExpense`
+  encuentre el presupuesto, el test crea `fiscalYearStart`/`fiscalYearEnd` a **mediodía UTC**: esa
+  función toma el mes de inicio con `moment()` local y una medianoche UTC del 1/1 cae en diciembre en
+  UTC-3, con lo que busca el ejercicio anterior. Es un quirk previo de la verificación presupuestaria,
+  fuera de este ticket; anotado para seguimiento.
+- `assertExpenseEntryAccounts` vive en `expenses/actions.server.ts` (privado, ~40 líneas) y no en
+  `entry-preflight.ts`: el gasto no tiene pagos ni vista previa, y `treasury/shared` es de otra feature.
+
+**Verificación:** `npx vitest run` 569/569 (562 + 7, escritos primero en rojo: 6 fallaban y el caso 1
+ya pasaba); `check-types` en 219; ESLint sin errores en lo tocado; Prettier limpio en el archivo nuevo
+(los tres preexistentes ya no cumplían Prettier en HEAD); base sin restos `TSK728-`.
 
 ### Fase 5: Script de diagnóstico
 
