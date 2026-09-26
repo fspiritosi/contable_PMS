@@ -27,6 +27,7 @@ import {
   FormMessage,
 } from '@/shared/components/ui/form';
 import { Input } from '@/shared/components/ui/input';
+import { MoneyInput } from '@/shared/components/ui/money-input';
 import {
   Select,
   SelectContent,
@@ -36,7 +37,6 @@ import {
 } from '@/shared/components/ui/select';
 import { Separator } from '@/shared/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/components/ui/tabs';
-import { MoneyInput } from '@/shared/components/ui/money-input';
 
 import type {
   CostType,
@@ -54,14 +54,14 @@ import { createVehicle, type CreateVehicleInput } from '../actions.server';
 
 // Catalog Hooks
 import {
-  useVehicleBrandsWithModels,
-  useVehicleTypes,
-  useTypesOfVehicle,
+  useContractors,
   useCostCenters,
+  useEquipmentOwners,
   useSectors,
   useTypeOperatives,
-  useContractors,
-  useEquipmentOwners,
+  useTypesOfVehicle,
+  useVehicleBrandsWithModels,
+  useVehicleTypes,
 } from '@/shared/hooks';
 
 const currentYear = new Date().getFullYear();
@@ -615,9 +615,13 @@ export function _EquipmentForm({ defaultValues, vehicleId, mode = 'create' }: Pr
                                 </SelectItem>
                               ))
                             ) : (
-                              <SelectItem value="" disabled>
+                              // Un SelectItem con value="" hace crashear Radix
+                              // ("must have a value prop that is not an empty
+                              // string"): el vacío se reserva para limpiar la
+                              // selección. El estado vacío va como texto (TSK-743).
+                              <p className="px-2 py-4 text-center text-sm text-muted-foreground">
                                 No hay titulares para este tipo
-                              </SelectItem>
+                              </p>
                             )}
                           </SelectContent>
                         </Select>
