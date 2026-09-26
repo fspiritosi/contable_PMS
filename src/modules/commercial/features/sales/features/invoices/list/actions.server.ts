@@ -274,9 +274,15 @@ export async function getInvoiceById(id: string) {
                 unitOfMeasure: true,
               },
             },
-            // Reparto por centro de costo de la línea (TSK-583).
+            // Reparto por centro de costo de la línea (TSK-583). El nombre del
+            // centro lo muestra el detalle de la factura.
             costCenterAllocations: {
-              select: { costCenterId: true, percentage: true },
+              select: {
+                costCenterId: true,
+                percentage: true,
+                costCenter: { select: { id: true, name: true } },
+              },
+              orderBy: { costCenter: { name: 'asc' } },
             },
           },
         },
@@ -402,6 +408,7 @@ export async function getInvoiceById(id: string) {
         costCenterAllocations: line.costCenterAllocations.map((a) => ({
           costCenterId: a.costCenterId,
           percentage: Number(a.percentage),
+          costCenter: a.costCenter,
         })),
       })),
       creditDebitNotes: invoice.creditDebitNotes.map((cn) => ({

@@ -868,6 +868,14 @@ porcentaje, en vez de un único centro fijo. Reglas:
   omite esas facturas, sigue con el resto e informa el motivo. Con el flag apagado (default),
   el comportamiento es el previo a esta entrega.
 - Facturas ya confirmadas no se revalidan: la regla corre solo al confirmar.
+- **Visible en el detalle** (TSK-583, reapertura): `PurchaseInvoiceDetail` e `InvoiceDetail`
+  muestran el reparto debajo de la descripción de cada línea, con
+  `formatCostCenterAllocations()` (`modules/commercial/shared/cost-center.ts`): un solo centro
+  al 100% se muestra sin porcentaje (`Centro de costo: Logística`), varios se listan con el
+  suyo (`Centros de costo: Logística 60% · Mantenimiento 40%`), y una línea sin reparto no
+  muestra nada — su imputación puede venir del centro predeterminado del ítem. Las dos
+  actions (`getPurchaseInvoiceById`, `getInvoiceById`) traen `costCenter: { id, name }` y
+  ordenan el reparto por nombre de centro.
 
 Modelo de datos: `PurchaseInvoiceLineCostCenter` y `SalesInvoiceLineCostCenter` (ver
 [data-model.md](../architecture/data-model.md)).

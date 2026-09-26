@@ -214,3 +214,47 @@ export function expandByCostCenter(
 
   return [...grouped.values()];
 }
+
+/**
+ * Un tramo del reparto con el nombre del centro, tal como lo muestra el detalle
+ * de la factura (TSK-583, reapertura).
+ */
+export interface NamedCostCenterAllocation {
+  costCenter: { name: string };
+  percentage: number;
+}
+
+/** Porcentaje legible: sin decimales de relleno y con coma decimal. */
+function formatPercentage(percentage: number): string {
+  return String(round2(percentage)).replace('.', ',');
+}
+
+/**
+ * Los centros de costo de una línea, en una sola línea de texto.
+ *
+ * Devuelve `null` cuando la línea no tiene reparto: en ese caso el detalle no
+ * muestra nada, porque la imputación puede venir del centro predeterminado del
+ * ítem y anunciar "sin centro de costo" sería mentir.
+ *
+ * El porcentaje se omite en el único caso en que no aporta información: un solo
+ * centro que se lleva el 100%.
+ */
+export function formatCostCenterAllocations(
+  allocations: NamedCostCenterAllocation[]
+): string | null {
+  if (allocations.length === 0) return null;
+
+  if (allocations.length === 1) {
+    const [only] = allocations;
+    const percentage =
+      round2(only.percentage) === 100 ? '' : ` ${formatPercentage(only.percentage)}%`;
+
+    return `Centro de costo: ${only.costCenter.name}${percentage}`;
+  }
+
+  const partes = allocations
+    .map((a) => `${a.costCenter.name} ${formatPercentage(a.percentage)}%`)
+    .join(' · ');
+
+  return `Centros de costo: ${partes}`;
+}
