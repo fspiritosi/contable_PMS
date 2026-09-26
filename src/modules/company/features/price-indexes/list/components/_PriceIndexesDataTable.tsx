@@ -18,10 +18,7 @@ import {
 } from '@/shared/components/ui/alert-dialog';
 import { Button } from '@/shared/components/ui/button';
 
-import {
-  DataTable,
-  type DataTableSearchParams,
-} from '@/shared/components/common/DataTable';
+import { DataTable, type DataTableSearchParams } from '@/shared/components/common/DataTable';
 import type { ModulePermissions } from '@/shared/lib/permissions';
 
 import { deletePriceIndex, type PriceIndexListItem } from '../actions.server';
@@ -72,6 +69,11 @@ export function _PriceIndexesDataTable({ data, totalRows, searchParams, permissi
     setDeleteDialogOpen(true);
   };
 
+  /** Los valores por período se cargan en el detalle del índice (TSK-621). */
+  const handleViewValues = (priceIndex: PriceIndexListItem) => {
+    router.push(`/dashboard/company/price-indexes/${priceIndex.id}`);
+  };
+
   const handleFormModalClose = (open: boolean) => {
     setFormModalOpen(open);
     if (!open) setSelectedPriceIndex(null);
@@ -79,7 +81,14 @@ export function _PriceIndexesDataTable({ data, totalRows, searchParams, permissi
 
   // Memoize columns with handlers
   const columns = useMemo(
-    () => getColumns({ onEdit: handleEdit, onDelete: handleDelete, permissions }),
+    () =>
+      getColumns({
+        onEdit: handleEdit,
+        onDelete: handleDelete,
+        onViewValues: handleViewValues,
+        permissions,
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [permissions]
   );
 

@@ -305,10 +305,19 @@ export function _CommercialGuide() {
               opcional
             </li>
             <li>
-              Entrá al <strong>detalle</strong> del índice y cargá el{' '}
-              <strong>porcentaje</strong> de cada período (mes/año) a medida
-              que se va publicando. Un índice sin ningún valor cargado no se
-              puede aplicar a una lista
+              Entrá al <strong>detalle</strong> del índice —haciendo clic en su{' '}
+              <strong>nombre</strong> en la tabla, o con la opción{' '}
+              <strong>Ver / cargar valores</strong> del menú de tres puntos— y
+              cargá el <strong>porcentaje</strong> de cada período (mes/año) con
+              el botón <strong>Nuevo Valor</strong>, a medida que se va
+              publicando. Un índice sin ningún valor cargado no se puede
+              aplicar a una lista
+            </li>
+            <li>
+              En la lista de índices, la columna{' '}
+              <strong>Valores Cargados</strong> muestra cuántos períodos tiene
+              cada índice; los que dicen <strong>Sin valores</strong> todavía
+              no se pueden aplicar
             </li>
           </ol>
 
@@ -514,6 +523,13 @@ export function _CommercialGuide() {
             Ejemplo: una factura de $100.000 repartida 60% a Logística y 40%
             a Mantenimiento le imputa $60.000 a un centro y $40.000 al otro.
             Solo se reparte el neto de la línea; el IVA nunca se reparte.
+          </p>
+          <p className="text-sm text-muted-foreground">
+            Una vez guardada la factura, el <strong>detalle</strong> muestra el
+            reparto debajo de cada línea: “Centro de costo: Logística” cuando se
+            lleva todo, o “Centros de costo: Logística 60% · Mantenimiento 40%”
+            cuando se reparte entre varios. Las líneas sin reparto no muestran
+            nada, porque usan el centro predeterminado del ítem.
           </p>
           <p className="text-sm text-muted-foreground">
             Si en <strong>Contabilidad → Configuración</strong> está

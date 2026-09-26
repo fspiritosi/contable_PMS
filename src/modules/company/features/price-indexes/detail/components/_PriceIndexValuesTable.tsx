@@ -104,8 +104,11 @@ export function _PriceIndexValuesTable({ indexId, values, permissions }: Props) 
               <TableCell
                 colSpan={hasAnyAction ? 3 : 2}
                 className="h-24 text-center text-muted-foreground"
+                data-testid="price-index-values-empty"
               >
-                No hay valores cargados para este índice
+                {permissions.canCreate
+                  ? 'Todavía no hay valores cargados. Usá el botón "Nuevo Valor" para cargar el porcentaje de cada mes; sin valores el índice no se puede aplicar a una lista de precios.'
+                  : 'Todavía no hay valores cargados para este índice, así que no se puede aplicar a una lista de precios.'}
               </TableCell>
             </TableRow>
           ) : (
