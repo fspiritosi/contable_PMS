@@ -2,18 +2,18 @@
 
 import { z } from 'zod';
 
-import { prisma } from '@/shared/lib/prisma';
 import { Prisma } from '@/generated/prisma/client';
-import { logger } from '@/shared/lib/logger';
-import { revalidatePath } from 'next/cache';
-import { getActiveCompanyId } from '@/shared/lib/company';
-import { checkPermission } from '@/shared/lib/permissions';
 import type { DataTableSearchParams } from '@/shared/components/common/DataTable';
 import {
   buildSearchWhere,
   parseSearchParams,
   stateToPrismaParams,
 } from '@/shared/components/common/DataTable/helpers';
+import { getActiveCompanyId } from '@/shared/lib/company';
+import { logger } from '@/shared/lib/logger';
+import { checkPermission } from '@/shared/lib/permissions';
+import { prisma } from '@/shared/lib/prisma';
+import { revalidatePath } from 'next/cache';
 
 // ============================================
 // SCHEMA
@@ -60,7 +60,12 @@ export async function getPriceIndexesPaginated(searchParams: DataTableSearchPara
         skip,
         take,
         orderBy: orderBy || { name: 'asc' },
-        include: {
+        select: {
+          id: true,
+          name: true,
+          description: true,
+          isActive: true,
+          // Cantidad de valores por período: un índice sin valores no se puede aplicar.
           _count: {
             select: { values: true },
           },
@@ -188,9 +193,7 @@ export async function deletePriceIndex(id: string) {
     return { success: true };
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2003') {
-      throw new Error(
-        'No se puede eliminar: el índice ya se aplicó a una o más listas de precios'
-      );
+      throw new Error('No se puede eliminar: el índice ya se aplicó a una o más listas de precios');
     }
     logger.error('Error al eliminar índice de precios', { data: { error, id } });
     throw error;

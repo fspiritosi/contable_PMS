@@ -14,6 +14,7 @@ import { _LinkInvoiceToProjection } from './components/_LinkInvoiceToProjection'
 import { _InvoicePDFButton } from './components/_InvoicePDFButton';
 import { formatCurrency } from '@/shared/utils/formatters';
 import { perceptionLabel } from '@/modules/commercial/shared/perceptions';
+import { formatCostCenterAllocations } from '@/modules/commercial/shared/cost-center';
 
 type Invoice = Awaited<ReturnType<typeof getInvoiceById>>;
 
@@ -184,6 +185,12 @@ export async function InvoiceDetail({ id }: InvoiceDetailProps) {
                   <td className="py-3">
                     <div className="font-medium">{line.product.name}</div>
                     <div className="text-xs text-muted-foreground">{line.description}</div>
+                    {/* Reparto por centro de costo de la línea (TSK-583). */}
+                    {formatCostCenterAllocations(line.costCenterAllocations) && (
+                      <div className="text-xs text-muted-foreground">
+                        {formatCostCenterAllocations(line.costCenterAllocations)}
+                      </div>
+                    )}
                   </td>
                   <td className="py-3 text-right font-mono">
                     {Number(line.quantity).toFixed(3)} {line.product.unitOfMeasure}

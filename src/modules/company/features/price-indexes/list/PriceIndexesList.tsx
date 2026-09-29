@@ -23,8 +23,13 @@ export async function PriceIndexesList({ searchParams }: Props) {
             Índices de Precios
           </h1>
           <p className="text-muted-foreground">
-            Administra los índices (IPC, Costo de Vida, etc.) que se pueden aplicar para
-            actualizar los precios de las listas
+            Administra los índices (IPC, Costo de Vida, etc.) que se pueden aplicar para actualizar
+            los precios de las listas
+          </p>
+          {/* TSK-621: el listado no dejaba ver que los valores se cargan dentro de cada índice. */}
+          <p className="text-muted-foreground text-sm" data-testid="price-indexes-page-hint">
+            Para cargar el valor de cada mes, entrá al índice haciendo clic en su nombre (o desde el
+            menú de acciones) y usá el botón &quot;Nuevo Valor&quot;.
           </p>
         </div>
 

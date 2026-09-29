@@ -20,6 +20,7 @@ import { _PayPurchaseInvoiceButton } from './components/_PayPurchaseInvoiceButto
 import { calculatePurchaseInvoiceBalance } from '@/modules/commercial/shared/purchase-invoice-balance';
 import { formatCurrency } from '@/shared/utils/formatters';
 import { perceptionLabel } from '@/modules/commercial/shared/perceptions';
+import { formatCostCenterAllocations } from '@/modules/commercial/shared/cost-center';
 import {
   FIXED_ASSET_ATTACHMENT_PENDING,
   effectiveIsFixedAsset,
@@ -250,6 +251,12 @@ export async function PurchaseInvoiceDetail({ invoiceId }: Props) {
                             {line.product && (
                               <p className="text-xs text-muted-foreground">
                                 {line.product.code} - {line.product.name}
+                              </p>
+                            )}
+                            {/* Reparto por centro de costo de la linea (TSK-583). */}
+                            {formatCostCenterAllocations(line.costCenterAllocations) && (
+                              <p className="text-xs text-muted-foreground">
+                                {formatCostCenterAllocations(line.costCenterAllocations)}
                               </p>
                             )}
                           </div>

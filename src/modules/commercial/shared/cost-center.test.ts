@@ -7,12 +7,14 @@ import {
   effectiveAccountType,
   expandByCostCenter,
   findLinesMissingCostCenter,
+  formatCostCenterAllocations,
   prorateAmount,
   replicateAllocations,
   totalPercentage,
   validateAllocations,
   type CostCenterAllocation,
   type CostCenterLineCheck,
+  type NamedCostCenterAllocation,
 } from './cost-center';
 
 describe('qué líneas admiten centro de costo', () => {
@@ -424,5 +426,62 @@ describe('venta con ítems de distintos centros (regresión)', () => {
       { accountId: CUENTA_SERVICIOS, costCenterId: LOGISTICA, total: 1000 },
       { accountId: CUENTA_SERVICIOS, costCenterId: MANTENIMIENTO, total: 500 },
     ]);
+  });
+});
+
+/**
+ * Lo único que faltaba de TSK-583: el detalle de la factura tiene que mostrar a
+ * qué centros se repartió cada línea.
+ */
+describe('texto de los centros de costo de una línea (TSK-583)', () => {
+  const centro = (name: string, percentage: number): NamedCostCenterAllocation => ({
+    costCenter: { name },
+    percentage,
+  });
+
+  /** Sin reparto no se muestra nada: la imputación puede venir del ítem. */
+  it('sin asignaciones devuelve null', () => {
+    expect(formatCostCenterAllocations([])).toBeNull();
+  });
+
+  it('un solo centro al 100% se muestra sin el porcentaje', () => {
+    expect(formatCostCenterAllocations([centro('Logística', 100)])).toBe(
+      'Centro de costo: Logística'
+    );
+  });
+
+  it('un solo centro que no se lleva todo muestra su porcentaje', () => {
+    expect(formatCostCenterAllocations([centro('Logística', 60)])).toBe(
+      'Centro de costo: Logística 60%'
+    );
+  });
+
+  it('dos centros se listan con su porcentaje, separados por punto medio', () => {
+    expect(
+      formatCostCenterAllocations([centro('Logística', 60), centro('Mantenimiento', 40)])
+    ).toBe('Centros de costo: Logística 60% · Mantenimiento 40%');
+  });
+
+  it('tres centros conservan el orden recibido', () => {
+    expect(
+      formatCostCenterAllocations([
+        centro('Logística', 33.33),
+        centro('Mantenimiento', 33.33),
+        centro('Administración', 33.34),
+      ])
+    ).toBe(
+      'Centros de costo: Logística 33,33% · Mantenimiento 33,33% · Administración 33,34%'
+    );
+  });
+
+  /** Los `Decimal(5,2)` llegan como 60.00: el relleno no se muestra. */
+  it('redondea a dos decimales y no rellena con ceros', () => {
+    expect(
+      formatCostCenterAllocations([centro('Logística', 60.004), centro('Mantenimiento', 40.0)])
+    ).toBe('Centros de costo: Logística 60% · Mantenimiento 40%');
+
+    expect(
+      formatCostCenterAllocations([centro('Logística', 12.3456), centro('Mantenimiento', 87.6544)])
+    ).toBe('Centros de costo: Logística 12,35% · Mantenimiento 87,65%');
   });
 });
