@@ -267,16 +267,66 @@ Partner
 │
 └── FundMovement (por partnerId, SIN FK)
     ├── type: PARTNER_CONTRIBUTION / PARTNER_WITHDRAWAL / ACCOUNT_TRANSFER / BANK_CHARGES
-    ├── status: DRAFT → CONFIRMED
+    ├── status: DRAFT → CONFIRMED   # CANCELLED (Anulado) existe en el enum; ninguna acción lo produce hoy
     ├── partnerId, partnerName      # Obligatorio en aporte y retiro; snapshot del nombre
     ├── fundOut* / fundIn*          # Banco o caja de origen / destino
     ├── journalEntryId              # Asiento generado al confirmar (nace en DRAFT)
+    ├── journalEntryNumber, confirmedAt  # Se muestran en "Ver" (TSK-720a); ya no hay columna en el listado
     └── FundMovementLine[]          # Solo BANK_CHARGES (TSK-585)
 ```
 
 **Flujo**: el movimiento se guarda como borrador editable; **Confirmar** actualiza el saldo del
 banco/caja y genera el asiento (2 líneas en aporte/retiro/transferencia, N+1 en gastos bancarios)
 dentro de una única transacción. Confirmado no se edita ni se elimina.
+
+**Ver en solo lectura y modal responsive (TSK-720a / TSK-726)**:
+
+- **Listado** (`list/columns.tsx`): sin la columna "Asiento". La columna de acciones se agrega con
+  `hasAnyRowAction(permissions)` (`canView || canUpdate || canDelete`) y el menú sale de
+  `getRowActions(status, permissions)`: **Ver** (`Eye`) en cualquier estado con `canView`;
+  Confirmar/Editar (`canUpdate`) y Eliminar (`canDelete`) solo en `DRAFT`. Un confirmado o anulado
+  muestra solo "Ver".
+- **Un solo modal, tres modos**: `_CreateFundMovementModal` recibe `mode: 'create' | 'edit' |
+  'view'` (única fuente de verdad; reemplaza al viejo `isEdit = Boolean(movement)`). Título y
+  descripción salen de `getModalCopy(mode, status)`; en vista la descripción depende del estado
+  ("Borrador: todavía no movió saldos…", "Confirmado: ya actualizó el saldo…", "Anulado: …").
+  `_FundMovementsTable` monta una instancia para alta y otra compartida por edición y vista
+  (`selected: { movement, mode } | null` + `detailOpen`; al cerrar solo baja `open` para que la
+  animación no cambie el contenido).
+- **Solo lectura**: los campos van dentro de `<fieldset disabled={isView}>` (inputs, textarea,
+  `MoneyInput`, botones) y además `disabled` explícito en los `Select` de Radix y en cada
+  `AccountCombobox` (el fieldset no alcanza a Radix). La opacidad del `disabled` se neutraliza con
+  `[&_:disabled]:opacity-100! [&_:disabled]:cursor-default!` (con `!`: sin él empata en
+  especificidad con `disabled:opacity-50`). El footer queda fuera del fieldset con un único
+  "Cerrar". En vista se ocultan "Agregar concepto", los tachos, `_PartnerAccountNotice`,
+  `_BankChargesDefaultNotice` y el aviso de "no hay bancos ni cajas"; el total de conceptos se
+  mantiene. `useFundMovementSubmit` ignora el submit en `view`.
+- **Resumen** (`_FundMovementViewSummary`): badge de estado y, si existen, "Confirmado el"
+  (`confirmedAt`, `DD/MM/YYYY HH:mm` local) y "Asiento N°" (`journalEntryNumber`, texto sin link:
+  no hay página de detalle de asiento). Es el lugar donde se consulta el N° de asiento.
+- **Snapshot**: en vista, si el banco/caja o el socio guardados no están en el catálogo actual
+  (caja sin sesión abierta, banco inactivo, socio inactivo o borrado), `withSnapshotOption`
+  agrega una opción con `fundInLabel` / `fundOutLabel` / `partnerName` para que el trigger muestre
+  el nombre guardado en lugar de quedar vacío. Solo en vista; en edición el comportamiento es el
+  previo (trigger vacío).
+- **Piezas del modal** (`list/components/`): `_FundMovementTypeField`, `_FundMovementAmountDateFields`,
+  `_FundSelectField` (origen/destino, grupos Bancos/Cajas desde `buildFundOptions`),
+  `_PartnerSelectField`, `_FundMovementDescriptionField`, `_FundMovementFormFooter`,
+  `_FundMovementViewSummary` y `_FundMovementConfirmDialogs` (los `AlertDialog` de confirmar y
+  eliminar). Hooks en `list/hooks/`: `useFundMovementForm` (form, queries de detalle y cuentas de
+  conceptos, precarga con `formResetKey`/`formValuesFromMovement`, limpieza de campos al cambiar
+  de tipo) y `useFundMovementSubmit` (`persist`/`submit`).
+- **Limpieza por tipo en la instancia compartida**: el efecto lee el tipo con
+  `form.getValues('type')` (ya reseteado) y depende de `[mode, type, form]`. Con los flags del
+  render anterior, pasar de "Ver gastos" a "Editar aporte" borraba destino y socio del aporte.
+- **Celular (TSK-726)**: el modal no tenía un problema propio; la página de fondo medía 443 px por
+  la barra de paginación compartida y el navegador móvil ensanchaba el *layout viewport*, así que
+  el `DialogContent` (`position: fixed`, `max-w-[calc(100%-2rem)]`) se calculaba contra 443. Se
+  arregló en `DataTablePagination` (ver `src/shared/components/common/DataTable/DOCS.md`). La fila
+  de conceptos se apila en `< sm` (cuenta a ancho completo; debajo descripción, importe y tacho).
+  Verificación: `scripts/guia-presentacion/capturas-tsk720a-726.mjs` (375 px con `isMobile: true`).
+- **Caso borde (D12)**: `getFundMovementLineAccounts` no cambió; si la cuenta de un concepto ya no
+  es de egreso/activo imputable, en la vista el combobox de esa fila puede quedar sin texto.
 
 **Gastos bancarios — cuenta por defecto preseleccionada (TSK-718)**: `getFundMovementCatalogs`
 devuelve `defaultBankChargesAccount` (`AccountingSettings.bankChargesAccountId`, "Gastos bancarios
@@ -1027,6 +1077,7 @@ Tanto Recibos como Órdenes de Pago soportan retenciones impositivas:
 | `modules/commercial/features/treasury/shared/components/_ConfirmEntryDialog.tsx`, `_EntryPreviewNotice.tsx` | Diálogo genérico de confirmar con vista previa de cuentas, bloqueo y avisos (TSK-728) |
 | `shared/lib/accounts/settings-account-labels.ts` | Labels literales de los 31 campos de Ajustes contables + `ACCOUNTING_SETTINGS_PATH`; los lee el formulario y los citan los mensajes (TSK-728) |
 | `modules/commercial/features/treasury/features/fund-movements/shared/lines-calc.ts` | Totales de conceptos de gastos bancarios y `pickDefaultLineAccount` (preselección de la cuenta por defecto, TSK-718) |
+| `modules/commercial/features/treasury/features/fund-movements/shared/view-mode.ts` | Modos del modal (`create`/`edit`/`view`), rótulos y variante de estado, `getRowActions`/`hasAnyRowAction`, `buildFundOptions`/`withSnapshotOption`, `formValuesFromMovement`, `getModalCopy`, guardas del hook y `getViewSummaryFacts` (TSK-720a) |
 | `shared/lib/action-result.ts` | `ActionResult`, `BusinessError`, `toActionResult`: errores de negocio como dato en Server Actions (TSK-481 / TSK-721) |
 | `modules/commercial/shared/components/_DocumentAttachment.tsx` | UI de adjuntos |
 

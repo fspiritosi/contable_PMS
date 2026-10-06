@@ -1,7 +1,7 @@
 # TSK-720a + TSK-726 — Movimientos de Fondos: ver en solo lectura, sin columna de asiento, modal responsive
 
 **Fecha de inicio:** 2026-10-06
-**Estado:** Implementación en progreso (Fase 6 de 8 completada)
+**Estado:** Implementación en progreso (Fase 7 de 8 completada)
 
 ---
 
@@ -443,16 +443,16 @@ Otras decisiones de esta planificación:
 
 - **Objetivo:** entregables obligatorios del ticket.
 - **Tareas:**
-  - [ ] `src/modules/help/features/guide/components/_TreasuryGuide.tsx` (sección "Movimientos
+  - [x] `src/modules/help/features/guide/components/_TreasuryGuide.tsx` (sección "Movimientos
         de Fondos", `:907` en adelante; párrafo de acciones ~`:1005-1007`): documentar "Ver" en
         cualquier estado (qué muestra, que es de solo lectura, dónde se consulta ahora el N° de
         asiento y la fecha de confirmación) y que el listado ya no tiene la columna "Asiento".
-  - [ ] `docs/modules/commercial.md` (sección "Socios y Movimientos de Fondos", `:258`): modo
+  - [x] `docs/modules/commercial.md` (sección "Socios y Movimientos de Fondos", `:258`): modo
         `mode` del modal, acción Ver, helpers de `shared/view-mode.ts`, nuevas piezas del modal
         y el hook; agregar `view-mode.ts` a la tabla de archivos (~`:1029`); caso borde D12.
-  - [ ] `src/shared/components/common/DataTable/DOCS.md`: nota de que la paginación es
+  - [x] `src/shared/components/common/DataTable/DOCS.md`: nota de que la paginación es
         responsive (wrap en mobile) y por qué (layout viewport en celulares, TSK-726).
-  - [ ] `scripts/guia-presentacion/tsk-720a-726.html` (nuevo, patrón `tsk-583.html`): qué
+  - [x] `scripts/guia-presentacion/tsk-720a-726.html` (nuevo, patrón `tsk-583.html`): qué
         cambió, cómo usar "Ver", dónde quedó el N° de asiento, el modal en celular antes/después;
         con las capturas de la Fase 6; generar el PDF con `generar-pdf.mjs`
         (`scripts/guia-presentacion/tsk-720a-726.pdf`).
@@ -1457,7 +1457,18 @@ Patrón de `capturas-tsk728.mjs` (constantes `COMPANY_ID`, `USER_ID`, `EMAIL`, `
   - **Rol con solo `view`:** no hay uno en dev; queda cubierto por los tests de `getRowActions`/`hasAnyRowAction` (Fase 1).
 
 ### Fase 7: Documentación — guía in-app, docs y presentación para la clienta
-- **Estado:** Pendiente
+- **Estado:** Completada
+- **Archivos modificados:**
+  - `src/modules/help/features/guide/components/_TreasuryGuide.tsx` - sección Movimientos de Fondos: el paso de acciones ahora habla del menú ⋯ (Ver en cualquier estado; Confirmar/Editar/Eliminar solo en borrador); nueva lista "Ver un movimiento (cualquier estado)" (mismo formulario bloqueado, recuadro Estado / Confirmado el / Asiento N°, nombre guardado si la caja o el socio ya no están, Cerrar/X); `Alert` "¿Dónde está el número de asiento?"; párrafo "Desde el celular" (modal completo con la X, conceptos apilados, tabla que se desliza, paginación en varias líneas).
+  - `docs/modules/commercial.md` - "Socios y Movimientos de Fondos": `CANCELLED` en el árbol (sin acción que lo produzca), `journalEntryNumber`/`confirmedAt`; bloque "Ver en solo lectura y modal responsive (TSK-720a / TSK-726)" (listado y `getRowActions`, prop `mode`, fieldset + `disabled` en Radix y la opacidad con `!`, resumen, snapshot, piezas y hooks, la corrección del efecto de limpieza, causa de TSK-726 y el script de capturas, caso borde D12); `view-mode.ts` en la tabla de archivos.
+  - `src/shared/components/common/DataTable/DOCS.md` - troubleshooting "En el celular la página se ensancha o un modal se sale de la pantalla" (layout viewport, clases de la paginación responsive, medir con `isMobile`, pendientes Socios/Dashboard) y la característica "Responsive" actualizada.
+  - `scripts/guia-presentacion/tsk-720a-726.html` - nuevo, mismo CSS que `tsk-728.html`: 1 qué se pidió (cita literal del 720; el 726 lo detectamos nosotros), 2 tabla sin Asiento y menú, 3 Ver paso a paso con ejemplo (gastos bancarios y aporte confirmados, borrador, anulado, snapshot), 4 celular antes/después (modal, conceptos, Ver, listado), 5 qué no cambió, 6 qué queda para la segunda parte del 720 (tipos configurables y vínculo con movimientos del banco, esperando su respuesta).
+  - `docs/presentaciones/TSK-720-726-ver-movimientos-de-fondos.pdf` - nuevo, 9 páginas A4, generado con `generar-pdf.mjs` (cae a Chrome del sistema).
+- **Notas:**
+  - PDF revisado página por página como imagen: las 20 capturas se ven y los bloques título + imágenes no se parten (se agregaron cortes de sección para que "Los conceptos…" y "La tabla en el celular" no queden huérfanos).
+  - El ticket 726 es interno (lo creamos en la verificación de TSK-717); la presentación lo dice así en vez de atribuírselo a la clienta. La presentación no promete "anular": ninguna acción de la UI produce `CANCELLED` hoy; solo se muestra que un anulado se puede ver.
+  - `check-types` 219 (sin cambio); `eslint` de `_TreasuryGuide.tsx` sin problemas.
+  - Como en TSK-719/728, el PDF va en `docs/presentaciones/` y las PNG se commitearon con el script (Fase 6).
 
 ### Fase 8: Verificación final
 - **Estado:** Pendiente

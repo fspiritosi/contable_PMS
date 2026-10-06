@@ -1002,11 +1002,62 @@ export function _TreasuryGuide() {
               </ul>
             </li>
             <li>
-              Desde el listado podés <strong>Editar</strong>, <strong>Confirmar</strong>
-              o <strong>Eliminar</strong> un borrador. Una vez confirmado, el
-              movimiento ya no se edita.
+              Desde el menú <strong>⋯</strong> de cada fila podés{' '}
+              <strong>Ver</strong> cualquier movimiento y, si es un borrador,
+              también <strong>Confirmar</strong>, <strong>Editar</strong> o{' '}
+              <strong>Eliminar</strong>. Una vez confirmado o anulado, el
+              movimiento ya no se edita: solo se puede ver.
             </li>
           </ol>
+          <p>
+            <strong>Ver un movimiento (cualquier estado):</strong>
+          </p>
+          <ol className="list-decimal pl-6 space-y-1 text-muted-foreground">
+            <li>
+              En el listado, abrí el menú <strong>⋯</strong> de la fila y elegí{' '}
+              <strong>Ver</strong>. Está para borradores, confirmados y anulados.
+            </li>
+            <li>
+              Se abre <strong>el mismo formulario</strong> de la carga, con todos
+              los campos <strong>bloqueados</strong>: tipo, monto, fecha, banco o
+              caja, socio, descripción y, en gastos bancarios, cada concepto con
+              su cuenta, descripción e importe, y el total. No hay botones de
+              guardar ni de agregar conceptos: es solo para consultar.
+            </li>
+            <li>
+              Arriba del formulario, un recuadro resume el{' '}
+              <strong>Estado</strong> y, si el movimiento está confirmado, la
+              fecha y hora en que se confirmó (<strong>Confirmado el</strong>) y
+              el <strong>Asiento N°</strong> que generó. Con ese número lo
+              encontrás en <strong>Contabilidad → Asientos</strong>.
+            </li>
+            <li>
+              Si el banco, la caja o el socio ya no se pueden elegir (la caja
+              cerró su sesión o el socio se dio de baja), se muestra igual el
+              nombre que quedó guardado en el movimiento.
+            </li>
+            <li>
+              Cerrá con <strong>Cerrar</strong> o con la <strong>X</strong>.
+            </li>
+          </ol>
+          <Alert>
+            <Info className="h-4 w-4" />
+            <AlertDescription>
+              <strong>¿Dónde está el número de asiento?</strong> El listado ya
+              no tiene la columna <strong>Asiento</strong>: el número se consulta
+              con <strong>Ver</strong>, en el recuadro de arriba del formulario.
+            </AlertDescription>
+          </Alert>
+          <p className="text-sm text-muted-foreground">
+            <strong>Desde el celular:</strong> el formulario de alta, edición y
+            vista entra completo en la pantalla, con la <strong>X</strong> de
+            cerrar visible y sin desplazarse hacia los costados. En gastos
+            bancarios, cada concepto se apila: la cuenta ocupa toda la fila y
+            debajo van la descripción y el importe. La tabla del listado se
+            desliza con el dedo para ver todas las columnas, y los controles de
+            página (filas por página, página actual y flechas) se acomodan en
+            varias líneas.
+          </p>
           <p className="text-sm text-muted-foreground">
             Al confirmar un movimiento de <strong>Gastos e impuestos
             bancarios</strong>, el asiento no imputa todo a una única cuenta de

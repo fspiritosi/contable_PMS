@@ -29,7 +29,7 @@ Componente de tabla de datos server-side con soporte para paginación, sorting, 
 - ✅ **Filtros Faceteados** - Multi-select con conteo de resultados
 - ✅ **Toggle de Columnas** - Mostrar/ocultar columnas dinámicamente
 - ✅ **Selección de Filas** - Con checkbox y callback de selección
-- ✅ **Responsive** - Adapta controles en móvil
+- ✅ **Responsive** - Adapta controles en móvil (la paginación hace wrap y no ensancha la página, TSK-726)
 - ✅ **Accesible** - Soporta navegación por teclado
 - ✅ **Tipado Completo** - TypeScript con inferencia de tipos
 
@@ -802,6 +802,27 @@ Ver implementación en: `src/modules/documents/features/document-types/`
 1. URL usa índice 1-based, interno usa 0-based
 2. `parseSearchParams` hace la conversión automáticamente
 3. Verifica que `totalRows` sea correcto
+
+### En el celular la página se ensancha o un modal se sale de la pantalla
+
+Un elemento de la página más ancho que el viewport (sin un ancestro que lo recorte) hace que el
+navegador móvil ensanche el *layout viewport* hasta el ancho del contenido. Todo lo que es
+`position: fixed` —los `Dialog`, `Sheet`, toasts— se calcula contra ese viewport más ancho: un
+`DialogContent` con `max-w-[calc(100%-2rem)]` y `left: 50%` termina más ancho que la pantalla y
+con la X de cerrar afuera (TSK-726: página de 443 px a 375 → modal de 411 px).
+
+- **La paginación ya es responsive** (`DataTablePagination.tsx`): contenedor y bloque de controles
+  con `flex-wrap` + `gap-x/gap-y` (en lugar de `space-x-*`, que no se lleva bien con el wrap),
+  rango "Mostrando X a Y de Z" con `min-w-0 flex-1`, controles con `ml-auto` y "Página X de Y" con
+  `min-w-[100px]`. En escritorio queda en una sola línea, igual que antes (36 px de alto); en un
+  celular de 375 px se parte en líneas (rango; filas por página + página; flechas) y la página
+  mide 375.
+- En el celular la tabla en sí no ensancha la página: scrollea dentro de su contenedor (medido en Movimientos de Fondos, TSK-726).
+- Si agregás algo al toolbar o al lado de la tabla, revisalo a 375 px **con emulación móvil**
+  (`isMobile: true` en Playwright o el modo dispositivo de DevTools): con un viewport angosto de
+  escritorio el problema **no se reproduce**, porque ahí el layout viewport no se ensancha.
+  Medí `document.documentElement.scrollWidth` (debe ser ≤ `window.innerWidth`). Pendientes
+  conocidos: la toolbar "Filtros | Nuevo Socio" de Socios (383 px) y el Dashboard (491 px).
 
 ### Performance lenta
 
