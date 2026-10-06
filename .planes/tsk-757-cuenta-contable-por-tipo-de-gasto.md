@@ -1,7 +1,7 @@
 # TSK-757 — Cuenta contable por tipo de gasto
 
 **Fecha de inicio:** 2026-10-06
-**Estado:** Implementación completada
+**Estado:** Completado
 
 ---
 
@@ -1838,4 +1838,89 @@ constantes `COMPANY_ID`, `USER_ID`, `SUPPLIER_ID`, `EMAIL`/`PASSWORD`, `BASE` po
 - **Notas:** la prueba del toast real en modo producción (`npm run start` en :3011) queda a cargo del verificador independiente de `/verificar`. No hizo falta commit de `fix`.
 
 ## 5. Verificación
-_Pendiente - ejecutar `/verificar tsk-757-cuenta-contable-por-tipo-de-gasto`_
+
+Verificador independiente, 2026-10-06, rama `feat/tsk-757-cuenta-por-tipo-de-gasto` (sobre `aed5e67`).
+
+### 5.1 Revisión de código
+- **Esquema/migración**: frente a `main`, `schema.prisma` solo suma `ExpenseCategory.accountId` + relación
+  `ExpenseCategoryAccount` (`onDelete: SetNull`) + `@@index([accountId])` y la inversa `Account.expenseCategories`
+  (+6 líneas). `migration.sql` = el esperado en 3.2 (ADD COLUMN, CREATE INDEX, FK), sin `UPDATE`/backfill.
+  `prisma migrate status`: "Database schema is up to date!" (34 migraciones).
+- **TSK-728**: pre-validación fuera de la transacción, `$transaction` y `catch → toActionResult` intactos; la firma de
+  `confirmExpense` no cambió. Todos los errores esperables son `BusinessError` (incluido P2002 en el ABM).
+- **TSK-721**: label "Cuenta de egresos por defecto" en la constante única + ayuda condicional en Ajustes.
+- **TSK-717**: si la categoría tiene cuenta, el `toCheck` valida esa (kind `category`) y bloquea con
+  `buildCategoryAccountNotImputableMessage`; no hay camino que caiga a la por defecto.
+- **Presupuesto**: `checkBudgetForExpense(debitAccountId, …)` con la cuenta resuelta, dentro del try/catch no bloqueante.
+- **Consistencia confirm/asiento**: `assertExpenseEntryAccounts` y `createJournalEntryForExpense` usan los mismos
+  helpers puros (`requiredExpenseSettingsFields` + `resolveExpenseDebitAccount`); el asiento re-resuelve dentro de la
+  transacción (carrera aceptada en 3.7).
+- **Egresos confirmados intactos**: sin backfill; el detalle de un confirmado lee la cuenta del Debe del asiento.
+- **Multiempresa**: `assertCategoryAccountBelongsToCompany` en alta y edición; `includeIds` filtrado por `companyId`
+  (C2, C4, C6).
+- **Casos borde revisados**: categoría desactivada con cuenta → el borrador confirma igual contra esa cuenta
+  (comportamiento previo: la categoría inactiva nunca bloqueó); cuenta borrada → `SET NULL` y usa la por defecto (caso
+  13); borrador cuya categoría cambia de cuenta → se resuelve al confirmar (caso 14, agregado); editar solo el nombre no
+  borra la cuenta (la action con `accountId` undefined no lo toca, y la fila de la UI siempre manda el valor actual del
+  borrador inicializado desde `category.accountId`).
+- **React Query**: el hook invalida `allExpenseCategories`, `expenseCategories` y `expenseCategoryAccounts` (prefijo,
+  cubre la key con `includeIds`). Sin `Decimal` nuevos al cliente (`debit` no se selecciona en el detalle).
+- **Permisos**: `checkPermission` en las 3 mutaciones (create/update/update) y en las lecturas nuevas
+  (`getExpenseCategoryAccounts`, `getDefaultExpenseAccount`: view); en UI `usePermissions` para el form de alta
+  (`create`) y Editar/Activar (`update`); listado bajo `PermissionGuard` (previo).
+- Sin bugs encontrados en el código de producción.
+
+### 5.2 Build / Lint
+- `npm run check-types`: **219** errores (= línea base, todos previos).
+- `eslint` sobre los `.ts`/`.tsx` agregados/modificados en la rama: **0 errores**, 2 warnings previos
+  (`fiscalYearStart`/`fiscalYearEnd` en `integrations/commercial/index.ts`).
+- `NEXT_PUBLIC_APP_URL=http://localhost:3011 npm run build`: OK.
+
+### 5.3 Tests
+- `npm run test`: **50 archivos / 634 tests** en verde.
+- Integración de egresos (`expense-journal-entry.integration.test.ts`) en verbose: **21/21**, ninguno salteado (corre
+  contra `contable-pms-db`).
+- **Agregado** (commit `e818274`): caso 14 — editar solo el nombre no toca la cuenta; asignar la cuenta a la categoría
+  después de crear el borrador y desactivarla → al confirmar el Debe va a la cuenta nueva.
+
+### 5.4 Verificación funcional
+**Modo producción** (`npm run start -p 3011`, build con `NEXT_PUBLIC_APP_URL` en 3011; script Playwright temporal,
+marca `TSK757-VERIF`, ya borrado). Toasts reales, ninguno redactado:
+1. Crear categoría con nombre duplicado → `[error] Ya existe una categoría con ese nombre`.
+2. Confirmar GTO-00006, categoría con cuenta inactiva → `[error] No se puede confirmar el gasto GTO-00006: la cuenta
+   TSK757-VERIF - Cuenta dada de baja TSK757-VERIF de la categoría "TSK757-VERIF Cuenta inactiva" no está activa o no
+   es imputable. Corregila en Comercial → Egresos → Categorías.` El egreso quedó `DRAFT` sin asiento.
+3. Cuenta de otra empresa: la UI no la ofrece (el combo filtra por empresa); el rechazo del servidor lo cubren C2 (alta)
+   y C4 (edición) con `{ success: false, error: 'La cuenta contable seleccionada no pertenece a la empresa' }`. No se
+   probó por llamada directa en prod (los IDs de action no son estables).
+
+Limpieza: el borrador se eliminó desde la UI ("Egreso eliminado correctamente"); categorías y cuenta `TSK757-VERIF`
+por SQL acotado a la marca. Conteo final `0|0|0`. Servidor de :3011 detenido (kill por PID); :3010 responde 200.
+
+**Dev :3010** — `node scripts/guia-presentacion/capturas-tsk757.mjs http://localhost:3010`: **25/25 OK**, limpieza
+`0|0|0`, por defecto restaurada a NULL; 3 WARN informativos del desborde preexistente del listado en móvil (PR #33). La
+corrida regeneró 4 PNG (números de asiento 46/47 en vez de 44/45); se restauraron los commiteados para que coincidan
+con el PDF.
+
+### 5.5 Cumplimiento de reglas
+- Client components con `_`; hook sin prefijo. Componentes nuevos < 200 líneas (máx. `_CategoryRow` 187); los
+  excedidos previos crecen +1/+2 (lo previsto en 2.0).
+- Sin `console.*`, `any`, `date-fns`, `confirm()`/`alert()` en líneas agregadas.
+- Permisos en las 3 capas (ver 5.1). Sin módulos/permisos nuevos.
+- Guía in-app (`_CommercialGuide`, `_AccountingGuide`), `docs/modules/commercial.md`, `accounting.md` y
+  `data-model.md` actualizados.
+- PDF `docs/presentaciones/TSK-757-cuenta-por-tipo-de-gasto.pdf` (6 págs.; revisadas 2 y 4): coherente con lo
+  implementado (botón Categorías, cuenta por categoría / por defecto, detalle "del asiento"). **Observación (no
+  bloqueante):** 6 de las capturas del PDF muestran datos de prueba con marcas técnicas que vería la clienta: 01
+  listado y 02/03 modal (filas "TSK757-F4 egreso con/sin cuenta" y categorías "TSK757-F4 Con cuenta/Sin cuenta",
+  descripción "Ejemplo TSK-757"), 05 y 06b detalle (Notas "TSK757-demo"), 08 toast (cuenta "TSK757-DEMO").
+- Testing con Vitest; Cypress no aplica en este repo.
+
+### 5.6 Resultado final
+**Estado:** APROBADO
+
+**Acciones pendientes:**
+- (Opcional, antes de enviar el PDF) Regenerar capturas sin marcas técnicas: borrar los datos de la Fase 4 (GTO-00004/05,
+  asientos 38/39, categorías "TSK757-F4 …") y usar `notes`/código de cuenta neutros en `capturas-tsk757.mjs`.
+- Datos de dev que siguen de la Fase 4 (anotados en 4): GTO-00004/05 con `notes='TSK757-F4'` y sus categorías desactivadas.
+- Seguimientos de 2.4 (TSK-738 centro de costo, desborde móvil del listado → PR #33, `cancelExpense` sin revertir asiento).
