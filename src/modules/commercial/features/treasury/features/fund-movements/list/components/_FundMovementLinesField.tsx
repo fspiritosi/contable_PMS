@@ -22,6 +22,12 @@ interface FundMovementLinesFieldProps {
   accounts: AccountOption[];
   /** "Gastos bancarios por defecto" de Ajustes contables; se preselecciona en cada concepto nuevo (TSK-718). */
   defaultAccount?: FundMovementAccountRef | null;
+  /**
+   * Modo vista (TSK-720a): sin "Agregar concepto", sin tachos, sin aviso de
+   * cuenta por defecto y con el combobox deshabilitado; se mantiene el total.
+   * Input y MoneyInput los deshabilita el `<fieldset disabled>` del modal.
+   */
+  readOnly?: boolean;
 }
 
 /**
@@ -39,6 +45,7 @@ interface FundMovementLinesFieldProps {
 export function _FundMovementLinesField({
   accounts,
   defaultAccount = null,
+  readOnly = false,
 }: FundMovementLinesFieldProps) {
   const { control, register, setValue } = useFormContext();
   const { fields, append, remove } = useFieldArray({ control, name: 'lines' });
@@ -59,20 +66,24 @@ export function _FundMovementLinesField({
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <span className="text-sm font-medium">Conceptos *</span>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() => append({ accountId: defaultAccountId, description: '', amount: '' })}
-        >
-          <Plus className="mr-1 h-4 w-4" />
-          Agregar concepto
-        </Button>
+        <span className="text-sm font-medium">Conceptos{readOnly ? '' : ' *'}</span>
+        {!readOnly && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => append({ accountId: defaultAccountId, description: '', amount: '' })}
+          >
+            <Plus className="mr-1 h-4 w-4" />
+            Agregar concepto
+          </Button>
+        )}
       </div>
 
       {fields.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Agregá al menos un concepto</p>
+        <p className="text-sm text-muted-foreground">
+          {readOnly ? 'Sin conceptos cargados' : 'Agregá al menos un concepto'}
+        </p>
       ) : (
         <>
           {fields.map((field, index) => {
@@ -90,6 +101,7 @@ export function _FundMovementLinesField({
                       })
                     }
                     clearLabel={null}
+                    disabled={readOnly}
                     placeholder="Cuenta contable"
                     className="min-w-0 basis-full sm:basis-auto sm:flex-1"
                     aria-invalid={Boolean(lineError)}
@@ -112,15 +124,17 @@ export function _FundMovementLinesField({
                     }
                   />
 
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="shrink-0"
-                    onClick={() => remove(index)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  {!readOnly && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="shrink-0"
+                      onClick={() => remove(index)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
                 </div>
                 {lineError && <p className="text-sm text-destructive">{lineError}</p>}
               </div>
@@ -133,11 +147,14 @@ export function _FundMovementLinesField({
         </>
       )}
 
-      {/* Siempre visible (con y sin conceptos) para que se lea antes del primer "Agregar concepto". */}
-      <_BankChargesDefaultNotice
-        defaultAccount={defaultAccount}
-        available={defaultAccountId !== ''}
-      />
+      {/* Siempre visible en alta/edición (con y sin conceptos) para que se lea antes del primer
+          "Agregar concepto". En vista se oculta: habla de conceptos nuevos (TSK-720a). */}
+      {!readOnly && (
+        <_BankChargesDefaultNotice
+          defaultAccount={defaultAccount}
+          available={defaultAccountId !== ''}
+        />
+      )}
     </div>
   );
 }

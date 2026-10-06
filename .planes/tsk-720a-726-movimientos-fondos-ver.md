@@ -1,7 +1,7 @@
 # TSK-720a + TSK-726 — Movimientos de Fondos: ver en solo lectura, sin columna de asiento, modal responsive
 
 **Fecha de inicio:** 2026-10-06
-**Estado:** Implementación en progreso (Fase 3 de 8 completada)
+**Estado:** Implementación en progreso (Fase 4 de 8 completada)
 
 ---
 
@@ -344,26 +344,26 @@ Otras decisiones de esta planificación:
 - **Objetivo:** el mismo formulario, con los datos guardados, en solo lectura y legible, para
   cualquier estado y los 4 tipos.
 - **Tareas:**
-  - [ ] `_CreateFundMovementModal.tsx`: `const isView = mode === 'view'`; envolver los campos en
+  - [x] `_CreateFundMovementModal.tsx`: `const isView = mode === 'view'`; envolver los campos en
         `<fieldset disabled={isView} className={cn('min-w-0 space-y-4', isView &&
         '[&_:disabled]:opacity-100 [&_:disabled]:cursor-default')}>` (D1/D2); el `<form>` deja de
         llevar `space-y-4` propio si hace falta y el footer queda fuera del fieldset.
-  - [ ] Pasar `disabled={isView}` a `_FundMovementTypeField`, `_FundSelectField` (×2),
+  - [x] Pasar `disabled={isView}` a `_FundMovementTypeField`, `_FundSelectField` (×2),
         `_PartnerSelectField` (en el `Select` Root, no solo en el trigger) y
         `snapshotLabel` = `movement.fundOutLabel` / `fundInLabel` / `partnerName` **solo** cuando
         `isView` (D4); dentro de los fields, `withSnapshotOption` sobre las opciones del catálogo
         (la opción fantasma va en un `SelectGroup` sin label o al final).
-  - [ ] Ocultar en vista: aviso `noFundAccounts` (`:346-354`), `_PartnerAccountNotice`
+  - [x] Ocultar en vista: aviso `noFundAccounts` (`:346-354`), `_PartnerAccountNotice`
         (`:492-497`) (D5).
-  - [ ] `_FundMovementLinesField.tsx`: prop `readOnly?: boolean` → oculta "Agregar concepto"
+  - [x] `_FundMovementLinesField.tsx`: prop `readOnly?: boolean` → oculta "Agregar concepto"
         (`:63-71`), los tachos y `_BankChargesDefaultNotice` (`:137-140`); pasa
         `disabled={readOnly}` a cada `AccountCombobox` (`:83-124`); mantiene el total.
-  - [ ] `FM/list/components/_FundMovementViewSummary.tsx` (nuevo): bloque `rounded-md border
+  - [x] `FM/list/components/_FundMovementViewSummary.tsx` (nuevo): bloque `rounded-md border
         p-3 text-sm` con badge de estado (`FUND_MOVEMENT_STATUS_LABELS` +
         `fundMovementStatusVariant`), "Confirmado el …" y "Asiento N° …" (D3), en grilla
         `grid gap-2 sm:grid-cols-3`; se monta arriba del fieldset solo en vista.
-  - [ ] `_FundMovementFormFooter` en vista: un único botón "Cerrar" (`variant="outline"`).
-  - [ ] `useFundMovementForm`: en vista no se llama a `persist` (el footer no lo ofrece) y el
+  - [x] `_FundMovementFormFooter` en vista: un único botón "Cerrar" (`variant="outline"`).
+  - [x] `useFundMovementForm`: en vista no se llama a `persist` (el footer no lo ofrece) y el
         efecto de limpieza ya está desactivado (Fase 1/3).
 - **Archivos:** `_CreateFundMovementModal.tsx`, `_FundMovementLinesField.tsx`,
   `_FundSelectField.tsx`, `_PartnerSelectField.tsx`, `_FundMovementTypeField.tsx`,
@@ -1401,7 +1401,19 @@ Patrón de `capturas-tsk728.mjs` (constantes `COMPANY_ID`, `USER_ID`, `EMAIL`, `
   - `_FundSelectField` arma los grupos Bancos/Cajas desde `buildFundOptions` (mismas claves/valores `BANK:<id>`/`CASH:<id>` y mismo orden); un grupo vacío no se renderiza, igual que antes.
 
 ### Fase 4: Modo vista del modal
-- **Estado:** Pendiente
+- **Estado:** Completada
+- **Archivos modificados** (`FM/list/components/`, líneas con `wc -l`):
+  - `_CreateFundMovementModal.tsx` (173 → 191) - `isView`; `_FundMovementViewSummary` arriba; campos dentro de `<fieldset disabled={isView} className={cn('min-w-0 space-y-4', isView && READ_ONLY_FIELDSET)}>` con `READ_ONLY_FIELDSET = '[&_:disabled]:opacity-100! [&_:disabled]:cursor-default!'` (variante con `!` desde el inicio, como fija 3.4.1); `disabled={isView}` en Tipo, los dos `_FundSelectField` y `_PartnerSelectField`; `snapshotLabel` = `fundInLabel`/`fundOutLabel`/`partnerName` solo en vista; aviso "No hay cuentas bancarias ni cajas…" y `_PartnerAccountNotice` ocultos en vista; footer fuera del fieldset.
+  - `_FundMovementLinesField.tsx` (143 → 160) - prop `readOnly`: oculta "Agregar concepto", tachos y `_BankChargesDefaultNotice`; `AccountCombobox disabled={readOnly}`; rótulo "Conceptos" sin `*` y "Sin conceptos cargados" en vista; se mantiene el total.
+  - `_FundMovementViewSummary.tsx` (43) - nuevo: `<dl>` con badge de estado (`FUND_MOVEMENT_STATUS_LABELS` + `fundMovementStatusVariant`) y los hechos de `getViewSummaryFacts` ("Confirmado el" con moment `DD/MM/YYYY HH:mm` en hora local, "Asiento N°" en `font-mono`, texto sin link).
+  - `_FundMovementDescriptionField.tsx` (38) - nuevo: el `FormField` + `Textarea` de Descripción, extraído del modal **para que entre en < 200 líneas** (con el fieldset, el resumen y los props de vista llegaba a 210).
+  - Sin cambios: `_FundSelectField`, `_PartnerSelectField`, `_FundMovementTypeField`, `_FundMovementFormFooter` (ya traían `disabled`/`snapshotLabel` y la rama "Cerrar" desde la Fase 3) y `useFundMovementSubmit` (ya tenía la guarda `if (mode === 'view') return`).
+- **Notas:**
+  - Verificación en navegador hecha junto con la Fase 5 (la vista solo se abre desde el menú "Ver" del listado): ver los resultados en la entrada de la Fase 5.
+  - `npx vitest run FM` 125/125; `check-types` 219 (sin cambio); `eslint` de los archivos tocados sin errores.
+- **Desvíos / precisiones:**
+  - Archivo extra `_FundMovementDescriptionField.tsx` (no estaba en 3.4.7) para cumplir < 200 líneas en el modal.
+  - Snapshot en **edición** (fuera de alcance, D4): un fondo/socio fuera de catálogo muestra el trigger **vacío** (Radix no pinta el placeholder si el `value` no tiene `SelectItem`), no el placeholder como decía 3.7.2. Es el comportamiento previo, sin cambios.
 
 ### Fase 5: Listado — sin columna "Asiento" y con acción "Ver"
 - **Estado:** Pendiente
