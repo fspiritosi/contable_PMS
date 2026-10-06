@@ -71,7 +71,11 @@ export function _CategoryManagementModal({ trigger, onClose }: CategoryManagemen
 
   const handleCreate = async (data: ExpenseCategoryFormInput) => {
     try {
-      await createExpenseCategory(data);
+      const result = await createExpenseCategory(data);
+      if (!result.success) {
+        toast.error(result.error);
+        return;
+      }
       toast.success('Categoría creada correctamente');
       await queryClient.invalidateQueries({ queryKey: ['allExpenseCategories'] });
       await queryClient.invalidateQueries({ queryKey: ['expenseCategories'] });
@@ -85,10 +89,14 @@ export function _CategoryManagementModal({ trigger, onClose }: CategoryManagemen
     if (!editState) return;
 
     try {
-      await updateExpenseCategory(category.id, {
+      const result = await updateExpenseCategory(category.id, {
         name: editState.name,
         description: editState.description || null,
       });
+      if (!result.success) {
+        toast.error(result.error);
+        return;
+      }
       toast.success('Categoría actualizada correctamente');
       await queryClient.invalidateQueries({ queryKey: ['allExpenseCategories'] });
       await queryClient.invalidateQueries({ queryKey: ['expenseCategories'] });
@@ -101,7 +109,11 @@ export function _CategoryManagementModal({ trigger, onClose }: CategoryManagemen
   const handleToggle = async (category: CategoryItem) => {
     setTogglingId(category.id);
     try {
-      await toggleExpenseCategory(category.id);
+      const result = await toggleExpenseCategory(category.id);
+      if (!result.success) {
+        toast.error(result.error);
+        return;
+      }
       toast.success(category.isActive ? 'Categoría desactivada' : 'Categoría activada');
       await queryClient.invalidateQueries({ queryKey: ['allExpenseCategories'] });
       await queryClient.invalidateQueries({ queryKey: ['expenseCategories'] });

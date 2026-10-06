@@ -10,6 +10,9 @@
  * presupuestario no bloqueante.
  *
  * Se entra por los **server actions reales** (`createExpense`, `confirmExpense`).
+ *
+ * TSK-757: las categorías de gasto guardan su cuenta contable propia (ABM con
+ * `ActionResult`, validación multiempresa y combo con `includeIds`), casos C1–C6.
  */
 import 'dotenv/config';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -29,7 +32,14 @@ import { getActiveCompanyId } from '@/shared/lib/company';
 import { getCurrentUserId } from '@/shared/lib/current-user';
 
 // Código real de producción.
-import { confirmExpense, createExpense } from './actions.server';
+import {
+  confirmExpense,
+  createExpense,
+  createExpenseCategory,
+  getExpenseCategoryAccounts,
+  toggleExpenseCategory,
+  updateExpenseCategory,
+} from './actions.server';
 
 const PREFIX = 'TSK728-GAS-';
 const EXPENSE_DATE = new Date('2026-03-10');
@@ -315,5 +325,177 @@ describe.skipIf(!dbAvailable)('integración e2e: asiento al confirmar un gasto (
     expect(again.success).toBe(false);
     if (again.success) return;
     expect(again.error).toBe('Gasto no encontrado o ya confirmado');
+  });
+
+  describe('categorías con cuenta (TSK-757)', () => {
+    let alqId: string;
+    let alqViejaId: string;
+    let activoId: string;
+    let otherCompanyId: string;
+    let otherAccountId: string;
+
+    const readCategory = (id: string) =>
+      prisma.expenseCategory.findUniqueOrThrow({
+        where: { id },
+        select: { name: true, description: true, accountId: true, isActive: true },
+      });
+
+    beforeAll(async () => {
+      const mk = (code: string, name: string, type: 'EXPENSE' | 'ASSET') =>
+        prisma.account.create({
+          data: { companyId, code, name: `${PREFIX}${name}`, type, nature: 'DEBIT' },
+          select: { id: true },
+        });
+      const [alq, alqVieja, activo] = await Promise.all([
+        mk('T757-ALQ', 'Alquileres', 'EXPENSE'),
+        mk('T757-ALQ-VIEJA', 'Alquileres vieja', 'EXPENSE'),
+        mk('T757-ACTIVO', 'Anticipos', 'ASSET'),
+      ]);
+      alqId = alq.id;
+      alqViejaId = alqVieja.id;
+      activoId = activo.id;
+
+      const other = await prisma.company.create({
+        data: { name: `${PREFIX}Otra`, isActive: true },
+        select: { id: true },
+      });
+      otherCompanyId = other.id;
+      const otherAccount = await prisma.account.create({
+        data: {
+          companyId: otherCompanyId,
+          code: 'T757-OTRA',
+          name: `${PREFIX}Gastos otra empresa`,
+          type: 'EXPENSE',
+          nature: 'DEBIT',
+        },
+        select: { id: true },
+      });
+      otherAccountId = otherAccount.id;
+    });
+
+    afterAll(async () => {
+      // Guarda: sin `otherCompanyId` Prisma omite el filtro y borraría tablas enteras.
+      if (otherCompanyId) {
+        await prisma.expenseCategory.deleteMany({ where: { companyId: otherCompanyId } });
+        await prisma.account.deleteMany({ where: { companyId: otherCompanyId } });
+        await prisma.company.deleteMany({ where: { id: otherCompanyId } });
+      }
+    });
+
+    it('C1: crear con cuenta propia → { success, id } y la cuenta queda guardada', async () => {
+      const result = await createExpenseCategory({
+        name: `${PREFIX}Alquiler`,
+        description: 'Alquiler de oficina',
+        accountId: alqId,
+      });
+      expect(result.success).toBe(true);
+      if (!result.success) return;
+      expect((await readCategory(result.id)).accountId).toBe(alqId);
+
+      const sinCuenta = await createExpenseCategory({ name: `${PREFIX}Sin cuenta` });
+      expect(sinCuenta.success).toBe(true);
+      if (!sinCuenta.success) return;
+      expect((await readCategory(sinCuenta.id)).accountId).toBeNull();
+    });
+
+    it('C2: cuenta de otra empresa → error de negocio y no se crea', async () => {
+      const name = `${PREFIX}Ajena`;
+      const result = await createExpenseCategory({ name, accountId: otherAccountId });
+      expect(result).toEqual({
+        success: false,
+        error: 'La cuenta contable seleccionada no pertenece a la empresa',
+      });
+      expect(await prisma.expenseCategory.count({ where: { companyId, name } })).toBe(0);
+    });
+
+    it('C3: nombre duplicado → "Ya existe una categoría con ese nombre" (alta y edición)', async () => {
+      const name = `${PREFIX}Duplicada`;
+      const first = await createExpenseCategory({ name });
+      expect(first.success).toBe(true);
+
+      expect(await createExpenseCategory({ name })).toEqual({
+        success: false,
+        error: 'Ya existe una categoría con ese nombre',
+      });
+
+      const other = await createExpenseCategory({ name: `${PREFIX}Otra duplicada` });
+      if (!other.success) throw new Error(other.error);
+      expect(await updateExpenseCategory(other.id, { name })).toEqual({
+        success: false,
+        error: 'Ya existe una categoría con ese nombre',
+      });
+    });
+
+    it('C4: update con accountId null vuelve a "por defecto"; sin accountId no lo toca', async () => {
+      const created = await createExpenseCategory({ name: `${PREFIX}Editable`, accountId: alqId });
+      if (!created.success) throw new Error(created.error);
+
+      const untouched = await updateExpenseCategory(created.id, {
+        name: `${PREFIX}Editable 2`,
+        description: 'nueva',
+      });
+      expect(untouched).toEqual({ success: true });
+      expect(await readCategory(created.id)).toMatchObject({
+        name: `${PREFIX}Editable 2`,
+        description: 'nueva',
+        accountId: alqId,
+      });
+
+      expect(
+        await updateExpenseCategory(created.id, { name: `${PREFIX}Editable 2`, accountId: null })
+      ).toEqual({ success: true });
+      expect((await readCategory(created.id)).accountId).toBeNull();
+
+      expect(
+        await updateExpenseCategory(created.id, {
+          name: `${PREFIX}Editable 2`,
+          accountId: otherAccountId,
+        })
+      ).toEqual({
+        success: false,
+        error: 'La cuenta contable seleccionada no pertenece a la empresa',
+      });
+      expect((await readCategory(created.id)).accountId).toBeNull();
+    });
+
+    it('C5: toggle devuelve el estado nuevo; id inexistente → "Categoría no encontrada"', async () => {
+      const created = await createExpenseCategory({ name: `${PREFIX}Toggle` });
+      if (!created.success) throw new Error(created.error);
+
+      expect(await toggleExpenseCategory(created.id)).toEqual({ success: true, isActive: false });
+      expect((await readCategory(created.id)).isActive).toBe(false);
+      expect(await toggleExpenseCategory(created.id)).toEqual({ success: true, isActive: true });
+
+      const missingId = '3f2504e0-4f89-41d3-9a0c-0305e82c3301';
+      expect(await toggleExpenseCategory(missingId)).toEqual({
+        success: false,
+        error: 'Categoría no encontrada',
+      });
+      expect(await updateExpenseCategory(missingId, { name: `${PREFIX}Nada` })).toEqual({
+        success: false,
+        error: 'Categoría no encontrada',
+      });
+    });
+
+    it('C6: el combo ofrece EXPENSE imputables + la guardada inactiva; sin ASSET ni otra empresa', async () => {
+      await prisma.account.update({ where: { id: alqViejaId }, data: { isActive: false } });
+      try {
+        const withoutSaved = (await getExpenseCategoryAccounts()).map((a) => a.id);
+        expect(withoutSaved).toContain(alqId);
+        expect(withoutSaved).not.toContain(alqViejaId);
+
+        const withSaved = (await getExpenseCategoryAccounts([alqViejaId])).map((a) => a.id);
+        expect(withSaved).toContain(alqId);
+        expect(withSaved).toContain(alqViejaId);
+        expect(withSaved).not.toContain(activoId);
+        expect(withSaved).not.toContain(otherAccountId);
+
+        // includeIds de otra empresa no se cuela.
+        const foreign = (await getExpenseCategoryAccounts([otherAccountId])).map((a) => a.id);
+        expect(foreign).not.toContain(otherAccountId);
+      } finally {
+        await prisma.account.update({ where: { id: alqViejaId }, data: { isActive: true } });
+      }
+    });
   });
 });

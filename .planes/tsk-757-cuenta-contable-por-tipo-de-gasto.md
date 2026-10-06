@@ -1,7 +1,7 @@
 # TSK-757 — Cuenta contable por tipo de gasto
 
 **Fecha de inicio:** 2026-10-06
-**Estado:** Implementación en progreso (Fase 2 de 9 completada)
+**Estado:** Implementación en progreso (Fase 3 de 9 completada)
 
 ---
 
@@ -489,28 +489,28 @@ Otras decisiones de esta planificación:
 - **Objetivo:** las actions de categorías guardan/leen la cuenta y sus errores de negocio llegan
   legibles en producción.
 - **Tareas:**
-  - [ ] `EXP/actions.server.ts` `getExpenseCategories` (:50): sumar al `select`
+  - [x] `EXP/actions.server.ts` `getExpenseCategories` (:50): sumar al `select`
         `account: { select: { id: true, code: true, name: true } }` (lo usa el hint del alta, D6).
-  - [ ] `getAllExpenseCategories` (:70): sumar `accountId` y el mismo `account`.
-  - [ ] Nueva `getExpenseCategoryAccounts(includeIds?: string[])`: `checkPermission(
+  - [x] `getAllExpenseCategories` (:70): sumar `accountId` y el mismo `account`.
+  - [x] Nueva `getExpenseCategoryAccounts(includeIds?: string[])`: `checkPermission(
         'commercial.expenses', 'view', { redirect: true })`, `getActiveCompanyId()`,
         `buildImputableAccountsWhere({ companyId, types: ['EXPENSE'] })` envuelto en `OR` con
         `{ companyId, id: { in: includeIds } }` (molde vehicle-types :176-200), `select { id, code,
         name }`, `orderBy code`.
-  - [ ] Helper privado `assertCategoryAccountBelongsToCompany(accountId, companyId)` →
+  - [x] Helper privado `assertCategoryAccountBelongsToCompany(accountId, companyId)` →
         `BusinessError('La cuenta contable seleccionada no pertenece a la empresa')` (molde
         vehicle-types :229-241, pero con `BusinessError`).
-  - [ ] `createExpenseCategory` (:91) → `Promise<ActionResult<{ id: string }>>`: valida
+  - [x] `createExpenseCategory` (:91) → `Promise<ActionResult<{ id: string }>>`: valida
         `accountId` si viene, persiste `accountId ?? null`; P2002 → `BusinessError('Ya existe una
         categoría con ese nombre')`; `catch` → `toActionResult(error, 'Error al crear categoría de
         gasto')`; `logger.warn` para `BusinessError`, `logger.error` para lo demás.
-  - [ ] `updateExpenseCategory` (:124) → `Promise<ActionResult>`: `accountId` con la semántica
+  - [x] `updateExpenseCategory` (:124) → `Promise<ActionResult>`: `accountId` con la semántica
         undefined/null/string de 2.0; `count === 0` → `BusinessError('Categoría no encontrada')`.
-  - [ ] `toggleExpenseCategory` (:160) → `Promise<ActionResult<{ isActive: boolean }>>`.
-  - [ ] Ajustar los consumidores mínimos para que compile (el refactor visual es la Fase 5):
+  - [x] `toggleExpenseCategory` (:160) → `Promise<ActionResult<{ isActive: boolean }>>`.
+  - [x] Ajustar los consumidores mínimos para que compile (el refactor visual es la Fase 5):
         `EXP/components/_CategoryManagementModal.tsx` (`if (!result.success) toast.error(
         result.error)` en lugar de `catch`).
-  - [ ] Tests de integración en `EXP/expense-journal-entry.integration.test.ts` (nuevo
+  - [x] Tests de integración en `EXP/expense-journal-entry.integration.test.ts` (nuevo
         `describe` "categorías con cuenta (TSK-757)" reutilizando el andamiaje de empresa/cuentas
         de :52-187): crear con cuenta propia → `accountId` guardado; crear con cuenta de **otra
         empresa** → `{ success: false }` con el mensaje; nombre duplicado → `{ success: false,
@@ -1541,10 +1541,39 @@ constantes `COMPANY_ID`, `USER_ID`, `SUPPLIER_ID`, `EMAIL`/`PASSWORD`, `BASE` po
     el literal se verifica allí (`settings-accounts.test.ts` y casos 2-4/11 de integración).
   - `expense-accounts.ts` no importa `ACCOUNTING_SETTINGS_PATH` ni `formatAccountLabel` (el diseño
     los listaba, pero el helper recibe los labels ya armados y el path de Ajustes lo aporta
-    `buildMissingSettingsAccountsMessage`): evitaría imports sin uso.
+    `buildMissingSettingsAccountsMessage`): así no quedan imports sin uso.
 
 ### Fase 3: ABM de categorías en el servidor (cuenta + `ActionResult`)
-- **Estado:** Pendiente
+- **Estado:** Completada
+- **Archivos modificados:**
+  - `src/modules/commercial/features/expenses/actions.server.ts` — `CATEGORY_ACCOUNT_SELECT`;
+    `getExpenseCategories` y `getAllExpenseCategories` suman `account` (la segunda también
+    `accountId`); nueva `getExpenseCategoryAccounts(includeIds?)`; helpers privados
+    `assertCategoryAccountBelongsToCompany`, `parseCategoryInput` y `toCategoryActionFailure`;
+    `createExpenseCategory` → `ActionResult<{ id }>`, `updateExpenseCategory` → `ActionResult`
+    (semántica undefined/null/string de `accountId`), `toggleExpenseCategory` →
+    `ActionResult<{ isActive }>`.
+  - `src/modules/commercial/features/expenses/components/_CategoryManagementModal.tsx` — los tres
+    handlers hacen `if (!result.success) { toast.error(result.error); return; }` (ajuste mínimo; la
+    partición del modal es la Fase 5). La edición sigue sin mandar `accountId` → no lo toca.
+  - `src/modules/commercial/features/expenses/expense-journal-entry.integration.test.ts` — import de
+    las actions de categorías y `describe` anidado "categorías con cuenta (TSK-757)" con C1–C6
+    (cuentas `T757-ALQ`, `T757-ALQ-VIEJA`, `T757-ACTIVO` en la empresa del test y una segunda
+    empresa `PREFIX + 'Otra'` con su cuenta EXPENSE, limpiada en su `afterAll`).
+- **Notas:**
+  - Tests: `npx vitest run` completo → 50 archivos / 626 tests en verde (601 de la línea base + 19
+    puros de la Fase 2 + 6 de integración C1–C6); los 7 casos de TSK-728 siguen verdes. Los de
+    integración corren de verdad contra `contable-pms-db` (no se saltean) y el `afterAll` verifica
+    que no quede nada con el prefijo.
+  - `check-types` 219; eslint sin errores en los tres archivos.
+  - `toCategoryActionFailure` recibe además un `logData` opcional (id / nombre) para el
+    `logger.warn`; el resto como en 3.3.3. P2002 también se traduce en `updateExpenseCategory`
+    (C3 lo cubre en alta y edición).
+  - C4 y C5 suman, además de lo pedido, la cuenta de otra empresa en la edición y
+    `updateExpenseCategory` con id inexistente ("Categoría no encontrada"); C6 verifica también que
+    un `includeIds` de otra empresa no se cuela.
+  - Las lecturas siguen lanzando (errores técnicos); "No autenticado"/"No hay empresa activa"
+    quedan como `throw`, según 2.0.
 
 ### Fase 4: Confirmación y asiento con la cuenta resuelta
 - **Estado:** Pendiente
