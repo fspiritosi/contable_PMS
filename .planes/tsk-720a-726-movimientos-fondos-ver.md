@@ -1,7 +1,7 @@
 # TSK-720a + TSK-726 — Movimientos de Fondos: ver en solo lectura, sin columna de asiento, modal responsive
 
 **Fecha de inicio:** 2026-10-06
-**Estado:** Implementación en progreso (Fase 7 de 8 completada)
+**Estado:** Implementación completada
 
 ---
 
@@ -467,11 +467,11 @@ Otras decisiones de esta planificación:
 
 - **Objetivo:** cerrar con calidad y build de producción.
 - **Tareas:**
-  - [ ] `npm run check-types` → no sube de la línea base de la Fase 1.
-  - [ ] `npm run lint` → sin errores nuevos en los archivos tocados (sin `console.*`, sin `:any`).
-  - [ ] `npm run test` → en verde (unitarios nuevos + integración de fund-movements sin regresión).
-  - [ ] `npm run build` → OK.
-  - [ ] `wc -l` de todos los componentes nuevos/modificados del modal < 200.
+  - [x] `npm run check-types` → no sube de la línea base de la Fase 1.
+  - [x] `npm run lint` → sin errores nuevos en los archivos tocados (sin `console.*`, sin `:any`).
+  - [x] `npm run test` → en verde (unitarios nuevos + integración de fund-movements sin regresión).
+  - [x] `npm run build` → OK.
+  - [x] `wc -l` de todos los componentes nuevos/modificados del modal < 200.
   - [ ] Completar la sección 5 con los números de la Fase 6 y los resultados de esta.
 - **Archivos:** este documento (sección 5).
 - **Criterio de completitud:** los cuatro comandos pasan y la sección 5 está completa; si quedó
@@ -1471,7 +1471,15 @@ Patrón de `capturas-tsk728.mjs` (constantes `COMPANY_ID`, `USER_ID`, `EMAIL`, `
   - Como en TSK-719/728, el PDF va en `docs/presentaciones/` y las PNG se commitearon con el script (Fase 6).
 
 ### Fase 8: Verificación final
-- **Estado:** Pendiente
+- **Estado:** Completada (2026-10-06)
+- **Resultados:**
+  - `npm run check-types`: 219 errores, igual a la línea base medida antes de la Fase 1 (todos previos).
+  - `eslint` sobre los `.ts`/`.tsx` cambiados en la rama: 0 errores, 1 warning previo (`react-hooks/incompatible-library` por `form.watch('type')` en `useFundMovementForm.ts`, misma llamada que tenía el modal original; el React Compiler no está activo).
+  - Sin `console.*` ni `any` en las líneas agregadas (`git diff main...HEAD -- src`).
+  - `npm run test`: 49 archivos, 655 tests en verde.
+  - `npm run build`: OK (el dev server de :3010 siguió respondiendo 200).
+  - Líneas: `useFundMovementForm.ts` 198, `_CreateFundMovementModal.tsx` 191, `columns.tsx` 175, `_FundMovementLinesField.tsx` 160, `_FundMovementsTable.tsx` 127; el resto por debajo.
+- **Notas:** no hizo falta commit de `fix` en esta fase. La sección 5 la completa `/verificar`.
 
 ## 5. Verificación
 _Pendiente - ejecutar `/verificar tsk-720a-726-movimientos-fondos-ver`_
