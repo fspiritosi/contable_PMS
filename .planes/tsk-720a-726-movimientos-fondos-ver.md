@@ -1,7 +1,7 @@
 # TSK-720a + TSK-726 — Movimientos de Fondos: ver en solo lectura, sin columna de asiento, modal responsive
 
 **Fecha de inicio:** 2026-10-06
-**Estado:** Implementación en progreso (Fase 5 de 8 completada)
+**Estado:** Implementación en progreso (Fase 6 de 8 completada)
 
 ---
 
@@ -406,31 +406,31 @@ Otras decisiones de esta planificación:
 - **Objetivo:** evidencia de TSK-720a y del criterio de aceptación de TSK-726, y capturas para la
   presentación.
 - **Tareas:**
-  - [ ] `scripts/guia-presentacion/capturas-tsk720a-726.mjs` (nuevo, patrón
+  - [x] `scripts/guia-presentacion/capturas-tsk720a-726.mjs` (nuevo, patrón
         `capturas-tsk728.mjs`): `chromium.launch().catch(() => chromium.launch({ channel:
         'chrome' }))`; login con `fspiritosi@codecontrol.com.ar` / `Contable2026!` contra
         `http://localhost:3010`; siembra por SQL (si no existen) movimientos marcados
         `description LIKE 'TSK720A-demo%'` de los 4 tipos, al menos uno Confirmado (con asiento),
         uno Anulado y uno cuyo socio esté inactivo o cuya caja no tenga sesión abierta (para el
         snapshot); limpia al terminar (también ante error).
-  - [ ] Capturas de escritorio (1440): 01 listado sin "Asiento"; 02 menú de un confirmado (solo
+  - [x] Capturas de escritorio (1440): 01 listado sin "Asiento"; 02 menú de un confirmado (solo
         "Ver"); 03 menú de un borrador (Ver + Confirmar/Editar/Eliminar); 04-07 vista de los 4
         tipos (BANK_CHARGES con conceptos y total, aporte con resumen Estado/Confirmado
         el/Asiento N°); 08 vista con snapshot de caja/socio; 09 vista de un anulado.
-  - [ ] Criterio TSK-726 (contexto `isMobile: true`, `hasTouch: true`, viewport 375×812) para
+  - [x] Criterio TSK-726 (contexto `isMobile: true`, `hasTouch: true`, viewport 375×812) para
         **cada uno de los 4 tipos** en el modal de alta (cambiando el tipo) y en la vista: medir
         `bbox` del `[role="dialog"]` → `x ≥ 0` y `x + width ≤ 375`;
         `document.documentElement.scrollWidth ≤ window.innerWidth` y `innerWidth === 375`; la X
         (`[data-slot="dialog-close"]` o el botón "Close" del dialog) con `bbox.x + width ≤ 375` y
         visible. Imprimir tabla de resultados y fallar el script si alguno no cumple. Capturas
         mobile 10-13 (los 4 tipos) incluida la fila de conceptos apilada.
-  - [ ] Medir en mobile `scrollWidth` de `/dashboard/commercial/treasury/partners` (antes 443) y
+  - [x] Medir en mobile `scrollWidth` de `/dashboard/commercial/treasury/partners` (antes 443) y
         `/dashboard` (antes 491) y verificar que **no empeoran** (Socios debería bajar a ~383 por
         la toolbar; queda como seguimiento 2.4).
-  - [ ] Escritorio: captura de la paginación de Movimientos de Fondos y de otra tabla a 1440 para
+  - [x] Escritorio: captura de la paginación de Movimientos de Fondos y de otra tabla a 1440 para
         confirmar que no cambió; si D2 no neutraliza la opacidad, aplicar la variante con `!` y
         repetir.
-  - [ ] Probar un rol con solo `view` (si hay uno en dev; si no, anotar que se cubre con el test
+  - [x] Probar un rol con solo `view` (si hay uno en dev; si no, anotar que se cubre con el test
         de `getRowActions`).
 - **Archivos:** `scripts/guia-presentacion/capturas-tsk720a-726.mjs` (nuevo),
   `scripts/guia-presentacion/assets/tsk720a-726-*.png` (nuevas).
@@ -1440,7 +1440,21 @@ Patrón de `capturas-tsk728.mjs` (constantes `COMPANY_ID`, `USER_ID`, `EMAIL`, `
   - `_FundMovementConfirmDialogs.tsx` se creó como estaba previsto en 3.4.5 (el plan lo dejaba "eventual").
 
 ### Fase 6: Verificación en navegador y capturas
-- **Estado:** Pendiente
+- **Estado:** Completada
+- **Archivos modificados:**
+  - `scripts/guia-presentacion/capturas-tsk720a-726.mjs` - nuevo: siembra, recorrido escritorio + celular, mediciones de TSK-726 con `console.table`, 35 chequeos; `process.exitCode = 1` si alguno falla. Opciones `--solo-movil` (10-18 y mediciones) y `--cleanup` (solo borra la siembra).
+  - `scripts/guia-presentacion/assets/tsk720a-726-*.png` - 22 capturas: 01-09b escritorio, 10-18 celular y tres `-antes` (10 alta aporte, 13 alta gastos, 18 listado).
+- **Resultado** (`node scripts/guia-presentacion/capturas-tsk720a-726.mjs`, dev `:3010`): **35/35 chequeos OK, código de salida 0** (y `--solo-movil`: 9/9).
+  - Celular 375×812 `isMobile: true`, los 8 escenarios de diálogo (alta de los 4 tipos y Ver de los 4): `DialogContent` **x=16, width=343, right=359**, X de cerrar **right=342** y visible, `innerWidth` = `scrollWidth` = **375**, desborde diálogo/fieldset **0/0**. Criterio de TSK-726 cumplido en los 4 tipos, en alta y en vista.
+  - Fila de conceptos en el celular (anchos de hijos): cuenta **293** (fila completa) y debajo descripción 113 / importe 128 / tacho 36.
+  - Sin modal: Movimientos de Fondos **375** (antes 443); Socios **383** (antes 443, no empeora; los 8 px son la toolbar, seguimiento 2.4); Dashboard **491** (antes 491, sin cambio, seguimiento 2.4).
+  - Escritorio: listado sin encabezado "Asiento"; menú de confirmado = `Ver`; menú de borrador = `Ver | Confirmar | Editar | Eliminar`; vistas 04-08 con el texto esperado (estado, "Confirmado el", "Asiento N° 36/37", conceptos), sin Guardar ni "Agregar concepto", con "Cerrar"; en 07 el Select de tipo y los 5 combobox del fieldset están `disabled`, un click no abre listbox ni popover y la opacidad computada de los controles deshabilitados es **1** (D2 confirmado); en 08 los triggers muestran `Caja Chica` y `Carlos Gómez` (snapshot, no placeholder). Barra de paginación a 1440 en una línea (alto 36 px) en Movimientos de Fondos y Socios.
+- **Desvíos / precisiones:**
+  - **Datos:** en vez de sembrar y confirmar por UI un aporte (y revertir saldo/asiento al limpiar), el script **reutiliza los dos confirmados de las fases 4/5** (`c2250ab9-…` aporte, asiento N° 36; `f6411cea-…` gastos, asiento N° 37) y solo les pone una descripción legible ("Aporte de capital de María López", "Comisiones e impuestos del banco"); no los borra. Más simple y sin volver a mover el saldo del banco ni la numeración en cada corrida. Si faltan, el script aborta con un mensaje claro.
+  - **Marca de la siembra:** `created_by = 'TSK720A-demo'` en lugar de `description LIKE 'TSK720A-demo%'`, para que las descripciones de las capturas de la clienta queden limpias (`created_by` no se muestra en ninguna pantalla). Se siembran 3: retiro en borrador (Juan Perez), transferencia anulada (banco → Caja Principal) y retiro anulado con snapshot (ids inexistentes con `fund_out_label='Caja Chica'` y `partner_name='Carlos Gómez'`, como en la Fase 5, en vez de crear una caja y un socio reales). Se borran en `finally`.
+  - **Capturas "antes":** no las genera el script; son las que se tomaron en la Fase 2 sobre el código previo al arreglo con el mismo contexto móvil (`tsk726-antes-*.png` del scratchpad), copiadas a `assets/` con el prefijo del ticket.
+  - **Hallazgo (fuera de alcance):** a **1440 px de escritorio** el listado de Movimientos de Fondos también desborda en horizontal (`scrollWidth` 1537-1612 según el largo de las descripciones; la tabla mide ~1250 px dentro de un panel de ~1150). Es previo a este ticket (antes, con la columna "Asiento", era más ancho) y no afecta al modal en escritorio (no se usa `isMobile`). Las capturas 01-03 se toman a 1600 para que se vea la tabla entera; las de diálogos y paginación, a 1440. Candidato a seguimiento junto con 2.4.
+  - **Rol con solo `view`:** no hay uno en dev; queda cubierto por los tests de `getRowActions`/`hasAnyRowAction` (Fase 1).
 
 ### Fase 7: Documentación — guía in-app, docs y presentación para la clienta
 - **Estado:** Pendiente
