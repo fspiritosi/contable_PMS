@@ -1196,29 +1196,89 @@ export function _CommercialGuide() {
             </li>
           </ul>
 
+          <p className="font-medium mt-3">Categorías y cuenta contable</p>
+          <p className="text-muted-foreground">
+            Cada categoría de gasto puede tener su <strong>propia cuenta
+            contable</strong>. Así, por ejemplo, los egresos de la categoría
+            &quot;Alquiler&quot; van a la cuenta <em>Alquiler inmuebles</em> y
+            los de &quot;Tasas municipales&quot; a la cuenta <em>Tasas</em>, en
+            vez de quedar todos juntos en una sola cuenta.
+          </p>
+          <ol className="list-decimal pl-6 space-y-2 text-muted-foreground">
+            <li>
+              En <strong>Comercial → Egresos</strong> haz clic en{' '}
+              <strong>Categorías</strong> (en el celular, el ícono de etiqueta).
+              También se abre desde <strong>Gestionar</strong>, junto al campo
+              Categoría del alta de un egreso.
+            </li>
+            <li>
+              Para una categoría nueva, completa el nombre y elige la{' '}
+              <strong>Cuenta contable (opcional)</strong>: puedes buscarla por
+              código o por nombre. Solo se ofrecen cuentas de egresos activas e
+              imputables.
+            </li>
+            <li>
+              Para una existente, haz clic en el lápiz, cambia la cuenta y{' '}
+              <strong>Guardar</strong>. Con{' '}
+              <em>Sin asignar (usar la cuenta de egresos por defecto)</em> la
+              categoría vuelve a usar la cuenta por defecto.
+            </li>
+          </ol>
+          <p className="text-muted-foreground">
+            Cada categoría muestra su cuenta, o <strong>Por defecto</strong> si
+            no tiene. Al cargar un egreso, debajo de la categoría aparece{' '}
+            <strong>&quot;Se imputa a: …&quot;</strong> con la cuenta que va a
+            usar; en el detalle del egreso, el dato{' '}
+            <strong>Cuenta contable</strong> dice de dónde sale: &quot;de la
+            categoría&quot;, &quot;por defecto&quot; o, una vez confirmado,
+            &quot;del asiento N° …&quot;.
+          </p>
+
           <p className="font-medium mt-3">Qué revisa el sistema al confirmar</p>
           <p className="text-muted-foreground">
-            Al confirmar un egreso se genera su asiento contable:{' '}
-            <strong>Cuenta de Gastos Operativos</strong> contra{' '}
-            <strong>Cuentas por Pagar</strong>. Las dos se cargan en{' '}
-            <strong>Contabilidad → Configuración</strong>. Si falta alguna (o la
-            cuenta cargada está dada de baja), el egreso{' '}
-            <strong>no se confirma</strong> y el mensaje nombra la cuenta y
-            dónde configurarla; queda en Borrador hasta que lo corrijas.
+            Al confirmar un egreso se genera su asiento contable: al{' '}
+            <strong>Debe</strong>, la cuenta de su categoría o, si la categoría
+            no tiene, la <strong>Cuenta de egresos por defecto</strong>; al{' '}
+            <strong>Haber</strong>, <strong>Cuentas por Pagar</strong>. Las dos
+            cuentas por defecto se cargan en{' '}
+            <strong>Contabilidad → Configuración</strong>.
+          </p>
+          <ul className="list-disc pl-6 space-y-1 text-muted-foreground">
+            <li>
+              Si la categoría no tiene cuenta y tampoco hay Cuenta de egresos
+              por defecto, el egreso <strong>no se confirma</strong>: el mensaje
+              te ofrece las dos salidas (asignarle cuenta a la categoría o
+              configurar la por defecto).
+            </li>
+            <li>
+              Si la cuenta de la categoría está dada de baja o ya no es
+              imputable, el egreso <strong>no se confirma</strong> y el mensaje
+              nombra la categoría y la cuenta. No se usa la por defecto &quot;en
+              silencio&quot;: corrige la cuenta en Categorías.
+            </li>
+            <li>
+              Si falta Cuentas por Pagar, tampoco se confirma. En todos los
+              casos el egreso queda en Borrador hasta que lo corrijas.
+            </li>
+          </ul>
+          <p className="text-sm text-muted-foreground">
+            El aviso de presupuesto (cuando el egreso lleva la cuenta al 80% o
+            más de lo presupuestado en el mes) mira la{' '}
+            <strong>cuenta a la que va el egreso</strong> y sigue siendo solo un
+            aviso. Ojo: si tenías un presupuesto armado sobre la cuenta de
+            egresos por defecto, los egresos de categorías con cuenta propia ya
+            no lo consumen; conviene presupuestar también esas cuentas.
           </p>
           <p className="text-sm text-muted-foreground">
-            Antes, un egreso con una de esas cuentas sin configurar podía
-            quedar confirmado <strong>sin asiento contable</strong> y sin
-            ningún aviso. Eso ya no pasa: o se confirma con su asiento, o no se
-            confirma y te dice por qué. El aviso de presupuesto (cuando el
-            egreso lleva la Cuenta de Gastos Operativos al 80% o más de lo
-            presupuestado en el mes) sigue siendo solo un aviso: no frena la
-            confirmación.
+            Los egresos <strong>ya confirmados no cambian</strong>: su asiento
+            queda como se hizo. Cambiar la cuenta de una categoría afecta solo a
+            lo que confirmes de ahí en adelante. Si un comprobante trae IVA
+            discriminado, cárgalo como <strong>factura de compra</strong> (el
+            egreso registra un importe único, sin IVA ni percepciones).
           </p>
 
           <p className="text-sm text-muted-foreground mt-3">
-            Las <strong>categorías de gasto</strong> se gestionan desde el botón
-            de configuración en la lista de egresos. Los pagos se registran desde{' '}
+            Los pagos se registran desde{' '}
             <strong>Tesorería → Órdenes de Pago</strong> donde puedes
             seleccionar egresos pendientes.
           </p>

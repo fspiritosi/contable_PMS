@@ -1,0 +1,573 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>TSK-757 — Cada tipo de gasto, a su cuenta contable</title>
+<style>
+  @page {
+    size: A4;
+    margin: 0;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #1f2430;
+    font-size: 13px;
+    line-height: 1.55;
+    background: #ffffff;
+  }
+
+  .page {
+    padding: 4mm 2mm;
+  }
+
+  header.cover {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    text-align: left;
+    padding: 10mm 2mm 8mm 2mm;
+    border-bottom: 3px solid #2f6f4f;
+    margin-bottom: 10mm;
+  }
+
+  .eyebrow {
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 11px;
+    font-weight: 700;
+    color: #2f6f4f;
+    margin-bottom: 6px;
+  }
+
+  h1 {
+    font-size: 26px;
+    margin: 0 0 8px 0;
+    color: #14251c;
+  }
+
+  .subtitle {
+    font-size: 14px;
+    color: #4b5563;
+    margin: 0;
+  }
+
+  section {
+    margin-bottom: 9mm;
+    page-break-inside: avoid;
+  }
+
+  section.allow-break {
+    page-break-inside: auto;
+  }
+
+  section:last-of-type { margin-bottom: 2mm; }
+
+  h2 {
+    font-size: 16px;
+    color: #14251c;
+    border-left: 4px solid #2f6f4f;
+    padding-left: 8px;
+    margin: 0 0 6mm 0;
+    page-break-after: avoid;
+  }
+
+  h3.sub {
+    font-size: 13.5px;
+    color: #14251c;
+    margin: 6mm 0 3mm 0;
+    page-break-after: avoid;
+  }
+
+  .quote {
+    background: #f4f7f5;
+    border-left: 4px solid #2f6f4f;
+    padding: 10px 14px;
+    font-style: italic;
+    color: #2b3a33;
+    margin: 0 0 6px 0;
+  }
+
+  .quote cite {
+    display: block;
+    font-style: normal;
+    font-size: 11.5px;
+    color: #6b7280;
+    margin-top: 6px;
+  }
+
+  .before-after {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    page-break-inside: avoid;
+  }
+
+  .card {
+    border: 1px solid #e2e5e0;
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+
+  .card.before { background: #fbf7f2; border-color: #ecd9bd; }
+  .card.after { background: #f2f8f4; border-color: #bfe0cb; }
+
+  .card h3 {
+    margin: 0 0 6px 0;
+    font-size: 12.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .card.before h3 { color: #9a6a1f; }
+  .card.after h3 { color: #226240; }
+
+  .card p { margin: 0; }
+
+  ol.steps {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    counter-reset: step;
+  }
+
+  ol.steps > li {
+    counter-increment: step;
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+    page-break-inside: avoid;
+  }
+
+  ol.steps > li::before {
+    content: counter(step);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    border-radius: 50%;
+    background: #2f6f4f;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  ol.steps.letters > li::before {
+    content: counter(step, lower-alpha);
+  }
+
+  .step-body { flex: 1; }
+
+  .step-body strong { color: #14251c; }
+
+  figure {
+    margin: 8px 0 0 0;
+    page-break-inside: avoid;
+  }
+
+  figure img {
+    max-width: 100%;
+    border: 1px solid #d9dce0;
+    border-radius: 6px;
+    display: block;
+  }
+
+  figure.small img { max-width: 320px; }
+
+  figure.sidebar img { max-width: 150px; }
+
+  figure.modal img { max-width: 400px; }
+
+  figure.modal-sm img { max-width: 340px; }
+
+  ol.steps.long > li { page-break-inside: auto; }
+
+  figcaption {
+    font-size: 11px;
+    color: #6b7280;
+    margin-top: 4px;
+  }
+
+  .callout {
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin: 0 0 8px 0;
+    page-break-inside: avoid;
+  }
+
+  .callout.config {
+    background: #f2f6fb;
+    border: 1px solid #cddaeb;
+  }
+
+  .callout.warning {
+    background: #fdf5ec;
+    border: 1px solid #efd6a8;
+  }
+
+  .callout h3 {
+    margin: 0 0 4px 0;
+    font-size: 13px;
+  }
+
+  .callout p { margin: 0 0 6px 0; }
+  .callout p:last-child { margin-bottom: 0; }
+
+  ul.plain {
+    margin: 4px 0 0 0;
+    padding-left: 18px;
+  }
+
+  ul.plain li { margin-bottom: 4px; }
+
+  .no-change-list {
+    display: grid;
+    gap: 6px;
+  }
+
+  .no-change-item {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+  }
+
+  .check {
+    color: #2f6f4f;
+    font-weight: 700;
+  }
+
+  .side-by-side {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8mm;
+    align-items: start;
+    page-break-inside: avoid;
+  }
+
+  .side-by-side figure { margin-top: 0; }
+
+  .side-by-side.narrow-left {
+    grid-template-columns: 160px 1fr;
+  }
+
+  .ui-text {
+    font-style: italic;
+    color: #374151;
+  }
+
+  table.chain {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 6px 0 8px 0;
+    font-size: 12px;
+    page-break-inside: avoid;
+  }
+
+  table.chain th, table.chain td {
+    border: 1px solid #dfe3e0;
+    padding: 6px 8px;
+    text-align: left;
+    vertical-align: top;
+  }
+
+  table.chain th {
+    background: #f4f7f5;
+    color: #14251c;
+    font-weight: 700;
+  }
+
+  .entry {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 11.5px;
+    background: #f7f8f7;
+    border: 1px solid #e2e5e0;
+    border-radius: 6px;
+    padding: 8px 10px;
+    margin: 6px 0;
+    white-space: pre;
+  }
+
+  /* TSK-757: capturas de modales más chicas para que el paso a paso no ocupe una página por figura */
+  figure.modal img { max-width: 330px; }
+  figure.detail img { max-width: 250px; }
+  .side-by-side figure img { max-width: 290px; }
+
+  footer.doc-footer {
+    text-align: center;
+    color: #9ca3af;
+    font-size: 10.5px;
+    margin-top: 2mm;
+  }
+</style>
+
+</head>
+
+<body>
+
+
+<div class="page">
+
+  <header class="cover">
+    <div class="eyebrow">Ticket 757 · Comercial → Egresos · Contabilidad</div>
+    <h1>Cada tipo de gasto, a su cuenta contable</h1>
+    <p class="subtitle">Guía de presentación — qué pediste, qué cambió, cómo se usa paso a paso con un ejemplo, qué hay que configurar y qué queda para conversar</p>
+  </header>
+
+  <section>
+    <h2>1. Qué pediste</h2>
+    <div class="quote">
+      "Tenemos que tener la opción de asignar tipo de gastos a cuentas contables."
+      <cite>— Elizabeth Perez, ticket 757, Gastos e Impuestos</cite>
+    </div>
+    <p><strong>Qué pasaba.</strong> Cada egreso que cargás en Comercial → Egresos lleva una
+    <strong>categoría</strong> (Alquiler, Servicios, Viáticos…), pero la categoría no tenía ningún
+    efecto en la contabilidad: al confirmar, el asiento iba <strong>siempre a la misma cuenta</strong>,
+    la que en Contabilidad → Configuración se llamaba <span class="ui-text">Cuenta de Gastos
+    Operativos</span>. El alquiler, las tasas municipales y los viáticos terminaban todos juntos en
+    una sola cuenta, y para que el Estado de Resultados mostrara cada gasto en su lugar había que
+    reclasificarlos a mano con asientos manuales.</p>
+  </section>
+
+  <section class="allow-break">
+    <h2>2. Qué cambió: la cuenta la define la categoría</h2>
+    <div class="before-after">
+      <div class="card before">
+        <h3>Antes</h3>
+        <p>Todos los egresos, de cualquier categoría, se imputaban a una única cuenta de gastos
+        configurada en Contabilidad → Configuración.</p>
+      </div>
+      <div class="card after">
+        <h3>Ahora</h3>
+        <p>Cada <strong>categoría de egreso</strong> puede tener su propia cuenta contable. Al
+        confirmar un egreso, el asiento va a la cuenta de su categoría. Las categorías sin cuenta
+        siguen usando la cuenta de Configuración, que ahora se llama <span class="ui-text">Cuenta de
+        egresos por defecto</span>.</p>
+      </div>
+    </div>
+    <p style="margin-top:8px">La regla, en una línea: <strong>cuenta de la categoría → cuenta de
+    egresos por defecto → si no hay ninguna, el egreso no se confirma y el sistema te dice qué
+    falta</strong>. Nada cambia para las categorías a las que no les asignes cuenta: siguen
+    funcionando exactamente como hasta ahora.</p>
+    <figure>
+      <img src="assets/tsk757-01-listado-boton-categorias.png" alt="Listado de Egresos con la barra de herramientas: filtros, botón Categorías con ícono de etiqueta, botón Nuevo Egreso y Columnas; debajo la tabla con egresos de ejemplo Alquiler de oficina octubre, ABL octubre y Viáticos obra Neuquén en Borrador" />
+      <figcaption>Comercial → Egresos: el botón nuevo <span class="ui-text">Categorías</span>, al lado
+      de <span class="ui-text">Nuevo Egreso</span>. Ya no hace falta empezar a cargar un egreso para
+      administrar las categorías.</figcaption>
+    </figure>
+  </section>
+
+  <section class="allow-break">
+    <h2>3. Paso a paso, con un ejemplo</h2>
+    <p>Supongamos tres tipos de gasto habituales: el <strong>alquiler de la oficina</strong>, que
+    tiene que ir a la cuenta <em>Alquiler inmuebles</em>; las <strong>tasas municipales</strong>
+    (ABL), que van a <em>Tasas</em>; y los <strong>viáticos de obra</strong>, que por ahora pueden
+    seguir en la cuenta general.</p>
+
+    <ol class="steps long">
+      <li><div class="step-body">
+        <strong>Abrí las categorías.</strong> En Comercial → Egresos hacé clic en
+        <span class="ui-text">Categorías</span>. También se abre desde
+        <span class="ui-text">Gestionar</span>, junto al campo Categoría cuando cargás un egreso.
+        Cada categoría muestra a la derecha de su nombre la cuenta a la que imputa, o
+        <span class="ui-text">Por defecto</span> si no tiene.
+        <figure class="modal">
+          <img src="assets/tsk757-02-modal-categorias.png" alt="Modal Categorías de egreso: arriba el alta con Nombre, Cuenta contable (opcional) y Descripción; abajo la lista de categorías existentes: Alquiler de oficina con 4.2.1/02/18 - Alquiler inmuebles, Servicios generales Por defecto, dos categorías de prueba inactivas, Tasas municipales con 4.2.1/07/04 - Tasas y Viáticos de obra Por defecto" />
+          <figcaption>"Alquiler de oficina" y "Tasas municipales" con su cuenta; "Viáticos de obra" y
+          "Servicios generales", <span class="ui-text">Por defecto</span>. Las que aparecen en gris
+          son categorías desactivadas (datos de prueba).</figcaption>
+        </figure>
+      </div></li>
+
+      <li><div class="step-body">
+        <strong>Asignale la cuenta a cada categoría.</strong> Para una categoría nueva, escribí el
+        nombre y elegí la <span class="ui-text">Cuenta contable (opcional)</span>. Para una que ya
+        existe, hacé clic en el lápiz, elegí la cuenta y <span class="ui-text">Guardar</span>. En el
+        buscador podés escribir parte del nombre ("alquiler", "viát") o del código ("4.2.1/07"). Solo
+        aparecen cuentas de gastos activas e imputables, así no se puede elegir una cuenta
+        madre por error. Si después querés que la categoría vuelva a la cuenta general, elegí
+        <span class="ui-text">Sin asignar (usar la cuenta de egresos por defecto)</span>.
+        <figure class="modal">
+          <img src="assets/tsk757-03-edicion-combo-cuenta.png" alt="Modal de categorías con la fila Viáticos de obra en edición: nombre, combo de cuenta abierto con la búsqueda viát mostrando 4.2.1/03/06 Viáticos - Administración y 4.2.1/04/17 Viáticos - Comercialización, y botones Guardar y Cancelar" />
+          <figcaption>Editando "Viáticos de obra": al escribir "viát" el buscador muestra las dos
+          cuentas de viáticos del plan.</figcaption>
+        </figure>
+      </div></li>
+
+      <li><div class="step-body">
+        <strong>Cargá el egreso como siempre.</strong> Al elegir la categoría, debajo aparece a qué
+        cuenta se va a imputar, para que lo veas antes de guardar.
+        <div class="side-by-side">
+          <figure>
+            <img src="assets/tsk757-04-alta-aviso-se-imputa.png" alt="Formulario Nuevo Egreso con categoría Alquiler de oficina y debajo el texto Se imputa a: 4.2.1/02/18 - Alquiler inmuebles" />
+            <figcaption>Categoría con cuenta: <span class="ui-text">Se imputa a: 4.2.1/02/18 -
+            Alquiler inmuebles</span>.</figcaption>
+          </figure>
+          <figure>
+            <img src="assets/tsk757-04b-alta-aviso-por-defecto.png" alt="Formulario Nuevo Egreso con categoría Viáticos de obra y debajo el texto Se imputa a la cuenta de egresos por defecto: 4.2.1/03/10 - Gastos Varios - Administración" />
+            <figcaption>Categoría sin cuenta: <span class="ui-text">Se imputa a la cuenta de egresos
+            por defecto: …</span>.</figcaption>
+          </figure>
+        </div>
+      </div></li>
+
+      <li><div class="step-body">
+        <strong>Revisalo en el detalle.</strong> En <span class="ui-text">Ver Detalle</span> hay un
+        dato nuevo, <span class="ui-text">Cuenta contable</span>, que dice de dónde sale la cuenta:
+        <em>(de la categoría)</em> o <em>(por defecto)</em> mientras el egreso está en Borrador.
+        <figure class="detail">
+          <img src="assets/tsk757-05-detalle-borrador-de-la-categoria.png" alt="Detalle de Egreso GTO-00006 en Borrador, categoría Alquiler de oficina, Cuenta contable 4.2.1/02/18 - Alquiler inmuebles (de la categoría)" />
+          <figcaption>El alquiler de octubre, todavía en Borrador.</figcaption>
+        </figure>
+      </div></li>
+
+      <li><div class="step-body">
+        <strong>Confirmalo.</strong> Desde el menú de la fila o desde el detalle, como siempre. El
+        asiento va a la cuenta de la categoría contra Cuentas por Pagar, y en el detalle la cuenta
+        pasa a leerse <strong>del asiento</strong>, con su número.
+        <figure class="small">
+          <img src="assets/tsk757-06-confirmado-toast.png" alt="Mensaje Egreso confirmado correctamente" />
+        </figure>
+        <div class="side-by-side">
+          <figure>
+            <img src="assets/tsk757-06b-detalle-confirmado-del-asiento.png" alt="Detalle de Egreso GTO-00006 Confirmado, Cuenta contable 4.2.1/02/18 - Alquiler inmuebles (del asiento N° 44)" />
+            <figcaption>Confirmado: <span class="ui-text">(del asiento N° 44)</span>. Si más
+            adelante cambiás la cuenta de la categoría, este egreso sigue mostrando la cuenta con la
+            que se registró.</figcaption>
+          </figure>
+          <div>
+            <p style="margin-top:0">El asiento que se generó:</p>
+            <div class="entry">Gasto GTO-00006 - Alquiler de oficina octubre
+Debe   4.2.1/02/18 Alquiler inmuebles      350.000,00
+Haber  2.1.1/02/01 Acreedores Locales      350.000,00</div>
+            <p>Y el de los viáticos, cuya categoría no tiene cuenta, fue a la cuenta de egresos por
+            defecto:</p>
+            <div class="entry">Gasto GTO-00008 - Viáticos obra Neuquén
+Debe   4.2.1/03/10 Gastos Varios - Adm.     42.300,00
+Haber  2.1.1/02/01 Acreedores Locales       42.300,00</div>
+          </div>
+        </div>
+        <figure>
+          <img src="assets/tsk757-07-asiento-cuenta-categoria.png" alt="Contabilidad → Asientos: asiento 44 Gasto GTO-00006 - Alquiler de oficina octubre desplegado, con 4.2.1/02/18 - Alquiler inmuebles al Debe por $ 350.000,00 y 2.1.1/02/01 - Acreedores Locales (Ctes.) al Haber" />
+          <figcaption>El mismo asiento en Contabilidad → Asientos. Como todos los asientos
+          automáticos, nace en <span class="ui-text">Borrador</span> y hay que
+          <strong>Registrarlo</strong> para que sume en el Mayor y el Balance.</figcaption>
+        </figure>
+      </div></li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>4. Qué hay que configurar</h2>
+    <div class="callout config">
+      <h3>La cuenta de egresos por defecto, como respaldo</h3>
+      <p>En Contabilidad → Configuración, sección <span class="ui-text">Cuentas de Resultado</span>,
+      el campo que antes se llamaba "Cuenta de Gastos Operativos" ahora es
+      <span class="ui-text">Cuenta de egresos por defecto</span>. Se usa solo para los egresos cuya
+      categoría no tiene cuenta propia. Si todas las categorías que usás tienen la suya, puede
+      quedar vacío; si alguna no tiene, tiene que estar cargado (si no, ese egreso no se confirma y
+      el mensaje te ofrece las dos salidas: asignarle cuenta a la categoría o completar este
+      campo).</p>
+    </div>
+    <figure>
+      <img src="assets/tsk757-09-ajustes-cuenta-egresos-por-defecto.png" alt="Contabilidad → Configuración, sección Cuentas de Resultado: Cuenta de ventas por defecto, Cuenta de compras por defecto y Cuenta de egresos por defecto con 4.2.1/03/10 - Gastos Varios - Administración y la ayuda Se usa al confirmar egresos cuya categoría no tiene cuenta contable propia" />
+      <figcaption>El campo renombrado y su ayuda.</figcaption>
+    </figure>
+    <div class="callout warning" style="margin-top:10px">
+      <h3>Si la cuenta de una categoría se da de baja</h3>
+      <p>Si desactivás una cuenta que tiene asignada alguna categoría (o la convertís en cuenta
+      madre), los egresos de esa categoría <strong>no se confirman</strong> hasta que la corrijas.
+      El sistema <strong>no</strong> los manda "en silencio" a la cuenta por defecto, porque eso
+      escondería el error: te muestra un mensaje con la categoría y la cuenta, y el egreso queda en
+      Borrador.</p>
+      <figure class="modal" style="margin-top:6px">
+        <img src="assets/tsk757-08-error-cuenta-inactiva-toast.png" alt="Mensaje de error: No se puede confirmar el gasto GTO-00007: la cuenta TSK757-DEMO - Gastos varios (dada de baja) de la categoría Tasas municipales no está activa o no es imputable. Corregila en Comercial → Egresos → Categorías." />
+        <figcaption>Ejemplo con una cuenta de prueba dada de baja asignada a "Tasas municipales".</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section>
+    <h2>5. Qué no cambia (y un aviso sobre presupuestos)</h2>
+    <div class="callout warning">
+      <h3>Presupuestos armados sobre la cuenta general</h3>
+      <p>El presupuesto se controla <strong>por cuenta</strong>. Si hoy tenés un presupuesto sobre
+      la cuenta de egresos por defecto (la vieja "Gastos Operativos") y le asignás cuenta propia a,
+      por ejemplo, "Alquiler de oficina", los alquileres que confirmes de ahí en adelante
+      <strong>dejan de sumar en ese presupuesto</strong> y suman en el de "Alquiler inmuebles". Es lo
+      correcto contablemente, pero conviene revisar los presupuestos: bajar el de la cuenta general y
+      crear uno para cada cuenta nueva que quieras controlar. El aviso del 80% al confirmar también
+      mira la cuenta a la que va el egreso.</p>
+    </div>
+    <div class="no-change-list">
+      <div class="no-change-item">
+        <span class="check">✓</span>
+        <span>Los <strong>egresos ya confirmados</strong> no se tocan: su asiento queda como se hizo.
+        Asignar o cambiar la cuenta de una categoría afecta solo lo que confirmes de acá en adelante.
+        Si querés reclasificar lo ya registrado, se hace con un asiento manual.</span>
+      </div>
+      <div class="no-change-item">
+        <span class="check">✓</span>
+        <span>Las <strong>categorías sin cuenta</strong> funcionan igual que antes, contra la cuenta
+        de egresos por defecto.</span>
+      </div>
+      <div class="no-change-item">
+        <span class="check">✓</span>
+        <span>El Haber sigue siendo <strong>Cuentas por Pagar</strong>, y el pago del egreso por orden
+        de pago no cambia.</span>
+      </div>
+      <div class="no-change-item">
+        <span class="check">✓</span>
+        <span>El gráfico del Dashboard que agrupa los egresos <strong>por categoría</strong> sigue
+        igual.</span>
+      </div>
+      <div class="no-change-item">
+        <span class="check">✓</span>
+        <span>Los <strong>permisos</strong> son los mismos: quien puede crear o editar egresos puede
+        crear o editar categorías y su cuenta.</span>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>6. Qué queda pendiente y qué te queremos preguntar</h2>
+    <div class="callout config">
+      <h3>"Impuestos": ¿a qué te referías?</h3>
+      <p>El ticket se llama "Gastos e Impuestos". Con este cambio ya podés crear categorías como
+      "Tasas municipales", "Patentes", "Impuesto inmobiliario" o "Ingresos Brutos" y mandar cada una
+      a su cuenta de impuestos. Lo que el egreso <strong>no</strong> hace es discriminar IVA ni
+      percepciones: registra un importe único. Si un comprobante trae IVA discriminado, la forma
+      correcta es cargarlo como <strong>factura de compra</strong> (sin ítem, si no es mercadería),
+      que sí separa el IVA crédito fiscal y las percepciones y alimenta el Libro IVA Compras.</p>
+      <p>¿Era eso lo que buscabas, o "Impuestos" apuntaba a otra cosa (por ejemplo, IVA en los
+      egresos, o los impuestos bancarios, que ya tienen cuenta por concepto en los movimientos de
+      fondos)? Con tu respuesta vemos si hace falta algo más.</p>
+    </div>
+    <div class="callout config">
+      <h3>¿Cuentas de activo en las categorías?</h3>
+      <p>Por ahora la categoría solo admite cuentas de <strong>gastos</strong>. Si cargás como egreso
+      cosas que en realidad son activo (un seguro anual pagado por adelantado, anticipos de
+      impuestos), avisanos y lo ampliamos.</p>
+    </div>
+    <ul class="plain">
+      <li><strong>Centro de costo en los egresos</strong>: es el ticket 738, que viene a continuación
+      y se apoya en esto mismo (la línea del gasto del asiento quedó preparada para llevar el centro
+      de costo).</li>
+      <li><strong>En el celular</strong> la ventana de categorías se ve bien, pero el listado de
+      Egresos todavía se corre hacia el costado por la paginación de las tablas; ese arreglo es
+      general para todos los listados y llega con otra entrega que está en revisión (ticket 726).</li>
+    </ul>
+  </section>
+
+  <footer class="doc-footer">
+    TSK-757 — Cada tipo de gasto, a su cuenta contable · Comercial → Egresos → Categorías · Contabilidad → Configuración
+  </footer>
+
+</div>
+
+</body>
+</html>

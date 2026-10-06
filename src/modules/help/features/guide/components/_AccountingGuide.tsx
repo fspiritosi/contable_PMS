@@ -249,7 +249,13 @@ export function _AccountingGuide() {
                   en cada concepto de un movimiento de Gastos e impuestos
                   bancarios; podés cambiarla en cada fila)
                 </li>
-                <li>Cuenta de Gastos Operativos: la usa el asiento de cada egreso</li>
+                <li>
+                  Cuenta de egresos <strong>por defecto</strong>: la usa el
+                  asiento de los egresos cuya categoría no tiene cuenta propia
+                  (cada categoría puede tener la suya en Comercial → Egresos →
+                  Categorías). Si todas las categorías que usás tienen cuenta,
+                  puede quedar sin asignar
+                </li>
                 <li>
                   Retenciones (IVA, Ganancias, IIBB, SUSS - emitidas y
                   sufridas): cada tipo que uses en recibos u órdenes de pago
@@ -333,7 +339,10 @@ export function _AccountingGuide() {
               </TableRow>
               <TableRow>
                 <TableCell className="font-medium">Egreso</TableCell>
-                <TableCell>Cuenta de Gastos Operativos y Cuentas por Pagar</TableCell>
+                <TableCell>
+                  La cuenta de la categoría del egreso (o la Cuenta de egresos
+                  por defecto, si la categoría no tiene) y Cuentas por Pagar
+                </TableCell>
               </TableRow>
             </TableBody>
           </Table>
@@ -673,6 +682,13 @@ export function _AccountingGuide() {
             <li>
               Los montos ejecutados se calculan automáticamente desde los
               asientos contables registrados en la cuenta
+            </li>
+            <li>
+              Los egresos (Comercial → Egresos) consumen el presupuesto de la
+              cuenta a la que se imputan: la de su categoría o, si no tiene, la
+              cuenta de egresos por defecto. Si le asignás cuenta a una
+              categoría, sus egresos nuevos dejan de sumar en el presupuesto de
+              la cuenta por defecto y pasan a la de la categoría
             </li>
           </ul>
 

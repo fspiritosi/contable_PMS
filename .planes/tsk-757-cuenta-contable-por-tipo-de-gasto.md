@@ -1,7 +1,7 @@
 # TSK-757 — Cuenta contable por tipo de gasto
 
 **Fecha de inicio:** 2026-10-06
-**Estado:** Implementación en progreso (Fase 7 de 9 completada)
+**Estado:** Implementación en progreso (Fase 8 de 9 completada)
 
 ---
 
@@ -673,29 +673,29 @@ Otras decisiones de esta planificación:
 
 - **Objetivo:** entregables obligatorios del ticket.
 - **Tareas:**
-  - [ ] `src/modules/help/features/guide/components/_CommercialGuide.tsx` (Egresos :1125-1230):
+  - [x] `src/modules/help/features/guide/components/_CommercialGuide.tsx` (Egresos :1125-1230):
         nueva sub-sección "Categorías y cuenta contable" (botón "Categorías", asignar/limpiar la
         cuenta, regla categoría → por defecto, el hint del alta y la cuenta en el detalle);
         actualizar "Qué revisa el sistema al confirmar" (:1202, :1214) con la cuenta resuelta, el
         bloqueo si la cuenta de la categoría no es imputable, y que el control presupuestario mira
         esa cuenta (R1); aclarar que los egresos ya confirmados no cambian (D8) y que los
         comprobantes con IVA van como factura de compra (D1).
-  - [ ] `src/modules/help/features/guide/components/_AccountingGuide.tsx:252, :336`: label
+  - [x] `src/modules/help/features/guide/components/_AccountingGuide.tsx:252, :336`: label
         "Cuenta de egresos por defecto" y cuándo se usa.
-  - [ ] `docs/modules/commercial.md` (:631-638 "Confirmar Gasto", :740 tabla de asientos,
+  - [x] `docs/modules/commercial.md` (:631-638 "Confirmar Gasto", :740 tabla de asientos,
         :947-948 requisitos, tabla de archivos ~:991): resolución, `expense-accounts.ts`, nuevas
         piezas del modal, actions con `ActionResult`, `getExpenseCategoryAccounts`, nota para
         TSK-738 (`buildExpenseDebitLine`).
-  - [ ] `docs/modules/accounting.md:259, :271`: label y semántica "por defecto"; presupuestos por
+  - [x] `docs/modules/accounting.md:259, :271`: label y semántica "por defecto"; presupuestos por
         cuenta resuelta.
-  - [ ] `docs/architecture/data-model.md:451`: `ExpenseCategory.accountId` (FK `Account`,
+  - [x] `docs/architecture/data-model.md:451`: `ExpenseCategory.accountId` (FK `Account`,
         `SET NULL`) e inversa `Account.expenseCategories`.
-  - [ ] `scripts/guia-presentacion/tsk-757.html` (nuevo, patrón `tsk-728.html`/`tsk-724c.html`):
+  - [x] `scripts/guia-presentacion/tsk-757.html` (nuevo, patrón `tsk-728.html`/`tsk-724c.html`):
         qué pidió la clienta, qué cambió (antes/después), paso a paso con ejemplo (Alquiler →
         5.2.03), configuración necesaria, qué **no** cambia (egresos confirmados, IVA), avisos
         (presupuestos sobre la cuenta por defecto dejan de ver esos egresos) y las preguntas
         abiertas a la clienta (D1 "Impuestos", D2 cuentas de activo).
-  - [ ] PDF: `node scripts/guia-presentacion/generar-pdf.mjs scripts/guia-presentacion/tsk-757.html
+  - [x] PDF: `node scripts/guia-presentacion/generar-pdf.mjs scripts/guia-presentacion/tsk-757.html
         docs/presentaciones/TSK-757-cuenta-por-tipo-de-gasto.pdf`; abrirlo y revisar capturas.
 - **Archivos:** `_CommercialGuide.tsx`, `_AccountingGuide.tsx`, `docs/modules/commercial.md`,
   `docs/modules/accounting.md`, `docs/architecture/data-model.md` (modificados);
@@ -1795,7 +1795,37 @@ constantes `COMPANY_ID`, `USER_ID`, `SUPPLIER_ID`, `EMAIL`/`PASSWORD`, `BASE` po
   - No apareció ningún bug: sin commit `fix`.
 
 ### Fase 8: Documentación — guía in-app, docs y presentación
-- **Estado:** Pendiente
+- **Estado:** Completada
+- **Archivos modificados:**
+  - `src/modules/help/features/guide/components/_CommercialGuide.tsx` — Egresos: sub-sección "Categorías y
+    cuenta contable" (botón Categorías / Gestionar, asignar o quitar la cuenta, "Por defecto", aviso "Se
+    imputa a…", dato "Cuenta contable" del detalle con su origen); "Qué revisa el sistema al confirmar"
+    reescrito (categoría → cuenta de egresos por defecto; bloqueos por falta de cuenta, cuenta de categoría
+    inactiva sin fallback silencioso y Pagar); presupuesto por la cuenta a la que va el egreso (R1); egresos
+    confirmados no cambian (D8); IVA → factura de compra (D1). Se quitó la frase vieja "botón de
+    configuración en la lista de egresos".
+  - `_AccountingGuide.tsx` — lista de cuentas de Configuración y tabla de cuentas por comprobante con
+    "Cuenta de egresos por defecto"; nota en Presupuestos sobre los egresos que pasan a la cuenta de su
+    categoría.
+  - `docs/modules/commercial.md` — Confirmar Gasto (pre-validación, presupuesto con la cuenta resuelta,
+    asiento), tabla de asientos, mapeo `expensesAccount`, sección nueva "Cuenta del egreso por categoría
+    (TSK-757)" (helper, `buildExpenseDebitLine` para TSK-738, ABM con `ActionResult`, combo con
+    `includeIds`, hint y detalle, fuera de alcance), Reglas de validación y Archivos clave.
+  - `docs/modules/accounting.md` — fila `expensesAccountId` ("Egresos por defecto"), labels y nota de
+    presupuestos.
+  - `docs/architecture/data-model.md` — `ExpenseCategory.accountId` (FK, `SetNull`, índice, inversa
+    `Account.expenseCategories`, migración).
+  - `scripts/guia-presentacion/tsk-757.html` (nuevo, CSS de `tsk-724c.html`) y
+    `docs/presentaciones/TSK-757-cuenta-por-tipo-de-gasto.pdf` (nuevo, 6 páginas A4).
+- **Notas:**
+  - El label viejo "Cuenta de Gastos Operativos" ya no aparece en guías ni docs (solo como "antes se
+    llamaba…"); `tsk-728.*` no se tocaron.
+  - PDF revisado como imagen (todas las páginas en miniatura y 2 a 90 dpi): ejemplo Alquiler de oficina →
+    4.2.1/02/18 Alquiler inmuebles (asiento N° 44 de la captura), viáticos a la por defecto, configuración,
+    cuenta inactiva, aviso de presupuestos, qué no cambia, preguntas abiertas (Impuestos/IVA, cuentas de
+    activo) y pendientes (TSK-738 centro de costo, listado en el celular → TSK-726).
+  - Calidad: `check-types` 219; eslint sin errores en las dos guías; `npm run test` 50 archivos / 633 tests
+    en verde.
 
 ### Fase 9: Verificación final
 - **Estado:** Pendiente
