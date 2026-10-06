@@ -1,7 +1,7 @@
 # TSK-757 — Cuenta contable por tipo de gasto
 
 **Fecha de inicio:** 2026-10-06
-**Estado:** Diseño completado
+**Estado:** Implementación en progreso (Fase 1 de 9 completada)
 
 ---
 
@@ -417,9 +417,9 @@ Otras decisiones de esta planificación:
 - **Objetivo:** `ExpenseCategory` con cuenta contable opcional; migración aditiva; cliente
   regenerado. Sin cambio de comportamiento.
 - **Tareas:**
-  - [ ] Medir línea base: `npm run check-types 2>&1 | grep -c "error TS"` (esperado 219) y
+  - [x] Medir línea base: `npm run check-types 2>&1 | grep -c "error TS"` (esperado 219) y
         `npm run test` (anotar cuántos pasan); registrarlas en la sección 4.
-  - [ ] `prisma/schema.prisma:3645-3659` (`model ExpenseCategory`), después de `isActive`:
+  - [x] `prisma/schema.prisma:3645-3659` (`model ExpenseCategory`), después de `isActive`:
         ```prisma
         // TSK-757: cuenta contable de la categoría; null = usa la cuenta de egresos por defecto de AccountingSettings
         accountId   String?  @map("account_id") @db.Uuid
@@ -427,18 +427,18 @@ Otras decisiones de esta planificación:
         relación `account Account? @relation("ExpenseCategoryAccount", fields: [accountId],
         references: [id], onDelete: SetNull)` junto a `company`/`expenses`, y
         `@@index([accountId])` antes de `@@map`.
-  - [ ] `prisma/schema.prisma` (`model Account`, después de `depreciationsAsDepreciationExpense`,
+  - [x] `prisma/schema.prisma` (`model Account`, después de `depreciationsAsDepreciationExpense`,
         ~:360): inversa `expenseCategories ExpenseCategory[] @relation("ExpenseCategoryAccount")`
         con comentario `// TSK-757`.
-  - [ ] Con el docker `contable-pms-db` arriba: `npm run db:migrate -- --name
+  - [x] Con el docker `contable-pms-db` arriba: `npm run db:migrate -- --name
         tsk_757_expense_category_account`. Verificar que
         `prisma/migrations/<timestamp>_tsk_757_expense_category_account/migration.sql` tenga
         **solo** 1 `ALTER TABLE "expense_categories" ADD COLUMN "account_id" UUID`, 1
         `CREATE INDEX` y 1 `ADD CONSTRAINT … FOREIGN KEY ("account_id") REFERENCES
         "accounts"("id") ON DELETE SET NULL ON UPDATE CASCADE`. Sin `UPDATE`, sin backfill (D8).
         Si `migrate dev` detecta drift ajeno, no resetear: `npx prisma migrate status`.
-  - [ ] `npm run db:generate`; `npm run check-types` sigue en 219.
-  - [ ] Anotar en la sección 4 que en producción la aplica el `docker-entrypoint.sh` al deployar
+  - [x] `npm run db:generate`; `npm run check-types` sigue en 219.
+  - [x] Anotar en la sección 4 que en producción la aplica el `docker-entrypoint.sh` al deployar
         (memoria `produccion-dokploy-scripts-db`) y que es aditiva (no afecta categorías
         existentes: quedan "por defecto").
 - **Archivos:** `prisma/schema.prisma` (modificar);
@@ -1500,7 +1500,49 @@ constantes `COMPANY_ID`, `USER_ID`, `SUPPLIER_ID`, `EMAIL`/`PASSWORD`, `BASE` po
 - **Línea base**: `check-types` ≤ 219 errores; `eslint` sin errores en archivos tocados.
 
 ## 4. Implementación
-_Pendiente - ejecutar `/implementar tsk-757-cuenta-contable-por-tipo-de-gasto`_
+
+### Fase 1: Esquema y migración
+- **Estado:** Completada
+- **Archivos modificados:**
+  - `prisma/schema.prisma` — `ExpenseCategory.accountId` (`account_id`, uuid nullable), relación
+    `account` (`ExpenseCategoryAccount`, `onDelete: SetNull`), `@@index([accountId])`; inversa
+    `Account.expenseCategories`.
+  - `prisma/migrations/20261006214031_tsk_757_expense_category_account/migration.sql` (nuevo).
+- **Notas:**
+  - Línea base medida antes de tocar nada: `check-types` = 219 errores; `npx vitest run` = 48
+    archivos / 601 tests en verde.
+  - La migración se generó con `prisma migrate dev --create-only` (para revisar el SQL antes de
+    aplicarla) y después `prisma migrate dev`. El SQL coincide **exactamente** con el esperado en
+    3.2 (ADD COLUMN, CREATE INDEX, FK `ON DELETE SET NULL ON UPDATE CASCADE`); sin drift ajeno, sin
+    `UPDATE` ni backfill. `prisma migrate status`: "Database schema is up to date!".
+  - Cliente regenerado (`npm run db:generate`); `check-types` sigue en 219. Dev server de :3010
+    reiniciado para tomar el cliente nuevo.
+  - Producción: la aplica `docker-entrypoint.sh` al deployar (`prisma migrate deploy`). Es aditiva:
+    las categorías existentes quedan con `account_id NULL` = "por defecto", mismo asiento que hoy.
+
+### Fase 2: Helpers puros de resolución y validador (TDD)
+- **Estado:** Pendiente
+
+### Fase 3: ABM de categorías en el servidor (cuenta + `ActionResult`)
+- **Estado:** Pendiente
+
+### Fase 4: Confirmación y asiento con la cuenta resuelta
+- **Estado:** Pendiente
+
+### Fase 5: UI de categorías — modal partido y acceso desde el listado
+- **Estado:** Pendiente
+
+### Fase 6: La cuenta visible en el egreso (D6)
+- **Estado:** Pendiente
+
+### Fase 7: Verificación en navegador y capturas
+- **Estado:** Pendiente
+
+### Fase 8: Documentación — guía in-app, docs y presentación
+- **Estado:** Pendiente
+
+### Fase 9: Verificación final
+- **Estado:** Pendiente
 
 ## 5. Verificación
 _Pendiente - ejecutar `/verificar tsk-757-cuenta-contable-por-tipo-de-gasto`_

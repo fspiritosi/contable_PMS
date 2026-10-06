@@ -358,6 +358,8 @@ model Account {
   depreciationsAsFixedAsset          VehicleDepreciation[]  @relation("DepreciationFixedAssetAccount")
   depreciationsAsAccumulatedDepr     VehicleDepreciation[]  @relation("DepreciationAccumulatedDepreciationAccount")
   depreciationsAsDepreciationExpense VehicleDepreciation[]  @relation("DepreciationDepreciationExpenseAccount")
+  // TSK-757: categorías de egreso que imputan a esta cuenta
+  expenseCategories                  ExpenseCategory[]      @relation("ExpenseCategoryAccount")
   settingsAsPercIvaCollected         AccountingSettings[]   @relation("PercIvaCollectedAccount")
   settingsAsPercIibbCollected        AccountingSettings[]   @relation("PercIibbCollectedAccount")
   settingsAsPercMunicipalCollected   AccountingSettings[]   @relation("PercMunicipalCollectedAccount")
@@ -3648,13 +3650,17 @@ model ExpenseCategory {
   description String?
   companyId   String   @map("company_id") @db.Uuid
   isActive    Boolean  @default(true) @map("is_active")
+  // TSK-757: cuenta contable de la categoría; null = usa la cuenta de egresos por defecto de AccountingSettings
+  accountId   String?  @map("account_id") @db.Uuid
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   company  Company   @relation(fields: [companyId], references: [id])
+  account  Account?  @relation("ExpenseCategoryAccount", fields: [accountId], references: [id], onDelete: SetNull)
   expenses Expense[]
 
   @@unique([companyId, name])
+  @@index([accountId])
   @@map("expense_categories")
 }
 
