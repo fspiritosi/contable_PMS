@@ -1,7 +1,7 @@
 # TSK-760 — Cierre contable: el cierre anual no funciona y el bloqueo de períodos se saltea
 
 **Fecha de inicio:** 2026-10-06
-**Estado:** Planificación completada
+**Estado:** Diseño completado
 
 ---
 
@@ -1303,7 +1303,1265 @@ Total coherente con los ~12 puntos de 1.7 (escala de 758): el grueso del riesgo 
   interpretan por día UTC; no se reescriben).
 
 ## 3. Diseño
-_Pendiente - ejecutar `/disenar tsk-760-cierre-contable`_
+
+Rutas abreviadas como en 2 (`ACC/`, `UT/`, `INT/`, `TRE/`, `DEP/`, `GP/`). Todo lo que sigue se
+verificó contra el código de la rama (2026-10-06); las líneas citadas son las de hoy.
+
+**Hallazgos de esta etapa que cambian o precisan el plan** (detalle en cada sección):
+
+| # | Hallazgo | Dónde | Efecto en el diseño |
+|---|---|---|---|
+| H1 | Prisma 7 **no** envuelve la migración en una transacción en PostgreSQL (lo hace recién Prisma 8; verificado con `ctx7`, docs `/prisma/web`). | `docker-entrypoint.sh:16` corre `migrate deploy` | La migración abre y cierra `BEGIN; … COMMIT;` explícitos. `ALTER TABLE … DISABLE TRIGGER` es DDL transaccional: si algo falla, el trigger queda habilitado. |
+| H2 | **B25 (nuevo):** "Editar" el asiento de saldos de apertura borra las líneas de un asiento POSTED (`deleteMany` + `update`), y el trigger `trg_journal_entry_line_immutable` lo rechaza siempre. La edición nunca funcionó. | `opening-balances/actions.server.ts:400-433`, UI `_AccountBalancesForm.tsx:185` | Reemplazar = revertir el asiento vigente + crear uno nuevo, ambos en el período OPENING (3.3.6, #19). |
+| H3 | `saveOpeningBalanceEntry` y `getOpeningBalancesPageData` buscan la apertura existente por `date = settings.fiscalYearStart` exacto. Al normalizar las fechas (D8) dejarían de encontrarla y permitirían duplicarla. | `opening-balances/actions.server.ts:112-113`, `:405-406`, `:441-442` | Se busca por `fiscalYearId` del ejercicio + descripción + POSTED. |
+| H4 | Las aperturas generadas también distorsionan la **liquidación de IVA** de enero (suma movimientos POSTED del mes sobre cuentas de IVA), la diferencia de cambio y el ajuste por inflación (saldos acumulados), no solo Balance, Sumas y Saldos y Mayor. La refundición distorsiona el control de presupuesto de gastos de diciembre. | `vat-settlement/actions.server.ts:58-79`, `exchange-rates:205-216`, `inflation-adjustment:170-200`, `INT/commercial/index.ts:1130-1145`, `budgets/actions.server.ts:80-95` | La exclusión de D7 se aplica con dos fragmentos SQL compartidos en todas esas consultas (3.3.8). |
+| H5 | El cierre anual filtra `a.is_active = true`: una cuenta de resultado desactivada con saldo queda fuera de la refundición (resultado mal calculado) y fuera de la apertura (desbalance). Con ingresos = gastos, la línea de Resultado sale 0/0 y choca con el CHECK. | `fiscal-year-close/actions.server.ts:147`, `:204`, `:183-189` | Sin filtro de cuenta activa; la línea de Resultado se omite si la diferencia es 0. |
+| H6 | `saveAccountingSettings` la llama también `_CommercialIntegrationForm` reenviando las fechas del ejercicio leídas de la DB. Con D11 eso mezclaría "guardar cuentas" con "cambiar el ejercicio". | `_CommercialIntegrationForm.tsx:328-339` | Se separa en `saveFiscalYearSettings` (fechas) y `saveAccountingSettings` (solo cuentas). |
+| H7 | `entries/validators/index.ts` y `UT/balances.ts` tienen `'use server'`: cada función exportada es un endpoint invocable desde el navegador. | `validators/index.ts:1`, `balances.ts:1` | Los helpers nuevos **no** llevan `'use server'` y abren con `import 'server-only'`. Se quita `'use server'` de `validators/index.ts` (solo lo importan actions). `balances.ts` se deja (fuera de alcance, anotado). |
+| H8 | El duplicado `ACC/shared/validators/index.ts:128` (`validateJournalEntryDate`) no tiene callers (`accounts/actions.server.ts` no lo importa). | grep | Se borra. |
+| H9 | No hay acción para editar ni eliminar un asiento manual en borrador. Un borrador que no se puede registrar (cuenta que dejó de ser imputable) bloquea para siempre el cierre de su mes con D2 "todo o nada". | `entries/actions.server.ts` | Se mantiene D2, con mensaje que nombra el asiento y la cuenta; ver decisión a confirmar C6. |
+| H10 | La transacción interactiva de Prisma corta a los 5 s por defecto: "Registrar N borradores y cerrar" y el cierre anual pueden excederlo. | — | `$transaction(fn, { timeout: 30_000, maxWait: 10_000 })` en esas dos actions. |
+
+### 3.1 Arquitectura de la solución
+
+#### 3.1.1 Capas
+
+```
+┌──────────────────────────────── Client Components (prefijo _) ─────────────────────────────────┐
+│ _CreateEntryModal  _PostEntryDialog  _ReverseEntryDialog   _PeriodLockingPanel  _ClosePeriodDialog │
+│ _ClosePreviewDialog  _FiscalYearStatus  _AccountBalancesForm  _CreateBankMovementDialog  …         │
+│        useQuery / useMutation  →  if (!r.success) toast.error(r.error)                             │
+└───────────────────────────────────────────────┬───────────────────────────────────────────────────┘
+                                                │ Server Actions → ActionResult<T>
+┌───────────────────────────────────────────────▼───────────────────────────────────────────────────┐
+│ Actions (checkPermission + getActiveCompanyId + prisma.$transaction + toActionResult)              │
+│  ACC/entries  ACC/settings (close/reopen mes, ejercicio)  ACC/fiscal-year-close  ACC/recurring …   │
+│  INT/commercial · INT/equipment (helpers con tx del llamador)  TRE/fund-movements  TRE/bank-mov.   │
+│  DEP/depreciation                                                                                   │
+└───────────────────────────────────────────────┬───────────────────────────────────────────────────┘
+                                                │ tx: Prisma.TransactionClient (sin $transaction ni permisos propios)
+┌───────────────────────────────────────────────▼───────────────────────────────────────────────────┐
+│ Núcleo UT/ (server-only)                                                                            │
+│  period-lock.ts        lockAccountingSettingsTx · ensureFiscalYearTx · assertPeriodOpen            │
+│                        syncLockedUntilDateTx · createFiscalYearWithPeriodsTx                       │
+│  journal-entry-tx.ts   nextEntryNumberTx · createJournalEntryTx · postJournalEntryTx               │
+│                        reverseJournalEntryTx                                                       │
+│  entry-document-link.ts getEntryDocumentLink · entriesWithoutDocumentWhere                          │
+│  closing-entries.ts    NOT_CLOSE_GENERATED_OPENING_SQL · NOT_CLOSING_ENTRY_SQL · *Where (Prisma)   │
+│ Núcleo UT/ (puro, testeable sin DB, usable en cliente)                                             │
+│  utc-month.ts  period-closure.ts  journal-entry-lines.ts  fiscal-year-close-math.ts                │
+└───────────────────────────────────────────────┬───────────────────────────────────────────────────┘
+                                                │
+┌───────────────────────────────────────────────▼───────────────────────────────────────────────────┐
+│ PostgreSQL: accounting_settings (fila = lock por empresa + contador) · fiscal_years ·             │
+│ accounting_periods · journal_entries/lines (triggers de inmutabilidad, CHECK 0/0)                  │
+└───────────────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+Reexportación para otros módulos (D9): `src/modules/accounting/features/integrations/core/index.ts`
+(nuevo) reexporta `createJournalEntryTx`, `assertPeriodOpen`, `postJournalEntryTx` y los tipos
+`JournalEntryLineDraft`, `CreatedJournalEntry`. `TRE/` y `DEP/` importan de
+`@/modules/accounting/features/integrations/core`, igual que hoy importan de `integrations/commercial`
+y `integrations/equipment`.
+
+**Regla de lock (única forma de serializar por empresa):** toda operación que crea, registra o
+anula asientos, o que cambia el estado de un período, toma **primero** la fila de
+`accounting_settings` de la empresa con `SELECT … FOR UPDATE` (`lockAccountingSettingsTx`) y recién
+después lee ejercicios y períodos. La numeración (`UPDATE … RETURNING` sobre la misma fila) ya
+tomaba ese lock; ahora también lo toman el cierre y la reapertura de meses, el cierre anual y
+`saveFiscalYearSettings`. Orden de locks: documentos propios del creador → `accounting_settings` →
+períodos/asientos. El cierre de meses no toca documentos, así que no hay ciclo posible.
+
+#### 3.1.2 Flujo "crear asiento" (cualquiera de los 20 caminos)
+
+```
+action ─ checkPermission ─ getActiveCompanyId ─ validaciones de solo lectura (cuentas, auxiliares)
+  └─ prisma.$transaction(tx =>
+       [lógica propia del documento: estados, saldos de banco, etc.]
+       createJournalEntryTx(tx, { companyId, date, description, lines, status, createdBy, periodType? })
+         ├─ validateEntryLines(lines)                      (puro: ≥2 líneas, sin 0/0, sin negativos, balance)
+         ├─ assertAccountsUsableTx(tx, companyId, ids)     (de la empresa y hojas)
+         ├─ assertPeriodOpen(tx, companyId, date, { periodType })
+         │    ├─ lockAccountingSettingsTx  ── SELECT … FROM accounting_settings … FOR UPDATE
+         │    ├─ findFiscalYearForDateTx   ── si no hay: (lockedUntil cubre la fecha → "período cerrado")
+         │    │                                          sino ensureFiscalYearTx (crea el siguiente o rechaza)
+         │    ├─ findPeriodTx (MONTHLY del mes UTC, u OPENING/CLOSING por tipo); si falta → ensurePeriodsTx
+         │    └─ evaluatePeriodClosure (puro, OR de las 3 condiciones) → BusinessError o { fiscalYearId, periodId }
+         ├─ nextEntryNumberTx  ── UPDATE accounting_settings … RETURNING (salta números ocupados)
+         └─ tx.journalEntry.create({ number, fiscalYearId, periodId, status, postDate?, lines: todas las columnas })
+       [documento.journalEntryId = entry.id]
+     )
+  └─ catch → toActionResult(error, contexto)
+```
+
+#### 3.1.3 Flujo "registrar" (DRAFT → POSTED)
+
+```
+postJournalEntry(entryId) → $transaction(tx => postJournalEntryTx(tx, { companyId, entryId, userId }))
+  ├─ lee el asiento con líneas (de la empresa, DRAFT)
+  ├─ assertPeriodOpen(tx, companyId, entry.date)        (incluye FY cerrado: corrige B4)
+  ├─ validateEntryLines(lines) + assertAccountsUsableTx
+  └─ UPDATE status = POSTED, postDate = now, fiscalYearId/periodId = los resueltos (corrige datos viejos)
+```
+
+#### 3.1.4 Flujo "cerrar mes" / "reabrir mes" (A1, D2, D10, B3, B5, B22)
+
+```
+closeAccountingPeriod({ year, month, postDrafts })
+  ├─ checkPermission(settings, update) [+ (entries, approve) si postDrafts]
+  └─ $transaction(tx =>                                        { timeout: 30 s }
+       lockAccountingSettingsTx
+       candidato = primer MONTHLY abierto de los FY abiertos (orden FY.number, year, month)
+       ≠ {year, month} → BusinessError "Solo se puede cerrar el primer mes abierto: MM/YYYY."
+       borradores = DRAFT con fecha (día UTC) dentro del mes
+       si hay y !postDrafts → BusinessError con cantidad y números
+       si postDrafts → para cada borrador (por número): postJournalEntryTx; el primero que falla
+                        aborta todo con "No se cerró MM/YYYY: el borrador N° X no se puede registrar. <motivo>"
+       UPDATE accounting_periods SET is_closed = true, closed_at, closed_by
+       syncLockedUntilDateTx  → locked_until_date = fin UTC del último mes cerrado contiguo
+     )
+
+reopenAccountingPeriod({ year, month })
+  └─ $transaction(tx =>
+       lockAccountingSettingsTx
+       el mes pedido pertenece a un FY cerrado → BusinessError (piso, B5)
+       candidato = último MONTHLY cerrado de los FY abiertos; ≠ pedido → BusinessError
+       UPDATE is_closed = false, closed_at = null, closed_by = null
+       syncLockedUntilDateTx  → si no quedan meses cerrados en FY abiertos: fin del último FY cerrado, o NULL
+     )
+```
+
+#### 3.1.5 Flujo "cerrar ejercicio" (B1, B4, B18–B21, B24, D12)
+
+```
+closeFiscalYear({ fiscalYearId })
+  ├─ checkPermission(fiscal-year-close, approve)
+  └─ $transaction(tx =>                                        { timeout: 30 s }
+       lockAccountingSettingsTx
+       fy = FY abierto más antiguo; ≠ fiscalYearId → BusinessError; ya cerrado → BusinessError
+       MONTHLY abiertos del FY → BusinessError con la lista (B1)
+       DRAFT con fecha en el FY → BusinessError con cantidad por mes y números (A5, B4)
+       resultAccountId de Ajustes → si falta, BusinessError
+       preview = computeClosePreviewTx(tx, companyId, fy)      (mismo cálculo que el preview)
+       preview.closingLines vacío → BusinessError (B20)
+       closing = createJournalEntryTx(POSTED, date = fin del FY, periodType CLOSING, líneas de refundición)
+       next = ensureFiscalYearTx(tx, settings, día siguiente al fin)   (reutiliza si existe: B24; meses UTC)
+       opening = preview.openingLines vacío ? null
+               : createJournalEntryTx(POSTED, date = inicio de next, periodType OPENING)  (balance verificado: B21)
+       UPDATE fiscal_years (fy):   is_closed, closed_at, closed_by, closing_entry_id
+       UPDATE accounting_periods:  todos los períodos de fy → is_closed = true
+       UPDATE fiscal_years (next): opening_entry_id = opening.id; su OPENING → is_closed = true
+       syncLockedUntilDateTx; Ajustes.fiscalYearStart/End = rango del FY abierto más antiguo
+     )
+```
+
+El orden importa: la refundición se crea con el FY todavía abierto (D12: `CLOSING` exige FY no
+cerrado y período CLOSING abierto) y recién después se marca cerrado.
+
+#### 3.1.6 Flujo "revertir" (A4, B10, D5, D6)
+
+```
+reverseJournalEntry({ entryId })
+  ├─ checkPermission(entries, approve)
+  └─ $transaction(tx =>
+       link = getEntryDocumentLink(tx, companyId, entryId)
+       link ≠ null → BusinessError "Este asiento pertenece a <documento>…" (D6)
+       reverseJournalEntryTx(tx, { companyId, entryId, date: hoy UTC 00:00, createdBy: userId })
+         ├─ lee original (POSTED, de la empresa) con todas las columnas de línea y el tipo de su período
+         ├─ assertPeriodOpen(original.date, { periodType: tipo del período original,
+         │                                    subject: "No se puede anular el asiento N° X (fecha DD/MM/YYYY)" })
+         ├─ reversal = createJournalEntryTx(POSTED, date, líneas invertidas con auxiliares, costCenterId,
+         │                                  currency/originalAmount/exchangeRate, originalEntryId)
+         │                (valida el período de la fecha de reversión)
+         └─ UPDATE original SET status = REVERSED, reversal_entry_id, reversed_by, reversed_at   (un solo UPDATE)
+     )
+```
+
+### 3.2 Modelos de datos
+
+#### 3.2.1 Cambios de schema: ninguno
+
+Se evaluó agregar un enum `JournalEntryType` (MANUAL / CLOSING / OPENING_GENERATED…) para
+identificar la apertura generada por el cierre (D7) y se descarta: el dato ya existe y es único.
+
+- **Apertura generada por cierre** = asiento cuyo id está en `fiscal_years.opening_entry_id`
+  (FK `@unique`, `schema.prisma:713-721`). Hoy solo la escribe `closeFiscalYear`; el saldo de
+  apertura manual (#19, descripción `'Asiento de Apertura'`) **no** la usa. Se fija como invariante
+  documentado (docs y comentario en `closing-entries.ts`): *`openingEntryId` solo lo escribe
+  `closeFiscalYear`*. Test que lo protege en 3.7.
+- **Refundición** = asiento cuyo id está en `fiscal_years.closing_entry_id`.
+- **Período** de cada asiento especial: refundición → `AccountingPeriod` `CLOSING`; apertura
+  generada y saldo de apertura manual → `OPENING`. `periodType` ya existe (`AccountingPeriodType`,
+  `schema.prisma:248-253`); `ADJUSTMENT` sigue sin uso.
+- Convenciones de datos (sin cambio de tipo de columna):
+  - `fiscal_years.start_date` = día UTC 00:00:00.000; `end_date` = último día 23:59:59.999 (D8).
+  - `accounting_settings.locked_until_date` = fin UTC (23:59:59.999) del último mes cerrado
+    contiguo, o `NULL`. Derivado: solo lo escribe `syncLockedUntilDateTx` (y la migración).
+  - `accounting_settings.fiscal_year_start/end` = rango del FY abierto más antiguo (derivado).
+  - OPENING/CLOSING: `year`/`month` reales del inicio y del fin del FY (D12).
+  - Un FY tiene exactamente un OPENING, un CLOSING y un MONTHLY por mes calendario entre
+    `start_date` y `end_date`, ni uno más.
+
+Opcional descartado: relación declarada `FundMovement.journalEntry` (queda en 758; la detección
+consulta la columna, 3.3.7).
+
+#### 3.2.2 Migración de datos `tsk_760_fiscal_years_backfill`
+
+Archivo: `prisma/migrations/<timestamp>_tsk_760_fiscal_years_backfill/migration.sql`, creado con
+`npx prisma migrate dev --create-only --name tsk_760_fiscal_years_backfill` y escrito a mano.
+Propiedades:
+
+- **Transaccional** con `BEGIN;`/`COMMIT;` explícitos (H1). Si falla, Prisma la marca como fallida
+  (P3009) pero la base queda como estaba; se corrige y se hace
+  `migrate resolve --rolled-back <nombre>` antes de redeployar.
+- **Idempotente:** cada paso tiene guarda (`NOT EXISTS`, `ON CONFLICT DO NOTHING`,
+  `IS DISTINCT FROM`). Correrla dos veces deja exactamente lo mismo.
+- **Segura para producción:** no borra asientos ni líneas; el trigger de inmutabilidad se
+  deshabilita solo alrededor del `UPDATE` de `fiscal_year_id`/`period_id` y se rehabilita en la
+  misma transacción; no toca `updated_at` de `journal_entries` (auditoría).
+- **Funciona sobre una base vacía** (shadow DB de `migrate dev`).
+- Informa con `RAISE NOTICE`. **Prisma no garantiza mostrar los NOTICE en el log del
+  contenedor**: la verificación oficial es correr el diagnóstico antes y después (3.7.6).
+- Requiere ser dueño de `journal_entries` (consulta 0 del diagnóstico). En local el usuario es
+  `postgres` (superusuario, dueño); en prod, `$POSTGRES_USER` del contenedor.
+- Toma `ACCESS EXCLUSIVE` sobre `journal_entries` por el `ALTER TABLE` mientras dura la
+  transacción (segundos). En un deploy con la réplica vieja todavía viva, sus escrituras de asientos
+  esperan; no fallan.
+
+```sql
+-- TSK-760: ejercicios y períodos para todas las empresas con Ajustes, bloqueo sincronizado
+-- (A1/D3), fiscal_year_id/period_id en todos los asientos (D4) y contador de numeración.
+-- Idempotente y transaccional. Ver .planes/tsk-760-cierre-contable.md §3.2.2.
+BEGIN;
+
+-- ===================================================================================
+-- Paso 1: normalizar los ejercicios existentes a días UTC (D8) y OPENING/CLOSING (D12)
+-- ===================================================================================
+UPDATE fiscal_years
+SET start_date = start_date::date,
+    end_date   = end_date::date + interval '1 day' - interval '1 millisecond',
+    updated_at = now()
+WHERE start_date <> start_date::date
+   OR end_date <> end_date::date + interval '1 day' - interval '1 millisecond';
+
+UPDATE accounting_periods p
+SET year = EXTRACT(YEAR FROM f.start_date)::int, month = EXTRACT(MONTH FROM f.start_date)::int,
+    updated_at = now()
+FROM fiscal_years f
+WHERE f.id = p.fiscal_year_id AND p.type = 'OPENING'
+  AND (p.year, p.month) IS DISTINCT FROM
+      (EXTRACT(YEAR FROM f.start_date)::int, EXTRACT(MONTH FROM f.start_date)::int);
+
+UPDATE accounting_periods p
+SET year = EXTRACT(YEAR FROM f.end_date)::int, month = EXTRACT(MONTH FROM f.end_date)::int,
+    updated_at = now()
+FROM fiscal_years f
+WHERE f.id = p.fiscal_year_id AND p.type = 'CLOSING'
+  AND (p.year, p.month) IS DISTINCT FROM
+      (EXTRACT(YEAR FROM f.end_date)::int, EXTRACT(MONTH FROM f.end_date)::int);
+
+-- ===================================================================================
+-- Paso 2: FY 1 para empresas con Ajustes y sin ejercicios (B2/B23), y ejercicios
+--         contiguos de 12 meses hasta cubrir hoy o el último asiento (tope: hoy + 1 año)
+-- ===================================================================================
+INSERT INTO fiscal_years (id, company_id, number, start_date, end_date, updated_at)
+SELECT gen_random_uuid(), s.company_id, 1,
+       s.fiscal_year_start::date,
+       s.fiscal_year_end::date + interval '1 day' - interval '1 millisecond',
+       now()
+FROM accounting_settings s
+WHERE NOT EXISTS (SELECT 1 FROM fiscal_years f WHERE f.company_id = s.company_id);
+
+DO $$
+DECLARE
+  r        record;
+  last_fy  record;
+  v_start  date;
+  creados  int := 0;
+BEGIN
+  FOR r IN
+    SELECT s.company_id,
+           LEAST(
+             GREATEST((now() AT TIME ZONE 'UTC')::date,
+                      COALESCE((SELECT max(j.date)::date FROM journal_entries j
+                                WHERE j.company_id = s.company_id),
+                               (now() AT TIME ZONE 'UTC')::date)),
+             ((now() AT TIME ZONE 'UTC') + interval '1 year')::date
+           ) AS objetivo
+    FROM accounting_settings s
+    WHERE EXISTS (SELECT 1 FROM fiscal_years f WHERE f.company_id = s.company_id)
+  LOOP
+    LOOP
+      SELECT id, number, end_date INTO last_fy
+      FROM fiscal_years WHERE company_id = r.company_id ORDER BY number DESC LIMIT 1;
+      EXIT WHEN last_fy.end_date::date >= r.objetivo;
+      v_start := last_fy.end_date::date + 1;
+      INSERT INTO fiscal_years (id, company_id, number, start_date, end_date, updated_at)
+      VALUES (gen_random_uuid(), r.company_id, last_fy.number + 1, v_start,
+              (v_start + interval '12 months') - interval '1 millisecond',
+              now());
+      creados := creados + 1;
+    END LOOP;
+  END LOOP;
+  RAISE NOTICE 'TSK-760 paso 2: ejercicios siguientes creados: %', creados;
+END $$;
+
+-- Períodos: OPENING, un MONTHLY por mes calendario del rango y CLOSING (ON CONFLICT = idempotente)
+INSERT INTO accounting_periods (id, fiscal_year_id, year, month, type, is_closed, updated_at)
+SELECT gen_random_uuid(), f.id, EXTRACT(YEAR FROM m)::int, EXTRACT(MONTH FROM m)::int,
+       'MONTHLY', false, now()
+FROM fiscal_years f
+CROSS JOIN LATERAL generate_series(date_trunc('month', f.start_date),
+                                   date_trunc('month', f.end_date),
+                                   interval '1 month') AS m
+ON CONFLICT (fiscal_year_id, year, month, type) DO NOTHING;
+
+INSERT INTO accounting_periods (id, fiscal_year_id, year, month, type, is_closed, updated_at)
+SELECT gen_random_uuid(), f.id, EXTRACT(YEAR FROM f.start_date)::int,
+       EXTRACT(MONTH FROM f.start_date)::int, 'OPENING', false, now()
+FROM fiscal_years f
+WHERE NOT EXISTS (SELECT 1 FROM accounting_periods p
+                  WHERE p.fiscal_year_id = f.id AND p.type = 'OPENING');
+
+INSERT INTO accounting_periods (id, fiscal_year_id, year, month, type, is_closed, updated_at)
+SELECT gen_random_uuid(), f.id, EXTRACT(YEAR FROM f.end_date)::int,
+       EXTRACT(MONTH FROM f.end_date)::int, 'CLOSING', false, now()
+FROM fiscal_years f
+WHERE NOT EXISTS (SELECT 1 FROM accounting_periods p
+                  WHERE p.fiscal_year_id = f.id AND p.type = 'CLOSING');
+
+-- MONTHLY fuera del rango del FY (20260625 creaba siempre 12; el bug de 13 meses de
+-- closeFiscalYear): se borran solo si ningún asiento los referencia.
+DELETE FROM accounting_periods p
+USING fiscal_years f
+WHERE f.id = p.fiscal_year_id AND p.type = 'MONTHLY'
+  AND (make_date(p.year, p.month, 1) < date_trunc('month', f.start_date)::date
+       OR make_date(p.year, p.month, 1) > date_trunc('month', f.end_date)::date)
+  AND NOT EXISTS (SELECT 1 FROM journal_entries j WHERE j.period_id = p.id);
+
+-- ===================================================================================
+-- Paso 3: is_closed por unión (D3), FY cerrados, huecos y locked_until_date derivado
+-- ===================================================================================
+DO $$
+DECLARE n_union int; n_fy int; n_hueco int; n_lock int;
+BEGIN
+  -- 3a. unión: is_closed actual O fin_del_mes <= locked_until_date (por día)
+  UPDATE accounting_periods p
+  SET is_closed = true, closed_at = COALESCE(p.closed_at, now()),
+      closed_by = COALESCE(p.closed_by, 'migracion-tsk760'), updated_at = now()
+  FROM fiscal_years f JOIN accounting_settings s ON s.company_id = f.company_id
+  WHERE p.fiscal_year_id = f.id AND p.type = 'MONTHLY' AND NOT p.is_closed
+    AND s.locked_until_date IS NOT NULL
+    AND (make_date(p.year, p.month, 1) + interval '1 month' - interval '1 day')::date
+        <= s.locked_until_date::date;
+  GET DIAGNOSTICS n_union = ROW_COUNT;
+
+  -- 3b. FY cerrado → todos sus períodos cerrados (MONTHLY, OPENING, CLOSING)
+  UPDATE accounting_periods p
+  SET is_closed = true, closed_at = COALESCE(p.closed_at, f.closed_at, now()),
+      closed_by = COALESCE(p.closed_by, f.closed_by, 'migracion-tsk760'), updated_at = now()
+  FROM fiscal_years f
+  WHERE p.fiscal_year_id = f.id AND f.is_closed AND NOT p.is_closed;
+  GET DIAGNOSTICS n_fy = ROW_COUNT;
+
+  -- 3c. huecos: todo MONTHLY anterior al último MONTHLY cerrado de la empresa
+  WITH ultimo AS (
+    SELECT f.company_id, max(make_date(p.year, p.month, 1)) AS mes
+    FROM accounting_periods p JOIN fiscal_years f ON f.id = p.fiscal_year_id
+    WHERE p.type = 'MONTHLY' AND p.is_closed
+    GROUP BY f.company_id
+  )
+  UPDATE accounting_periods p
+  SET is_closed = true, closed_at = COALESCE(p.closed_at, now()),
+      closed_by = COALESCE(p.closed_by, 'migracion-tsk760'), updated_at = now()
+  FROM fiscal_years f JOIN ultimo u ON u.company_id = f.company_id
+  WHERE p.fiscal_year_id = f.id AND p.type = 'MONTHLY' AND NOT p.is_closed
+    AND make_date(p.year, p.month, 1) < u.mes;
+  GET DIAGNOSTICS n_hueco = ROW_COUNT;
+
+  -- 3d. locked_until_date = fin UTC del último MONTHLY cerrado (ya contiguo tras 3c), o NULL
+  WITH ultimo AS (
+    SELECT f.company_id,
+           max(make_date(p.year, p.month, 1)) + interval '1 month' - interval '1 millisecond' AS hasta
+    FROM accounting_periods p JOIN fiscal_years f ON f.id = p.fiscal_year_id
+    WHERE p.type = 'MONTHLY' AND p.is_closed
+    GROUP BY f.company_id
+  )
+  UPDATE accounting_settings s
+  SET locked_until_date = u.hasta, updated_at = now()
+  FROM (SELECT s2.company_id, u2.hasta FROM accounting_settings s2
+        LEFT JOIN ultimo u2 ON u2.company_id = s2.company_id
+        WHERE EXISTS (SELECT 1 FROM fiscal_years f WHERE f.company_id = s2.company_id)) u
+  WHERE u.company_id = s.company_id AND s.locked_until_date IS DISTINCT FROM u.hasta;
+  GET DIAGNOSTICS n_lock = ROW_COUNT;
+
+  -- 3e. fechas de Ajustes = rango del FY abierto más antiguo (D11)
+  UPDATE accounting_settings s
+  SET fiscal_year_start = f.start_date, fiscal_year_end = f.end_date, updated_at = now()
+  FROM (SELECT DISTINCT ON (company_id) company_id, start_date, end_date
+        FROM fiscal_years WHERE NOT is_closed ORDER BY company_id, number) f
+  WHERE f.company_id = s.company_id
+    AND (s.fiscal_year_start, s.fiscal_year_end) IS DISTINCT FROM (f.start_date, f.end_date);
+
+  RAISE NOTICE 'TSK-760 paso 3: meses cerrados por unión %, por FY cerrado %, por hueco %; bloqueos recalculados %',
+    n_union, n_fy, n_hueco, n_lock;
+END $$;
+
+-- ===================================================================================
+-- Paso 4: fiscal_year_id/period_id de todos los asientos (D4). Trigger deshabilitado
+--         SOLO alrededor de este UPDATE.
+-- ===================================================================================
+ALTER TABLE journal_entries DISABLE TRIGGER trg_journal_entry_immutable;
+
+WITH destino AS (
+  SELECT j.id, f.id AS fy_id,
+         CASE
+           WHEN EXISTS (SELECT 1 FROM fiscal_years x WHERE x.closing_entry_id = j.id)
+             THEN (SELECT p.id FROM accounting_periods p
+                   WHERE p.fiscal_year_id = f.id AND p.type = 'CLOSING' LIMIT 1)
+           WHEN EXISTS (SELECT 1 FROM fiscal_years x WHERE x.opening_entry_id = j.id)
+             OR (j.description = 'Asiento de Apertura' AND j.date::date = f.start_date::date)
+             THEN (SELECT p.id FROM accounting_periods p
+                   WHERE p.fiscal_year_id = f.id AND p.type = 'OPENING' LIMIT 1)
+           ELSE (SELECT p.id FROM accounting_periods p
+                 WHERE p.fiscal_year_id = f.id AND p.type = 'MONTHLY'
+                   AND p.year = EXTRACT(YEAR FROM j.date)::int
+                   AND p.month = EXTRACT(MONTH FROM j.date)::int)
+         END AS period_id
+  FROM journal_entries j
+  JOIN fiscal_years f ON f.company_id = j.company_id
+                     AND j.date >= f.start_date AND j.date <= f.end_date
+)
+UPDATE journal_entries j
+SET fiscal_year_id = d.fy_id, period_id = d.period_id
+FROM destino d
+WHERE d.id = j.id
+  AND (j.fiscal_year_id IS DISTINCT FROM d.fy_id OR j.period_id IS DISTINCT FROM d.period_id);
+
+ALTER TABLE journal_entries ENABLE TRIGGER trg_journal_entry_immutable;
+
+-- ===================================================================================
+-- Paso 5: contador = último número de la racha contigua que sigue al contador
+--         (no salta a un número aislado como el 999999 de debug)
+-- ===================================================================================
+UPDATE accounting_settings s
+SET last_entry_number = x.ultimo_contiguo, updated_at = now()
+FROM (
+  SELECT s2.company_id,
+         (SELECT min(j.number) FROM journal_entries j
+          WHERE j.company_id = s2.company_id AND j.number > s2.last_entry_number
+            AND NOT EXISTS (SELECT 1 FROM journal_entries k
+                            WHERE k.company_id = j.company_id AND k.number = j.number + 1)
+         ) AS ultimo_contiguo
+  FROM accounting_settings s2
+  WHERE EXISTS (SELECT 1 FROM journal_entries j
+                WHERE j.company_id = s2.company_id AND j.number = s2.last_entry_number + 1)
+) x
+WHERE x.company_id = s.company_id;
+
+-- ===================================================================================
+-- Paso 6: informe de lo que no se pudo asignar
+-- ===================================================================================
+DO $$
+DECLARE r record;
+BEGIN
+  FOR r IN
+    SELECT j.company_id, count(*) AS n, min(j.date)::date AS desde, max(j.date)::date AS hasta
+    FROM journal_entries j WHERE j.fiscal_year_id IS NULL GROUP BY j.company_id
+  LOOP
+    RAISE NOTICE 'TSK-760: empresa % tiene % asientos fuera de todo ejercicio (% a %)',
+      r.company_id, r.n, r.desde, r.hasta;
+  END LOOP;
+  FOR r IN
+    SELECT s.company_id, count(*) AS n, max(j.number) AS max_num
+    FROM accounting_settings s JOIN journal_entries j ON j.company_id = s.company_id
+    WHERE j.number > s.last_entry_number GROUP BY s.company_id
+  LOOP
+    RAISE NOTICE 'TSK-760: empresa % tiene % números aislados sobre el contador (máx %); nextEntryNumberTx los saltea',
+      r.company_id, r.n, r.max_num;
+  END LOOP;
+END $$;
+
+COMMIT;
+```
+
+**Probado en seco (2026-10-06):** el SQL corrió contra `contable_pms` local dentro de una
+transacción con `ROLLBACK`, dos veces seguidas: la primera creó FY 1 (2026, 00:00 → 23:59:59.999)
+con 14 períodos, asignó FY/período a los 32 asientos, dejó el contador en 49 y reportó el 999999;
+la segunda no cambió nada (huellas de 3.2.4 idénticas) y los triggers quedaron `O`. Con el
+999999 presente, el `UPDATE` de `nextEntryNumberTx` devolvió 50.
+
+Decisiones dentro del SQL:
+
+- **Numeración (paso 5) — cambia el plan:** en vez de `GREATEST(contador, max(number))` (que con
+  un 999999 aislado llevaría el contador a 999999), el contador sube solo hasta el final de la
+  racha **contigua** que lo sigue (las colisiones reales: asientos `contador+1, +2…` creados por
+  los caminos no atómicos). Un número aislado se reporta y `nextEntryNumberTx` lo saltea si alguna
+  vez se lo alcanza (3.3.4). Así el 999999 local no hace falta borrarlo para migrar (igual se borra
+  en Fase 1 por prolijidad) y algo parecido en prod no rompe nada.
+- **Asientos fuera de todo ejercicio:** los anteriores al primer FY y los posteriores al tope
+  (hoy + 1 año) quedan con `fiscal_year_id = NULL` y se reportan (paso 6 y consulta 13). Siguen
+  sumando en los reportes (que filtran por fecha). Si son DRAFT, ya no se pueden registrar: la
+  fecha anterior al primer ejercicio se rechaza (D1). No hay acción para borrarlos (H9): se
+  informan a la clienta según el diagnóstico.
+- **Saldo de apertura manual** dentro del backfill: se asigna al período OPENING (consistente con
+  cómo lo crea #19 desde ahora y necesario para revertirlo, B25).
+- `locked_until_date` heredado de la UI vieja (fin de mes local, p. ej. `2026-04-01 02:59:59.999`)
+  se interpreta por `::date` en 3a (cierra marzo, no abril) y se reescribe normalizado en 3d.
+
+#### 3.2.3 Escenarios sembrados para probar la migración
+
+`prisma/scripts/tsk760-escenarios-migracion.sql` (solo local, empresas con nombre `TSK760-MIG-x`,
+fechas fijas de 2025-2026; borra y vuelve a crear sus filas al inicio). Estado **antes** → esperado
+**después**:
+
+| Esc. | Siembra | Esperado tras la migración |
+|---|---|---|
+| (a) | Ajustes 2025-01-01→2025-12-31 (03:00 UTC), sin FY, asientos DRAFT y POSTED en 2025 y en 03/2026 | FY 1 (2025, 00:00/23:59:59.999), FY 2 (2026) con 12 MONTHLY + OPENING + CLOSING cada uno; todos los asientos con FY/período; Ajustes = rango FY 1 |
+| (b) | FY de 20260625 (`month` 0/13, 12 meses) con `locked_until_date = 2026-04-01 02:59:59.999` y todos los meses `is_closed = false` | ene-mar cerrados (unión), abr abierto; OPENING/CLOSING con mes 1 y 12; `locked_until_date = 2026-03-31 23:59:59.999` |
+| (c) | FY con ene-feb `is_closed = true`, `locked_until_date = NULL` | ene-feb siguen cerrados; `locked_until_date = 2026-02-28 23:59:59.999` |
+| (d) | DRAFT y POSTED (y un REVERSED con su reversión) fechados en meses que quedan cerrados por (b) | FY/período asignados también a POSTED y REVERSED; el trigger vuelve a `tgenabled = 'O'`; los DRAFT aparecen en la consulta 4 |
+| (e) | Asientos del 2024-12-15 (antes del primer FY) y uno DRAFT del 2030-01-10 | ambos con `fiscal_year_id = NULL` y reportados; no se crean FY más allá de hoy + 1 año |
+| (f) | Hueco: marzo cerrado, enero y febrero abiertos, `locked_until_date = NULL` | ene-feb cerrados por hueco; `locked_until_date = 2026-03-31 23:59:59.999` |
+| (g) | FY 1 `is_closed = true` con un MONTHLY abierto y CLOSING abierto; FY 2 abierto | todos los períodos de FY 1 cerrados; Ajustes = rango FY 2; `locked_until_date` ≥ fin de FY 1 |
+| (h) extra | Contador 10, asientos 11 y 12 (no atómicos) y un 999999 | contador = 12; NOTICE por el 999999 |
+
+#### 3.2.4 Cómo verificar la idempotencia
+
+1. Copia: `docker exec contable-pms-db pg_dump -U postgres -Fc contable_pms > /tmp/tsk760.dump`,
+   `createdb contable_tsk760_copia`, `pg_restore -d contable_tsk760_copia`; correr
+   `tsk760-escenarios-migracion.sql`.
+2. Primera corrida: `DATABASE_URL=…/contable_tsk760_copia npx prisma migrate deploy`.
+3. Huella: guardar la salida de esta consulta (en el script de diagnóstico como consulta 14):
+
+```sql
+SELECT 'fy' AS t, md5(string_agg(concat_ws('|', company_id, number, start_date, end_date, is_closed,
+        closing_entry_id, opening_entry_id), ',' ORDER BY company_id, number)) FROM fiscal_years
+UNION ALL SELECT 'periodos', md5(string_agg(concat_ws('|', fiscal_year_id, year, month, type, is_closed),
+        ',' ORDER BY fiscal_year_id, type, year, month)) FROM accounting_periods
+UNION ALL SELECT 'asientos', md5(string_agg(concat_ws('|', id, fiscal_year_id, period_id, status, number),
+        ',' ORDER BY id)) FROM journal_entries
+UNION ALL SELECT 'ajustes', md5(string_agg(concat_ws('|', company_id, fiscal_year_start, fiscal_year_end,
+        locked_until_date, last_entry_number), ',' ORDER BY company_id)) FROM accounting_settings;
+```
+
+4. Segunda corrida **del mismo archivo** por fuera de Prisma (que ya la marcó aplicada):
+   `docker exec -i contable-pms-db psql -U postgres -d contable_tsk760_copia -v ON_ERROR_STOP=1 < migration.sql`.
+   Los NOTICE deben dar 0 en todos los contadores; la huella, idéntica; `pg_trigger.tgenabled = 'O'`
+   para los dos triggers.
+5. Lo mismo automatizado en `fy-backfill.integration.test.ts` (3.7).
+
+### 3.3 Funciones y métodos
+
+Tipos comunes (en `UT/journal-entry-types.ts`, sin `server-only` para poder usarlos en cliente):
+
+```ts
+import type { Prisma } from '@/generated/prisma/client';
+import type { AccountingPeriodType, JournalEntryStatus } from '@/generated/prisma/enums';
+
+/** Cliente transaccional. `prisma` también es asignable (para lecturas fuera de tx). */
+export type Tx = Prisma.TransactionClient;
+/** 'YYYY-MM-DD' (día calendario UTC). Es lo que viaja entre cliente y servidor. */
+export type IsoDay = string;
+export interface YearMonth { year: number; month: number } // month 1..12
+export type EntryPeriodType = Extract<AccountingPeriodType, 'MONTHLY' | 'OPENING' | 'CLOSING'>;
+export type CreatableEntryStatus = Extract<JournalEntryStatus, 'DRAFT' | 'POSTED'>;
+export type Amount = number | Prisma.Decimal;
+```
+
+Los `PrismaTransactionClient` locales de cada archivo (`Omit<typeof prisma, '$connect' | …>`) son
+estructuralmente asignables a `Prisma.TransactionClient`: los llamadores no cambian su alias.
+
+#### 3.3.1 `UT/utc-month.ts` (puro)
+
+```ts
+export function toUtcDay(date: Date): IsoDay;                       // moment.utc(date).format('YYYY-MM-DD')
+export function parseIsoDay(day: IsoDay): Date;                     // 00:00:00.000Z; lanza BusinessError si no es válido
+export function startOfDayUtc(date: Date | IsoDay): Date;
+export function endOfDayUtc(date: Date | IsoDay): Date;             // 23:59:59.999Z
+export function monthKeyUtc(date: Date): YearMonth;
+export function startOfMonthUtc(ym: YearMonth): Date;
+export function endOfMonthUtc(ym: YearMonth): Date;                 // último día 23:59:59.999Z
+export function addMonths(ym: YearMonth, n: number): YearMonth;
+export function compareYearMonth(a: YearMonth, b: YearMonth): number;
+export function monthsBetweenUtc(start: Date, end: Date): YearMonth[];   // inclusivo, irregulares incluidos
+export function isOnOrBeforeDayUtc(a: Date, b: Date): boolean;     // por día calendario UTC
+export function formatMonth(ym: YearMonth): string;                 // 'MM/YYYY'
+export function formatMonthLabel(ym: YearMonth): string;            // 'mar 2026' (locale es)
+export function formatDayUtc(date: Date | IsoDay): string;          // 'DD/MM/YYYY'
+```
+
+#### 3.3.2 `UT/period-closure.ts` (puro)
+
+```ts
+export type PeriodClosureReason = 'FISCAL_YEAR' | 'PERIOD' | 'LOCKED_UNTIL';
+export type PeriodClosure = { closed: false } | { closed: true; reason: PeriodClosureReason };
+
+export interface PeriodClosureInput {
+  date: Date;
+  periodType: EntryPeriodType;
+  fiscalYear: { number: number; isClosed: boolean };
+  period: { isClosed: boolean };
+  lockedUntilDate: Date | null;
+}
+/** Precedencia: FY cerrado > período cerrado > lockedUntilDate. Con OPENING/CLOSING (D12)
+ *  solo cuentan FY y período de ese tipo; lockedUntilDate se ignora. */
+export function evaluatePeriodClosure(input: PeriodClosureInput): PeriodClosure;
+
+export interface PeriodClosedMessageInput {
+  date: Date;
+  reason: PeriodClosureReason;
+  periodType: EntryPeriodType;
+  fiscalYearNumber: number;
+  lockedUntilDate: Date | null;
+  /** Sujeto de la frase. Por defecto: `No se puede registrar con fecha DD/MM/YYYY`. */
+  subject?: string;
+}
+export function buildPeriodClosedMessage(input: PeriodClosedMessageInput): string;
+```
+
+Textos exactos (siempre contienen "el período está cerrado", tests existentes):
+
+| Causa | Mensaje |
+|---|---|
+| `PERIOD` (MONTHLY) | `No se puede registrar con fecha 10/03/2026: el período está cerrado (mes 03/2026 cerrado). Para operar, reabrilo desde Contabilidad → Configuración → Bloqueo de Períodos.` |
+| `FISCAL_YEAR` | `No se puede registrar con fecha 10/03/2026: el período está cerrado (ejercicio N° 1 cerrado).` |
+| `LOCKED_UNTIL` | `No se puede registrar con fecha 10/03/2026: el período está cerrado (bloqueado hasta 31/03/2026). Para operar, reabrilo desde Contabilidad → Configuración → Bloqueo de Períodos.` |
+| `PERIOD` (OPENING) | `No se puede registrar con fecha 01/01/2027: el período está cerrado (apertura del ejercicio N° 2 cerrada).` |
+| `PERIOD` (CLOSING) | `No se puede registrar con fecha 31/12/2026: el período está cerrado (cierre del ejercicio N° 1 cerrado).` |
+
+Con `subject` (reversión): `No se puede anular el asiento N° 12 (fecha 10/03/2026): el período está cerrado (mes 03/2026 cerrado). …`.
+
+#### 3.3.3 `UT/period-lock.ts` (`import 'server-only'`)
+
+```ts
+export interface LockedAccountingSettings {
+  id: string;
+  companyId: string;
+  fiscalYearStart: Date;
+  fiscalYearEnd: Date;
+  lockedUntilDate: Date | null;
+}
+export interface FiscalYearRef {
+  id: string; number: number; startDate: Date; endDate: Date; isClosed: boolean;
+}
+export interface OpenPeriodRef { fiscalYearId: string; fiscalYearNumber: number; periodId: string }
+export interface AssertPeriodOpenOptions { periodType?: EntryPeriodType; subject?: string }
+
+/** SELECT … FROM accounting_settings WHERE company_id = $1 FOR UPDATE.
+ *  Reentrante dentro de la misma tx. Sin fila → BusinessError NO_SETTINGS. */
+export async function lockAccountingSettingsTx(tx: Tx, companyId: string): Promise<LockedAccountingSettings>;
+
+/** FY cuyo rango contiene la fecha (startDate <= date <= endDate; fechas normalizadas). */
+export async function findFiscalYearForDateTx(tx: Tx, companyId: string, date: Date): Promise<FiscalYearRef | null>;
+
+/**
+ * D1. Devuelve el FY que contiene la fecha, creándolo si corresponde. Recibe los Ajustes ya
+ * bloqueados (prueba de que el llamador tiene el lock).
+ * - Sin FY en la empresa → crea FY 1 con el rango de Ajustes (por día UTC) y lo usa si la fecha cae
+ *   dentro; si no, sigue con las reglas de abajo.
+ * - Fecha anterior al inicio del primer FY → BusinessError BEFORE_FIRST_FY.
+ * - Fecha posterior al último FY y dentro del inmediato siguiente (inicio = día siguiente al fin,
+ *   12 meses) → lo crea con createFiscalYearWithPeriodsTx.
+ * - Más allá del siguiente → BusinessError TOO_FAR_AHEAD.
+ */
+export async function ensureFiscalYearTx(tx: Tx, settings: LockedAccountingSettings, date: Date): Promise<FiscalYearRef>;
+
+/** Crea el FY con OPENING (mes de inicio) + un MONTHLY por mes + CLOSING (mes de fin).
+ *  createMany({ skipDuplicates: true }) para los períodos. */
+export async function createFiscalYearWithPeriodsTx(
+  tx: Tx,
+  input: { companyId: string; number: number; startDay: IsoDay; endDay: IsoDay }
+): Promise<FiscalYearRef>;
+
+/** Crea los períodos faltantes de un FY existente (autorreparación; createMany skipDuplicates). */
+export async function ensurePeriodsTx(tx: Tx, fiscalYear: FiscalYearRef): Promise<void>;
+
+/**
+ * A2 + D12. Una sola definición de período cerrado. Pasos:
+ * 1. settings = lockAccountingSettingsTx(tx, companyId)            ← lock FOR UPDATE de la fila
+ *    de accounting_settings de la empresa (la misma que actualiza nextEntryNumberTx).
+ * 2. fy = findFiscalYearForDateTx; si no hay:
+ *      MONTHLY y lockedUntilDate cubre la fecha (por día UTC) → BusinessError LOCKED_UNTIL
+ *      si no → fy = ensureFiscalYearTx(tx, settings, date)
+ * 3. period = MONTHLY {fy, monthKeyUtc(date)} | {fy, type} para OPENING/CLOSING;
+ *    si falta → ensurePeriodsTx y se relee.
+ * 4. evaluatePeriodClosure → BusinessError(buildPeriodClosedMessage(…)).
+ * 5. Devuelve { fiscalYearId, fiscalYearNumber, periodId }.
+ */
+export async function assertPeriodOpen(
+  tx: Tx, companyId: string, date: Date, opts?: AssertPeriodOpenOptions
+): Promise<OpenPeriodRef>;
+
+/** lockedUntilDate = endOfMonthUtc del último MONTHLY de la racha cerrada desde el primer mes
+ *  del primer FY (FY cerrado cuenta como todo cerrado), o NULL. Escribe solo si cambia. */
+export async function syncLockedUntilDateTx(tx: Tx, companyId: string): Promise<Date | null>;
+
+/** Lista ordenada (FY.number, year, month) de MONTHLY con su FY; base de cierre/reapertura y de
+ *  getPeriodLockStatus. */
+export async function listMonthlyPeriodsTx(tx: Tx, companyId: string): Promise<MonthlyPeriodRow[]>;
+export interface MonthlyPeriodRow extends YearMonth {
+  periodId: string; isClosed: boolean;
+  fiscalYearId: string; fiscalYearNumber: number; fiscalYearClosed: boolean;
+}
+```
+
+SQL del lock (exacto):
+
+```ts
+const rows = await tx.$queryRaw<LockedAccountingSettings[]>`
+  SELECT id, company_id AS "companyId", fiscal_year_start AS "fiscalYearStart",
+         fiscal_year_end AS "fiscalYearEnd", locked_until_date AS "lockedUntilDate"
+  FROM accounting_settings WHERE company_id = ${companyId}::uuid
+  FOR UPDATE`;
+```
+
+Mensajes (`BusinessError`):
+
+| Código | Texto |
+|---|---|
+| NO_SETTINGS | `No se encontró configuración contable para la empresa. Configurala en Contabilidad → Configuración.` |
+| BEFORE_FIRST_FY | `La fecha 15/12/2025 es anterior al inicio del primer ejercicio (01/01/2026); cargala como saldo de apertura.` |
+| TOO_FAR_AHEAD | `La fecha 05/03/2028 está más de un ejercicio por delante del último ejercicio (N° 2, hasta 31/12/2027).` |
+
+#### 3.3.4 `UT/journal-entry-lines.ts` (puro) y `UT/journal-entry-tx.ts` (`server-only`)
+
+```ts
+// journal-entry-lines.ts
+export interface JournalEntryLineDraft {
+  accountId: string;
+  debit: Amount;
+  credit: Amount;
+  description?: string | null;
+  customerId?: string | null;
+  supplierId?: string | null;
+  costCenterId?: string | null;   // TSK-583/719
+  currency?: string;              // default 'ARS'
+  originalAmount?: Amount | null;
+  exchangeRate?: Amount | null;
+}
+export interface LineTotals { debit: Prisma.Decimal; credit: Prisma.Decimal }
+/** Suma con Prisma.Decimal. Lanza BusinessError con el primer problema. */
+export function validateEntryLines(lines: readonly JournalEntryLineDraft[]): LineTotals;
+/** Invierte debe/haber conservando todas las demás columnas (reversión). */
+export function invertLines(lines: readonly JournalEntryLineDraft[]): JournalEntryLineDraft[];
+```
+
+| Regla | Mensaje |
+|---|---|
+| < 2 líneas | `Un asiento debe tener al menos 2 líneas.` |
+| importe no finito o negativo | `La línea 3 tiene un importe inválido: los montos deben ser números positivos.` |
+| debe y haber > 0 | `La línea 3 tiene importe en el Debe y en el Haber; cada línea va en uno solo.` |
+| debe y haber = 0 | `La línea 3 no tiene importe en el Debe ni en el Haber.` |
+| desbalance ≥ 0,01 | `El asiento no está balanceado. Debe: $1500.00, Haber: $1499.00, Diferencia: $1.00` (texto actual) |
+
+Se valida balance **siempre** (también DRAFT): todos los creadores ya lo exigían al crear; para
+POSTED (nace o se registra) es el control de B21.
+
+```ts
+// journal-entry-tx.ts
+export interface CreateJournalEntryTxInput {
+  companyId: string;
+  date: Date;
+  description: string;
+  lines: readonly JournalEntryLineDraft[];
+  status: CreatableEntryStatus;
+  /** userId o 'system' (se conserva lo de cada creador, 1.2.5). */
+  createdBy: string;
+  periodType?: EntryPeriodType;      // default MONTHLY
+  originalEntryId?: string;          // solo reversiones
+  /** Etiqueta del origen para el log (p. ej. 'sales-invoice:<id>'); no se persiste. */
+  source?: string;
+}
+export interface CreatedJournalEntry {
+  id: string; number: number; fiscalYearId: string; periodId: string; status: CreatableEntryStatus;
+}
+
+/** Cuentas de la empresa y hojas (1 query). BusinessError:
+ *  `La cuenta 5.1.03 no es imputable (tiene subcuentas).` /
+ *  `Una o más cuentas del asiento no existen o no pertenecen a la empresa.` */
+export async function assertAccountsUsableTx(tx: Tx, companyId: string, accountIds: readonly string[]): Promise<void>;
+
+/** Siguiente número libre. Requiere el lock (lo toma assertPeriodOpen). */
+export async function nextEntryNumberTx(tx: Tx, companyId: string): Promise<number>;
+
+/** validateEntryLines → assertAccountsUsableTx → assertPeriodOpen → nextEntryNumberTx → create.
+ *  Sin checkPermission ni $transaction. */
+export async function createJournalEntryTx(tx: Tx, input: CreateJournalEntryTxInput): Promise<CreatedJournalEntry>;
+
+export interface PostJournalEntryTxInput { companyId: string; entryId: string; userId: string }
+/** DRAFT → POSTED: assertPeriodOpen(entry.date, tipo de su período) + validateEntryLines +
+ *  assertAccountsUsableTx; actualiza fiscalYearId/periodId. */
+export async function postJournalEntryTx(tx: Tx, input: PostJournalEntryTxInput): Promise<{ id: string; number: number }>;
+
+export interface ReverseJournalEntryTxInput { companyId: string; entryId: string; date: Date; createdBy: string }
+export interface ReversedJournalEntry { original: { id: string; number: number }; reversal: CreatedJournalEntry }
+export async function reverseJournalEntryTx(tx: Tx, input: ReverseJournalEntryTxInput): Promise<ReversedJournalEntry>;
+```
+
+`nextEntryNumberTx` (un solo statement; salta números ocupados, ver paso 5 de la migración):
+
+```sql
+-- Las referencias a s.last_entry_number se reevalúan sobre la versión vigente de la fila
+-- (sin CTE con snapshot propio); el lock ya lo tomó assertPeriodOpen.
+UPDATE accounting_settings s
+SET last_entry_number = CASE
+      WHEN NOT EXISTS (SELECT 1 FROM journal_entries j
+                       WHERE j.company_id = s.company_id AND j.number = s.last_entry_number + 1)
+        THEN s.last_entry_number + 1
+      ELSE (SELECT min(j.number) + 1 FROM journal_entries j
+            WHERE j.company_id = s.company_id AND j.number > s.last_entry_number
+              AND NOT EXISTS (SELECT 1 FROM journal_entries k
+                              WHERE k.company_id = s.company_id AND k.number = j.number + 1))
+    END,
+    updated_at = now()
+WHERE s.company_id = ${companyId}::uuid
+RETURNING s.last_entry_number
+```
+
+Sin fila → BusinessError NO_SETTINGS. El camino normal es un `EXISTS` sobre el índice único
+`(company_id, number)`.
+
+Mensajes de `postJournalEntryTx` / `reverseJournalEntryTx`:
+
+| Caso | Mensaje |
+|---|---|
+| no existe o es de otra empresa | `Asiento no encontrado.` |
+| post de un no-DRAFT | `El asiento N° 12 ya no está en borrador.` |
+| reversión de un no-POSTED | `Solo se pueden anular asientos registrados; el N° 12 está en estado Borrador.` (o `Anulado`) |
+| período del original cerrado | tabla 3.3.2 con `subject` |
+| período de la fecha de reversión cerrado | tabla 3.3.2 sin `subject` (fecha de hoy) |
+
+#### 3.3.5 Cierre y reapertura de meses (`ACC/features/settings/actions.server.ts`)
+
+```ts
+export interface PeriodMonthStatus extends YearMonth {
+  label: string;               // 'mar 2026'
+  isClosed: boolean;
+  draftCount: number;
+  action: 'close' | 'reopen' | null;   // solo el primer abierto y el último cerrado reabrible
+}
+export interface PeriodLockFiscalYear {
+  id: string; number: number; startDay: IsoDay; endDay: IsoDay; months: PeriodMonthStatus[];
+}
+export interface PeriodLockStatus {
+  fiscalYears: PeriodLockFiscalYear[];   // FY abierto más antiguo y el siguiente si existe
+  lockedUntil: IsoDay | null;
+  /** Piso de B5: último FY cerrado. La UI explica "sus meses no se pueden reabrir". */
+  lastClosedFiscalYear: { number: number; endDay: IsoDay } | null;
+}
+
+export async function getPeriodLockStatus(): Promise<PeriodLockStatus | null>;   // null = sin Ajustes
+export async function closeAccountingPeriod(
+  input: YearMonth & { postDrafts: boolean }
+): Promise<ActionResult<{ lockedUntil: IsoDay; postedDrafts: number }>>;
+export async function reopenAccountingPeriod(
+  input: YearMonth
+): Promise<ActionResult<{ lockedUntil: IsoDay | null }>>;
+```
+
+Mensajes:
+
+| Caso | Mensaje |
+|---|---|
+| mes inexistente | `No existe el mes 07/2031 en los ejercicios de la empresa.` |
+| no es el primer abierto | `Solo se puede cerrar el primer mes abierto: 03/2026.` |
+| no hay abiertos | `No hay meses abiertos para cerrar en los ejercicios vigentes.` |
+| borradores sin `postDrafts` | `El mes 03/2026 tiene 4 borradores sin registrar (N° 12, 15, 18, 20). Registralos o elegí "Registrar los 4 borradores y cerrar".` (hasta 5 números + `…`) |
+| un borrador falla | `No se cerró 03/2026: el borrador N° 15 no se puede registrar. <mensaje de la causa>` |
+| reabrir mes de FY cerrado | `No se puede reabrir 12/2026: pertenece al ejercicio N° 1, que está cerrado.` |
+| no es el último cerrado | `Solo se puede reabrir el último mes cerrado: 05/2026.` |
+| nada que reabrir | `No hay meses cerrados para reabrir.` |
+| `postDrafts` sin permiso | `checkPermission('accounting.entries', 'approve', { redirect: true })` (como hoy) |
+
+`setLockedPeriod` y `getLockedPeriod` se **borran**. `validateFiscalYear` de
+`ACC/shared/validators` se reutiliza en `saveFiscalYearSettings`.
+
+#### 3.3.6 Ajustes: ejercicio y cuentas (B23, D11, H6)
+
+```ts
+export interface FiscalYearSettingsView {
+  fiscalYearNumber: number;
+  startDay: IsoDay; endDay: IsoDay;     // FY abierto más antiguo
+  datesEditable: boolean;               // único FY, sin asientos en la empresa, sin meses cerrados
+}
+export async function getFiscalYearSettings(): Promise<FiscalYearSettingsView | null>;
+
+/** Primera vez: upsert de Ajustes + FY 1 con sus períodos (createFiscalYearWithPeriodsTx).
+ *  Con FY: solo si datesEditable (regenera períodos en la tx); si no, BusinessError. */
+export async function saveFiscalYearSettings(
+  input: { startDay: IsoDay; endDay: IsoDay }
+): Promise<ActionResult<{ fiscalYearNumber: number }>>;
+
+/** Solo cuentas (sin fechas). Requiere Ajustes existentes. */
+export async function saveAccountingSettings(
+  input: Omit<SaveAccountingSettingsInput, 'fiscalYearStart' | 'fiscalYearEnd'>
+): Promise<ActionResult>;
+```
+
+| Caso | Mensaje |
+|---|---|
+| fin ≤ inicio / > 1 año | textos actuales de `validateFiscalYear` |
+| no empieza día 1 o no termina fin de mes | `El ejercicio tiene que empezar el primer día de un mes y terminar el último día de un mes.` |
+| cambio con asientos o meses cerrados | `No se pueden cambiar las fechas del ejercicio N° 1: la empresa ya tiene asientos o meses cerrados. Las fechas cambian solas al cerrar el ejercicio.` |
+| cuentas sin Ajustes | `Configurá primero el ejercicio fiscal.` |
+
+#### 3.3.7 `UT/entry-document-link.ts` (`server-only`)
+
+```ts
+export type EntryDocumentKind =
+  | 'SALES_INVOICE' | 'PURCHASE_INVOICE' | 'RECEIPT' | 'PAYMENT_ORDER' | 'EXPENSE'
+  | 'FUND_MOVEMENT' | 'DEPRECIATION' | 'VALUE_ADJUSTMENT' | 'FISCAL_YEAR_CLOSING' | 'FISCAL_YEAR_OPENING';
+export interface EntryDocumentLink { kind: EntryDocumentKind; documentId: string; label: string }
+
+/** Un findUnique de journalEntry con select de las 7 relaciones inversas + FY de cierre/apertura,
+ *  y un fundMovement.findFirst({ where: { companyId, journalEntryId } }) (columna sin relación). */
+export async function getEntryDocumentLink(tx: Tx, companyId: string, entryId: string): Promise<EntryDocumentLink | null>;
+
+/** Where para getEntriesWithoutDocuments: { none: {} } en las 7 relaciones, `is: null` en las dos
+ *  de FY y `id: { notIn }` con los journalEntryId de fund_movements de la empresa. */
+export async function entriesWithoutDocumentWhere(tx: Tx, companyId: string): Promise<Prisma.JournalEntryWhereInput>;
+
+export function buildDocumentLinkedMessage(link: EntryDocumentLink): string;
+```
+
+`label` y mensaje de rechazo (D6):
+
+| kind | label | Mensaje |
+|---|---|---|
+| SALES_INVOICE | `la factura de venta 0001-00000012` | `Este asiento pertenece a la factura de venta 0001-00000012 y no se puede anular desde Asientos: anulá el comprobante.` |
+| PURCHASE_INVOICE | `la factura de compra 0001-00000345` | ídem |
+| RECEIPT / PAYMENT_ORDER / EXPENSE | `el recibo R-00001` / `la orden de pago OP-00004` / `el gasto GTO-00002` | ídem |
+| FUND_MOVEMENT | `el movimiento de fondos "Aporte de socio"` | ídem |
+| DEPRECIATION | `la depreciación del período 3 del equipo INT-12` | ídem |
+| VALUE_ADJUSTMENT | `el ajuste de valor del equipo INT-12` | ídem |
+| FISCAL_YEAR_CLOSING | `la refundición del ejercicio N° 1` | `Este asiento es la refundición del ejercicio N° 1 y no se puede anular.` |
+| FISCAL_YEAR_OPENING | `la apertura del ejercicio N° 2` | `Este asiento es la apertura del ejercicio N° 2 y no se puede anular.` |
+
+#### 3.3.8 `UT/closing-entries.ts` (B18, B19, H4)
+
+```ts
+/** Excluye la apertura generada por un cierre (alias de journal_entries = je). */
+export const NOT_CLOSE_GENERATED_OPENING_SQL: Prisma.Sql =
+  Prisma.sql`NOT EXISTS (SELECT 1 FROM fiscal_years fyo WHERE fyo.opening_entry_id = je.id)`;
+/** Excluye la refundición. */
+export const NOT_CLOSING_ENTRY_SQL: Prisma.Sql =
+  Prisma.sql`NOT EXISTS (SELECT 1 FROM fiscal_years fyc WHERE fyc.closing_entry_id = je.id)`;
+export const notCloseGeneratedOpeningWhere: Prisma.JournalEntryWhereInput = { fiscalYearAsOpeningEntry: { is: null } };
+export const notClosingEntryWhere: Prisma.JournalEntryWhereInput = { fiscalYearAsClosingEntry: { is: null } };
+```
+
+Dónde se aplican (regla: *la apertura generada solo se ve en el Diario; la refundición no
+cuenta como resultado del período*):
+
+| Consulta | Archivo:línea | Fragmento |
+|---|---|---|
+| `calculateAccountBalance`, `calculateAllAccountBalances` (×2), `calculateBalanceByType` (×2) — Balance, Sumas y Saldos, plan de cuentas, ecuación contable | `UT/balances.ts:15-27`, `:70-95`, `:198-223` | apertura |
+| Mayor: saldo anterior y movimientos | `reports/actions.server.ts:252-275` | apertura (ambos) |
+| Estado de Resultados | `reports/actions.server.ts:532-541` | refundición |
+| Presupuesto vs. real | `reports/actions.server.ts:1197-1210`, `budgets/actions.server.ts:80-95` | refundición |
+| Movimientos por centro de costo | `reports/actions.server.ts:1586-1592` | refundición |
+| Control de presupuesto de gastos | `INT/commercial/index.ts:1130-1145` | refundición |
+| Liquidación de IVA (preview) | `vat-settlement/actions.server.ts:58-79` | apertura |
+| Diferencia de cambio (saldo acumulado) | `exchange-rates/actions.server.ts:205-216` | apertura |
+| Ajuste por inflación (saldos de cierre y de apertura) | `inflation-adjustment/actions.server.ts:170-200` | apertura |
+| Saldos patrimoniales del cierre anual | `computeClosePreviewTx` | apertura |
+
+`UT/balances.ts:15` cambia `whereCondition: any` por `Prisma.JournalEntryLineWhereInput` al tocarla.
+
+#### 3.3.9 Cierre anual (`ACC/features/fiscal-year-close/actions.server.ts` + `UT/fiscal-year-close-math.ts`)
+
+```ts
+// fiscal-year-close-math.ts (puro)
+export interface AccountBalanceRow {
+  accountId: string; code: string; name: string;
+  type: AccountType; debit: Prisma.Decimal; credit: Prisma.Decimal;
+}
+export interface ClosingLine { accountId: string; accountCode: string; accountName: string; debit: number; credit: number }
+/** Refundición: cada REVENUE/EXPENSE con saldo ≠ 0 al lado contrario; contrapartida en Resultado
+ *  solo si |diferencia| ≥ 0,005 (H5). */
+export function buildClosingLines(results: readonly AccountBalanceRow[], resultAccount: AccountRef): ClosingLine[];
+/** Apertura: saldos patrimoniales + efecto de la refundición sobre la cuenta Resultado (B21). */
+export function buildOpeningLines(patrimonial: readonly AccountBalanceRow[], closing: readonly ClosingLine[], resultAccount: AccountRef): ClosingLine[];
+
+// actions.server.ts
+export interface ClosePreview {
+  fiscalYear: { id: string; number: number; startDay: IsoDay; endDay: IsoDay };
+  closingLines: ClosingLine[];
+  openingLines: ClosingLine[];
+  totalRevenue: number; totalExpense: number; netResult: number;
+}
+export interface FiscalYearCloseStatus {
+  fiscalYear: { id: string; number: number; startDay: IsoDay; endDay: IsoDay } | null;  // abierto más antiguo
+  lastClosed: { number: number; closingEntryNumber: number | null; openingEntryNumber: number | null; closedAt: IsoDay } | null;
+  resultAccountName: string | null;
+  openMonths: string[];                                                 // ['11/2026', '12/2026']
+  pendingDrafts: { month: string; count: number; numbers: number[] }[];  // primeros 5 por mes
+  canClose: boolean;
+}
+export async function getFiscalYearStatus(): Promise<FiscalYearCloseStatus | null>;
+export async function previewFiscalYearClose(fiscalYearId: string): Promise<ActionResult<ClosePreview>>;
+export async function closeFiscalYear(
+  input: { fiscalYearId: string }
+): Promise<ActionResult<{ closingEntryNumber: number; openingEntryNumber: number | null; nextFiscalYearNumber: number }>>;
+
+/** Interno; lo usan preview (con `prisma`) y close (con `tx`, después del lock). */
+async function computeClosePreviewTx(tx: Tx, companyId: string, fy: FiscalYearRef, resultAccount: AccountRef): Promise<ClosePreview>;
+```
+
+Correcciones de `computeClosePreviewTx` respecto de hoy:
+
+- Saldos de resultado: POSTED con `je.date <= fy.endDate` (**acumulado**, no solo el rango del
+  FY), sin filtro de cuenta activa (H5). Como los ejercicios anteriores quedaron en cero por su
+  refundición, el acumulado da el resultado del FY; y si hay resultados viejos sin refundir
+  (asientos anteriores al primer FY), entran en esta refundición en vez de desbalancear la
+  apertura. Ver C4.
+- Saldos patrimoniales: POSTED con `je.date <= fy.endDate`, `NOT_CLOSE_GENERATED_OPENING_SQL`,
+  sin filtro de cuenta activa.
+- Sumas con `::numeric` → `Prisma.Decimal`, redondeo a 2 decimales al armar líneas.
+
+Mensajes:
+
+| Caso | Mensaje |
+|---|---|
+| sin Ajustes | NO_SETTINGS (3.3.3) |
+| sin cuenta de Resultado | `Configurá la cuenta de Resultado del Ejercicio en Contabilidad → Configuración antes de cerrar.` |
+| no es el abierto más antiguo | `Solo se puede cerrar el ejercicio abierto más antiguo (N° 1).` |
+| ya cerrado | `El ejercicio N° 1 ya está cerrado.` |
+| meses abiertos (B1) | `No se puede cerrar el ejercicio N° 1: faltan cerrar los meses 11/2026, 12/2026. Cerralos en orden desde Contabilidad → Configuración → Bloqueo de Períodos.` |
+| borradores (A5) | `No se puede cerrar el ejercicio N° 1: hay 5 borradores sin registrar (03/2026: N° 12, 15; 07/2026: N° 30, 31, 33). Reabrí esos meses y registralos antes de cerrar.` |
+| sin resultados (B20) | `No hay asientos registrados con resultado en el ejercicio N° 1: registrá los borradores antes de cerrar.` |
+| apertura desbalanceada (defensa B21) | se propaga el de `validateEntryLines`, prefijado: `El asiento de apertura no balancea. …` |
+
+#### 3.3.10 Diff conceptual por creador
+
+| # | Creador | Qué reemplaza | Riesgos |
+|---|---|---|---|
+| 1 | `createJournalEntry(input)` → `ActionResult<{ id; number }>` | `validateJournalEntryDate`, `resolveFiscalPeriod` y el `UPDATE … RETURNING` fuera/dentro de tx por `createJournalEntryTx` (DRAFT, `createdBy` = userId). `companyId` de `getActiveCompanyId()`; se quita el parámetro. Validadores de cuentas/auxiliares siguen fuera de la tx pero lanzan `BusinessError` | Si un validador queda con `throw new Error`, en prod llega el genérico: convertir todos. Firma nueva: un solo caller (`_CreateEntryModal`) |
+| 2 | `postJournalEntry(entryId)` | `validatePeriodLock` + `validateJournalEntryBalance` + `update` por `postJournalEntryTx` | B4: pasa a rechazar DRAFT de FY cerrado (esperado) |
+| 3 | `reverseJournalEntry({ entryId })` | Validación y creación inline por `getEntryDocumentLink` + `reverseJournalEntryTx` | Escenario 7 de 1.6.2: deja de poder anular asientos de documentos |
+| 4 | `INT/commercial` `createJournalEntry` interno (venta, compra, recibo, OP, gasto) | Cuerpo entero (balance, `lockedUntilDate`, resolver con `moment()` local, numeración) por `createJournalEntryTx` (DRAFT, `'system'`); devuelve `entry.id` | Tests existentes: el texto sigue conteniendo "período está cerrado". Primer asiento de una empresa de test crea FY 1 (R7, limpieza) |
+| 5 | `createJournalEntryForCOGS` | se borra (D13) | grep de callers en `src/`, `prisma/`, tests |
+| 6 | `INT/equipment` `createJournalEntry` interno (baja/venta) | ídem #4; el desbalance pasa de `Error` a `BusinessError` | `asset-disposal` con `lockedUntilDate` 2099: sigue rechazando por condición (c) |
+| 7 | `INT/treasury/index.ts` | se borra (D13) | — |
+| 8 | `postEntryTx` / `postDepreciationEntry` | `resolveFiscalPeriodTx` (se borra), numeración y el chequeo previo de `loaded.lockedUntilDate` (`:842-849`) por `createJournalEntryTx` dentro de la tx | El texto "El período MM/YYYY está bloqueado" pasa al estándar (sin tests que lo fijen) |
+| 9 | `postAllPendingDepreciations` | se quita el filtro `gt: lockedUntilDate`; en el bucle, `BusinessError` → `errors[]` con `Equipo X: <mensaje>`; cualquier otro error se relanza (una excepción SQL aborta la tx de Postgres) | Los períodos siguientes del mismo equipo salen como "omitido (anterior no contabilizado)": correcto, se informa |
+| 10 | `createValueAdjustment` | chequeo previo `:1057-1064` y resolver/numeración por `createJournalEntryTx` | — |
+| 11 | `createJournalEntryForFundMovement` | `lastEntryNumber + 1` + `update` del contador por `createJournalEntryTx` (DRAFT, `'system'`); conserva su chequeo exacto con `Decimal` previo | Antes no validaba período: escenario 3 de 1.6.2 |
+| 12 | `createJournalEntryForBankMovement` | numeración no atómica por `createJournalEntryTx`; conserva "sin Ajustes no hay asiento" (`findUnique` de Ajustes con `select: { id }` y `logger.warn`, como hoy) | Con Ajustes y mes cerrado, el movimiento entero se rechaza (no se graba sin asiento) |
+| 13-14 | transferencias banco→banco y banco↔caja | ídem #12, extrayendo las líneas a `buildTransferLines` dentro del mismo archivo | Archivo grande (1390 líneas): tocar solo los bloques `:1108-1147` y `:1223-1262` |
+| 15 | `generateVatSettlementEntry` | numeración + resolver por `createJournalEntryTx` (POSTED, `'system'`, fecha `endOfMonthUtc`); rango del preview en UTC | Sin UI |
+| 16 | `generateExchangeDifferenceEntry` | numeración por `createJournalEntryTx` (POSTED, userId); ahora carga FY/período | Sin UI |
+| 17 | `generateInflationAdjustmentEntry` | ídem #15 (fecha `endOfMonthUtc`) | Sin UI |
+| 18 | `generateRecurringEntry` / masiva | función interna `generateRecurringEntryTx(tx, …)`; `lastEntryNumber + 1` por `createJournalEntryTx` (DRAFT, userId); avance de `nextDueDate` en la misma tx; la masiva junta `result.error` en `errors[]` | Recurrente con fecha en mes cerrado queda pendiente hasta reabrir (el mensaje lo dice) |
+| 19 | `saveOpeningBalanceEntry` | `lastEntryNumber + 1` por `createJournalEntryTx` (POSTED, `periodType: 'OPENING'`, fecha = inicio del FY abierto más antiguo). Reemplazo = `reverseJournalEntryTx` del vigente con su misma fecha + nuevo (B25). Búsqueda del vigente por `fiscalYearId` (H3) | OPENING de un FY generado por cierre está cerrado: no se cargan saldos manuales en FY ≥ 2 (correcto) |
+| 20 | `closeFiscalYear` | reescrito (3.3.9) | Ver 3.7 |
+
+### 3.4 Interfaces de usuario
+
+| Componente | Tipo | Props | Líneas est. | Notas |
+|---|---|---|---|---|
+| `AccountingSettings.tsx` | Server | — | 150 (hoy 160) | deja de pasar fechas a la grilla; card "Bloqueo de Períodos" con `id="bloqueo-periodos"`; pasa `fiscalYear` a `_AccountingSettingsForm` |
+| `_AccountingSettingsForm.tsx` | Client | `{ fiscalYear: FiscalYearSettingsView \| null }` | 120 | si `!datesEditable`: fechas en texto con la leyenda "Las fechas salen del ejercicio N° X; cambian solas al cerrar el ejercicio." Envía `'YYYY-MM-DD'` (sin `new Date('…T00:00:00')`); `ActionResult` |
+| `_PeriodLockingPanel.tsx` (reemplaza `_PeriodLockingForm`) | Client | — | 130 | `useQuery({ queryKey: ['accounting', 'periodLockStatus'], queryFn: getPeriodLockStatus })`; un bloque por FY con grilla de `_PeriodMonthCell`; nota del piso ("El ejercicio N° 1 está cerrado: sus meses no se pueden reabrir"); abre los diálogos |
+| `_PeriodMonthCell.tsx` | Client | `{ month: PeriodMonthStatus; disabled: boolean; onSelect(month): void }` | 70 | candado abierto/cerrado, insignia con `draftCount` si > 0, botón solo si `action` ≠ null |
+| `_ClosePeriodDialog.tsx` | Client | `{ month: PeriodMonthStatus \| null; canPostDrafts: boolean; onOpenChange(open): void }` | 120 | `AlertDialog`. Sin borradores: "¿Cerrar marzo 2026?" + "Cerrar mes". Con N: "Marzo 2026 tiene N borradores sin registrar" + explicación + botón "Registrar los N borradores y cerrar" (requiere `accounting.entries` `approve`, si no: texto "pedile a alguien con permiso de registrar asientos") |
+| `_ReopenPeriodDialog.tsx` | Client | `{ month: PeriodMonthStatus \| null; onOpenChange(open): void }` | 60 | `AlertDialog` de confirmación |
+| `hooks/usePeriodLockMutations.ts` | Hook | — → `{ close, reopen }` | 60 | `useMutation`; si `!result.success` → `toast.error(result.error)`; si ok → toast + `invalidateQueries(['accounting', 'periodLockStatus'])` + `router.refresh()` |
+| `_FiscalYearStatus.tsx` | Client | `{ status: FiscalYearCloseStatus }` | 150 | meses abiertos y borradores por mes con links a `/dashboard/company/accounting/settings#bloqueo-periodos` y `/dashboard/company/accounting/entries`; botón "Cerrar ejercicio N° X" deshabilitado si `!canClose`; bloque del último cerrado |
+| `_ClosePreviewDialog.tsx` | Client | `{ fiscalYear: { id; number; startDay; endDay }; onClose(): void }` | 120 | `useQuery({ queryKey: ['accounting', 'fiscalYearClosePreview', id], queryFn })` (queryFn lanza `new Error(r.error)` si `!r.success`: el mensaje se arma en el cliente y no se redacta); `useMutation` de `closeFiscalYear`; fuera `useEffect` |
+| `_ClosePreviewTables.tsx` | Client | `{ preview: ClosePreview }` | 120 | resumen (ingresos, gastos, resultado) + `ClosingLinesTable` (refundición) + `<details>` de apertura |
+| `_ReverseEntryDialog.tsx` | Client | `{ entry: JournalEntryWithLines; onClose(): void }` | 110 | `useQuery({ queryKey: ['accounting', 'reversalCheck', entry.id], queryFn: getReversalCheck })`: si `link` → texto del bloqueo y botón deshabilitado; si `warning` → aviso ámbar; siempre "La anulación se registra con fecha de hoy (DD/MM/YYYY)". `ActionResult` |
+| 7 componentes de Fase 12 | Client | sin cambio | +3-4 c/u | `_CreateEntryModal`, `_PostEntryDialog`, `_RecurringEntriesTable`, `_GeneratePendingDialog`, `_AccountBalancesForm`, `_CreateBankMovementDialog`, `_BankTransferDialog`; `_CommercialIntegrationForm` deja de leer y reenviar fechas (−5) |
+
+Responsive: grilla `grid-cols-3 sm:grid-cols-4 md:grid-cols-6` como hoy; tablas del preview con
+`overflow-x-auto`.
+
+### 3.5 Rutas y navegación
+
+Sin rutas nuevas ni ítems de sidebar.
+
+- `/dashboard/company/accounting/settings` — card "Bloqueo de Períodos" con ancla
+  `#bloqueo-periodos` (destino de los links del cierre anual y del texto de los mensajes).
+- `/dashboard/company/accounting/fiscal-year-close` — links a la anterior y a
+  `/dashboard/company/accounting/entries`.
+- `revalidateAccountingRoutes(companyId)` después de cada mutación (ya cubre settings,
+  entries, fiscal-year-close, opening-balances, recurring-entries).
+
+### 3.6 APIs / Endpoints (Server Actions)
+
+Ninguna API Route. Todas con `checkPermission` al inicio, `getActiveCompanyId()` (el
+`companyId` del cliente se ignora o se quita), `BusinessError` + `toActionResult`. "No
+autenticado"/"Sin empresa activa" siguen como `throw`.
+
+| Action | Firma | Permiso | Estado |
+|---|---|---|---|
+| `createJournalEntry` | `(input: CreateJournalEntryInput) => Promise<ActionResult<{ id: string; number: number }>>` | entries create | modificada |
+| `postJournalEntry` | `(entryId: string) => Promise<ActionResult<{ number: number }>>` | entries approve | modificada |
+| `reverseJournalEntry` | `(input: { entryId: string }) => Promise<ActionResult<{ reversalNumber: number }>>` | entries approve | modificada |
+| `getReversalCheck` | `(entryId: string) => Promise<ActionResult<{ link: EntryDocumentLink \| null; warning: string \| null; date: IsoDay }>>` | entries approve | nueva |
+| `getPeriodLockStatus` | `() => Promise<PeriodLockStatus \| null>` | settings view | nueva (reemplaza `getLockedPeriod`) |
+| `closeAccountingPeriod` | `(input: YearMonth & { postDrafts: boolean }) => Promise<ActionResult<{ lockedUntil: IsoDay; postedDrafts: number }>>` | settings update (+ entries approve) | nueva (reemplaza `setLockedPeriod`) |
+| `reopenAccountingPeriod` | `(input: YearMonth) => Promise<ActionResult<{ lockedUntil: IsoDay \| null }>>` | settings update | nueva |
+| `getFiscalYearSettings` | `() => Promise<FiscalYearSettingsView \| null>` | settings view | nueva |
+| `saveFiscalYearSettings` | `(input: { startDay: IsoDay; endDay: IsoDay }) => Promise<ActionResult<{ fiscalYearNumber: number }>>` | settings update | nueva |
+| `saveAccountingSettings` | `(input: AccountsSettingsInput) => Promise<ActionResult>` | settings update | modificada (sin fechas) |
+| `getFiscalYearStatus` | `() => Promise<FiscalYearCloseStatus \| null>` | fiscal-year-close view | modificada |
+| `previewFiscalYearClose` | `(fiscalYearId: string) => Promise<ActionResult<ClosePreview>>` | fiscal-year-close view | modificada |
+| `closeFiscalYear` | `(input: { fiscalYearId: string }) => Promise<ActionResult<{ closingEntryNumber: number; openingEntryNumber: number \| null; nextFiscalYearNumber: number }>>` | fiscal-year-close approve | modificada |
+| `createBankMovement` | `(data: BankMovementFormData) => Promise<ActionResult<{ id: string }>>` | treasury.bank-accounts create | modificada (Fase 12) |
+| `createBankTransfer` | `(data: BankTransferFormData) => Promise<ActionResult<{ id: string }>>` | ídem | modificada (Fase 12) |
+| `generateRecurringEntry` | `(recurringEntryId: string) => Promise<ActionResult<{ id: string; number: number }>>` | recurring-entries create | modificada |
+| `generateAllPendingRecurringEntries` | `() => Promise<ActionResult<{ generated: number; errors: string[] }>>` | ídem | modificada |
+| `saveOpeningBalanceEntry` | `(input: OpeningBalanceFormInput, replaceExisting: boolean) => Promise<ActionResult<{ entryId: string; entryNumber: number }>>` | opening-balances create | modificada |
+| `getEntriesWithoutDocuments` | igual | reports view | usa `entriesWithoutDocumentWhere` |
+| `setLockedPeriod`, `getLockedPeriod` | — | — | borradas |
+
+IVA, diferencia de cambio e inflación conservan su firma (sin UI, siguen lanzando; anotado en 2.4).
+
+### 3.7 Consideraciones técnicas
+
+#### 3.7.1 Casos de test por fase
+
+Puros (`UT/*.test.ts`, sin DB) e integración (`*.integration.test.ts`, `describe.skipIf(!dbAvailable)`,
+empresa propia con prefijo `TSK760-…`, mocks de `server-only`, `current-user`, `company`,
+`permissions`, `next/cache` como `receipt-journal-entry.integration.test.ts`).
+
+| Fase | Archivo | Casos |
+|---|---|---|
+| 2 | `UT/utc-month.test.ts` | día 1 00:00Z y 02:59Z → mes del día 1; `endOfMonthUtc` feb 2028 = 29 23:59:59.999Z; `monthsBetweenUtc` de un FY de 18 meses y de uno de 6; `isOnOrBeforeDayUtc` mismo día distinta hora; todo igual con `process.env.TZ = 'UTC'` y `'America/Argentina/Buenos_Aires'` (se fija antes de importar moment, en dos `describe` con `vi.resetModules`) |
+| 2 | `UT/period-closure.test.ts` | cada causa sola; OR con datos desincronizados (escenarios 1 y 2 de 1.6.2); precedencia FY > período > bloqueo; OPENING/CLOSING ignoran `lockedUntilDate`; los 5 textos exactos de 3.3.2 |
+| 2 | `UT/journal-entry-lines.test.ts` | 1 línea; 0/0; negativo; NaN; ambos lados; desbalance 0,01 rechaza y 0,009 pasa; `0.1 + 0.2` vs `0.3` balancea (Decimal); `invertLines` conserva auxiliares, `costCenterId` y moneda |
+| 2 | `UT/fiscal-year-close-math.test.ts` | refundición con ganancia, con pérdida, con resultado 0 (sin línea de Resultado, H5); apertura balanceada con el resultado incluido (B21) |
+| 2 | `UT/period-lock.integration.test.ts` | sin FY → crea FY 1 desde Ajustes 03:00Z normalizado; fecha del FY siguiente → lo crea contiguo con 12 MONTHLY + OPENING + CLOSING; dos adelante → TOO_FAR_AHEAD; anterior → BEFORE_FIRST_FY; mes cerrado / FY cerrado / `lockedUntilDate` → texto exacto; sin FY y fecha ≤ `lockedUntilDate` → LOCKED_UNTIL sin crear FY; OPENING/CLOSING (D12); período faltante → `ensurePeriodsTx` lo repara; `syncLockedUntilDateTx` con racha y con FY cerrado |
+| 2 | `UT/journal-entry-tx.integration.test.ts` | número correlativo; **concurrencia de numeración**: 10 `prisma.$transaction(tx => createJournalEntryTx(…), { maxWait: 10_000, timeout: 10_000 })` en `Promise.all` → números 1..10 sin repetir y contador = 10; **salto de ocupados**: contador 5 con asientos 6 y 7 sembrados → devuelve 8; **cierre concurrente**: tx A toma `lockAccountingSettingsTx`, espera una promesa, cierra el mes; tx B `createJournalEntryTx` en ese mes arranca después y termina con "el período está cerrado"; DRAFT y POSTED con `fiscalYearId`/`periodId`; desbalance → BusinessError sin consumir número; cuenta de otra empresa y no hoja → BusinessError; copia de auxiliares, moneda y `costCenterId` (TSK-583/719); `postJournalEntryTx` de FY cerrado (B4); `reverseJournalEntryTx` copia todo y deja el original REVERSED con `reversalEntryId` |
+| 3 | `ACC/features/fiscal-year-close/fy-backfill.integration.test.ts` | siembra (a)-(h) de 3.2.3 en empresas propias, ejecuta `migration.sql` con `pg.Client` (`client.query(sql)` multi-sentencia), verifica la tabla de esperados, la huella, los triggers `'O'`, y que una segunda ejecución no cambia la huella. Limpieza con `SET LOCAL session_replication_role = 'replica'` |
+| 3 | `ACC/features/settings/accounting-settings.integration.test.ts` | primera vez → FY 1 con períodos; cambiar fechas con asientos → `{ success: false }` con el texto; sin asientos → regenera; día no 1 → rechazo; `saveAccountingSettings` sin Ajustes → rechazo; `_CommercialIntegrationForm` ya no manda fechas (tipo) |
+| 4 | `ACC/features/entries/entries.integration.test.ts` | DRAFT con FY/período/número; mes cerrado; post de DRAFT en FY cerrado (B4); post de DRAFT desbalanceado (sembrado por SQL); validadores devuelven `BusinessError` legible; `companyId` ajeno no se usa |
+| 5 | 6 tests existentes (receipt, payment-order, expense, sales-invoice-line-accounts, purchase-invoice-line-accounts, asset-disposal) | siguen verdes sin tocar el texto; + caso "mes cerrado por `AccountingPeriod` sin `lockedUntilDate`" (B3) + "asiento con `fiscalYearId`/`periodId`"; limpieza con FY creados |
+| 5 | `DEP/depreciation-period-lock.integration.test.ts` | individual, revalúo y masiva con un mes cerrado (masiva: aparece en `errors[]`, los demás se contabilizan) |
+| 6 | `fund-movement-lines.integration.test.ts` + `TRE/bank-movements/bank-movement-period-lock.integration.test.ts` | numeración atómica y FY/período; movimiento manual y dos transferencias en mes abierto (asiento) y cerrado (rechazo, sin movimiento ni saldo cambiado); sin Ajustes → movimiento sin asiento (se conserva) |
+| 7 | `recurring-entries.integration.test.ts`, `opening-balances.integration.test.ts`, `vat-settlement/generators-period-lock.integration.test.ts` | abierto/cerrado, numeración, FY/período; apertura en OPENING; **editar apertura** = reversión + nuevo (B25), búsqueda por FY (H3); IVA/cambio/inflación rechazan mes cerrado |
+| 8 | `ACC/features/settings/period-lock.integration.test.ts` | cerrar en orden; fuera de orden; reabrir el último; reabrir primer mes del FY nuevo con el anterior cerrado (B5); con DRAFT sin/con `postDrafts`; DRAFT desbalanceado aborta todo (nada cerrado, nada registrado); `lockedUntilDate` = fin UTC del último; diciembre con `TZ` UTC y AR (B22); `getPeriodLockStatus` con `action` correcto |
+| 9 | `ACC/features/fiscal-year-close/fiscal-year-close.integration.test.ts` | meses abiertos → texto; DRAFT → texto; sin resultados (B20); resultado 0 (H5); cuenta de resultado inactiva con saldo entra (H5); cierre feliz: refundición y apertura balanceadas, FY siguiente con 12 meses, períodos del FY cerrado todos cerrados, OPENING del nuevo cerrado; FY siguiente ya existente reutilizado (B24); después: Balance y Sumas y Saldos del FY nuevo = saldos del cerrado (no el doble, B18), Estado de Resultados del cerrado ≠ 0 (B19), IVA de enero sin la apertura (H4); reabrir mes del FY cerrado → rechazo; **segundo cierre** (FY 2) no duplica (excluye la apertura de FY 2); `openingEntryId` solo lo escribe el cierre (#19 no lo toca) |
+| 9 | `cost-center-movements.*`, `reports/*` existentes | verdes |
+| 10 | `ACC/features/entries/reverse-entry.integration.test.ts` | copia auxiliares, moneda y centro de costo; original en mes cerrado → texto con `subject`; hoy en mes cerrado → rechazo; factura / gasto / fondos (columna sin relación) / refundición → texto de 3.3.7; manual → anula; `getReversalCheck` da aviso para `'system'` sin vínculo |
+| 12 | tests de fases 4, 6, 7 | de `rejects.toThrow(/el período está cerrado/)` a `{ success: false, error: expect.stringContaining('el período está cerrado') }` |
+
+**Helper de limpieza** compartido para tests (R7): `ACC/shared/test-utils/cleanup-accounting-company.ts`
+(no termina en `.test.ts`, Vitest no lo corre): en una tx con
+`SET LOCAL session_replication_role = 'replica'` borra líneas y asientos de la empresa, y después
+`fiscal_years` (cascada a períodos). Los tests nuevos y los 6 existentes lo llaman antes de borrar
+la empresa: con FY creados de forma perezosa, borrar la empresa primero dispararía el `SET NULL`
+de `journal_entries.fiscal_year_id` sobre asientos POSTED y el trigger lo rechazaría.
+
+#### 3.7.2 Invariantes a no romper
+
+- **TSK-728 (errores como dato, nada en silencio):** ningún creador devuelve `null` ante error; el
+  período cerrado es `BusinessError` que llega como `{ success: false, error }`. Única excepción
+  conservada a propósito: bancos sin Ajustes (2.0). `grep -rn "return null" ` en los creadores en
+  Fase 11.
+- **TSK-583/719 (centros de costo en líneas):** `createJournalEntryTx` persiste `costCenterId` de
+  cada línea tal cual; `expandByCostCenter` sigue en `INT/commercial` antes de llamar al núcleo; la
+  reversión invierte conservando `costCenterId`. Test en Fase 2 y Fase 10;
+  `cost-center-movements.*` verdes.
+- **TSK-717/721/757 (cuentas):** las pre-validaciones de cuentas por documento siguen antes de la
+  tx con sus mensajes; `assertAccountsUsableTx` es defensa en profundidad (empresa + hoja) y no
+  reemplaza a `buildImputableAccountsWhere`. La cuenta de aportes por socio (717) y las de ítems
+  (721/757) no cambian.
+- **Numeración única:** solo `nextEntryNumberTx` asigna números (`grep "lastEntryNumber + 1\|journalEntry.create(" src/modules` → solo `UT/journal-entry-tx.ts`);
+  `@@unique([companyId, number])` sigue siendo la red final.
+- **Inmutabilidad:** nadie hace `UPDATE` de un POSTED salvo la transición a REVERSED en un solo
+  `UPDATE`; la única desactivación del trigger es la de la migración.
+- **Permisos:** sin permisos nuevos (D10).
+
+#### 3.7.3 Rendimiento y concurrencia
+
+- Cada asiento suma 2-3 lecturas (lock, FY, período) a la tx; la creación ya estaba serializada por
+  empresa por el `UPDATE` del contador, así que el lock no agrega espera nueva.
+- `closeAccountingPeriod` y `closeFiscalYear` corren con `{ timeout: 30_000, maxWait: 10_000 }`
+  (H10). Mientras corren, la creación de asientos de esa empresa espera (es el objetivo, R4).
+- `getPeriodLockStatus` arma los conteos de borradores con un solo `groupBy` por mes
+  (`date_trunc('month', date)`) en el rango de los FY mostrados.
+
+#### 3.7.4 Diseño de `GP/capturas-tsk760.mjs`
+
+Molde `capturas-tsk728.mjs` (Playwright con Chrome del sistema, login con las credenciales de dev,
+puerto 3010 con `NEXT_PUBLIC_APP_URL` sobrescrito; memoria `dev-local-capturas-y-login`).
+
+- **Uso:** `node scripts/guia-presentacion/capturas-tsk760.mjs [baseUrl]` (01-04 y 08-10),
+  `… --copia` (05-07, sobre la base copia), `… --prod` (11-12 contra :3011), `… --restore`.
+- **Siembra por `psql`** sobre "Empresa de Prueba 01 SA" (`COMPANY_ID` del molde), marcada
+  `TSK760-demo` en la descripción de los asientos: guarda antes el estado de
+  `accounting_periods.is_closed`, `fiscal_years` y `accounting_settings.locked_until_date/fiscal_year_*`
+  de la empresa; crea por las actions (vía UI) o por SQL 3 asientos manuales DRAFT en marzo y uno
+  POSTED de factura; deja enero y febrero cerrados.
+- **Recorrido:**
+  01 Configuración → Bloqueo de Períodos (ene-feb cerrados, marzo con "3 borradores").
+  02 Clic en marzo → diálogo "Marzo 2026 tiene 3 borradores" con "Registrar los 3 borradores y cerrar".
+  03 Asientos → nuevo asiento manual con fecha 15/02 → toast "el período está cerrado (mes 02/2026 cerrado)".
+  04 Con FY 2 sembrado y FY 1 cerrado por SQL: primer mes de FY 2 → nota del piso, sin botón de reabrir.
+  05 Cierre de ejercicio con meses abiertos y borradores → lista y links.
+  06 Cierre ejecutado (todos los meses cerrados por SQL) → toast + números de refundición y apertura.
+  07 Reportes → Balance al 31/01 del FY nuevo (sin duplicar).
+  08 Asientos → anular asiento de factura → diálogo bloqueado con el texto de 3.3.7.
+  09 Anular movimiento bancario → aviso ámbar.
+  10 Configuración → fechas del ejercicio de solo lectura.
+  11-12 (`--prod`) toasts de 03 y 08 contra el build de producción (texto real, no el digest).
+- **Restauración:** 01-04 y 08-10 solo crean datos marcados `TSK760-demo` y cambian
+  `is_closed`/`locked_until_date`; en `finally` (y con `--restore`) se borran los asientos marcados
+  (con `SET LOCAL session_replication_role = 'replica'`, son POSTED) y se reponen los valores
+  guardados. 05-07 **cierran un ejercicio** (asientos POSTED inmutables, FY nuevo): se corren solo
+  con `--copia`, contra `contable_tsk760_copia` (dev server levantado con el `DATABASE_URL` de la
+  copia); el script verifica `current_database()` y se niega a correrlos sobre `contable_pms`.
+
+#### 3.7.5 Documentación
+
+Sin cambios respecto de la Fase 13; agregar en `docs/modules/accounting.md` la tabla de mensajes
+(3.3.2), el invariante `openingEntryId`, la regla de lock y la exclusión de 3.3.8; en
+`docs/architecture/data-model.md`, las convenciones de 3.2.1.
+
+#### 3.7.6 Notas de deploy (texto para el PR)
+
+1. **Antes (diagnóstico, solo lectura):** en el servidor,
+   `bash prisma/scripts/diagnostico-tsk760.sh > diag-antes.txt`. Revisar:
+   - 0: el usuario de la base es dueño de `journal_entries` y los dos triggers están `O`
+     (si no es dueño, **no deployar**: la migración falla y queda P3009);
+   - 1 y 12: empresas que reciben FY nuevo y FY con `month 0/13`;
+   - 4, 6 y 8: tamaño del cambio de comportamiento (borradores en meses que quedan cerrados,
+     meses desincronizados, comprobantes en borrador con fecha bloqueada); si hay filas, avisar a la
+     clienta con la presentación **antes** del deploy;
+   - 7: contador; 13: asientos anteriores al primer ejercicio;
+   - 14: huella (para comparar después);
+   - zona horaria del contenedor de la app (B22).
+2. **Backup:** `sudo docker exec $(sudo docker ps -q --filter name=contablemas-contablemas) sh -c 'pg_dump -U "$POSTGRES_USER" -Fc "$POSTGRES_DB"' > contable-antes-tsk760.dump`
+   y comprobar que pesa más de 0 bytes.
+3. **Deploy:** la migración `tsk_760_fiscal_years_backfill` la aplica `docker-entrypoint.sh` al
+   arrancar (transaccional e idempotente). Verificar con
+   `sudo docker exec $(sudo docker ps -q --filter name=contablemas-frontend) node node_modules/prisma/build/index.js migrate status`.
+   Si figura fallida (P3009): la base quedó como antes (BEGIN/COMMIT); corregir, `migrate resolve
+   --rolled-back <nombre>` y redeployar.
+4. **Después:** `bash prisma/scripts/diagnostico-tsk760.sh > diag-despues.txt`. Esperado: consulta 2
+   sin asientos sin ejercicio salvo los de la 13; 6 y 7 vacías (salvo números aislados reportados);
+   triggers `O`; FY para toda empresa con Ajustes. Si la réplica vieja creó asientos durante el
+   deploy y la consulta 2 muestra alguno sin ejercicio, correr el paso 4 de la migración a mano (se
+   deja como `prisma/scripts/tsk760-backfill-asientos.sql`, idempotente).
+5. Sin permisos, módulos ni variables de entorno nuevas (`TZ` no hace falta).
+6. Comportamiento visible para la clienta: link al PDF `docs/presentaciones/TSK-760-cierre-contable.pdf`.
+
+#### 3.7.7 Decisiones de diseño a confirmar por el líder
+
+| # | Decisión | Alternativa |
+|---|---|---|
+| C1 | Contador = fin de la racha contigua + `nextEntryNumberTx` que saltea ocupados (en vez de `GREATEST(max)`) | `GREATEST` del plan: un número aislado alto en prod dispararía la numeración |
+| C2 | B25: "editar saldos de apertura" = revertir + nuevo (dos asientos POSTED más por edición) | Dejar la edición rota y ocultar el botón; queda para 758 |
+| C3 | Separar `saveFiscalYearSettings` de `saveAccountingSettings` y exigir ejercicios de meses completos (día 1 a fin de mes); fechas editables solo si la empresa no tiene **ningún** asiento | Mantener una sola action y comparar fechas por día |
+| C4 | Refundición sobre saldos de resultado **acumulados** al fin del FY, incluidas cuentas inactivas, y sin línea de Resultado cuando da 0 | Solo el rango del FY: si hay resultados viejos sin refundir, la apertura no balancea y el cierre se rechaza |
+| C5 | Validar balance también en DRAFT, más empresa + hoja de cada cuenta, en el núcleo | Solo POSTED (plan); hoy todos los creadores ya lo exigen |
+| C6 | Un borrador imposible de registrar bloquea el cierre de su mes (D2 todo o nada) y no hay acción para borrarlo (H9) | Agregar "eliminar borrador manual" (fuera de alcance, chico) |
+| C7 | El OPENING del ejercicio creado por un cierre queda cerrado: no se cargan saldos de apertura manuales en FY ≥ 2 | Dejarlo abierto (riesgo de duplicar la apertura) |
+| C8 | La migración crea ejercicios hacia adelante hasta hoy + 1 año como máximo; lo posterior queda sin FY y se reporta | Sin tope (un asiento con año mal tipeado crearía decenas de FY) |
+
 
 ## 4. Implementación
 _Pendiente - ejecutar `/implementar tsk-760-cierre-contable`_
