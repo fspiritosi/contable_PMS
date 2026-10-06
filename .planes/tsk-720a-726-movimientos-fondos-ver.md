@@ -1,7 +1,7 @@
 # TSK-720a + TSK-726 — Movimientos de Fondos: ver en solo lectura, sin columna de asiento, modal responsive
 
 **Fecha de inicio:** 2026-10-06
-**Estado:** Diseño completado
+**Estado:** Implementación en progreso (Fase 1 de 8 completada)
 
 ---
 
@@ -230,9 +230,9 @@ Otras decisiones de esta planificación:
 - **Objetivo:** dejar toda la lógica decidible sin UI en un `.ts` testeado con Vitest antes de
   tocar componentes.
 - **Tareas:**
-  - [ ] Medir línea base: `npm run check-types 2>&1 | grep -c "error TS"` y `npm run lint`;
+  - [x] Medir línea base: `npm run check-types 2>&1 | grep -c "error TS"` y `npm run lint`;
         anotarlas en la sección 4.
-  - [ ] Crear `FM/shared/view-mode.test.ts` primero (rojo) y después `FM/shared/view-mode.ts` con:
+  - [x] Crear `FM/shared/view-mode.test.ts` primero (rojo) y después `FM/shared/view-mode.ts` con:
     - `FundMovementModalMode = 'create' | 'edit' | 'view'`.
     - `FUND_MOVEMENT_STATUS_LABELS` (`DRAFT`→Borrador, `CONFIRMED`→Confirmado,
       `CANCELLED`→Anulado) y `fundMovementStatusVariant(status)` (`'default' | 'outline' |
@@ -253,13 +253,13 @@ Otras decisiones de esta planificación:
       actuales (`:310-316`) y los de vista por estado (D6).
     - `shouldCleanupFieldsOnTypeChange(mode)` → `mode !== 'view'` (riesgo 6) y
       `needsMovementDetail(mode, type)` → `mode !== 'create' && type === 'BANK_CHARGES'`.
-  - [ ] Casos de test: las 3 × 8 combinaciones relevantes de `getRowActions` (al menos: DRAFT con
+  - [x] Casos de test: las 3 × 8 combinaciones relevantes de `getRowActions` (al menos: DRAFT con
         todo, CONFIRMED con todo → solo view, CANCELLED solo view, DRAFT sin update, DRAFT solo
         view); `withSnapshotOption` (valor en catálogo, fuera de catálogo con label, sin label,
         valor vacío); `formValuesFromMovement` (los 4 tipos, fecha anclada a mediodía UTC que no
         se corre un día, `partnerId` null → `''`, líneas con `amount` a string);
         `getModalCopy` para los 3 modos y 3 estados.
-  - [ ] `npm run test -- FM/shared/view-mode` en verde.
+  - [x] `npm run test -- FM/shared/view-mode` en verde.
 - **Archivos:** `FM/shared/view-mode.ts` (nuevo), `FM/shared/view-mode.test.ts` (nuevo).
 - **Criterio de completitud:** tests nuevos en verde; nada de UI tocado todavía; commit
   `feat(treasury): helpers puros del modo vista de movimientos de fondos (TSK-720/726, fase 1)`.
@@ -1349,7 +1349,38 @@ Patrón de `capturas-tsk728.mjs` (constantes `COMPANY_ID`, `USER_ID`, `EMAIL`, `
   `getComputedStyle(input).opacity === '1'` para validar D2.
 
 ## 4. Implementación
-_Pendiente - ejecutar `/implementar tsk-720a-726-movimientos-fondos-ver`_
+
+### Fase 1: Helpers puros del modo vista y de las acciones por fila (TDD)
+- **Estado:** Completada
+- **Archivos modificados:**
+  - `src/modules/commercial/features/treasury/features/fund-movements/shared/view-mode.ts` - nuevo: modos del modal, rótulos/variante de estado, `getRowActions`/`hasAnyRowAction`/`hasDraftActions`, `buildFundOptions`/`withSnapshotOption`/`isSnapshotOption`, `fundRefFrom`/`emptyFundMovementFormValues`/`formValuesFromMovement`, `getModalCopy`, guardas del hook (`shouldCleanupFieldsOnTypeChange`, `needsMovementDetail`, `formResetKey`) y `getViewSummaryFacts`, con las firmas de 3.3.1.
+  - `src/modules/commercial/features/treasury/features/fund-movements/shared/view-mode.test.ts` - nuevo: 54 tests Vitest con los casos de 3.4.8 (escrito primero, en rojo).
+- **Notas:**
+  - Línea base medida al empezar: `npm run check-types 2>&1 | grep -c "error TS"` = **219**; `npm run lint` = **336 problemas (153 errores, 183 warnings)**, todos preexistentes. Tras la fase: 219 errores de tipos (no sube) y `eslint` sin problemas en los dos archivos nuevos.
+  - `npx vitest run .../shared/view-mode.test.ts`: 54/54 en verde.
+  - Sin desvíos de firmas. Precisiones de implementación: `formResetKey` con `movementId` null/undefined en edit/view devuelve `'<modo>:'` (caso no especificado; el hook nunca lo usa sin movimiento). `formValuesFromMovement` no necesitó cast: `FundMovementType` de Prisma asigna directo a `FundMovementTypeValue`.
+  - Todavía no se tocó UI: `columns.tsx` y `_CreateFundMovementModal.tsx` siguen con sus copias de `STATUS_LABELS` y `fundRefFrom`; se reemplazan en las fases 3 y 5.
+
+### Fase 2: Causa raíz de TSK-726 — paginación compartida y fila de conceptos responsive
+- **Estado:** Pendiente
+
+### Fase 3: Refactor del modal sin cambio de comportamiento (< 200 líneas)
+- **Estado:** Pendiente
+
+### Fase 4: Modo vista del modal
+- **Estado:** Pendiente
+
+### Fase 5: Listado — sin columna "Asiento" y con acción "Ver"
+- **Estado:** Pendiente
+
+### Fase 6: Verificación en navegador y capturas
+- **Estado:** Pendiente
+
+### Fase 7: Documentación — guía in-app, docs y presentación para la clienta
+- **Estado:** Pendiente
+
+### Fase 8: Verificación final
+- **Estado:** Pendiente
 
 ## 5. Verificación
 _Pendiente - ejecutar `/verificar tsk-720a-726-movimientos-fondos-ver`_
