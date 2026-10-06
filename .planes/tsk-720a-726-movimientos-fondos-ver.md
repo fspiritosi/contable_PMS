@@ -1,7 +1,7 @@
 # TSK-720a + TSK-726 — Movimientos de Fondos: ver en solo lectura, sin columna de asiento, modal responsive
 
 **Fecha de inicio:** 2026-10-06
-**Estado:** Implementación en progreso (Fase 4 de 8 completada)
+**Estado:** Implementación en progreso (Fase 5 de 8 completada)
 
 ---
 
@@ -378,21 +378,21 @@ Otras decisiones de esta planificación:
 
 - **Objetivo:** cumplir TSK-720a en el listado.
 - **Tareas:**
-  - [ ] `FM/list/columns.tsx`: borrar la columna `id: 'asiento'` (`:111-121`); `ColumnsProps`
+  - [x] `FM/list/columns.tsx`: borrar la columna `id: 'asiento'` (`:111-121`); `ColumnsProps`
         suma `onView`; importar `Eye`; `STATUS_LABELS` y el variant del badge pasan a
         `FUND_MOVEMENT_STATUS_LABELS`/`fundMovementStatusVariant` de `view-mode.ts`; la columna
         de acciones se agrega con `hasAnyRowAction(permissions)` (`:124`) y su `cell` usa
         `getRowActions(m.status, permissions)`: "Ver" primero, `DropdownMenuSeparator` solo si
         hay acciones de borrador, luego Confirmar/Editar y Eliminar (se quita el `if (!isDraft)
         return null`, `:130`).
-  - [ ] `FM/list/components/_FundMovementsTable.tsx`: reemplazar `editing` por
+  - [x] `FM/list/components/_FundMovementsTable.tsx`: reemplazar `editing` por
         `selected: { movement: FundMovementListItem; mode: 'edit' | 'view' } | null` +
         `detailOpen: boolean` (D8); `onEdit` → `{ movement, mode: 'edit' }`, `onView` →
         `{ movement, mode: 'view' }`; una sola instancia del modal para edición/vista con
         `open={detailOpen}`, `onOpenChange={setDetailOpen}`, `mode={selected?.mode ?? 'view'}`,
         `movement={selected?.movement ?? null}`. Mantener el archivo < 200 líneas (hoy 197: si
         se pasa, extraer los dos `AlertDialog` a `_FundMovementConfirmDialogs.tsx`).
-  - [ ] Revisar que `tableId="commercial-fund-movements"` no rompa con la visibilidad de columnas
+  - [x] Revisar que `tableId="commercial-fund-movements"` no rompa con la visibilidad de columnas
         guardada que aún mencione `asiento` (debe ignorarse sola; verificar en navegador).
 - **Archivos:** `FM/list/columns.tsx`, `FM/list/components/_FundMovementsTable.tsx`
   (y eventualmente `_FundMovementConfirmDialogs.tsx`).
@@ -1416,7 +1416,28 @@ Patrón de `capturas-tsk728.mjs` (constantes `COMPANY_ID`, `USER_ID`, `EMAIL`, `
   - Snapshot en **edición** (fuera de alcance, D4): un fondo/socio fuera de catálogo muestra el trigger **vacío** (Radix no pinta el placeholder si el `value` no tiene `SelectItem`), no el placeholder como decía 3.7.2. Es el comportamiento previo, sin cambios.
 
 ### Fase 5: Listado — sin columna "Asiento" y con acción "Ver"
-- **Estado:** Pendiente
+- **Estado:** Completada
+- **Archivos modificados** (`FM/list/`, líneas con `wc -l`):
+  - `columns.tsx` (170 → 175) - sin la columna `asiento`; `onView` en `ColumnsProps`; `Eye`; badge de estado con `FUND_MOVEMENT_STATUS_LABELS`/`fundMovementStatusVariant` (se borra `STATUS_LABELS`); columna de acciones con `hasAnyRowAction(permissions)` y menú con `getRowActions`/`hasDraftActions`: "Ver" primero, separador solo si hay acciones de borrador, Confirmar/Editar (`canUpdate`) y Eliminar (`canDelete`) solo en DRAFT.
+  - `components/_FundMovementsTable.tsx` (199 → 127) - `selected: { movement, mode: 'edit' | 'view' } | null` + `detailOpen` (D8: al cerrar solo baja `open`); una instancia del modal para edición/vista y otra para alta; props comunes en `modalProps`.
+  - `components/_FundMovementConfirmDialogs.tsx` (125) - nuevo: los dos `AlertDialog`, `handleConfirm`/`handleDelete` e `isBusy` movidos sin cambios de texto ni lógica (I17).
+  - `hooks/useFundMovementForm.ts` (190 → 198) - **desvío, ver abajo**: el efecto de limpieza por tipo lee el tipo con `form.getValues('type')` y depende de `[mode, type, form]`.
+- **Verificación en navegador (Fases 4 + 5)** — script Playwright temporal contra `:3010` (escritorio 1440 + móvil 375 `isMobile: true`), 108/109 chequeos OK (el único FAIL era una expectativa mal escrita del script sobre el snapshot en edición, ver desvíos de la Fase 4), sin errores de página:
+  - Listado: encabezados `Fecha | Tipo | Descripción | Origen | Destino | Socio | Monto | Estado | (acciones)`, sin "Asiento". La visibilidad de columnas no se persiste (`dt-state:<tableId>` solo guarda `pageSize`/orden/filtros), así que no hay estado viejo con `asiento` que romper.
+  - Menú: borradores (los 4 tipos y uno sembrado por SQL) → `Ver | Confirmar | Editar | Eliminar`; confirmados (los 2 nuevos y 2 viejos de la base, `Aporte inicial de capital` y `dato`) → solo `Ver`.
+  - Vista de los 4 tipos en borrador y de los 2 confirmados: título "Movimiento de Fondos" y descripción por estado; **todos** los controles del fieldset `:disabled` (6 en aporte/retiro/transferencia, 10 y 13 en gastos) con `opacity` computada **1** (D2 con `!` confirmado); fuera del fieldset solo "Cerrar" + X; sin "Agregar concepto", sin tachos, sin avisos de cuenta, sin Guardar/Cancelar; click en el Select de tipo no abre listbox y en el combobox de cuenta no abre popover; conceptos cargados en gastos con total visible. Capturas a 100 % legibles.
+  - Resumen vs. base: aporte confirmado → `Confirmado el 06/10/2026 16:54`, `Asiento N° 36`; gastos confirmado → `06/10/2026 16:54`, `Asiento N° 37`; ambos coinciden con `fund_movements.confirmed_at` (UTC 19:54 → local -03) y con `journal_entries.number` del `journal_entry_id`.
+  - Snapshot (probado en navegador, no solo con el test unitario): dos borradores sembrados por SQL con fondo/socio inexistentes en el catálogo → la vista muestra `Banco Galicia - 4455-7 (baja)`, `Socio Dado De Baja` y `Caja Chica - CAJA-02 (cerrada)` (caso "caja con sesión cerrada": `fund_out_kind='CASH'` con un id fuera de las cajas con sesión `OPEN`) en lugar del placeholder.
+  - Editar ↔ Ver (instancia compartida): Ver gastos → Editar aporte, Ver transferencia → Editar aporte, Ver aporte → Editar transferencia, Ver aporte → Editar retiro: todos los campos del movimiento editado intactos y habilitados, con el aviso de cuenta del socio; Editar gastos → Ver gastos → Editar gastos: conceptos iguales, en vista sin botones de edición y en edición con "Agregar concepto" y 2 tachos.
+  - **I8–I10 (pendientes de la Fase 3):** alta con "Guardar y Confirmar" (aporte 1.234,56) → toast "Movimiento confirmado", modal cerrado, fila "Confirmado"; edición de un borrador de gastos (importe 1.500 → 1.600 y concepto nuevo "Sellado") con "Guardar y Confirmar" → `updateFundMovement` + `confirmFundMovement`, toast "Movimiento confirmado", modal cerrado, fila "Confirmado"; **I9**: reabrir ese movimiento en Ver sin recargar muestra los 3 conceptos frescos (1.600 / 315 / 50). Altas de borrador → "Borrador guardado". El camino de error como dato también se vio (ver dato de dev abajo): toast con el mensaje genérico, modal abierto, sin `throw`.
+  - I7 tras el cambio del hook (alta nueva): aporte→transferencia limpia el socio, transferencia→aporte limpia el origen, gastos→transferencia limpia el destino, salir de gastos vacía los conceptos, el monto (500) queda intacto.
+  - Móvil 375 `isMobile: true`, vista de gastos confirmado, aporte confirmado y transferencia borrador: `DialogContent` x=16, w=343, right=359; X 326–342; `innerWidth` = `scrollWidth` = 375; sin desborde del diálogo ni del fieldset.
+  - Limpieza: los borradores `TSK720A-F45-test …` se eliminaron desde la UI (menú → Eliminar → "Borrador eliminado"). **Quedan dos confirmados para la Fase 6** (no se pueden borrar desde la UI): `c2250ab9-00ba-4304-bc44-46f7cf526685` (aporte, `TSK720A-F45-test aporte confirmado`, Banco Santander, María López, $ 1.234,56, asiento N° 36, `journal_entry_id f658d76e-47d8-4c07-9fb6-0e31c7f934c9`) y `f6411cea-9d20-4559-b4c3-85373e88b14d` (gastos bancarios, `TSK720A-F45-test gastos confirmado`, Banco Santander, 3 conceptos $ 1.965, asiento N° 37, `journal_entry_id adb7dc11-0e56-4105-a0d8-8441ac36a9e3`). Movieron el saldo del Banco Santander de dev.
+  - `npx vitest run FM` 125/125; `check-types` 219 (sin cambio); `eslint` de los archivos tocados: 0 errores, 1 warning preexistente (`react-hooks/incompatible-library` por `form.watch`).
+- **Desvíos / precisiones:**
+  - **Bug latente de 3.7.2 corregido en el hook.** El diseño daba por inocuo que el efecto de limpieza corriera al cambiar de modo en la instancia compartida "porque el reset reescribe todo"; en realidad los dos efectos corren en el **mismo commit**, primero el reset y después la limpieza, y la limpieza usaba los flags (`isBankCharges`, `isContribution`, `isPartnerMovement`) del render anterior, es decir, del movimiento visto antes. Reproducido en navegador con el hook anterior: Ver gastos → Editar aporte dejaba el aporte **sin destino ni socio**, y Ver transferencia → Editar aporte lo dejaba sin socio (al guardar se perdían). Arreglo: el efecto deriva el tipo de `form.getValues('type')` (ya reseteado) y depende de `[mode, type, form]`; con eso los 4 cruces dan los datos intactos y I7 sigue igual.
+  - **Dato de dev corregido:** `accounting_settings.last_entry_number` de la empresa de prueba estaba en 29 mientras que `journal_entries` llegaba a 35 (asientos `TSK719-demo …` sembrados por SQL sin mover el contador) → toda confirmación fallaba con `P2002` en `journal_entries_company_id_number_key` (mensaje genérico en el toast). Se llevó el contador a 35 (se ignoró el asiento de depuración `999999`). No es un problema del código de este ticket; conviene que los scripts de siembra muevan el contador.
+  - `_FundMovementConfirmDialogs.tsx` se creó como estaba previsto en 3.4.5 (el plan lo dejaba "eventual").
 
 ### Fase 6: Verificación en navegador y capturas
 - **Estado:** Pendiente

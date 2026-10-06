@@ -3,32 +3,21 @@
 import { Plus } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
-import { toast } from 'sonner';
 
 import { DataTable, type DataTableSearchParams } from '@/shared/components/common/DataTable';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/shared/components/ui/alert-dialog';
 import { Button } from '@/shared/components/ui/button';
 import type { ModulePermissions } from '@/shared/lib/permissions';
 
-import {
-  confirmFundMovement,
-  deleteFundMovement,
-  type FundMovementAccountRef,
-  type FundMovementListItem,
-  type FundMovementPartnerOption,
-  type FundOption,
+import type { FundMovementDetailMode } from '../../shared/view-mode';
+import type {
+  FundMovementAccountRef,
+  FundMovementListItem,
+  FundMovementPartnerOption,
+  FundOption,
 } from '../actions.server';
 import { getColumns } from '../columns';
 import { _CreateFundMovementModal } from './_CreateFundMovementModal';
+import { _FundMovementConfirmDialogs } from './_FundMovementConfirmDialogs';
 
 interface Props {
   data: FundMovementListItem[];
@@ -41,6 +30,8 @@ interface Props {
   defaultContributionsAccount: FundMovementAccountRef | null;
   defaultBankChargesAccount: FundMovementAccountRef | null;
 }
+
+type DetailSelection = { movement: FundMovementListItem; mode: FundMovementDetailMode };
 
 export function _FundMovementsTable({
   data,
@@ -55,56 +46,37 @@ export function _FundMovementsTable({
 }: Props) {
   const router = useRouter();
   const [createOpen, setCreateOpen] = useState(false);
-  const [editing, setEditing] = useState<FundMovementListItem | null>(null);
+  // Edición y vista comparten una instancia del modal (TSK-720a, D8). Al cerrar
+  // solo baja `detailOpen`: `selected` se conserva para que la animación de
+  // salida no cambie título ni campos.
+  const [selected, setSelected] = useState<DetailSelection | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
   const [confirming, setConfirming] = useState<FundMovementListItem | null>(null);
   const [deleting, setDeleting] = useState<FundMovementListItem | null>(null);
-  const [isBusy, setIsBusy] = useState(false);
 
   const refresh = () => router.refresh();
 
-  const columns = useMemo(
-    () =>
-      getColumns({
-        onEdit: setEditing,
-        onConfirm: setConfirming,
-        onDelete: setDeleting,
-        permissions,
-      }),
-    [permissions]
-  );
+  const columns = useMemo(() => {
+    const openDetail = (movement: FundMovementListItem, mode: FundMovementDetailMode) => {
+      setSelected({ movement, mode });
+      setDetailOpen(true);
+    };
+    return getColumns({
+      onView: (m) => openDetail(m, 'view'),
+      onEdit: (m) => openDetail(m, 'edit'),
+      onConfirm: setConfirming,
+      onDelete: setDeleting,
+      permissions,
+    });
+  }, [permissions]);
 
-  const handleConfirm = async () => {
-    if (!confirming) return;
-    setIsBusy(true);
-    try {
-      const result = await confirmFundMovement(confirming.id);
-      if (!result.success) {
-        toast.error(result.error);
-        return;
-      }
-      toast.success('Movimiento confirmado');
-      refresh();
-    } finally {
-      setIsBusy(false);
-      setConfirming(null);
-    }
-  };
-
-  const handleDelete = async () => {
-    if (!deleting) return;
-    setIsBusy(true);
-    try {
-      const result = await deleteFundMovement(deleting.id);
-      if (!result.success) {
-        toast.error(result.error);
-        return;
-      }
-      toast.success('Borrador eliminado');
-      refresh();
-    } finally {
-      setIsBusy(false);
-      setDeleting(null);
-    }
+  const modalProps = {
+    banks,
+    cashRegisters,
+    partners,
+    defaultContributionsAccount,
+    defaultBankChargesAccount,
+    onSuccess: refresh,
   };
 
   return (
@@ -131,69 +103,25 @@ export function _FundMovementsTable({
         mode="create"
         open={createOpen}
         onOpenChange={setCreateOpen}
-        banks={banks}
-        cashRegisters={cashRegisters}
-        partners={partners}
-        defaultContributionsAccount={defaultContributionsAccount}
-        defaultBankChargesAccount={defaultBankChargesAccount}
-        onSuccess={refresh}
+        {...modalProps}
       />
 
-      {/* Edición de borrador */}
+      {/* Edición de borrador o vista de solo lectura (cualquier estado) */}
       <_CreateFundMovementModal
-        mode="edit"
-        open={!!editing}
-        onOpenChange={(open) => !open && setEditing(null)}
-        banks={banks}
-        cashRegisters={cashRegisters}
-        partners={partners}
-        defaultContributionsAccount={defaultContributionsAccount}
-        defaultBankChargesAccount={defaultBankChargesAccount}
-        movement={editing}
-        onSuccess={refresh}
+        mode={selected?.mode ?? 'view'}
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
+        movement={selected?.movement ?? null}
+        {...modalProps}
       />
 
-      {/* Confirmar */}
-      <AlertDialog open={!!confirming} onOpenChange={(open) => !open && setConfirming(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>¿Confirmar este movimiento?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Al confirmarlo se actualizará el saldo del banco/caja y se generará el asiento
-              contable. Esta acción no se puede deshacer desde acá.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isBusy}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={handleConfirm} disabled={isBusy}>
-              Confirmar
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* Eliminar */}
-      <AlertDialog open={!!deleting} onOpenChange={(open) => !open && setDeleting(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>¿Eliminar este borrador?</AlertDialogTitle>
-            <AlertDialogDescription>
-              El movimiento en borrador &quot;{deleting?.description}&quot; se eliminará
-              permanentemente.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isBusy}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDelete}
-              disabled={isBusy}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              Eliminar
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <_FundMovementConfirmDialogs
+        confirming={confirming}
+        deleting={deleting}
+        onCloseConfirm={() => setConfirming(null)}
+        onCloseDelete={() => setDeleting(null)}
+        onSuccess={refresh}
+      />
     </>
   );
 }

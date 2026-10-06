@@ -150,8 +150,16 @@ export function useFundMovementForm({
   // una transferencia previa (hallazgo de revisión final, TSK-585).
   //
   // En vista no se limpia nada: mostraría menos de lo guardado (TSK-720a).
+  // El tipo se lee del form y no de `type`: con la instancia compartida de
+  // edición/vista, al pasar de ver un movimiento a editar otro este efecto
+  // corre (cambió `mode`) en el mismo commit que el reset de arriba, y `type`
+  // todavía es el del movimiento anterior (TSK-720a, fase 5).
   useEffect(() => {
     if (!shouldCleanupFieldsOnTypeChange(mode)) return;
+    const currentType = form.getValues('type');
+    const isBankCharges = currentType === 'BANK_CHARGES';
+    const isContribution = currentType === 'PARTNER_CONTRIBUTION';
+    const isPartnerMovement = isContribution || currentType === 'PARTNER_WITHDRAWAL';
     if (!isBankCharges) {
       if (form.getValues('lines')?.length) form.setValue('lines', []);
     } else {
@@ -164,7 +172,7 @@ export function useFundMovementForm({
     if (isContribution && form.getValues('sourceFund')) {
       form.setValue('sourceFund', '');
     }
-  }, [mode, isBankCharges, isContribution, isPartnerMovement, form]);
+  }, [mode, type, form]);
 
   const { isSubmitting, submit } = useFundMovementSubmit({
     form,
