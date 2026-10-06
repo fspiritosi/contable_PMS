@@ -1,7 +1,7 @@
 # TSK-757 — Cuenta contable por tipo de gasto
 
 **Fecha de inicio:** 2026-10-06
-**Estado:** Implementación en progreso (Fase 1 de 9 completada)
+**Estado:** Implementación en progreso (Fase 2 de 9 completada)
 
 ---
 
@@ -452,7 +452,7 @@ Otras decisiones de esta planificación:
 - **Objetivo:** toda la regla "qué cuenta va al Debe" y sus mensajes en funciones puras testeadas,
   antes de tocar actions.
 - **Tareas:**
-  - [ ] Crear `src/modules/commercial/shared/expense-accounts.test.ts` primero (rojo) y después
+  - [x] Crear `src/modules/commercial/shared/expense-accounts.test.ts` primero (rojo) y después
         `src/modules/commercial/shared/expense-accounts.ts` con:
     - `type ExpenseDebitSource = 'category' | 'default'`.
     - `resolveExpenseDebitAccount({ categoryAccountId, defaultAccountId })` →
@@ -471,14 +471,14 @@ Otras decisiones de esta planificación:
       description })` → la línea actual de `INT/index.ts:999-1004` (`Gasto ${fullNumber} -
       ${description}`). JSDoc: "TSK-738 suma `costCenterId` al input y lo copia a la línea".
     - `describeExpenseDebitSource(source)` → "de la categoría" / "por defecto" (texto de D6).
-  - [ ] Casos: categoría con cuenta y default vacía → categoría; categoría sin cuenta → default;
+  - [x] Casos: categoría con cuenta y default vacía → categoría; categoría sin cuenta → default;
         ninguna → null; `''` como vacío; `requiredExpenseSettingsFields` en ambos casos; mensajes
         con y sin cuenta existente; `buildExpenseDebitLine` (importe, crédito 0, descripción, sin
         `costCenterId`).
-  - [ ] `EXP/validators.ts`: `expenseCategoryFormSchema` suma
+  - [x] `EXP/validators.ts`: `expenseCategoryFormSchema` suma
         `accountId: z.string().uuid().nullable().optional()`. Crear `EXP/validators.test.ts`: nombre
         vacío falla; `accountId` null/undefined/uuid válidos; string no-uuid falla.
-  - [ ] `npm run test -- expense-accounts validators` en verde.
+  - [x] `npm run test -- expense-accounts validators` en verde.
 - **Archivos:** `src/modules/commercial/shared/expense-accounts.ts` y `.test.ts` (nuevos);
   `EXP/validators.ts` (modificado); `EXP/validators.test.ts` (nuevo).
 - **Criterio de completitud:** tests nuevos en verde; sin cambios de UI ni actions; commit
@@ -1521,7 +1521,27 @@ constantes `COMPANY_ID`, `USER_ID`, `SUPPLIER_ID`, `EMAIL`/`PASSWORD`, `BASE` po
     las categorías existentes quedan con `account_id NULL` = "por defecto", mismo asiento que hoy.
 
 ### Fase 2: Helpers puros de resolución y validador (TDD)
-- **Estado:** Pendiente
+- **Estado:** Completada
+- **Archivos modificados:**
+  - `src/modules/commercial/shared/expense-accounts.ts` (nuevo) — `resolveExpenseDebitAccount`,
+    `requiredExpenseSettingsFields`, `buildMissingExpenseAccountsMessage`,
+    `buildCategoryAccountNotImputableMessage`, `describeExpenseDebitSource`,
+    `buildExpenseDebitLine` (punto de extensión TSK-738), `buildExpenseDebitAccountView`,
+    `EXPENSE_CATEGORIES_PATH` y tipos (`ExpenseEntryField`, `ExpenseDebitSource`,
+    `ExpenseDebitAccountOrigin`, `ExpenseDebitLine*`, `ExpenseDebitAccountView`).
+  - `src/modules/commercial/shared/expense-accounts.test.ts` (nuevo) — P1–P14 (14 tests).
+  - `src/modules/commercial/features/expenses/validators.ts` — `accountId`
+    `z.string().uuid('Cuenta contable inválida').nullable().optional()` en `expenseCategoryFormSchema`.
+  - `src/modules/commercial/features/expenses/validators.test.ts` (nuevo) — V1–V5.
+- **Notas:**
+  - TDD: los tests se escribieron primero y fallaron (módulo inexistente; V3–V5 en rojo); después
+    la implementación → 19/19 en verde. `check-types` 219; eslint sin errores.
+  - Ajuste mínimo: P7 compara el label de `expensesAccountId` vía `settingsAccountLabel(...)` en vez
+    del literal "Cuenta de egresos por defecto", porque el renombre del label es tarea de la Fase 4;
+    el literal se verifica allí (`settings-accounts.test.ts` y casos 2-4/11 de integración).
+  - `expense-accounts.ts` no importa `ACCOUNTING_SETTINGS_PATH` ni `formatAccountLabel` (el diseño
+    los listaba, pero el helper recibe los labels ya armados y el path de Ajustes lo aporta
+    `buildMissingSettingsAccountsMessage`): evitaría imports sin uso.
 
 ### Fase 3: ABM de categorías en el servidor (cuenta + `ActionResult`)
 - **Estado:** Pendiente
