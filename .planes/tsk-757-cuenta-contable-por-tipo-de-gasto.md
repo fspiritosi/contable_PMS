@@ -1,7 +1,7 @@
 # TSK-757 — Cuenta contable por tipo de gasto
 
 **Fecha de inicio:** 2026-10-06
-**Estado:** Implementación en progreso (Fase 8 de 9 completada)
+**Estado:** Implementación completada
 
 ---
 
@@ -708,14 +708,14 @@ Otras decisiones de esta planificación:
 
 - **Objetivo:** cerrar con calidad y build de producción.
 - **Tareas:**
-  - [ ] `npm run check-types` → ≤ 219.
-  - [ ] `npm run lint` → sin errores en archivos tocados (sin `console.*`, sin `:any`, sin
+  - [x] `npm run check-types` → ≤ 219.
+  - [x] `npm run lint` → sin errores en archivos tocados (sin `console.*`, sin `:any`, sin
         `date-fns`).
-  - [ ] `npm run test` → en verde (puros + integración de egresos y del resto).
+  - [x] `npm run test` → en verde (puros + integración de egresos y del resto).
   - [ ] `npm run build` → OK; `npm run start -- -p 3011` (con `NEXT_PUBLIC_APP_URL` en 3011) y
         disparar en el navegador "nombre duplicado" y "cuenta de categoría inactiva" para ver el
         **toast real** en producción (memoria `errores-negocio-server-actions`).
-  - [ ] `wc -l` de los componentes nuevos/reescritos < 200; los preexistentes excedidos no
+  - [x] `wc -l` de los componentes nuevos/reescritos < 200; los preexistentes excedidos no
         crecieron más de lo previsto.
   - [ ] Completar la sección 5 con resultados.
 - **Archivos:** este documento (sección 5).
@@ -1828,7 +1828,14 @@ constantes `COMPANY_ID`, `USER_ID`, `SUPPLIER_ID`, `EMAIL`/`PASSWORD`, `BASE` po
     en verde.
 
 ### Fase 9: Verificación final
-- **Estado:** Pendiente
+- **Estado:** Completada (2026-10-06), salvo la prueba en `npm run start` que pasa a `/verificar`
+- **Resultados:**
+  - `npm run check-types`: 219 errores, igual a la línea base (todos previos).
+  - `eslint` sobre los `.ts`/`.tsx` cambiados en la rama: 0 errores, 2 warnings previos (`fiscalYearStart`/`fiscalYearEnd` sin usar en `integrations/commercial/index.ts`).
+  - Sin `console.*` ni `any` en las líneas agregadas (`git diff main...HEAD -- src`).
+  - `npm run test`: 50 archivos, 633 tests en verde (integración de egresos contra la DB local, sin saltear).
+  - `npm run build`: OK.
+- **Notas:** la prueba del toast real en modo producción (`npm run start` en :3011) queda a cargo del verificador independiente de `/verificar`. No hizo falta commit de `fix`.
 
 ## 5. Verificación
 _Pendiente - ejecutar `/verificar tsk-757-cuenta-contable-por-tipo-de-gasto`_
