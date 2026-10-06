@@ -1,7 +1,7 @@
 # TSK-720a + TSK-726 — Movimientos de Fondos: ver en solo lectura, sin columna de asiento, modal responsive
 
 **Fecha de inicio:** 2026-10-06
-**Estado:** Implementación completada
+**Estado:** Completado
 
 ---
 
@@ -472,7 +472,7 @@ Otras decisiones de esta planificación:
   - [x] `npm run test` → en verde (unitarios nuevos + integración de fund-movements sin regresión).
   - [x] `npm run build` → OK.
   - [x] `wc -l` de todos los componentes nuevos/modificados del modal < 200.
-  - [ ] Completar la sección 5 con los números de la Fase 6 y los resultados de esta.
+  - [x] Completar la sección 5 con los números de la Fase 6 y los resultados de esta.
 - **Archivos:** este documento (sección 5).
 - **Criterio de completitud:** los cuatro comandos pasan y la sección 5 está completa; si quedó
   algo por arreglar, commit `fix(treasury): … (TSK-720/726, fase 8)`.
@@ -1482,4 +1482,54 @@ Patrón de `capturas-tsk728.mjs` (constantes `COMPANY_ID`, `USER_ID`, `EMAIL`, `
 - **Notas:** no hizo falta commit de `fix` en esta fase. La sección 5 la completa `/verificar`.
 
 ## 5. Verificación
-_Pendiente - ejecutar `/verificar tsk-720a-726-movimientos-fondos-ver`_
+
+### 5.1 Revisión de código
+- **Resultado:** OK (con observaciones menores, ninguna bloqueante)
+- **Observaciones:**
+  - Revisión independiente de `git diff main...HEAD -- src scripts docs` contra 3.3–3.7. Firmas de `view-mode.ts`, `useFundMovementForm`, `useFundMovementSubmit`, props de los componentes y del modal coinciden con 3.3/3.4 (desvío documentado: `_FundMovementDescriptionField.tsx` extra para quedar < 200 líneas).
+  - Tabla por modo 3.4.6: comprobada fila por fila en `_CreateFundMovementModal.tsx` (título/descripción con `getModalCopy`; resumen solo en vista; aviso "No hay cuentas…" y `_PartnerAccountNotice` con `!isView`; fieldset `disabled={isView}` con `min-w-0` y `READ_ONLY_FIELDSET` con `!`; `disabled` explícito en los 3 Select de Radix y en `AccountCombobox`; snapshot solo con `isView`; footer fuera del fieldset, "Cerrar" en vista) y en `_FundMovementLinesField.tsx` (sin "Agregar concepto", tachos ni `_BankChargesDefaultNotice` en vista; total visible).
+  - Invariantes I1–I17 contra `main`: I1/I2/I3 — mismo efecto con clave `formResetKey(mode, id)`, `null` al cerrar, espera a `movementDetail`. I4 — `formValuesFromMovement` usa `formatFundMovementDate(…,'YYYY-MM-DD')` (UTC, TSK-483). I5/I6 — claves de query idénticas; `enabled` del detalle solo se amplía a `view`. I7 — la limpieza por tipo nunca toca `amount`; en vista no corre. I8/I10 — `persist` idéntico al de `main` más la guarda `if (mode === 'view') return`. I9 — `invalidateQueries(['fund-movement-detail', id])` tras editar. I11 (TSK-718) — `pickDefaultLineAccount`/preselección sin cambios. I12/I13/I14/I15/I16 sin cambios fuera de la vista. I17 — `_FundMovementConfirmDialogs` es copia literal de los handlers de `main` (mismo orden `setIsBusy(false)` → cerrar en `finally`, mismos textos).
+  - Bug corregido en fase 5 (limpieza con la instancia compartida): el efecto lee `form.getValues('type')` (ya reseteado) y depende de `[mode, type, form]`. Revisado el orden de efectos en los cruces Ver→Editar con y sin detalle en cache: correcto. Comprobado además en navegador **guardando** (ver 5.4): la base conserva destino/socio/origen.
+  - Permisos: "Ver" con `canView` en cualquier estado; Confirmar/Editar con `canUpdate` y Eliminar con `canDelete` solo en `DRAFT` (`getRowActions`); columna con `hasAnyRowAction`. Servidor sin cambios (`getFundMovementById` con `view`; mutaciones con `update`/`delete`); página con `PermissionGuard … view redirect`.
+  - Envío del form en vista: no hay `type="submit"` (todos los botones son `type="button"`) y los controles están deshabilitados (no toman foco); al abrir Ver el foco inicial cae en "Cerrar". Probado: Enter no dispara `submit` ni navega.
+  - Decimal→Number: no hay queries nuevas; `getFundMovements`/`getFundMovementById` ya convierten `amount` (cabecera y líneas). `confirmedAt`/`date` son `Date` (serializables).
+  - Accesibilidad básica: resumen en `<dl>/<dt>/<dd>`; controles realmente `disabled` (no enfocables) con texto al 100 %; el disparador del menú conserva su nombre accesible ("Abrir menú"); título y descripción del diálogo por modo.
+  - Observaciones menores (no bloqueantes, comportamiento previo de la instancia de edición de `main`): (a) al abrir Ver/Editar de un BANK_CHARGES cuyo detalle no está en cache, mientras llega `getFundMovementById` el formulario muestra un instante los valores del movimiento abierto antes en la misma instancia (con el título/resumen del nuevo); (b) si esa query fallara, el reset no se aplica y quedarían esos valores. Candidato a seguimiento: resetear a vacío al abrir mientras se espera el detalle.
+
+### 5.2 Build / Lint
+- **Resultado:** OK
+- **Detalle:** `npm run check-types 2>&1 | grep -c "error TS"` = **219** (= línea base, todos previos). `eslint` sobre los `.ts`/`.tsx` cambiados en la rama: **0 errores**, 1 warning previo (`react-hooks/incompatible-library` por `form.watch('type')` en `useFundMovementForm.ts:123`, misma llamada que tenía el modal). `npm run build` no se repitió (OK en la Fase 8; no se modificó código en esta verificación).
+
+### 5.3 Tests
+- **Tests ejecutados:** `npm run test` → 49 archivos, **655/655** en verde (incluye `view-mode.test.ts` y los `*.integration.test.ts` de fund-movements).
+- **Tests nuevos creados:** ninguno. Los 54 casos de `view-mode.test.ts` cubren la tabla 3.4.8 (acciones por estado/permiso, snapshot, valores del form con fecha UTC, textos por modo/estado, guardas del hook); no se encontró un hueco relevante en los helpers puros.
+- **Detalle:** la UI (sin Testing Library/jsdom) se cubrió con Playwright (5.4).
+
+### 5.4 Verificación funcional
+- **Resultado:** OK
+- **Detalle:**
+  - `node scripts/guia-presentacion/capturas-tsk720a-726.mjs http://localhost:3010`: **35/35 chequeos OK**, salida 0; siembra `TSK720A-demo` borrada (0 restos). Celular 375×812 `isMobile: true`: los 8 escenarios (alta y Ver de los 4 tipos) con `DialogContent` x=16 / w=343 / right=359, X right=342 visible, `innerWidth` = `scrollWidth` = 375, desborde 0/0; listado 375; Socios 383 (antes 443) y Dashboard 491 (sin cambio), como se documentó.
+  - Prueba manual propia (script temporal, borrado; siembra `created_by='VERIF-tmp'` de 4 borradores, borrada al final, 0 restos): **22/22 OK**.
+    - Ver gastos → Editar aporte: destino "Banco Santander…" y socio "Juan Perez" presentes y campos habilitados; **Guardar** → en la base `fund_in_id` y `partner_id` intactos, `fund_out_id` nulo.
+    - Ver transferencia → Editar aporte: socio presente. Ver aporte → Editar transferencia: origen y destino presentes; **Guardar** → base intacta (sin socio).
+    - Ver gastos (2 conceptos, sin "Agregar") → Editar gastos (2 conceptos, "Agregar" visible) → Ver gastos (2 conceptos deshabilitados). Ver retiro → Editar gastos: conceptos L1/L2.
+    - Enter en Ver: `focus()` sobre un input no lo enfoca (deshabilitado); el foco está en "Cerrar"; Enter/Tab+Enter no disparan el evento `submit` ni cambian la URL (Enter sobre "Cerrar" cierra, como corresponde). Alta de gastos sin conceptos, Enter en Fecha: tampoco envía el form.
+    - Criterio de TSK-726 a 375 con `isMobile: true`: alta de los 4 tipos (gastos con un concepto) y Ver de los 4 borradores → x=16, w=343, X right=342, `innerWidth` = `scrollWidth` = 375.
+
+### 5.5 Cumplimiento de reglas
+- **CLAUDE.md respetado:** Sí
+- **Observaciones:**
+  - Client components nuevos con prefijo `_`; hooks en `list/hooks/` sin prefijo; nada en `src/app/`.
+  - < 200 líneas: `useFundMovementForm.ts` 198, `_CreateFundMovementModal.tsx` 191, `columns.tsx` 175, `_FundMovementLinesField.tsx` 160, `_FundMovementsTable.tsx` 127, resto menor.
+  - Sin `console.*`, `any`, `date-fns`, `confirm()`/`alert()` en las líneas agregadas de `src/`; fechas con moment / `formatFundMovementDate`.
+  - Permisos en 3 niveles (actions con `checkPermission`, página con `PermissionGuard`, cliente con `ModulePermissions` por props, patrón del archivo).
+  - Guía in-app (`_TreasuryGuide.tsx`): Ver en cualquier estado, recuadro Estado/Confirmado el/Asiento N°, snapshot, dónde quedó el N° de asiento, uso en el celular. `docs/modules/commercial.md` y `DataTable/DOCS.md` actualizados.
+  - Presentación `docs/presentaciones/TSK-720-726-ver-movimientos-de-fondos.pdf`: páginas 2-3 revisadas como imagen; coinciden con lo implementado (listado sin Asiento, menú Ver vs. Ver + Confirmar/Editar/Eliminar, vistas de gastos y aporte confirmados con Asiento N° 37/36, textos por estado).
+  - Testing: Vitest (la sección Cypress de CLAUDE.md no aplica: no existe en el repo). Sin módulo nuevo (no aplica `modules.md`) ni feature por industria.
+
+### 5.6 Resultado final
+- **Estado:** APROBADO
+- **Acciones pendientes:**
+  - Seguimientos ya listados en 2.4 (toolbar de Socios a 383 px, Dashboard a 491 px, desborde de la tabla a 1440 px, D12, TSK-720b).
+  - Opcional: evitar el instante con valores del movimiento anterior al abrir Ver/Editar un BANK_CHARGES sin detalle en cache (observación 5.1, comportamiento previo).
+  - Los dos confirmados de dev (`c2250ab9-…`, `f6411cea-…`) siguen en la base a propósito (los usa el script de capturas).
