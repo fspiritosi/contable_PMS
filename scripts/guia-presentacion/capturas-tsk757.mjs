@@ -28,11 +28,15 @@
  *   node scripts/guia-presentacion/capturas-tsk757.mjs [baseUrl]   # recorrido completo (dev :3010)
  *   node scripts/guia-presentacion/capturas-tsk757.mjs --restore   # solo limpieza
  *
- * Siembra por SQL tres categorías de ejemplo (descripción 'Ejemplo TSK-757'), una cuenta raíz
- * temporal inactiva `TSK757-DEMO` y tres egresos en borrador (notes = 'TSK757-demo'). Pone
- * temporalmente una "Cuenta de egresos por defecto" si la empresa no tiene. Todo se limpia y
- * restaura al inicio y al final (también ante error). Los datos de las fases 4-6 (GTO-00004/05,
- * marca 'TSK757-F4') no se tocan.
+ * Siembra por SQL tres categorías de ejemplo, una cuenta raíz temporal inactiva y tres egresos en
+ * borrador. Las capturas van a la clienta, así que la siembra NO lleva marcas visibles: todo se
+ * inserta con IDs fijos (`SEED_IDS`, prefijo 00000757-…) y la limpieza borra solo esas filas (y los
+ * asientos que generaron al confirmarse). Los textos que se ven son realistas (sin notas, cuenta
+ * "4.2.1/07/90 - Tasas municipales (dada de baja)"). Si ya existe una categoría o una cuenta real con
+ * el mismo nombre/código pero otro ID, se aborta sin tocar nada. Pone temporalmente una "Cuenta de
+ * egresos por defecto" si la empresa no tiene. Todo se limpia y restaura al inicio y al final
+ * (también ante error). Los datos de las fases 4-6 (GTO-00004/05, renombrados a "Factura de luz
+ * septiembre" / "Artículos de librería") no se tocan.
  */
 import { chromium } from 'playwright';
 import { mkdirSync, rmSync } from 'node:fs';
@@ -46,9 +50,20 @@ const EMAIL = 'fspiritosi@codecontrol.com.ar';
 const PASSWORD = 'Contable2026!';
 const COMPANY_ID = '02885d43-1358-4eb2-b774-c52d5be372f3';
 const USER_ID = '848d69ff-198d-4588-975e-d3691ea2333f';
-const MARK = 'TSK757-demo';
-const DEMO_DESC = 'Ejemplo TSK-757';
-const TEMP_ACCOUNT_CODE = 'TSK757-DEMO';
+// IDs fijos de lo sembrado: es la única "marca", invisible en pantalla.
+const SEED_IDS = {
+  catRent: '00000757-0000-4000-8000-000000000001',
+  catTax: '00000757-0000-4000-8000-000000000002',
+  catTravel: '00000757-0000-4000-8000-000000000003',
+  expRent: '00000757-0000-4000-8000-000000000011',
+  expTax: '00000757-0000-4000-8000-000000000012',
+  expTravel: '00000757-0000-4000-8000-000000000013',
+  tempAccount: '00000757-0000-4000-8000-000000000021',
+};
+const SEED_CATEGORY_IDS = [SEED_IDS.catRent, SEED_IDS.catTax, SEED_IDS.catTravel];
+const SEED_EXPENSE_IDS = [SEED_IDS.expRent, SEED_IDS.expTax, SEED_IDS.expTravel];
+const TEMP_ACCOUNT_CODE = '4.2.1/07/90';
+const TEMP_ACCOUNT_NAME = 'Tasas municipales (dada de baja)';
 const DEMO_CATEGORIES = ['Alquiler de oficina', 'Tasas municipales', 'Viáticos de obra'];
 const MOBILE_WIDTH = 375;
 const EXP_LIST = '/dashboard/commercial/expenses';
@@ -91,23 +106,27 @@ const indent = (text) => text.split('\n').map((l) => '     ' + l).join('\n');
 // =====================================================================
 // Limpieza y siembra
 // =====================================================================
+const inList = (list) => list.map((id) => `'${id}'`).join(',');
+const SEED_EXPENSES = `company_id='${COMPANY_ID}' and id in (${inList(SEED_EXPENSE_IDS)})`;
+const SEED_CATEGORIES = `company_id='${COMPANY_ID}' and id in (${inList(SEED_CATEGORY_IDS)})`;
+const SEED_ACCOUNT = `company_id='${COMPANY_ID}' and id='${SEED_IDS.tempAccount}'`;
+
 const cleanup = () => {
   const entries = psql(
-    `select string_agg(journal_entry_id::text, ',') from expenses where company_id='${COMPANY_ID}' and notes='${MARK}' and journal_entry_id is not null`
+    `select string_agg(journal_entry_id::text, ',') from expenses where ${SEED_EXPENSES} and journal_entry_id is not null`
   );
-  psql(`update expenses set journal_entry_id=null where company_id='${COMPANY_ID}' and notes='${MARK}'`);
+  psql(`update expenses set journal_entry_id=null where ${SEED_EXPENSES}`);
   if (entries) {
-    const ids = entries.split(',').map((id) => `'${id}'`).join(',');
+    const ids = inList(entries.split(','));
     psql(`delete from journal_entry_lines where entry_id in (${ids})`);
     psql(`delete from journal_entries where id in (${ids})`);
   }
-  psql(`delete from expenses where company_id='${COMPANY_ID}' and notes='${MARK}'`);
-  const names = DEMO_CATEGORIES.map(q).join(',');
-  psql(`delete from expense_categories where company_id='${COMPANY_ID}' and name in (${names}) and description='${DEMO_DESC}'`);
-  psql(`delete from accounts where company_id='${COMPANY_ID}' and code='${TEMP_ACCOUNT_CODE}'`);
+  psql(`delete from expenses where ${SEED_EXPENSES}`);
+  psql(`delete from expense_categories where ${SEED_CATEGORIES}`);
+  psql(`delete from accounts where ${SEED_ACCOUNT}`);
   setExpensesSetting(ORIG_EXPENSES_ACCOUNT);
   const counts = psql(
-    `select (select count(*) from expenses where company_id='${COMPANY_ID}' and notes='${MARK}') || '|' || (select count(*) from expense_categories where company_id='${COMPANY_ID}' and description='${DEMO_DESC}') || '|' || (select count(*) from accounts where company_id='${COMPANY_ID}' and code='${TEMP_ACCOUNT_CODE}')`
+    `select (select count(*) from expenses where ${SEED_EXPENSES}) || '|' || (select count(*) from expense_categories where ${SEED_CATEGORIES}) || '|' || (select count(*) from accounts where ${SEED_ACCOUNT})`
   );
   console.log(`  limpieza (egresos|categorías|cuenta temporal): ${counts}; cuenta de egresos por defecto: ${expensesSetting()}`);
   return counts === '0|0|0';
@@ -122,6 +141,8 @@ const seed = () => {
     `select string_agg(name, ', ') from expense_categories where company_id='${COMPANY_ID}' and name in (${DEMO_CATEGORIES.map(q).join(',')})`
   );
   if (clash) throw new Error(`Ya existen categorías reales con nombre de ejemplo: ${clash}. No se tocan.`);
+  const codeClash = psql(`select name from accounts where company_id='${COMPANY_ID}' and code='${TEMP_ACCOUNT_CODE}'`);
+  if (codeClash) throw new Error(`Ya existe una cuenta real con código ${TEMP_ACCOUNT_CODE} (${codeClash}). No se toca.`);
 
   // Cuenta de egresos por defecto: se respeta la de la empresa; si no tiene, una temporal.
   ids.defaultAccount =
@@ -131,29 +152,29 @@ const seed = () => {
   ids.rentAccount = pickExpenseAccount(['%alquiler%'], [ids.defaultAccount]);
   ids.taxAccount = pickExpenseAccount(['tasas', '%tasa%', '%impuesto%'], [ids.defaultAccount, ids.rentAccount]);
   ids.tempAccount = psql(
-    `insert into accounts (company_id, code, name, type, nature, is_active, is_leaf, updated_at) values ('${COMPANY_ID}','${TEMP_ACCOUNT_CODE}','Gastos varios (dada de baja)','EXPENSE','DEBIT',false,true,now()) returning id`
+    `insert into accounts (id, company_id, code, name, type, nature, is_active, is_leaf, updated_at) values ('${SEED_IDS.tempAccount}','${COMPANY_ID}','${TEMP_ACCOUNT_CODE}',${q(TEMP_ACCOUNT_NAME)},'EXPENSE','DEBIT',false,true,now()) returning id`
   );
 
-  const cat = (name, accountId) =>
+  const cat = (id, name, description, accountId) =>
     psql(
-      `insert into expense_categories (name, description, company_id, account_id, updated_at) values (${q(name)},'${DEMO_DESC}','${COMPANY_ID}',${accountId ? `'${accountId}'` : 'NULL'},now()) returning id`
+      `insert into expense_categories (id, name, description, company_id, account_id, updated_at) values ('${id}',${q(name)},${q(description)},'${COMPANY_ID}',${accountId ? `'${accountId}'` : 'NULL'},now()) returning id`
     );
-  ids.catRent = cat('Alquiler de oficina', ids.rentAccount);
-  ids.catTax = cat('Tasas municipales', ids.taxAccount);
-  ids.catTravel = cat('Viáticos de obra', null);
+  ids.catRent = cat(SEED_IDS.catRent, 'Alquiler de oficina', 'Alquiler mensual de la oficina central', ids.rentAccount);
+  ids.catTax = cat(SEED_IDS.catTax, 'Tasas municipales', 'ABL y otras tasas del municipio', ids.taxAccount);
+  ids.catTravel = cat(SEED_IDS.catTravel, 'Viáticos de obra', 'Comidas, traslados y alojamiento del personal en obra', null);
 
   const next = () => Number(psql(`select coalesce(max(number),0)+1 from expenses where company_id='${COMPANY_ID}'`));
-  const expense = (description, amount, categoryId) => {
+  const expense = (id, description, amount, categoryId) => {
     const n = next();
     const fullNumber = `GTO-${String(n).padStart(5, '0')}`;
     psql(
-      `insert into expenses (number, full_number, description, amount, date, status, notes, category_id, company_id, created_by, updated_at) values (${n},'${fullNumber}',${q(description)},${amount},current_date,'DRAFT','${MARK}','${categoryId}','${COMPANY_ID}','${USER_ID}',now())`
+      `insert into expenses (id, number, full_number, description, amount, date, status, notes, category_id, company_id, created_by, updated_at) values ('${id}',${n},'${fullNumber}',${q(description)},${amount},current_date,'DRAFT',NULL,'${categoryId}','${COMPANY_ID}','${USER_ID}',now())`
     );
     return fullNumber;
   };
-  ids.expRent = expense('Alquiler de oficina octubre', 350000, ids.catRent);
-  ids.expTax = expense('ABL octubre', 18500, ids.catTax);
-  ids.expTravel = expense('Viáticos obra Neuquén', 42300, ids.catTravel);
+  ids.expRent = expense(SEED_IDS.expRent, 'Alquiler de oficina octubre', 350000, ids.catRent);
+  ids.expTax = expense(SEED_IDS.expTax, 'ABL octubre', 18500, ids.catTax);
+  ids.expTravel = expense(SEED_IDS.expTravel, 'Viáticos obra Neuquén', 42300, ids.catTravel);
 
   console.log('Datos sembrados:');
   console.log(`  Alquiler de oficina → ${accLabel(ids.rentAccount)}`);

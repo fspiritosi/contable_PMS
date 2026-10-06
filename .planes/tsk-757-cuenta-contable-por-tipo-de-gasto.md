@@ -1827,6 +1827,28 @@ constantes `COMPANY_ID`, `USER_ID`, `SUPPLIER_ID`, `EMAIL`/`PASSWORD`, `BASE` po
   - Calidad: `check-types` 219; eslint sin errores en las dos guías; `npm run test` 50 archivos / 633 tests
     en verde.
 
+### Ajuste post-verificación: capturas sin marcas de prueba visibles
+- **Motivo:** la observación de 5.5 — 6 capturas del PDF mostraban marcas técnicas ("TSK757-F4 …",
+  "Ejemplo TSK-757", Notas "TSK757-demo", cuenta "TSK757-DEMO").
+- **Datos de dev de la Fase 4 renombrados** (SQL acotado a los IDs, empresa "Empresa de Prueba 01 SA"):
+  - Egresos `70f98beb-…` (GTO-00004) → "Factura de luz septiembre" y `d87b35ea-…` (GTO-00005) →
+    "Artículos de librería"; `notes` en NULL.
+  - Categorías `4c6e48b8-…` → "Energía eléctrica" (sigue con 4.2.1/02/03) y `48d83ffc-…` → "Gastos
+    generales"; descripción NULL; **siguen desactivadas** (se ven en gris con "Inactiva").
+  - Asientos 38/39 (`96e97680-…`, `ccc599a8-…`) y su línea del Debe: descripción "Gasto GTO-0000N -
+    <descripción nueva>" (contenían "TSK757-F4 egreso con/sin cuenta" y se ven en la captura 07).
+- **`capturas-tsk757.mjs`:** la marca pasa a ser invisible: categorías, egresos y la cuenta temporal se
+  insertan con IDs fijos (`SEED_IDS`, `00000757-0000-4000-8000-…`) y la limpieza borra solo esos IDs (más los
+  asientos que generaron). Egresos sin notas; categorías con descripciones realistas; cuenta temporal
+  inactiva `4.2.1/07/90 - Tasas municipales (dada de baja)`. Aborta si ya existe una categoría real con un
+  nombre de ejemplo o una cuenta real con el código `4.2.1/07/90`.
+- **Corrida** (dev :3010): 25/25 OK, limpieza `0|0|0`, por defecto restaurada a NULL. Se regeneraron las 15
+  capturas (la 09 quedó idéntica); el asiento del alquiler es ahora el **N° 48** (antes 44). Revisadas como
+  imagen: sin "TSK", "demo", "Ejemplo" ni "test" visibles.
+- `tsk-757.html`: asiento 44 → 48, texto/alt del toast de error con la cuenta nueva, y la nota del modal
+  ya no dice "datos de prueba". PDF regenerado (6 páginas, revisadas todas como imagen). `npm run test`:
+  50 archivos / 634 tests en verde.
+
 ### Fase 9: Verificación final
 - **Estado:** Completada (2026-10-06), salvo la prueba en `npm run start` que pasa a `/verificar`
 - **Resultados:**
@@ -1920,7 +1942,7 @@ con el PDF.
 **Estado:** APROBADO
 
 **Acciones pendientes:**
-- (Opcional, antes de enviar el PDF) Regenerar capturas sin marcas técnicas: borrar los datos de la Fase 4 (GTO-00004/05,
-  asientos 38/39, categorías "TSK757-F4 …") y usar `notes`/código de cuenta neutros en `capturas-tsk757.mjs`.
-- Datos de dev que siguen de la Fase 4 (anotados en 4): GTO-00004/05 con `notes='TSK757-F4'` y sus categorías desactivadas.
+- ~~Regenerar capturas sin marcas técnicas~~ — hecho (ver "Ajuste post-verificación" en 4): datos de la Fase 4
+  renombrados (GTO-00004/05, asientos 38/39, categorías "Energía eléctrica"/"Gastos generales" desactivadas) y el
+  script marca por IDs fijos.
 - Seguimientos de 2.4 (TSK-738 centro de costo, desborde móvil del listado → PR #33, `cancelExpense` sin revertir asiento).

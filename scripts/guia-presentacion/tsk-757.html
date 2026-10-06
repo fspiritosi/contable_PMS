@@ -376,10 +376,10 @@
         Cada categoría muestra a la derecha de su nombre la cuenta a la que imputa, o
         <span class="ui-text">Por defecto</span> si no tiene.
         <figure class="modal">
-          <img src="assets/tsk757-02-modal-categorias.png" alt="Modal Categorías de egreso: arriba el alta con Nombre, Cuenta contable (opcional) y Descripción; abajo la lista de categorías existentes: Alquiler de oficina con 4.2.1/02/18 - Alquiler inmuebles, Servicios generales Por defecto, dos categorías de prueba inactivas, Tasas municipales con 4.2.1/07/04 - Tasas y Viáticos de obra Por defecto" />
+          <img src="assets/tsk757-02-modal-categorias.png" alt="Modal Categorías de egreso: arriba el alta con Nombre, Cuenta contable (opcional) y Descripción; abajo la lista de categorías existentes: Alquiler de oficina con 4.2.1/02/18 - Alquiler inmuebles, Energía eléctrica y Gastos generales inactivas, Servicios generales Por defecto, Tasas municipales con 4.2.1/07/04 - Tasas y Viáticos de obra Por defecto" />
           <figcaption>"Alquiler de oficina" y "Tasas municipales" con su cuenta; "Viáticos de obra" y
           "Servicios generales", <span class="ui-text">Por defecto</span>. Las que aparecen en gris
-          son categorías desactivadas (datos de prueba).</figcaption>
+          ("Energía eléctrica", "Gastos generales") son categorías desactivadas.</figcaption>
         </figure>
       </div></li>
 
@@ -434,8 +434,8 @@
         </figure>
         <div class="side-by-side">
           <figure>
-            <img src="assets/tsk757-06b-detalle-confirmado-del-asiento.png" alt="Detalle de Egreso GTO-00006 Confirmado, Cuenta contable 4.2.1/02/18 - Alquiler inmuebles (del asiento N° 44)" />
-            <figcaption>Confirmado: <span class="ui-text">(del asiento N° 44)</span>. Si más
+            <img src="assets/tsk757-06b-detalle-confirmado-del-asiento.png" alt="Detalle de Egreso GTO-00006 Confirmado, Cuenta contable 4.2.1/02/18 - Alquiler inmuebles (del asiento N° 48)" />
+            <figcaption>Confirmado: <span class="ui-text">(del asiento N° 48)</span>. Si más
             adelante cambiás la cuenta de la categoría, este egreso sigue mostrando la cuenta con la
             que se registró.</figcaption>
           </figure>
@@ -452,7 +452,7 @@ Haber  2.1.1/02/01 Acreedores Locales       42.300,00</div>
           </div>
         </div>
         <figure>
-          <img src="assets/tsk757-07-asiento-cuenta-categoria.png" alt="Contabilidad → Asientos: asiento 44 Gasto GTO-00006 - Alquiler de oficina octubre desplegado, con 4.2.1/02/18 - Alquiler inmuebles al Debe por $ 350.000,00 y 2.1.1/02/01 - Acreedores Locales (Ctes.) al Haber" />
+          <img src="assets/tsk757-07-asiento-cuenta-categoria.png" alt="Contabilidad → Asientos: asiento 48 Gasto GTO-00006 - Alquiler de oficina octubre desplegado, con 4.2.1/02/18 - Alquiler inmuebles al Debe por $ 350.000,00 y 2.1.1/02/01 - Acreedores Locales (Ctes.) al Haber" />
           <figcaption>El mismo asiento en Contabilidad → Asientos. Como todos los asientos
           automáticos, nace en <span class="ui-text">Borrador</span> y hay que
           <strong>Registrarlo</strong> para que sume en el Mayor y el Balance.</figcaption>
@@ -485,8 +485,8 @@ Haber  2.1.1/02/01 Acreedores Locales       42.300,00</div>
       escondería el error: te muestra un mensaje con la categoría y la cuenta, y el egreso queda en
       Borrador.</p>
       <figure class="modal" style="margin-top:6px">
-        <img src="assets/tsk757-08-error-cuenta-inactiva-toast.png" alt="Mensaje de error: No se puede confirmar el gasto GTO-00007: la cuenta TSK757-DEMO - Gastos varios (dada de baja) de la categoría Tasas municipales no está activa o no es imputable. Corregila en Comercial → Egresos → Categorías." />
-        <figcaption>Ejemplo con una cuenta de prueba dada de baja asignada a "Tasas municipales".</figcaption>
+        <img src="assets/tsk757-08-error-cuenta-inactiva-toast.png" alt="Mensaje de error: No se puede confirmar el gasto GTO-00007: la cuenta 4.2.1/07/90 - Tasas municipales (dada de baja) de la categoría Tasas municipales no está activa o no es imputable. Corregila en Comercial → Egresos → Categorías." />
+        <figcaption>Ejemplo: la cuenta asignada a "Tasas municipales" se dio de baja y el egreso de ABL no se confirma.</figcaption>
       </figure>
     </div>
   </section>
