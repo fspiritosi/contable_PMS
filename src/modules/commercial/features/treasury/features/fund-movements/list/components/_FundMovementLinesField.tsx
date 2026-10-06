@@ -80,7 +80,7 @@ export function _FundMovementLinesField({
 
             return (
               <div key={field.id} className="space-y-1">
-                <div className="flex items-start gap-2">
+                <div className="flex flex-wrap items-start gap-2 sm:flex-nowrap">
                   <AccountCombobox
                     accounts={accounts}
                     value={lines[index]?.accountId || null}
@@ -91,20 +91,20 @@ export function _FundMovementLinesField({
                     }
                     clearLabel={null}
                     placeholder="Cuenta contable"
-                    className="flex-1"
+                    className="min-w-0 basis-full sm:basis-auto sm:flex-1"
                     aria-invalid={Boolean(lineError)}
                   />
 
                   <Input
                     placeholder="Descripción"
-                    className="flex-1"
+                    className="min-w-0 flex-1"
                     aria-invalid={Boolean(lineError)}
                     {...register(`lines.${index}.description`)}
                   />
 
                   <MoneyInput
                     placeholder="0,00"
-                    className="w-36 shrink-0"
+                    className="w-32 shrink-0 sm:w-36"
                     aria-invalid={Boolean(lineError)}
                     value={lines[index]?.amount ?? ''}
                     onChange={(value) =>

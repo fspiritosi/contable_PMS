@@ -47,9 +47,9 @@ export function DataTablePagination<TData>({
   const endRow = Math.min((pageIndex + 1) * pageSize, totalRows);
 
   return (
-    <div className="flex items-center justify-between px-2">
+    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-2">
       {/* Información de selección o rango */}
-      <div className="flex-1 text-sm text-muted-foreground">
+      <div className="min-w-0 flex-1 text-sm text-muted-foreground">
         {showRowSelection ? (
           <>
             {table.getFilteredSelectedRowModel().rows.length} de{' '}
@@ -62,9 +62,9 @@ export function DataTablePagination<TData>({
         )}
       </div>
 
-      <div className="flex items-center space-x-6 lg:space-x-8">
+      <div className="ml-auto flex flex-wrap items-center gap-x-6 gap-y-2 lg:gap-x-8">
         {/* Selector de filas por página */}
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center gap-2">
           <p className="text-sm font-medium">Filas por página</p>
           <Select
             value={`${pageSize}`}
@@ -86,12 +86,12 @@ export function DataTablePagination<TData>({
         </div>
 
         {/* Indicador de página actual */}
-        <div className="flex w-[100px] items-center justify-center text-sm font-medium">
+        <div className="flex min-w-[100px] items-center justify-center text-sm font-medium">
           Página {pageIndex + 1} de {pageCount || 1}
         </div>
 
         {/* Botones de navegación */}
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center gap-2">
           <Button
             variant="outline"
             className="hidden h-8 w-8 p-0 lg:flex"

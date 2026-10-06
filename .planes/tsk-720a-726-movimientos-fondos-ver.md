@@ -1,7 +1,7 @@
 # TSK-720a + TSK-726 — Movimientos de Fondos: ver en solo lectura, sin columna de asiento, modal responsive
 
 **Fecha de inicio:** 2026-10-06
-**Estado:** Implementación en progreso (Fase 1 de 8 completada)
+**Estado:** Implementación en progreso (Fase 2 de 8 completada)
 
 ---
 
@@ -269,7 +269,7 @@ Otras decisiones de esta planificación:
 - **Objetivo:** que ninguna `DataTable` ensanche la página en celular (layout viewport = 375) y
   que los conceptos de BANK_CHARGES se puedan usar a 343 px.
 - **Tareas:**
-  - [ ] `src/shared/components/common/DataTable/DataTablePagination.tsx`:
+  - [x] `src/shared/components/common/DataTable/DataTablePagination.tsx`:
     - `:50` → `flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-2`.
     - `:52` → agregar `min-w-0` al bloque "Mostrando X a Y de Z registros" (que pueda partir línea
       sin empujar).
@@ -279,11 +279,11 @@ Otras decisiones de esta planificación:
     - `:67` y `:94` → `gap-2` en vez de `space-x-2`.
     - `:89` → `w-[100px]` pasa a `min-w-[100px]` (no forzar ancho fijo).
     - En escritorio (≥ `lg`) el resultado visual debe ser idéntico al actual.
-  - [ ] `FM/list/components/_FundMovementLinesField.tsx:83-124`: fila con
+  - [x] `FM/list/components/_FundMovementLinesField.tsx:83-124`: fila con
         `flex flex-wrap items-start gap-2 sm:flex-nowrap`; `AccountCombobox` con
         `className="basis-full sm:basis-auto sm:flex-1 min-w-0"`; `Input` descripción
         `flex-1 min-w-0`; `MoneyInput` `w-32 sm:w-36 shrink-0`; tacho `shrink-0`.
-  - [ ] Chequeo rápido en navegador (Playwright, `isMobile: true`, 375×812) de Movimientos de
+  - [x] Chequeo rápido en navegador (Playwright, `isMobile: true`, 375×812) de Movimientos de
         Fondos: `documentElement.scrollWidth === 375`; y a 1440 px que la paginación de 2 tablas
         (Movimientos de Fondos y, por ejemplo, Facturas de venta) se ve igual que antes.
 - **Archivos:** `src/shared/components/common/DataTable/DataTablePagination.tsx`,
@@ -1362,7 +1362,19 @@ Patrón de `capturas-tsk728.mjs` (constantes `COMPANY_ID`, `USER_ID`, `EMAIL`, `
   - Todavía no se tocó UI: `columns.tsx` y `_CreateFundMovementModal.tsx` siguen con sus copias de `STATUS_LABELS` y `fundRefFrom`; se reemplazan en las fases 3 y 5.
 
 ### Fase 2: Causa raíz de TSK-726 — paginación compartida y fila de conceptos responsive
-- **Estado:** Pendiente
+- **Estado:** Completada
+- **Archivos modificados:**
+  - `src/shared/components/common/DataTable/DataTablePagination.tsx` - contenedor y bloque de controles con `flex-wrap` + `gap` (en lugar de `space-x-*`), rango con `min-w-0`, controles con `ml-auto`, "Página X de Y" con `min-w-[100px]`. Clases exactas de la tabla de 3.4.4.
+  - `src/modules/commercial/features/treasury/features/fund-movements/list/components/_FundMovementLinesField.tsx` - fila de conceptos apilada en mobile (`flex-wrap … sm:flex-nowrap`, cuenta `basis-full` arriba, descripción `min-w-0 flex-1`, importe `w-32 sm:w-36`). Clases exactas de la tabla de 3.4.3.
+- **Notas:**
+  - Mediciones con Playwright contra `:3010` (`isMobile: true`, 375×812), antes → después:
+    - `documentElement.scrollWidth`: Movimientos de Fondos **443 → 375**; Socios **443 → 383** (mejora; los 8 px restantes son la toolbar "Filtros | Nuevo Socio", fuera de alcance, ver 1.2); Dashboard **491 → 491** (sin cambio, fuera de alcance).
+    - Modal "Nuevo movimiento", los 4 tipos (PARTNER_CONTRIBUTION, PARTNER_WITHDRAWAL, ACCOUNT_TRANSFER, BANK_CHARGES): antes `DialogContent` w=411 con right 401-427 y X en right 384-410 (fuera de los 375); después **x=16, w=343, right=359** y **X 326-342** en los 4 tipos (dentro del viewport).
+    - Fila de conceptos de BANK_CHARGES (anchos de hijos): antes cuenta 79 / descripción 79 / importe 144 / tacho 36 en una sola línea; después cuenta **293** (ancho completo) y debajo descripción 113 / importe 128 / tacho 36.
+  - Escritorio 1440 (Movimientos de Fondos y Facturas de venta): altura de la barra 36 px antes y después; todos los controles en las mismas coordenadas (x=918…1384). Lo único que cambia es el ancho del bloque "Mostrando…" (638 → 622, por el `gap-x-4`), que no se ve. Capturas antes/después en el scratchpad de la sesión (`tsk726-{antes,despues}-*.png`).
+  - En celular la paginación ocupa 3 líneas: rango; "Filas por página" + "Página 1 de 1"; botones (alineados a la izquierda por el wrap interno). Es lo que se esperaba del diseño y se usa bien.
+  - `npm run check-types` = 219 errores (sin cambio); `eslint` sin problemas en los 2 archivos; `vitest` de fund-movements 125/125 en verde.
+  - Sin desvíos del diseño.
 
 ### Fase 3: Refactor del modal sin cambio de comportamiento (< 200 líneas)
 - **Estado:** Pendiente
