@@ -660,6 +660,25 @@ describe.skipIf(!dbAvailable)('integración e2e: asiento al confirmar un gasto (
       expect(debitLine(await fetchEntryLines(id)).accountId).toBe(gastosId);
     });
 
+    it('caso 14: la cuenta se resuelve al confirmar: el borrador toma la cuenta asignada después, aun con la categoría desactivada', async () => {
+      const catId = await createCategory('Cambia de cuenta', null);
+      const id = await createDraft('Categoría que cambia de cuenta', catId);
+
+      // Editar solo el nombre (sin accountId) no toca la cuenta; asignarla después del alta sí cuenta.
+      expect(await updateExpenseCategory(catId, { name: `${PREFIX}Cambia de cuenta 2` })).toEqual({
+        success: true,
+      });
+      expect((await readCategory(catId)).accountId).toBeNull();
+      expect(
+        await updateExpenseCategory(catId, { name: `${PREFIX}Cambia de cuenta 2`, accountId: alqId })
+      ).toEqual({ success: true });
+      expect(await toggleExpenseCategory(catId)).toEqual({ success: true, isActive: false });
+
+      const result = await confirmExpense(id);
+      expect(result.success).toBe(true);
+      expect(debitLine(await fetchEntryLines(id)).accountId).toBe(alqId);
+    });
+
     it('D1: el detalle muestra la cuenta del Debe: prevista en borrador, la del asiento si está confirmado', async () => {
       const alqLabel = `T757-ALQ - ${PREFIX}Alquileres`;
       const gastosLabel = `T728G-GASTOS - ${PREFIX}Gastos Operativos`;
