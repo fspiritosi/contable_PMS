@@ -1,7 +1,7 @@
 # TSK-757 — Cuenta contable por tipo de gasto
 
 **Fecha de inicio:** 2026-10-06
-**Estado:** Implementación en progreso (Fase 4 de 9 completada)
+**Estado:** Implementación en progreso (Fase 5 de 9 completada)
 
 ---
 
@@ -584,31 +584,31 @@ Otras decisiones de esta planificación:
 - **Objetivo:** gestionar la cuenta de cada categoría desde un modal < 200 líneas por archivo,
   alcanzable desde el listado y desde el alta del egreso.
 - **Tareas:**
-  - [ ] `EXP/hooks/useExpenseCategoryMutations.ts` (nuevo, sin `_`): `useMutation` de create /
+  - [x] `EXP/hooks/useExpenseCategoryMutations.ts` (nuevo, sin `_`): `useMutation` de create /
         update / toggle sobre las actions `ActionResult` (`if (!result.success)
         toast.error(result.error)`), `toast.success` e invalidación de
         `['allExpenseCategories']`, `['expenseCategories']` y `['expenseCategoryAccounts']`
         (sale de `_CategoryManagementModal.tsx:59-111`).
-  - [ ] `EXP/components/_CategoryAccountField.tsx` (nuevo): `useQuery(['expenseCategoryAccounts',
+  - [x] `EXP/components/_CategoryAccountField.tsx` (nuevo): `useQuery(['expenseCategoryAccounts',
         includeIds], () => getExpenseCategoryAccounts(includeIds))` + `AccountCombobox` con
         `clearLabel` de 2.0, prop `disabled`.
-  - [ ] `EXP/components/_CategoryCreateForm.tsx` (nuevo): RHF + `zodResolver(
+  - [x] `EXP/components/_CategoryCreateForm.tsx` (nuevo): RHF + `zodResolver(
         expenseCategoryFormSchema)` con nombre, descripción y `_CategoryAccountField`; se muestra
         solo con `hasPermission('commercial.expenses', 'create')`.
-  - [ ] `EXP/components/_CategoryRow.tsx` (nuevo): fila con nombre, descripción, cuenta
+  - [x] `EXP/components/_CategoryRow.tsx` (nuevo): fila con nombre, descripción, cuenta
         (`code - name` o "Por defecto" en `text-muted-foreground`), badge "Inactiva", conteo de
         egresos; edición inline (nombre, descripción, cuenta) y toggle solo con
         `hasPermission('commercial.expenses', 'update')`. Layout responsive: en `< sm` la cuenta
         baja a su propia línea (`flex-wrap`, `min-w-0`).
-  - [ ] `EXP/components/_CategoryManagementModal.tsx`: queda como `Dialog` + `useQuery
+  - [x] `EXP/components/_CategoryManagementModal.tsx`: queda como `Dialog` + `useQuery
         (['allExpenseCategories'])` + composición; título "Categorías de egreso" y descripción
         "Cada categoría puede tener su cuenta contable; si no tiene, el egreso usa la cuenta de
         egresos por defecto". `DialogContent` `sm:max-w-2xl` para que entre la cuenta.
-  - [ ] Acceso desde el listado: `EXP/list/components/_ExpensesToolbarActions.tsx` (nuevo) con el
+  - [x] Acceso desde el listado: `EXP/list/components/_ExpensesToolbarActions.tsx` (nuevo) con el
         botón "Categorías" (icono `Tags`, `variant="outline"`, trigger del modal; visible con
         `view`) + `_CreateExpenseModal` (con `create`); `_ExpensesTable.tsx:211` pasa a
         `toolbarActions={<_ExpensesToolbarActions … />}` (sin crecer).
-  - [ ] Verificar a mano en `:3010`: alta con y sin cuenta, edición (asignar, cambiar, limpiar),
+  - [x] Verificar a mano en `:3010`: alta con y sin cuenta, edición (asignar, cambiar, limpiar),
         toggle, nombre duplicado (toast con el mensaje), y que el combo del alta de egreso se
         refresca al cerrar el modal.
 - **Archivos:** `EXP/hooks/useExpenseCategoryMutations.ts`, `EXP/components/_CategoryAccountField.tsx`,
@@ -763,6 +763,9 @@ Total estimado: **media**.
 5. **Componentes > 200 líneas preexistentes** en egresos: `_CreateExpenseModal.tsx` (340),
    `_ExpenseDetailModal.tsx` (400), `_ExpensesTable.tsx` (301), `_ExpenseAttachments.tsx` (250),
    `list/columns.tsx` (207): refactor en ticket aparte.
+6. **Listado de Egresos en móvil (preexistente)**: a 375 px el `DataTable` desborda (paginación
+   `space-x-6` y barra derecha del toolbar sin wrap) → `scrollWidth` ≈ 443. Afecta a todos los
+   listados con `DataTable`; ticket aparte (detectado en la prueba de la Fase 5).
 
 
 ## 3. Diseño
@@ -1647,7 +1650,63 @@ constantes `COMPANY_ID`, `USER_ID`, `SUPPLIER_ID`, `EMAIL`/`PASSWORD`, `BASE` po
       mismo `BusinessError` → `toActionResult` de TSK-728).
 
 ### Fase 5: UI de categorías — modal partido y acceso desde el listado
-- **Estado:** Pendiente
+- **Estado:** Completada
+- **Archivos modificados:**
+  - `EXP/hooks/useExpenseCategoryMutations.ts` (nuevo, 103 líneas) — tres `useMutation` sobre las actions
+    `ActionResult`: `!result.success` → `toast.error(result.error)`; éxito → `toast.success` e
+    invalidación de `['allExpenseCategories']`, `['expenseCategories']`, `['expenseCategoryAccounts']`;
+    `onError` (fallo técnico) → `logger.error` + `UNEXPECTED_ERROR_MESSAGE`. Devuelve
+    `createCategory`/`updateCategory`/`toggleCategory` (→ `Promise<boolean>`), `isCreating`, `pendingId`.
+  - `EXP/components/_CategoryAccountField.tsx` (nuevo, 48) — `useQuery(['expenseCategoryAccounts',
+    includeIds])` + `AccountCombobox` con `clearLabel` "Sin asignar (usar la cuenta de egresos por
+    defecto)" y `placeholder` "Por defecto".
+  - `EXP/components/_CategoryCreateForm.tsx` (nuevo, 103) — RHF + `zodResolver`, nombre / cuenta (grid de
+    2 columnas desde `sm`) / descripción, `FormDescription` "Si la dejás vacía, se usa la cuenta de
+    egresos por defecto."; se resetea solo si se creó.
+  - `EXP/components/_CategoryRow.tsx` (nuevo, 187) — vista con cuenta (`code - name` o "Por defecto",
+    `data-testid="category-account"`), badge "Inactiva", conteo; edición inline (nombre, cuenta con
+    `savedAccountId`, descripción) que siempre manda `accountId` (null = por defecto); Editar/Activar solo
+    con `canUpdate`; `flex-wrap`/`min-w-0`/`basis-full sm:basis-auto` para móvil.
+  - `EXP/components/_CategoryManagementModal.tsx` (reescrito, 311 → 125) — `Dialog` + `useQuery
+    (['allExpenseCategories'])` + `usePermissions` + composición; título "Categorías de egreso",
+    `DialogDescription` del diseño; `sm:max-w-2xl max-h-[85vh] overflow-y-auto`. Props sin cambios.
+  - `EXP/list/components/_ExpensesToolbarActions.tsx` (nuevo, 36) — botón "Categorías" (`Tags`, outline)
+    + `_CreateExpenseModal` con `canCreate`; `onClose`/`onSuccess` → `router.refresh()`.
+  - `EXP/list/components/_ExpensesTable.tsx` (301 → 302) — `toolbarActions={<_ExpensesToolbarActions …/>}`.
+- **Notas / desvíos:**
+  - `_CategoryRow` suma las props `isEditing` y `onEdit(id | null)` (el diseño deja `editingId` en el
+    modal, así que la fila necesita saber si está en edición y avisar al entrar/salir).
+  - Los permisos de edición/alta se resuelven en el modal (`hasPermission('commercial.expenses',
+    'create' | 'update')`), no en `_CategoryCreateForm`: el form solo se monta con `create`.
+  - `_ExpensesTable.tsx` crece **1** línea (no 0): el import de `_CreateExpenseModal` se queda porque
+    la tabla lo usa también para el modal de edición; se suma el de `_ExpensesToolbarActions`.
+  - En móvil (`< sm`) el botón "Categorías" muestra solo el ícono (`aria-label`/`title` "Categorías"):
+    la barra derecha del `DataTable` (`flex items-center space-x-2`) no hace wrap.
+  - Calidad: `npm run test` 50 archivos / 632 tests en verde; `check-types` 219; eslint sin errores en
+    los 7 archivos; todos los componentes nuevos/reescritos < 200 líneas.
+  - **Prueba en navegador** (Playwright contra :3010, script temporal borrado, marca `TSK757-F56`):
+    - Botón "Categorías" del listado abre el modal "Categorías de egreso".
+    - Combo del alta: 78 opciones = 78 cuentas EXPENSE imputables de la empresa (SQL con la regla de
+      `buildImputableAccountsWhere`), todas de tipo EXPENSE, más "Sin asignar (usar la cuenta de
+      egresos por defecto)".
+    - Alta "TSK757-F56 Alquiler" con 4.2.1/02/18 Alquiler inmuebles → toast "Categoría creada
+      correctamente", fila con la cuenta, DB guardada, form reseteado.
+    - Cambio a 4.2.1/02/03 Energía - Explotación → "Categoría actualizada correctamente" y fila nueva.
+    - Quitar ("Sin asignar…") → fila "Por defecto", `account_id` NULL.
+    - Desactivar → toast + badge "Inactiva"; Activar → toast.
+    - Nombre duplicado → toast "Ya existe una categoría con ese nombre"; el form conserva el nombre.
+    - Cuenta guardada no imputable (cuenta raíz temporal `TSK757-F56` inactiva asignada por SQL): la fila
+      la muestra, el combo de edición la muestra seleccionada y figura entre las opciones (79 =
+      78 + `includeIds`). Cuenta temporal borrada al final.
+    - "Gestionar" del alta de egreso abre el mismo modal nuevo.
+    - Móvil 375×812 `isMobile`: el modal no tiene overflow propio (`scrollWidth == clientWidth`, también
+      con una fila en edición) y con el desborde ajeno neutralizado queda `documentElement.scrollWidth
+      = 375` y el dialog en x=16, ancho 343. **Preexistente (no de este ticket):** el listado de
+      Egresos en 375 ya tiene `scrollWidth` 443–451 por la paginación del `DataTable`
+      (`flex items-center space-x-6 lg:space-x-8`) y por la barra derecha del toolbar (`right=405`
+      también sin este cambio, medido con `git stash`); con eso el layout viewport se ensancha y el
+      dialog (`max-w-[calc(100%-2rem)]`) también. Queda anotado para Fase 7/2.4.
+    - Datos que quedan: categoría activa "TSK757-F56 Alquiler" sin cuenta (se usa en la Fase 6).
 
 ### Fase 6: La cuenta visible en el egreso (D6)
 - **Estado:** Pendiente
