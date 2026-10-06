@@ -1,7 +1,7 @@
 # TSK-757 — Cuenta contable por tipo de gasto
 
 **Fecha de inicio:** 2026-10-06
-**Estado:** Planificación completada
+**Estado:** Diseño completado
 
 ---
 
@@ -766,7 +766,738 @@ Total estimado: **media**.
 
 
 ## 3. Diseño
-_Pendiente - ejecutar `/disenar tsk-757-cuenta-contable-por-tipo-de-gasto`_
+
+Rutas abreviadas (como en §2): `EXP/` = `src/modules/commercial/features/expenses/`;
+`INT/` = `src/modules/accounting/features/integrations/commercial/`; `CSH/` =
+`src/modules/commercial/shared/`. Los números de línea son los de `4a6f826` (rama
+`feat/tsk-757-cuenta-por-tipo-de-gasto`, antes de implementar).
+
+### 3.1 Arquitectura de la solución
+
+Una sola regla — "¿a qué cuenta va el Debe del egreso?" — escrita una vez en un helper puro y
+consumida por los cuatro lugares que hoy la resuelven por su cuenta o no la resuelven:
+
+```
+                         CSH/expense-accounts.ts  (puro: sin Prisma, sin React)
+                         ├─ resolveExpenseDebitAccount()      categoría ?? por defecto ?? null
+                         ├─ requiredExpenseSettingsFields()   qué campos de Ajustes exigir
+                         ├─ build*Message()                   textos de error (TSK-728 + categoría)
+                         ├─ buildExpenseDebitLine()           línea de Debe (punto de extensión TSK-738)
+                         └─ buildExpenseDebitAccountView()    "cuenta contable" del detalle (D6)
+                                    ▲                ▲                 ▲
+          ┌─────────────────────────┘                │                 └──────────────┐
+EXP/actions.server.ts                       INT/index.ts                     EXP/actions.server.ts
+confirmExpense                              createJournalEntryForExpense      getExpenseById
+ ├ assertExpenseEntryAccounts(…, category)   (defensa en profundidad +         (borrador: cuenta prevista;
+ │   → { debitAccountId }                     línea de Debe)                    confirmado: la del asiento)
+ ├ checkBudgetForExpense(debitAccountId, …)
+ └ $transaction → createJournalEntryForExpense
+```
+
+- **Dato**: `ExpenseCategory.accountId` (FK opcional a `Account`, `SET NULL`). La cuenta **no**
+  se guarda en `Expense` (D6): se resuelve al confirmar y queda registrada en el asiento.
+- **Resolución** (D3): categoría con cuenta → esa (si no es imputable, **bloquea**); sin cuenta →
+  "Cuenta de egresos por defecto" de Ajustes; ninguna → `BusinessError` que nombra la categoría y
+  las dos salidas. `payablesAccountId` siempre obligatoria.
+- **Dependencias entre módulos**: `INT/index.ts` ya importa de `@/modules/commercial/shared/*`
+  (`cost-center`, `perceptions`, `line-accounts`, `payment-accounts`, `settings-accounts`,
+  `INT/index.ts:50-67`). `expense-accounts.ts` vive en el mismo lugar y solo importa de
+  `CSH/settings-accounts.ts`, `CSH/line-accounts.ts` (`formatAccountLabel`) y
+  `@/shared/lib/accounts/settings-account-labels`. Ninguna dependencia nueva entre módulos.
+- **ABM de categorías**: mismas actions (`EXP/actions.server.ts`), con `accountId` y contrato
+  `ActionResult` en las tres mutaciones. UI: el modal actual se parte en 4 componentes + 1 hook,
+  y se abre también desde la barra del listado (D4).
+- **Errores**: `BusinessError` → `toActionResult` → `toast.error(result.error)` (memoria
+  `errores-negocio-server-actions`; Next redacta los `throw` en producción).
+- **Sin permisos ni módulos nuevos** (D5): `commercial.expenses` view/create/update/approve.
+
+### 3.2 Modelos de datos
+
+#### Diff de `prisma/schema.prisma`
+
+```diff
+@@ model Account (prisma/schema.prisma:360, después de depreciationsAsDepreciationExpense)
+   depreciationsAsDepreciationExpense VehicleDepreciation[]  @relation("DepreciationDepreciationExpenseAccount")
++  // TSK-757: categorías de egreso que imputan a esta cuenta
++  expenseCategories                  ExpenseCategory[]      @relation("ExpenseCategoryAccount")
+   settingsAsPercIvaCollected         AccountingSettings[]   @relation("PercIvaCollectedAccount")
+
+@@ model ExpenseCategory (prisma/schema.prisma:3645-3659)
+ model ExpenseCategory {
+   id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+   name        String
+   description String?
+   companyId   String   @map("company_id") @db.Uuid
+   isActive    Boolean  @default(true) @map("is_active")
++  // TSK-757: cuenta contable de la categoría; null = usa la cuenta de egresos por defecto de AccountingSettings
++  accountId   String?  @map("account_id") @db.Uuid
+   createdAt   DateTime @default(now()) @map("created_at")
+   updatedAt   DateTime @updatedAt @map("updated_at")
+
+   company  Company   @relation(fields: [companyId], references: [id])
++  account  Account?  @relation("ExpenseCategoryAccount", fields: [accountId], references: [id], onDelete: SetNull)
+   expenses Expense[]
+
+   @@unique([companyId, name])
++  @@index([accountId])
+   @@map("expense_categories")
+ }
+```
+
+`Expense`, `AccountingSettings` y `JournalEntryLine` **no cambian** (`JournalEntryLine.costCenterId`
+ya existe, `schema.prisma:453`, para TSK-738).
+
+#### Migración esperada
+
+`prisma/migrations/<timestamp>_tsk_757_expense_category_account/migration.sql` (generada con
+`npm run db:migrate -- --name tsk_757_expense_category_account`; debe quedar **exactamente** así,
+mismo formato que `20260919121736_tsk_724c_asset_accounts_by_type`):
+
+```sql
+-- AlterTable
+ALTER TABLE "expense_categories" ADD COLUMN     "account_id" UUID;
+
+-- CreateIndex
+CREATE INDEX "expense_categories_account_id_idx" ON "expense_categories"("account_id");
+
+-- AddForeignKey
+ALTER TABLE "expense_categories" ADD CONSTRAINT "expense_categories_account_id_fkey" FOREIGN KEY ("account_id") REFERENCES "accounts"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+```
+
+Aditiva, sin `UPDATE` ni backfill (D8): toda categoría existente queda en `NULL` = "por
+defecto" → comportamiento idéntico al actual. En producción la aplica `docker-entrypoint.sh` al
+deployar (`prisma migrate deploy`).
+
+#### Tipos derivados (sin `any`)
+
+```typescript
+// EXP/actions.server.ts — select reutilizado por las tres lecturas
+const CATEGORY_ACCOUNT_SELECT = { id: true, code: true, name: true } as const satisfies Prisma.AccountSelect;
+
+// Consumidores (cliente): inferidos del retorno de las actions, como hoy
+type CategoryItem = Awaited<ReturnType<typeof getAllExpenseCategories>>[number];
+//   → { id; name; description; isActive; accountId: string | null;
+//       account: { id; code; name } | null; _count: { expenses: number } }
+type CategoryOption = Awaited<ReturnType<typeof getExpenseCategories>>[number];
+//   → { id; name; description; isActive; account: { id; code; name } | null }
+type ExpenseAccountOption = Awaited<ReturnType<typeof getExpenseCategoryAccounts>>[number];
+//   → { id; code; name }  (compatible con AccountOption de AccountCombobox)
+```
+
+### 3.3 Funciones y métodos
+
+#### 3.3.1 `CSH/expense-accounts.ts` (nuevo, puro) — ~110 líneas
+
+```typescript
+import {
+  ACCOUNTING_SETTINGS_PATH,
+  type AccountingSettingsAccountField,
+} from '@/shared/lib/accounts/settings-account-labels';
+import { buildMissingSettingsAccountsMessage } from './settings-accounts';
+
+/** Campos de Ajustes que intervienen en el asiento del egreso. */
+export type ExpenseEntryField = Extract<AccountingSettingsAccountField, 'expensesAccountId' | 'payablesAccountId'>;
+
+/** De dónde sale la cuenta del Debe al confirmar. */
+export type ExpenseDebitSource = 'category' | 'default';
+
+/** Origen que muestra el detalle: la del asiento (confirmado) o la prevista (borrador). */
+export type ExpenseDebitAccountOrigin = ExpenseDebitSource | 'entry';
+
+/** Dónde se gestionan las categorías (el "dónde" de los mensajes). */
+export const EXPENSE_CATEGORIES_PATH = 'Comercial → Egresos → Categorías';
+
+export interface ResolveExpenseDebitAccountInput {
+  /** `ExpenseCategory.accountId` del egreso. */
+  categoryAccountId: string | null | undefined;
+  /** `AccountingSettings.expensesAccountId` ("Cuenta de egresos por defecto"). */
+  defaultAccountId: string | null | undefined;
+}
+
+export interface ResolvedExpenseDebitAccount {
+  accountId: string;
+  source: ExpenseDebitSource;
+}
+
+/**
+ * Cuenta del Debe: la de la categoría; si no tiene, la por defecto; si tampoco, null.
+ * `''` cuenta como vacío (mismo criterio `||` que `findMissingSettingsAccounts`).
+ * No decide imputabilidad: si la de la categoría no es imputable, el llamador BLOQUEA
+ * (criterio TSK-717: nunca caer en silencio a la por defecto).
+ */
+export function resolveExpenseDebitAccount(
+  input: ResolveExpenseDebitAccountInput
+): ResolvedExpenseDebitAccount | null;
+
+/**
+ * Campos de Ajustes que el asiento exige según la categoría (R3), en el orden de TSK-728:
+ * con cuenta propia → ['payablesAccountId']; sin cuenta → ['expensesAccountId', 'payablesAccountId'].
+ */
+export function requiredExpenseSettingsFields(
+  categoryAccountId: string | null | undefined
+): ExpenseEntryField[];
+
+/**
+ * Mensaje de faltantes de TSK-728 ("No se puede confirmar el gasto GTO-00001: falta
+ * configurar "Cuenta de egresos por defecto" en Contabilidad → Configuración.") y, si falta
+ * `expensesAccountId`, la segunda salida: reemplaza el punto final por
+ * `, o asignale una cuenta contable a la categoría "Alquiler" en Comercial → Egresos → Categorías.`
+ * Con `missing` = ['payablesAccountId'] devuelve exactamente el mensaje de TSK-728.
+ */
+export function buildMissingExpenseAccountsMessage(
+  documentLabel: string,
+  missing: readonly AccountingSettingsAccountField[],
+  categoryName: string
+): string;
+
+/**
+ * La cuenta propia de la categoría existe pero no es imputable (o ya no existe):
+ * "No se puede confirmar el gasto GTO-00001: la cuenta 5.2.03 - Alquileres de la categoría
+ *  "Alquiler" no está activa o no es imputable. Corregila en Comercial → Egresos → Categorías."
+ * `accountLabel` null → "…: la cuenta contable de la categoría "Alquiler" ya no existe en el plan
+ *  de cuentas. Corregila en Comercial → Egresos → Categorías."
+ */
+export function buildCategoryAccountNotImputableMessage(
+  documentLabel: string,
+  categoryName: string,
+  accountLabel: string | null
+): string;
+
+/** Texto del origen para la UI (D6). */
+export function describeExpenseDebitSource(origin: ExpenseDebitAccountOrigin): string;
+// 'entry' → 'del asiento' · 'category' → 'de la categoría' · 'default' → 'por defecto'
+
+/**
+ * Input de la línea de Debe. PUNTO DE EXTENSIÓN TSK-738: sumará `costCenterId?: string`
+ * acá y en `ExpenseDebitLine`, y `buildExpenseDebitLine` lo copiará a la línea; los
+ * llamadores (`createJournalEntryForExpense`) no cambian de forma.
+ */
+export interface ExpenseDebitLineInput {
+  accountId: string;
+  amount: number;
+  fullNumber: string;
+  description: string;
+}
+
+/** Estructuralmente compatible con `JournalEntryLineInput` (INT/index.ts:80-91). */
+export interface ExpenseDebitLine {
+  accountId: string;
+  debit: number;
+  credit: 0;
+  description: string;
+  costCenterId?: string;
+}
+
+/** Hoy: `{ accountId, debit: amount, credit: 0, description: `Gasto ${fullNumber} - ${description}` }`
+ *  (idéntica a INT/index.ts:999-1004). */
+export function buildExpenseDebitLine(input: ExpenseDebitLineInput): ExpenseDebitLine;
+
+/** Lo que muestra "Cuenta contable" en el detalle del egreso (D6). */
+export type ExpenseDebitAccountView =
+  | { origin: ExpenseDebitAccountOrigin; label: string }
+  | { origin: 'missing'; label: null };
+
+export interface BuildExpenseDebitAccountViewInput {
+  /** `code - name` de la línea de Debe del asiento (egreso confirmado), o null. */
+  entryAccountLabel: string | null;
+  /** `code - name` de la cuenta de la categoría, o null si no tiene. */
+  categoryAccountLabel: string | null;
+  /** `code - name` de la cuenta de egresos por defecto, o null si no está configurada. */
+  defaultAccountLabel: string | null;
+}
+
+/** Asiento > categoría > por defecto > 'missing' (borrador sin ninguna cuenta). */
+export function buildExpenseDebitAccountView(input: BuildExpenseDebitAccountViewInput): ExpenseDebitAccountView;
+```
+
+#### 3.3.2 Validador (`EXP/validators.ts:32-37`)
+
+```diff
+ export const expenseCategoryFormSchema = z.object({
+   name: z.string().min(1, 'El nombre es requerido'),
+   description: z.string().optional().nullable(),
++  /** TSK-757: cuenta contable propia. undefined = no tocar (update); null = usar la por defecto. */
++  accountId: z.string().uuid('Cuenta contable inválida').nullable().optional(),
+ });
+
+ export type ExpenseCategoryFormInput = z.infer<typeof expenseCategoryFormSchema>;
++// → { name: string; description?: string | null; accountId?: string | null }
+```
+
+Zod 4.3 (`package.json`): `z.string().uuid()` sigue vigente y valida RFC 9562; los UUID de test
+tienen que ser v4 reales (p. ej. `'3f2504e0-4f89-41d3-9a0c-0305e82c3301'`).
+
+#### 3.3.3 Actions de categorías (`EXP/actions.server.ts`)
+
+| Action | Hoy | Después |
+|---|---|---|
+| `getExpenseCategories()` (:50) | `select { id, name, description, isActive }` | + `account: { select: CATEGORY_ACCOUNT_SELECT }`. Sigue lanzando (lectura). |
+| `getAllExpenseCategories()` (:70) | + `_count.expenses` | + `accountId: true`, `account: { select: CATEGORY_ACCOUNT_SELECT }`. |
+| `getExpenseCategoryAccounts(includeIds?)` | — | **nueva**, ver abajo. |
+| `createExpenseCategory(data)` (:91) | `{ success, id }` / `throw` | `Promise<ActionResult<{ id: string }>>` |
+| `updateExpenseCategory(id, data)` (:124) | `{ success }` / `throw` | `Promise<ActionResult>` |
+| `toggleExpenseCategory(id)` (:160) | `{ success }` / `throw` | `Promise<ActionResult<{ isActive: boolean }>>` |
+
+```typescript
+/**
+ * Cuentas ofrecidas en el combo de la categoría: imputables de tipo EXPENSE (D2) +
+ * las ya guardadas aunque hoy no sean imputables (`includeIds`, patrón
+ * `getVehicleTypeAssetAccounts`, company/features/vehicle-types/list/actions.server.ts:176-200).
+ */
+export async function getExpenseCategoryAccounts(
+  includeIds?: string[]
+): Promise<{ id: string; code: string; name: string }[]> {
+  await checkPermission('commercial.expenses', 'view', { redirect: true });
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+  const imputable = buildImputableAccountsWhere({ companyId, types: ['EXPENSE'] });
+  return prisma.account.findMany({
+    where: includeIds && includeIds.length > 0
+      ? { OR: [imputable, { companyId, id: { in: includeIds } }] }
+      : imputable,
+    select: CATEGORY_ACCOUNT_SELECT,
+    orderBy: { code: 'asc' },
+  });
+}
+
+/** La cuenta elegida es de la empresa activa. No exige imputabilidad (la rechaza la confirmación). */
+async function assertCategoryAccountBelongsToCompany(accountId: string, companyId: string): Promise<void>;
+// → BusinessError('La cuenta contable seleccionada no pertenece a la empresa')
+
+/** Primer mensaje de Zod como BusinessError (las actions no confían en el cliente). */
+function parseCategoryInput(data: ExpenseCategoryFormInput): ExpenseCategoryFormInput;
+// expenseCategoryFormSchema.safeParse(data); !success → BusinessError(error.issues[0].message)
+
+export async function createExpenseCategory(
+  data: ExpenseCategoryFormInput
+): Promise<ActionResult<{ id: string }>>;
+// checkPermission('commercial.expenses','create') · userId/companyId → throw (no son de negocio)
+// try { parse; if (accountId) assertCategoryAccountBelongsToCompany;
+//       create { companyId, name, description: description || null, accountId: accountId ?? null };
+//       logger.info; revalidatePath; return { success: true, id } }
+// catch { P2002 → { success:false, error:'Ya existe una categoría con ese nombre' };
+//         BusinessError → logger.warn; return toActionResult(error, 'Error al crear categoría de gasto') }
+
+export async function updateExpenseCategory(
+  id: string,
+  data: ExpenseCategoryFormInput
+): Promise<ActionResult>;
+// checkPermission('commercial.expenses','update')
+// accountId: undefined → no se incluye en `data` (no tocar); null → null; string → assert + id
+// updateMany({ where: { id, companyId }, data: { name, description, ...(accountId !== undefined && { accountId }) } })
+// count === 0 → BusinessError('Categoría no encontrada'); P2002 → mensaje de duplicado.
+
+export async function toggleExpenseCategory(id: string): Promise<ActionResult<{ isActive: boolean }>>;
+// 'Categoría no encontrada' → BusinessError; devuelve el estado nuevo.
+```
+
+Mapeo de P2002: helper privado
+`function toCategoryActionFailure(error: unknown, contexto: string): ActionFailure` que traduce
+`Prisma.PrismaClientKnownRequestError` con `code === 'P2002'` a `BusinessError('Ya existe una
+categoría con ese nombre')`, loguea `warn` si es `BusinessError` y delega en `toActionResult`.
+(`ActionFailure` se importa de `@/shared/lib/action-result`.)
+
+#### 3.3.4 Confirmación (`EXP/actions.server.ts:486-619`) — diff conceptual
+
+```diff
+-/** Cuentas de Ajustes que usa el asiento del gasto: Debe Gastos Operativos / Haber Cuentas por Pagar. */
+-const EXPENSE_ENTRY_FIELDS = ['expensesAccountId', 'payablesAccountId'] as const satisfies …;
+-type ExpenseEntryField = (typeof EXPENSE_ENTRY_FIELDS)[number];
++interface ExpenseCategoryForEntry { name: string; accountId: string | null }
+
+-async function assertExpenseEntryAccounts(companyId, documentLabel, settings): Promise<void>
++/**
++ * Pre-validación del asiento (TSK-728 + TSK-757). Devuelve la cuenta del Debe que van a usar
++ * el presupuesto y el asiento, para que las tres piezas coincidan.
++ */
++async function assertExpenseEntryAccounts(
++  companyId: string,
++  documentLabel: string,
++  settings: { expensesAccountId: string | null; payablesAccountId: string | null },
++  category: ExpenseCategoryForEntry
++): Promise<{ debitAccountId: string }> {
++  // (1) faltantes condicionales
++  const missing = findMissingSettingsAccounts(settings, requiredExpenseSettingsFields(category.accountId));
++  if (missing.length > 0) throw new BusinessError(buildMissingExpenseAccountsMessage(documentLabel, missing, category.name));
++  // (2) resolución
++  const debit = resolveExpenseDebitAccount({ categoryAccountId: category.accountId, defaultAccountId: settings.expensesAccountId });
++  //   (no puede ser null tras (1); igual se chequea y lanza el mismo mensaje)
++  // (3) imputabilidad: Debe resuelto + payables, UNA consulta imputable + una de labels (como hoy :510-516)
++  //   toCheck: [{ kind: debit.source === 'category' ? 'category' : 'expensesAccountId', accountId: debit.accountId },
++  //             { kind: 'payablesAccountId', accountId: settings.payablesAccountId }]
++  //   falla 'category' → buildCategoryAccountNotImputableMessage(documentLabel, category.name, info ? formatAccountLabel(info) : null)
++  //   falla un campo de Ajustes → mensaje actual (:521-527) con settingsAccountLabel(field)
++  return { debitAccountId: debit.accountId };
++}
+```
+
+`findMissingSettingsAccounts` devuelve `AccountingSettingsAccountField[]`; por eso
+`buildMissingExpenseAccountsMessage` acepta `readonly AccountingSettingsAccountField[]` y no hace
+falta ningún cast.
+
+```diff
+ export async function confirmExpense(id: string)
+   : Promise<ActionResult<{ budgetWarning?: { message: string; executedPercent: number } }>> {   // firma SIN cambios
+   …
+   const expense = await prisma.expense.findFirst({
+     where: { id, companyId, status: 'DRAFT' },
+-    select: { id: true, fullNumber: true, description: true, amount: true, categoryId: true, date: true },
++    select: { id: true, fullNumber: true, description: true, amount: true, date: true,
++              category: { select: { name: true, accountId: true } } },
+   });
+   …
+-  await assertExpenseEntryAccounts(companyId, `el gasto ${expense.fullNumber}`, settings);
++  const { debitAccountId } = await assertExpenseEntryAccounts(
++    companyId, `el gasto ${expense.fullNumber}`, settings, expense.category);
+
+   // Verificación presupuestaria (no bloqueante) — R1: contra la cuenta RESUELTA
+-  if (settings.expensesAccountId) {
+-    const check = await checkBudgetForExpense(settings.expensesAccountId, …);
++  const check = await checkBudgetForExpense(debitAccountId, Number(expense.amount), companyId, expense.date);
+   …                                         // try/catch no bloqueante y $transaction sin cambios
+```
+
+`categoryId` se quita del `select` (no se usaba). El `$transaction` (:591-605) y el `catch`
+(:611-618) no cambian.
+
+#### 3.3.5 Asiento (`INT/index.ts:962-1033`) — diff conceptual
+
+```diff
+  * 5. Gasto (confirmado):                                                     (cabecera :37-40)
+- *    - Debe: Gastos Operativos
++ *    - Debe: cuenta de la categoría del egreso, o "Cuenta de egresos por defecto" (TSK-757)
+  *    - Haber: Cuentas por Pagar
+
+ export async function createJournalEntryForExpense(expenseId, companyId, tx): Promise<string> {   // firma SIN cambios
+   const expense = await tx.expense.findUnique({
+     where: { id: expenseId },
+     select: { supplierId: true, fullNumber: true, description: true, date: true, amount: true,
+               supplier: { select: { businessName: true } },
++              category: { select: { name: true, accountId: true } },
+     },
+   });
+   …
+   const settings = await getAccountingSettings(companyId, tx);
+-  const missingSettings = findMissingSettingsAccounts(settings, ['expensesAccountId', 'payablesAccountId']);
+-  if (missingSettings.length > 0 || !settings.expensesAccountId || !settings.payablesAccountId) {
+-    throw new BusinessError(buildMissingSettingsAccountsMessage(`el gasto ${expense.fullNumber}`, missingSettings));
++  const documentLabel = `el gasto ${expense.fullNumber}`;
++  const missingSettings = findMissingSettingsAccounts(settings, requiredExpenseSettingsFields(expense.category.accountId));
++  const debit = resolveExpenseDebitAccount({ categoryAccountId: expense.category.accountId,
++                                             defaultAccountId: settings.expensesAccountId });
++  if (missingSettings.length > 0 || !debit || !settings.payablesAccountId) {
++    throw new BusinessError(buildMissingExpenseAccountsMessage(documentLabel, missingSettings, expense.category.name));
+   }
+   const lines: JournalEntryLineInput[] = [
+-    { accountId: settings.expensesAccountId, debit: amount, credit: 0, description: `Gasto ${…} - ${…}` },
++    buildExpenseDebitLine({ accountId: debit.accountId, amount, fullNumber: expense.fullNumber,
++                            description: expense.description }),
+     { accountId: settings.payablesAccountId, … supplierId … },                 // Haber SIN cambios
+   ];
+```
+
+Imputabilidad: no se re-chequea acá (hoy tampoco para Ajustes); la defensa es solo de
+"faltantes". `buildMissingSettingsAccountsMessage` deja de importarse en `INT/index.ts` si no
+queda otro uso (verificar con grep; hoy lo usan también recibos/OP → probablemente se queda).
+
+JSDoc de `checkBudgetForExpense` (`INT/index.ts:1042`):
+`@param accountId - Cuenta del Debe del egreso ya resuelta (la de su categoría o la de egresos por defecto, TSK-757)`.
+
+#### 3.3.6 Detalle (`EXP/actions.server.ts` `getExpenseById`, :313-389)
+
+```diff
+       category: {
+-        select: { id: true, name: true },
++        select: { id: true, name: true, account: { select: { code: true, name: true } } },
+       },
++      journalEntry: {
++        select: {
++          lines: { where: { debit: { gt: 0 } }, select: { account: { select: { code: true, name: true } } }, take: 1 },
++        },
++      },
+```
+
+Después del `findFirst`, solo si `status === 'DRAFT'` y la categoría no tiene cuenta:
+`prisma.accountingSettings.findUnique({ where: { companyId }, select: { expensesAccount: { select: { code: true, name: true } } } })`.
+Retorno: se agrega
+
+```typescript
+debitAccount: ExpenseDebitAccountView | null
+// null = no aplica (egreso anulado sin asiento): el componente no se renderiza.
+// Confirmado / pagado / parcial → origin 'entry' (label del asiento);
+// Borrador → buildExpenseDebitAccountView({ entryAccountLabel: null, categoryAccountLabel, defaultAccountLabel }).
+```
+
+y se **quita** `journalEntry` del objeto devuelto (`const { journalEntry, ...rest } = expense`)
+para no exponer relaciones de más. Sin `Decimal` nuevos: `debit` no se selecciona.
+`_CreateExpenseModal.tsx:86` sigue usando `data.category.id` (compatible).
+
+### 3.4 Interfaces de usuario
+
+#### 3.4.1 Hook `EXP/hooks/useExpenseCategoryMutations.ts` (nuevo, ~75 líneas)
+
+```typescript
+'use client';
+export interface ExpenseCategoryMutations {
+  /** true si se creó (el form se resetea solo en ese caso). */
+  createCategory: (data: ExpenseCategoryFormInput) => Promise<boolean>;
+  updateCategory: (id: string, data: ExpenseCategoryFormInput) => Promise<boolean>;
+  toggleCategory: (category: { id: string; isActive: boolean }) => Promise<boolean>;
+  isCreating: boolean;
+  /** Categoría con un update/toggle en curso (deshabilita sus botones). */
+  pendingId: string | null;
+}
+export function useExpenseCategoryMutations(): ExpenseCategoryMutations;
+```
+
+Tres `useMutation` sobre las actions `ActionResult`; en `onSuccess(result)`:
+`if (!result.success) { toast.error(result.error); return; }` → `toast.success(…)` ('Categoría
+creada', 'Categoría actualizada', 'Categoría desactivada'/'activada') e invalidación de
+`['allExpenseCategories']`, `['expenseCategories']` y `['expenseCategoryAccounts']`. `onError`
+(fallo técnico/red) → `logger.error` + `toast.error(UNEXPECTED_ERROR_MESSAGE)`.
+
+#### 3.4.2 Componentes nuevos / reescritos
+
+| Archivo | Tipo | Props | Líneas est. |
+|---|---|---|---|
+| `EXP/components/_CategoryManagementModal.tsx` (reescrito) | Dialog contenedor | `{ trigger?: ReactNode; onClose?: () => void }` (**sin cambios**: `_CreateExpenseModal.tsx:223-231` sigue igual) | ~95 |
+| `EXP/components/_CategoryCreateForm.tsx` | form de alta | `{ onCreate: (data: ExpenseCategoryFormInput) => Promise<boolean>; isCreating: boolean }` | ~110 |
+| `EXP/components/_CategoryRow.tsx` | fila vista/edición | `{ category: CategoryItem; canUpdate: boolean; isPending: boolean; onSave: (id: string, data: ExpenseCategoryFormInput) => Promise<boolean>; onToggle: (c: { id: string; isActive: boolean }) => Promise<boolean> }` | ~165 |
+| `EXP/components/_CategoryAccountField.tsx` | combo de cuenta | `{ value: string \| null \| undefined; onChange: (accountId: string \| null) => void; savedAccountId?: string \| null; disabled?: boolean; id?: string }` | ~45 |
+| `EXP/list/components/_ExpensesToolbarActions.tsx` | barra del listado | `{ canCreate: boolean; onCreated: () => void }` | ~40 |
+| `EXP/list/components/_ExpenseAccountHint.tsx` | hint del alta | `{ category: { account: { code: string; name: string } \| null } \| undefined }` | ~30 |
+| `EXP/list/components/_ExpenseDebitAccountInfo.tsx` | dato del detalle | `{ debitAccount: ExpenseDebitAccountView \| null }` | ~40 |
+
+Detalle de cada uno:
+
+- **`_CategoryManagementModal`**: `Dialog` + `useQuery({ queryKey: ['allExpenseCategories'],
+  queryFn: getAllExpenseCategories, enabled: open })` + `useExpenseCategoryMutations()` +
+  `usePermissions()`. Título "Categorías de egreso"; `DialogDescription` "Cada categoría puede
+  tener su cuenta contable; si no tiene, el egreso usa la cuenta de egresos por defecto
+  (Contabilidad → Configuración)." `DialogContent className="sm:max-w-2xl max-h-[85vh]
+  overflow-y-auto"`. Compone: `_CategoryCreateForm` (solo con `hasPermission('commercial.expenses',
+  'create')`), `Separator`, lista (skeleton / vacío / `_CategoryRow` por categoría). Estado de
+  edición: **solo** `editingId: string | null` en el modal (una fila en edición a la vez); el
+  borrador de los inputs vive en la fila.
+- **`_CategoryCreateForm`**: RHF + `zodResolver(expenseCategoryFormSchema)`, `defaultValues {
+  name: '', description: '', accountId: null }`; campos Nombre *, Descripción (opcional),
+  "Cuenta contable (opcional)" con `_CategoryAccountField` + `FormDescription` "Si la dejás vacía,
+  se usa la cuenta de egresos por defecto." Submit: `if (await onCreate(data)) form.reset()`.
+- **`_CategoryRow`**: vista — nombre + badge "Inactiva", descripción, línea de cuenta
+  (`5.2.03 - Alquileres` o "Por defecto" en `text-muted-foreground`, `data-testid="category-account"`),
+  conteo de egresos; botones Editar/Activar solo con `canUpdate`. Edición — `useState<{ name;
+  description; accountId }>` inicializado desde la categoría, dos `Input` + `_CategoryAccountField`
+  (`savedAccountId={category.accountId}`), Guardar → `onSave(category.id, { name, description:
+  description || null, accountId })` (siempre manda `accountId`, null = por defecto); Cancelar.
+  Responsive: contenedor `flex flex-wrap gap-2 min-w-0`; la cuenta en `basis-full sm:basis-auto
+  truncate`.
+- **`_CategoryAccountField`**: `includeIds = savedAccountId ? [savedAccountId] : []`;
+  `useQuery({ queryKey: ['expenseCategoryAccounts', includeIds], queryFn: () =>
+  getExpenseCategoryAccounts(includeIds.length ? includeIds : undefined) })`;
+  `<AccountCombobox accounts={data ?? []} value={value} onChange={onChange}
+  clearLabel="Sin asignar (usar la cuenta de egresos por defecto)" placeholder="Por defecto"
+  disabled={disabled || isLoading} />`.
+- **`_ExpensesToolbarActions`**: `<div className="flex flex-wrap gap-2">` con
+  `<_CategoryManagementModal trigger={<Button variant="outline" size="sm"><Tags …/>Categorías</Button>} onClose={onCreated} />`
+  (visible con `view`: el listado ya está bajo `PermissionGuard` view, `ExpensesList.tsx:31`) y
+  `{canCreate && <_CreateExpenseModal onSuccess={onCreated} />}`. `onClose` → `router.refresh()`
+  para que los filtros facetados del listado vean categorías nuevas.
+- **`_ExpenseAccountHint`**: nada si `category` es `undefined`; si no, `<p className="text-xs
+  text-muted-foreground" data-testid="expense-account-hint">` "Se imputa a: 5.2.03 - Alquileres"
+  o "Se imputa a la cuenta de egresos por defecto".
+- **`_ExpenseDebitAccountInfo`**: nada si `null`; `<div>` con `<p className="text-sm
+  text-muted-foreground">Cuenta contable</p>` y `<p className="font-medium">{label}</p>` +
+  `<span className="text-xs text-muted-foreground">({describeExpenseDebitSource(origin)})</span>`;
+  `origin === 'missing'` → texto ámbar "Sin cuenta: configurala antes de confirmar".
+
+#### 3.4.3 Archivos existentes que se tocan (crecimiento acotado)
+
+| Archivo | Cambio | Δ líneas |
+|---|---|---|
+| `EXP/list/components/_ExpensesTable.tsx:211` | `toolbarActions={<_ExpensesToolbarActions canCreate={canCreate} onCreated={() => router.refresh()} />}`; import `_ExpensesToolbarActions` reemplaza el de `_CreateExpenseModal` | 0 |
+| `EXP/list/components/_CreateExpenseModal.tsx:~247` (antes de `<FormMessage />` del campo Categoría) | `<_ExpenseAccountHint category={categories.find((c) => c.id === field.value)} />` + import | +2 |
+| `EXP/list/components/_ExpenseDetailModal.tsx:183-185` (después del bloque "Categoría", dentro del `grid-cols-2`) | `<_ExpenseDebitAccountInfo debitAccount={expense.debitAccount} />` + import | +2 |
+| `src/shared/lib/accounts/settings-account-labels.ts:56` | `expensesAccountId: 'Cuenta de egresos por defecto'` | 0 |
+| `src/modules/accounting/features/settings/components/_CommercialIntegrationForm.tsx:78` | `help: 'Se usa al confirmar egresos cuya categoría no tiene cuenta contable propia (Comercial → Egresos → Categorías). Si alguna categoría no tiene cuenta, tiene que estar asignada.'` | 0 |
+
+Textos visibles (en español rioplatense, como el resto): botón "Categorías"; título "Categorías de
+egreso"; columna "Por defecto"; `clearLabel` "Sin asignar (usar la cuenta de egresos por
+defecto)"; hint "Se imputa a: …"; detalle "Cuenta contable … (de la categoría | por defecto | del
+asiento)".
+
+### 3.5 Rutas y navegación
+
+No aplica: sin rutas nuevas ni cambios de sidebar. El modal de categorías se abre desde el botón
+"Categorías" de la barra del listado `/dashboard/commercial/expenses` y, como hoy, desde
+"Gestionar" en el alta/edición de un egreso.
+
+### 3.6 APIs / Endpoints
+
+No aplica: solo Server Actions (§3.3.3–3.3.6). Sin API routes.
+
+### 3.7 Consideraciones técnicas
+
+#### Árbol de archivos
+
+```
+prisma/
+├── schema.prisma                                                     (M) ExpenseCategory.accountId + inversa en Account
+└── migrations/<ts>_tsk_757_expense_category_account/migration.sql    (N)
+src/modules/commercial/shared/
+├── expense-accounts.ts                                               (N) helper puro
+├── expense-accounts.test.ts                                          (N)
+└── settings-accounts.test.ts                                         (M) label renombrado (:101)
+src/modules/commercial/features/expenses/
+├── actions.server.ts                                                 (M) categorías + confirmExpense + getExpenseById
+├── validators.ts                                                     (M) accountId
+├── validators.test.ts                                                (N)
+├── expense-journal-entry.integration.test.ts                         (M) casos 2-4 al label nuevo + 8-13 + describe categorías
+├── hooks/useExpenseCategoryMutations.ts                              (N)
+├── components/
+│   ├── _CategoryManagementModal.tsx                                  (R) 311 → ~95
+│   ├── _CategoryCreateForm.tsx                                       (N)
+│   ├── _CategoryRow.tsx                                              (N)
+│   └── _CategoryAccountField.tsx                                     (N)
+└── list/components/
+    ├── _ExpensesToolbarActions.tsx                                   (N)
+    ├── _ExpenseAccountHint.tsx                                       (N)
+    ├── _ExpenseDebitAccountInfo.tsx                                  (N)
+    ├── _ExpensesTable.tsx                                            (M) ±0
+    ├── _CreateExpenseModal.tsx                                       (M) +2
+    └── _ExpenseDetailModal.tsx                                       (M) +2
+src/modules/accounting/features/
+├── integrations/commercial/index.ts                                  (M) createJournalEntryForExpense + cabecera + JSDoc
+└── settings/components/_CommercialIntegrationForm.tsx                (M) ayuda
+src/shared/lib/accounts/settings-account-labels.ts                    (M) label
+src/modules/help/features/guide/components/_CommercialGuide.tsx       (M) Fase 8
+src/modules/help/features/guide/components/_AccountingGuide.tsx       (M) Fase 8 (:252, :336)
+docs/modules/commercial.md, docs/modules/accounting.md, docs/architecture/data-model.md   (M) Fase 8
+scripts/guia-presentacion/capturas-tsk757.mjs, tsk-757.html, assets/tsk757-*.png         (N) Fases 7-8
+docs/presentaciones/TSK-757-cuenta-por-tipo-de-gasto.pdf                                 (N) Fase 8
+```
+
+#### Casos de test
+
+**Puros — `CSH/expense-accounts.test.ts`** (Fase 2, TDD):
+
+| # | Función | Caso | Esperado |
+|---|---|---|---|
+| P1 | `resolveExpenseDebitAccount` | categoría `'c'`, default `null` | `{ accountId: 'c', source: 'category' }` |
+| P2 | idem | categoría `'c'`, default `'d'` | categoría gana |
+| P3 | idem | categoría `null`, default `'d'` | `{ 'd', 'default' }` |
+| P4 | idem | ambas `null` / `undefined` | `null` |
+| P5 | idem | categoría `''`, default `'d'` | `'default'` (`''` = vacío) |
+| P6 | `requiredExpenseSettingsFields` | con cuenta / sin cuenta / `''` | `['payablesAccountId']` / `['expensesAccountId','payablesAccountId']` / la de 2 |
+| P7 | `buildMissingExpenseAccountsMessage` | faltan las dos, categoría "Alquiler" | contiene `falta configurar "Cuenta de egresos por defecto" y "Cuentas por Pagar" en Contabilidad → Configuración` y `o asignale una cuenta contable a la categoría "Alquiler" en Comercial → Egresos → Categorías.` |
+| P8 | idem | falta solo `payablesAccountId` | **igual** a `buildMissingSettingsAccountsMessage` (sin mención de la categoría) |
+| P9 | `buildCategoryAccountNotImputableMessage` | con label | `la cuenta 5.2.03 - Alquileres de la categoría "Alquiler" no está activa o no es imputable. Corregila en Comercial → Egresos → Categorías.` |
+| P10 | idem | `accountLabel` null | `ya no existe en el plan de cuentas` |
+| P11 | `buildExpenseDebitLine` | `{ accountId, amount: 1000, fullNumber: 'GTO-00001', description: 'Alquiler' }` | `{ accountId, debit: 1000, credit: 0, description: 'Gasto GTO-00001 - Alquiler' }`, sin clave `costCenterId` |
+| P12 | `buildExpenseDebitAccountView` | entry + categoría + default | `{ origin: 'entry', … }` |
+| P13 | idem | sin entry, categoría / sin categoría con default / nada | `'category'` / `'default'` / `{ origin: 'missing', label: null }` |
+| P14 | `describeExpenseDebitSource` | los tres orígenes | 'del asiento' / 'de la categoría' / 'por defecto' |
+
+**Puros — `EXP/validators.test.ts`**: V1 nombre vacío → falla con "El nombre es requerido";
+V2 `accountId` ausente → OK; V3 `null` → OK; V4 UUID v4 válido → OK; V5 `'abc'` → falla
+"Cuenta contable inválida". **`CSH/settings-accounts.test.ts:101`**: label nuevo.
+
+**Integración — `EXP/expense-journal-entry.integration.test.ts`** (DB local; mismo andamiaje
+:52-187; se agregan cuentas `T757-ALQ` (EXPENSE, imputable), `T757-ALQ-VIEJA` (EXPENSE) y
+`T757-ACTIVO` (ASSET), y una segunda empresa `PREFIX + 'Otra'` con una cuenta EXPENSE; el
+`afterAll` limpia ambas empresas):
+
+| # | Caso | Verifica |
+|---|---|---|
+| 1, 5, 6, 7 | TSK-728 sin cambios | siguen verdes tal cual |
+| 2, 3, 4 | TSK-728 con label nuevo | `"Cuenta de egresos por defecto"` en lugar de `"Cuenta de Gastos Operativos"` (:206-256 y cabecera :5); el 2 además contiene la salida por categoría |
+| C1 | crear categoría con cuenta propia | `{ success: true, id }`; `accountId` guardado |
+| C2 | crear con cuenta de **otra empresa** | `{ success: false, error: 'La cuenta contable seleccionada no pertenece a la empresa' }`; no se crea |
+| C3 | nombre duplicado | `{ success: false, error: 'Ya existe una categoría con ese nombre' }` |
+| C4 | `update` con `accountId: null` / sin `accountId` | vuelve a `null` / no lo toca |
+| C5 | `toggle` | `{ success: true, isActive: false }`; id inexistente → `'Categoría no encontrada'` |
+| C6 | `getExpenseCategoryAccounts([idInactiva])` | incluye la inactiva guardada; excluye `T757-ACTIVO` (ASSET) y cuentas de la otra empresa |
+| 8 | categoría con cuenta y **sin** default en Ajustes | confirma; Debe `T757-ALQ` 1000, Haber Pagar 1000 con proveedor |
+| 9 | categoría con cuenta y con default | Debe en `T757-ALQ`, no en `gastosId` |
+| 10 | cuenta de la categoría inactiva | `success: false`; mensaje con `T757-ALQ-VIEJA - …`, `de la categoría "…"` y `Comercial → Egresos → Categorías`; **no** cae a la por defecto; `DRAFT`, `journalEntryId` null |
+| 11 | categoría sin cuenta y sin default | mensaje con `"Cuenta de egresos por defecto"` y `asignale una cuenta contable a la categoría "…"` |
+| 12 | presupuesto chico sobre `T757-ALQ` | egreso de esa categoría → `budgetWarning`; egreso de categoría **sin** cuenta con el presupuesto del caso 5 sobre `gastosId` sigue avisando, y uno de la categoría con cuenta no consume el de `gastosId` (sin aviso si `T757-ALQ` no tiene presupuesto en ese momento — ordenar: primero sin presupuesto, después con) |
+| 13 | desvincular la cuenta (`prisma.account.delete` de una cuenta sin movimientos creada para el caso; si choca con FK, `UPDATE` a null y anotarlo) | `accountId` queda `null` por `SET NULL`; el egreso confirma contra `gastosId` |
+| D1 | `getExpenseById` | borrador con categoría con cuenta → `{ origin: 'category' }`; sin cuenta → `'default'`; confirmado → `'entry'` con el label del Debe |
+
+Cada caso que cambia Ajustes o cuentas restaura en `finally` (patrón de los casos 2-4). Las
+categorías del describe nuevo usan el prefijo `PREFIX` para la limpieza.
+
+#### Script `scripts/guia-presentacion/capturas-tsk757.mjs` (Fase 7)
+
+Molde `capturas-tsk728.mjs` (playwright, `psql` vía `docker exec contable-pms-db`, mismas
+constantes `COMPANY_ID`, `USER_ID`, `SUPPLIER_ID`, `EMAIL`/`PASSWORD`, `BASE` por defecto
+`http://localhost:3010`, `chromium.launch().catch(() => chromium.launch({ channel: 'chrome' }))`).
+
+- **Marca y siembra** (`seed()`, idempotente: primero `cleanup()`):
+  - `MARK = 'TSK757-demo'` en `expenses.notes` de los egresos sembrados.
+  - Categorías con nombres realistas en la constante `DEMO_CATEGORIES = ['Alquiler de oficina',
+    'Tasas municipales', 'Viáticos de obra']` y `description = 'Ejemplo TSK-757'`. Si ya existe
+    una con ese nombre **sin** esa descripción (dato real), el script aborta sin tocarla.
+  - Cuentas: `Alquiler de oficina` → una cuenta EXPENSE imputable existente distinta de
+    `expenses_account_id` (elegida por SQL: `type='EXPENSE' and is_leaf and is_active and
+    name ilike '%alquiler%'`, si no la primera por código); `Tasas municipales` → otra EXPENSE
+    (`ilike '%impuesto%' or '%tasa%'`); `Viáticos de obra` → `NULL` (por defecto).
+  - Cuenta temporal raíz `code='TSK757-DEMO'`, `name='Gastos varios (dada de baja)'`, EXPENSE,
+    `is_active=false`, `parent_id NULL` (no altera `is_leaf` de nadie) para el escenario de
+    error; se le asigna temporalmente a `Tasas municipales`.
+  - Egresos en borrador (números `max+1…`): "Alquiler octubre" (Alquiler de oficina),
+    "ABL octubre" (Tasas municipales), "Viáticos obra Neuquén" (Viáticos de obra).
+- **Escenarios / capturas** (1440×900, `scripts/guia-presentacion/assets/tsk757-NN-*.png`):
+  01 listado con botón "Categorías"; 02 modal con las tres categorías (dos con cuenta, una "Por
+  defecto"); 03 edición de "Viáticos de obra" con el combo abierto y búsqueda "viát";
+  04 alta de egreso con categoría "Alquiler de oficina" y el hint "Se imputa a: …"; 05 detalle
+  del borrador "Alquiler octubre" ("de la categoría"); 06 confirmación OK (toast) y detalle del
+  confirmado ("del asiento"); 07 asiento en Contabilidad → Asientos (y SQL `entryLines('Gasto
+  GTO-%Alquiler octubre%')` impreso); 08 confirmar "ABL octubre" con la cuenta temporal inactiva →
+  toast rojo con categoría y cuenta, sigue en Borrador; 09 Contabilidad → Configuración con
+  "Cuenta de egresos por defecto" y su ayuda.
+- **Mobile** (375×812, `isMobile: true`): 10 modal de categorías; assert
+  `document.documentElement.scrollWidth <= 375` y el `[role="dialog"]` dentro del viewport;
+  falla el script si no.
+- **Limpieza** (`cleanup()`, en `finally` y también al inicio): borra asientos (`journal_entries`
+  de los egresos con `notes=MARK`, sus líneas caen por cascade), los egresos `MARK`, las
+  categorías `DEMO_CATEGORIES` con descripción `'Ejemplo TSK-757'` y la cuenta `TSK757-DEMO`.
+  Imprime conteos finales en 0. `--restore` corre solo la limpieza.
+
+#### Invariantes (no se deben romper)
+
+| Invariante | Dónde vive hoy | Cómo se preserva |
+|---|---|---|
+| **TSK-728 — sin confirmación silenciosa**: pre-validación fuera de la transacción; si el asiento falla, se revierte el confirm | `EXP/actions.server.ts:556-566` (pre-validación), `:591-605` (`$transaction` con `createJournalEntryForExpense`) | Misma estructura; solo cambia qué cuentas se exigen. Casos 1-7 verdes. |
+| **TSK-728 — errores legibles** (`ActionResult`, `BusinessError`) | `EXP/actions.server.ts:538-540` (firma), `:611-618` (`toActionResult`); `INT/index.ts:983-993` (defensa); período cerrado `INT/index.ts:217-219`; cliente `_ExpensesTable.tsx:54-77`, `_ExpenseDetailModal.tsx:97-110` | Firma de `confirmExpense` sin cambios; mensajes nuevos también `BusinessError`; mutaciones de categorías pasan a `ActionResult` (mismo contrato). Verificar toast en `npm run build && npm run start -- -p 3011`. |
+| **TSK-728 — label exacto del campo en el mensaje** | `settings-account-labels.ts:54-63`, `settings-accounts.ts` (`buildMissingSettingsAccountsMessage`) | El label renombrado sale de la misma constante; Ajustes y mensajes siguen leyendo el mismo texto. |
+| **TSK-721 — semántica "por defecto"** (label "… por defecto" + ayuda que dice cuándo se usa) | `settings-account-labels.ts:54-63`; `_CommercialIntegrationForm.tsx:62-79` | `expensesAccountId` adopta la misma forma ("Cuenta de egresos por defecto" + ayuda condicional). |
+| **TSK-717 — sin fallback silencioso** | `treasury/features/fund-movements/list/actions.server.ts:231-275` | Cuenta de categoría no imputable → bloquea (caso 10). |
+| **Presupuesto no bloqueante** | `EXP/actions.server.ts:568-589` (try/catch + `logger.warn`); `INT/index.ts:1048+` | Igual, con `debitAccountId` (casos 5 y 12). Aviso de R1 en guía y PDF. |
+| **Egresos confirmados intactos** (D8) | sin backfill; `updateExpense` solo `DRAFT` `EXP/actions.server.ts:455-460`; `cancelExpense` `:624-668` sin cambios | Migración sin `UPDATE`; la cuenta se resuelve solo al confirmar; el detalle de un confirmado lee la cuenta del asiento, no la de la categoría actual. |
+| **Retrocompatibilidad** | categorías existentes con `account_id NULL` | Mismo asiento que hoy (Debe `expensesAccountId`). |
+| **Multiempresa** | `getActiveCompanyId()` en todas las actions | `assertCategoryAccountBelongsToCompany`; `includeIds` filtrado por `companyId` (C2, C6). |
+| **Dashboard por categoría** | `src/modules/dashboard/actions.server.ts:390-409` | No se toca (agrupa por categoría, no por cuenta). |
+
+#### Otras consideraciones
+
+- **Orden de validación en el confirm**: faltantes → resolución → imputabilidad (una consulta
+  imputable + una de labels, como hoy). Si la categoría tiene cuenta, `expensesAccountId` vacío
+  **no** bloquea (R3).
+- **Borrador con cuenta de categoría no imputable**: el detalle la muestra igual ("de la
+  categoría"); quien bloquea es la confirmación (caso 10). No se agrega aviso previo (fuera de
+  alcance, evita otra consulta en el detalle).
+- **Carrera** entre pre-validación y transacción (alguien cambia la cuenta de la categoría en el
+  medio): el asiento vuelve a resolver dentro de la transacción; en el peor caso usa la cuenta
+  nueva o falla la defensa con `BusinessError` y se revierte. Aceptable (mismo nivel que TSK-728).
+- **Auxiliares (R5)**: `requiresAuxiliary` de la cuenta de la categoría no se valida (igual que
+  hoy). TSK-738 sumará `costCenterId` en `ExpenseDebitLineInput`/`ExpenseDebitLine`.
+- **Componentes**: todos los nuevos < 200 líneas; los preexistentes excedidos crecen ≤ 2 líneas
+  (2.4-5). Client components con prefijo `_`; el hook sin prefijo (no es componente).
+- **Consultas**: `select` explícito en todas; `getExpenseById` agrega una sola consulta extra y
+  solo para borradores sin cuenta de categoría.
+- **Sin Decimals nuevos** hacia el cliente (`debit` no se selecciona en el detalle).
+- **Línea base**: `check-types` ≤ 219 errores; `eslint` sin errores en archivos tocados.
 
 ## 4. Implementación
 _Pendiente - ejecutar `/implementar tsk-757-cuenta-contable-por-tipo-de-gasto`_
