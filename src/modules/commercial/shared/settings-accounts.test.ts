@@ -98,7 +98,7 @@ describe('mensaje de cuentas de Ajustes faltantes', () => {
         'payablesAccountId',
       ])
     ).toContain(
-      'falta configurar "Cuenta de Gastos Operativos", "IVA Crédito Fiscal" y "Cuentas por Pagar" en'
+      'falta configurar "Cuenta de egresos por defecto", "IVA Crédito Fiscal" y "Cuentas por Pagar" en'
     );
   });
 });

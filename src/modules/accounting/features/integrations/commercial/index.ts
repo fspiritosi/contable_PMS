@@ -35,7 +35,7 @@
  *    confirmPaymentOrder; acá defensa en profundidad.
  *
  * 5. Gasto (confirmado):
- *    - Debe: Gastos Operativos
+ *    - Debe: cuenta de la categoría del egreso, o "Cuenta de egresos por defecto" (TSK-757)
  *    - Haber: Cuentas por Pagar
  *    Pre-validado en confirmExpense (TSK-728); acá defensa en profundidad.
  */
@@ -49,6 +49,12 @@ import { BusinessError } from '@/shared/lib/action-result';
 import { isCreditNote } from '@/modules/commercial/shared/voucher-utils';
 import { expandByCostCenter } from '@/modules/commercial/shared/cost-center';
 import { buildMissingTributeAccountsMessage } from '@/modules/commercial/shared/perceptions';
+import {
+  buildExpenseDebitLine,
+  buildMissingExpenseAccountsMessage,
+  requiredExpenseSettingsFields,
+  resolveExpenseDebitAccount,
+} from '@/modules/commercial/shared/expense-accounts';
 import {
   buildMissingLineAccountsMessage,
   findLinesMissingAccount,
@@ -975,6 +981,7 @@ export async function createJournalEntryForExpense(
         date: true,
         amount: true,
         supplier: { select: { businessName: true } },
+        category: { select: { name: true, accountId: true } },
       },
     });
 
@@ -984,11 +991,23 @@ export async function createJournalEntryForExpense(
 
     const settings = await getAccountingSettings(companyId, tx);
 
-    // Cuentas obligatorias de Ajustes. Pre-validado en confirmExpense (TSK-728); acá defensa en profundidad.
-    const missingSettings = findMissingSettingsAccounts(settings, ['expensesAccountId', 'payablesAccountId']);
-    if (missingSettings.length > 0 || !settings.expensesAccountId || !settings.payablesAccountId) {
+    // Cuentas obligatorias. Pre-validado en confirmExpense (TSK-728/TSK-757); acá defensa en profundidad.
+    // Debe: la cuenta de la categoría; si no tiene, la de egresos por defecto de Ajustes (TSK-757).
+    const missingSettings = findMissingSettingsAccounts(
+      settings,
+      requiredExpenseSettingsFields(expense.category.accountId)
+    );
+    const debit = resolveExpenseDebitAccount({
+      categoryAccountId: expense.category.accountId,
+      defaultAccountId: settings.expensesAccountId,
+    });
+    if (missingSettings.length > 0 || !debit || !settings.payablesAccountId) {
       throw new BusinessError(
-        buildMissingSettingsAccountsMessage(`el gasto ${expense.fullNumber}`, missingSettings)
+        buildMissingExpenseAccountsMessage(
+          `el gasto ${expense.fullNumber}`,
+          missingSettings,
+          expense.category.name
+        )
       );
     }
 
@@ -996,12 +1015,12 @@ export async function createJournalEntryForExpense(
     const supplierName = expense.supplier?.businessName;
 
     const lines: JournalEntryLineInput[] = [
-      {
-        accountId: settings.expensesAccountId,
-        debit: amount,
-        credit: 0,
-        description: `Gasto ${expense.fullNumber} - ${expense.description}`,
-      },
+      buildExpenseDebitLine({
+        accountId: debit.accountId,
+        amount,
+        fullNumber: expense.fullNumber,
+        description: expense.description,
+      }),
       {
         accountId: settings.payablesAccountId,
         debit: 0,
@@ -1039,7 +1058,7 @@ export async function createJournalEntryForExpense(
  * Retorna un warning (no bloquea la operación).
  * Se invoca desde confirmExpense() antes de la transacción.
  *
- * @param accountId - ID de la cuenta de gastos (expensesAccountId de settings)
+ * @param accountId - Cuenta del Debe del egreso ya resuelta (la de su categoría o la de egresos por defecto, TSK-757)
  * @param amount - Monto del gasto que se está confirmando
  * @param companyId - ID de la empresa
  * @param expenseDate - Fecha del gasto para determinar el mes presupuestario

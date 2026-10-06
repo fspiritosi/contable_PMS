@@ -75,7 +75,7 @@ const SECTIONS: SectionDef[] = [
         name: 'expensesAccountId',
         label: ACCOUNTING_SETTINGS_ACCOUNT_LABELS.expensesAccountId,
         types: ['EXPENSE'],
-        help: 'Se usa al confirmar gastos operativos (Debe)',
+        help: 'Se usa al confirmar egresos cuya categoría no tiene cuenta contable propia (Comercial → Egresos → Categorías). Si alguna categoría no tiene cuenta, tiene que estar asignada.',
       },
     ],
   },

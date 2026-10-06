@@ -29,13 +29,16 @@ import { buildImputableAccountsWhere } from '@/shared/lib/accounts/imputable-acc
 import {
   ACCOUNTING_SETTINGS_PATH,
   settingsAccountLabel,
-  type AccountingSettingsAccountField,
 } from '@/shared/lib/accounts/settings-account-labels';
 import { formatAccountLabel } from '@/modules/commercial/shared/line-accounts';
+import { findMissingSettingsAccounts } from '@/modules/commercial/shared/settings-accounts';
 import {
-  buildMissingSettingsAccountsMessage,
-  findMissingSettingsAccounts,
-} from '@/modules/commercial/shared/settings-accounts';
+  buildCategoryAccountNotImputableMessage,
+  buildMissingExpenseAccountsMessage,
+  requiredExpenseSettingsFields,
+  resolveExpenseDebitAccount,
+  type ExpenseEntryField,
+} from '@/modules/commercial/shared/expense-accounts';
 
 /**
  * Normaliza una fecha @db.Date (medianoche UTC) a mediodía UTC
@@ -586,29 +589,45 @@ export async function updateExpense(id: string, data: ExpenseFormInput) {
   }
 }
 
-/** Cuentas de Ajustes que usa el asiento del gasto: Debe Gastos Operativos / Haber Cuentas por Pagar. */
-const EXPENSE_ENTRY_FIELDS = ['expensesAccountId', 'payablesAccountId'] as const satisfies readonly AccountingSettingsAccountField[];
-type ExpenseEntryField = (typeof EXPENSE_ENTRY_FIELDS)[number];
+/** Categoría del egreso tal como la necesita la pre-validación del asiento (TSK-757). */
+interface ExpenseCategoryForEntry {
+  name: string;
+  accountId: string | null;
+}
+
+/** Cuenta a validar: la del Debe resuelto (categoría o por defecto) o un campo de Ajustes. */
+type ExpenseAccountToCheck =
+  | { kind: 'category'; accountId: string }
+  | { kind: 'settings'; field: ExpenseEntryField; accountId: string };
 
 /**
- * Pre-validación del asiento del gasto (TSK-728): las dos cuentas de Ajustes
- * cargadas e imputables. Lanza `BusinessError` con el label real del campo.
+ * Pre-validación del asiento del gasto (TSK-728 + TSK-757). Exige las cuentas de Ajustes
+ * según la categoría, resuelve la cuenta del Debe (la de la categoría o la de egresos por
+ * defecto) y verifica que la resuelta y Cuentas por Pagar sean imputables. Si la cuenta
+ * propia de la categoría no es imputable BLOQUEA (nunca cae a la por defecto, TSK-717).
+ * Devuelve la cuenta del Debe, que usan el presupuesto y el asiento.
  */
 async function assertExpenseEntryAccounts(
   companyId: string,
   documentLabel: string,
-  settings: { expensesAccountId: string | null; payablesAccountId: string | null }
-): Promise<void> {
-  const missing = findMissingSettingsAccounts(settings, EXPENSE_ENTRY_FIELDS);
-  if (missing.length > 0) {
-    throw new BusinessError(buildMissingSettingsAccountsMessage(documentLabel, missing));
+  settings: { expensesAccountId: string | null; payablesAccountId: string | null },
+  category: ExpenseCategoryForEntry
+): Promise<{ debitAccountId: string }> {
+  const missing = findMissingSettingsAccounts(settings, requiredExpenseSettingsFields(category.accountId));
+  const debit = resolveExpenseDebitAccount({
+    categoryAccountId: category.accountId,
+    defaultAccountId: settings.expensesAccountId,
+  });
+  if (missing.length > 0 || !debit || !settings.payablesAccountId) {
+    throw new BusinessError(buildMissingExpenseAccountsMessage(documentLabel, missing, category.name));
   }
 
-  const toCheck: { field: ExpenseEntryField; accountId: string }[] = [];
-  for (const field of EXPENSE_ENTRY_FIELDS) {
-    const accountId = settings[field];
-    if (accountId) toCheck.push({ field, accountId });
-  }
+  const toCheck: ExpenseAccountToCheck[] = [
+    debit.source === 'category'
+      ? { kind: 'category', accountId: debit.accountId }
+      : { kind: 'settings', field: 'expensesAccountId', accountId: debit.accountId },
+    { kind: 'settings', field: 'payablesAccountId', accountId: settings.payablesAccountId },
+  ];
   const ids = toCheck.map((a) => a.accountId);
   const [imputable, all] = await Promise.all([
     prisma.account.findMany({
@@ -619,9 +638,14 @@ async function assertExpenseEntryAccounts(
   ]);
   const imputableIds = new Set(imputable.map((a) => a.id));
   const failed = toCheck.find((a) => !imputableIds.has(a.accountId));
-  if (!failed) return;
+  if (!failed) return { debitAccountId: debit.accountId };
 
   const info = all.find((a) => a.id === failed.accountId);
+  if (failed.kind === 'category') {
+    throw new BusinessError(
+      buildCategoryAccountNotImputableMessage(documentLabel, category.name, info ? formatAccountLabel(info) : null)
+    );
+  }
   const cuenta = info
     ? `la cuenta ${formatAccountLabel(info)} (configurada como ${settingsAccountLabel(failed.field)}) no está activa o no es imputable`
     : `la cuenta configurada como ${settingsAccountLabel(failed.field)} ya no existe en el plan de cuentas`;
@@ -633,7 +657,8 @@ async function assertExpenseEntryAccounts(
 /**
  * Confirma un gasto.
  * Antes de confirmar, verifica si el gasto excede el presupuesto mensual
- * de la cuenta de gastos. Si lo excede, retorna un budgetWarning (no bloqueante).
+ * de la cuenta del Debe (la de su categoría o la de egresos por defecto, TSK-757).
+ * Si lo excede, retorna un budgetWarning (no bloqueante).
  *
  * Los errores esperables (gasto ya confirmado, cuenta de Ajustes faltante o no
  * imputable, período cerrado) vuelven como `{ success: false, error }` (TSK-728).
@@ -651,7 +676,14 @@ export async function confirmExpense(
   try {
     const expense = await prisma.expense.findFirst({
       where: { id, companyId, status: 'DRAFT' },
-      select: { id: true, fullNumber: true, description: true, amount: true, categoryId: true, date: true },
+      select: {
+        id: true,
+        fullNumber: true,
+        description: true,
+        amount: true,
+        date: true,
+        category: { select: { name: true, accountId: true } },
+      },
     });
 
     if (!expense) throw new BusinessError('Gasto no encontrado o ya confirmado');
@@ -666,24 +698,27 @@ export async function confirmExpense(
         `No se encontró configuración contable para la empresa. Configurala en ${ACCOUNTING_SETTINGS_PATH}.`
       );
     }
-    await assertExpenseEntryAccounts(companyId, `el gasto ${expense.fullNumber}`, settings);
+    const { debitAccountId } = await assertExpenseEntryAccounts(
+      companyId,
+      `el gasto ${expense.fullNumber}`,
+      settings,
+      expense.category
+    );
 
-    // Verificación presupuestaria (no bloqueante)
+    // Verificación presupuestaria (no bloqueante), sobre la cuenta RESUELTA del Debe (TSK-757)
     let budgetWarning: { message: string; executedPercent: number } | undefined;
     try {
-      if (settings.expensesAccountId) {
-        const check = await checkBudgetForExpense(
-          settings.expensesAccountId,
-          Number(expense.amount),
-          companyId,
-          expense.date
-        );
-        if (check?.hasWarning) {
-          budgetWarning = {
-            message: check.message,
-            executedPercent: check.executedPercent,
-          };
-        }
+      const check = await checkBudgetForExpense(
+        debitAccountId,
+        Number(expense.amount),
+        companyId,
+        expense.date
+      );
+      if (check?.hasWarning) {
+        budgetWarning = {
+          message: check.message,
+          executedPercent: check.executedPercent,
+        };
       }
     } catch (error) {
       logger.warn('Error en verificación presupuestaria (no bloqueante)', {

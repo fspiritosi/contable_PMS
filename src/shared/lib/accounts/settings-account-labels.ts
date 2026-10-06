@@ -53,7 +53,7 @@ export type AccountingSettingsAccountField = (typeof ACCOUNTING_SETTINGS_ACCOUNT
 export const ACCOUNTING_SETTINGS_ACCOUNT_LABELS: Record<AccountingSettingsAccountField, string> = {
   salesAccountId: 'Cuenta de ventas por defecto',
   purchasesAccountId: 'Cuenta de compras por defecto',
-  expensesAccountId: 'Cuenta de Gastos Operativos',
+  expensesAccountId: 'Cuenta de egresos por defecto',
   receivablesAccountId: 'Cuentas por Cobrar',
   payablesAccountId: 'Cuentas por Pagar',
   vatDebitAccountId: 'IVA Débito Fiscal',

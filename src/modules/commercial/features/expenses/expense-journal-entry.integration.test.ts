@@ -2,8 +2,9 @@
  * Tests de integración de la confirmación de un gasto (Egresos) cuando el
  * asiento no se puede generar (TSK-728), contra la base real.
  *
- * El gasto no tiene pagos: su asiento es siempre "Cuenta de Gastos Operativos"
- * contra "Cuentas por Pagar". Antes, si faltaba alguna, la integración devolvía
+ * El gasto no tiene pagos: su asiento es la cuenta del Debe (la de su categoría
+ * o, si no tiene, la "Cuenta de egresos por defecto", TSK-757) contra "Cuentas
+ * por Pagar". Antes, si faltaba alguna, la integración devolvía
  * `null` y el gasto quedaba `CONFIRMED` sin asiento. Ahora `confirmExpense`
  * pre-valida las dos cuentas (y su imputabilidad) antes de la transacción y
  * devuelve `ActionResult<{ budgetWarning? }>`, conservando el aviso
@@ -12,7 +13,10 @@
  * Se entra por los **server actions reales** (`createExpense`, `confirmExpense`).
  *
  * TSK-757: las categorías de gasto guardan su cuenta contable propia (ABM con
- * `ActionResult`, validación multiempresa y combo con `includeIds`), casos C1–C6.
+ * `ActionResult`, validación multiempresa y combo con `includeIds`), casos C1–C6;
+ * y el asiento, la pre-validación y el presupuesto usan la cuenta resuelta
+ * (categoría → por defecto; cuenta de categoría no imputable bloquea), casos 8–13.
+ * Los casos 1–7 usan una categoría sin cuenta (mismo comportamiento que TSK-728).
  */
 import 'dotenv/config';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -76,13 +80,13 @@ describe.skipIf(!dbAvailable)('integración e2e: asiento al confirmar un gasto (
   }) => prisma.accountingSettings.update({ where: { companyId }, data });
 
   /** Gasto en borrador por el `createExpense` real: $1000 con proveedor. */
-  async function createDraft(description: string) {
+  async function createDraft(description: string, expenseCategoryId: string = categoryId) {
     const result = await createExpense({
       description: `${PREFIX}${description}`,
       amount: '1000',
       date: EXPENSE_DATE,
       dueDate: null,
-      categoryId,
+      categoryId: expenseCategoryId,
       supplierId,
       notes: null,
     });
@@ -213,7 +217,7 @@ describe.skipIf(!dbAvailable)('integración e2e: asiento al confirmar un gasto (
     expect(pagar?.supplierId).toBe(supplierId);
   });
 
-  it('caso 2: sin "Cuenta de Gastos Operativos" → bloqueado con el label exacto; sigue en borrador', async () => {
+  it('caso 2: sin "Cuenta de egresos por defecto" → bloqueado con el label exacto y la salida por categoría; sigue en borrador', async () => {
     const id = await createDraft('Sin cuenta de gastos');
     await setSettings({ expensesAccountId: null });
     try {
@@ -221,8 +225,11 @@ describe.skipIf(!dbAvailable)('integración e2e: asiento al confirmar un gasto (
       expect(result.success).toBe(false);
       if (result.success) return;
       expect(result.error).toContain('No se puede confirmar el gasto GTO-');
-      expect(result.error).toContain('falta configurar "Cuenta de Gastos Operativos"');
+      expect(result.error).toContain('falta configurar "Cuenta de egresos por defecto"');
       expect(result.error).toContain('en Contabilidad → Configuración');
+      expect(result.error).toContain(
+        `o asignale una cuenta contable a la categoría "${PREFIX}Categoría" en Comercial → Egresos → Categorías.`
+      );
 
       const expense = await readExpense(id);
       expect(expense.status).toBe('DRAFT');
@@ -246,7 +253,7 @@ describe.skipIf(!dbAvailable)('integración e2e: asiento al confirmar un gasto (
       expect(both.success).toBe(false);
       if (both.success) return;
       expect(both.error).toContain(
-        'falta configurar "Cuenta de Gastos Operativos" y "Cuentas por Pagar"'
+        'falta configurar "Cuenta de egresos por defecto" y "Cuentas por Pagar"'
       );
       expect((await readExpense(id)).status).toBe('DRAFT');
     } finally {
@@ -263,7 +270,7 @@ describe.skipIf(!dbAvailable)('integración e2e: asiento al confirmar un gasto (
       expect(result.success).toBe(false);
       if (result.success) return;
       expect(result.error).toContain(`la cuenta ${GASTOS_VIEJA_CODE} - ${PREFIX}Gastos vieja`);
-      expect(result.error).toContain('(configurada como "Cuenta de Gastos Operativos")');
+      expect(result.error).toContain('(configurada como "Cuenta de egresos por defecto")');
       expect(result.error).toContain('no está activa o no es imputable');
       expect(result.error).toContain('Corregila en Contabilidad → Configuración');
       expect((await readExpense(id)).status).toBe('DRAFT');
@@ -496,6 +503,159 @@ describe.skipIf(!dbAvailable)('integración e2e: asiento al confirmar un gasto (
       } finally {
         await prisma.account.update({ where: { id: alqViejaId }, data: { isActive: true } });
       }
+    });
+
+    /** Categoría del test (prefijo para la limpieza) por la action real. */
+    async function createCategory(name: string, accountId: string | null) {
+      const result = await createExpenseCategory({ name: `${PREFIX}${name}`, accountId });
+      if (!result.success) throw new Error(result.error);
+      return result.id;
+    }
+
+    function debitLine(lines: JournalLineRow[]) {
+      const debits = lines.filter((l) => l.debit > 0);
+      expect(debits).toHaveLength(1);
+      return debits[0];
+    }
+
+    it('caso 8: categoría con cuenta y SIN cuenta por defecto → confirma; Debe la de la categoría', async () => {
+      const catId = await createCategory('Con cuenta sin default', alqId);
+      const id = await createDraft('Categoría con cuenta sin default', catId);
+      await setSettings({ expensesAccountId: null });
+      try {
+        const result = await confirmExpense(id);
+        expect(result).toMatchObject({ success: true });
+
+        expect((await readExpense(id)).status).toBe('CONFIRMED');
+        const lines = await fetchEntryLines(id);
+        expect(lines).toHaveLength(2);
+        expect(debitLine(lines)).toMatchObject({ accountId: alqId, debit: 1000, credit: 0 });
+        const pagar = lines.find((l) => l.accountId === pagarId);
+        expect(pagar?.credit).toBe(1000);
+        expect(pagar?.supplierId).toBe(supplierId);
+      } finally {
+        await setSettings({ expensesAccountId: gastosId });
+      }
+    });
+
+    it('caso 9: categoría con cuenta y con cuenta por defecto → el Debe va a la de la categoría', async () => {
+      const catId = await createCategory('Con cuenta y default', alqId);
+      const id = await createDraft('Categoría con cuenta y default', catId);
+
+      const result = await confirmExpense(id);
+      expect(result.success).toBe(true);
+      if (!result.success) return;
+      // El presupuesto del caso 5 está sobre la cuenta por defecto: no aplica a este egreso.
+      expect(result.budgetWarning).toBeUndefined();
+
+      const lines = await fetchEntryLines(id);
+      expect(debitLine(lines).accountId).toBe(alqId);
+      expect(lines.some((l) => l.accountId === gastosId)).toBe(false);
+    });
+
+    it('caso 10: cuenta de la categoría inactiva → bloqueado nombrando categoría y cuenta; no cae a la por defecto', async () => {
+      const catId = await createCategory('Cuenta inactiva', alqViejaId);
+      const id = await createDraft('Categoría con cuenta inactiva', catId);
+      await prisma.account.update({ where: { id: alqViejaId }, data: { isActive: false } });
+      try {
+        const result = await confirmExpense(id);
+        expect(result.success).toBe(false);
+        if (result.success) return;
+        expect(result.error).toContain('No se puede confirmar el gasto GTO-');
+        expect(result.error).toContain(`la cuenta T757-ALQ-VIEJA - ${PREFIX}Alquileres vieja`);
+        expect(result.error).toContain(`de la categoría "${PREFIX}Cuenta inactiva"`);
+        expect(result.error).toContain('no está activa o no es imputable');
+        expect(result.error).toContain('Corregila en Comercial → Egresos → Categorías.');
+
+        const expense = await readExpense(id);
+        expect(expense.status).toBe('DRAFT');
+        expect(expense.journalEntryId).toBeNull();
+      } finally {
+        await prisma.account.update({ where: { id: alqViejaId }, data: { isActive: true } });
+      }
+    });
+
+    it('caso 11: categoría sin cuenta y sin cuenta por defecto → mensaje con las dos formas de resolverlo', async () => {
+      const catId = await createCategory('Sin cuenta ni default', null);
+      const id = await createDraft('Sin cuenta ni default', catId);
+      await setSettings({ expensesAccountId: null });
+      try {
+        const result = await confirmExpense(id);
+        expect(result.success).toBe(false);
+        if (result.success) return;
+        expect(result.error).toBe(
+          `No se puede confirmar el gasto ${(await readExpense(id)).fullNumber}: falta configurar ` +
+            '"Cuenta de egresos por defecto" en Contabilidad → Configuración, o asignale una ' +
+            `cuenta contable a la categoría "${PREFIX}Sin cuenta ni default" en Comercial → Egresos → Categorías.`
+        );
+        const expense = await readExpense(id);
+        expect(expense.status).toBe('DRAFT');
+        expect(expense.journalEntryId).toBeNull();
+      } finally {
+        await setSettings({ expensesAccountId: gastosId });
+      }
+    });
+
+    it('caso 12: el presupuesto se mide sobre la cuenta resuelta (categoría o por defecto)', async () => {
+      const catId = await createCategory('Presupuesto', alqId);
+
+      // Sin presupuesto en T757-ALQ: el de la cuenta por defecto (caso 5) no aplica.
+      const sinPresupuesto = await confirmExpense(await createDraft('Presupuesto sin', catId));
+      expect(sinPresupuesto.success).toBe(true);
+      if (!sinPresupuesto.success) return;
+      expect(sinPresupuesto.budgetWarning).toBeUndefined();
+
+      // La categoría sin cuenta sigue avisando por el presupuesto de la por defecto.
+      const porDefecto = await confirmExpense(await createDraft('Presupuesto por defecto'));
+      expect(porDefecto.success).toBe(true);
+      if (!porDefecto.success) return;
+      expect(porDefecto.budgetWarning).toBeDefined();
+
+      const monthlyAmounts = Array.from({ length: 12 }, () => 0);
+      monthlyAmounts[2] = 1000; // marzo
+      await prisma.budget.create({
+        data: {
+          companyId,
+          accountId: alqId,
+          fiscalYear: 2026,
+          status: 'ACTIVE',
+          monthlyAmounts,
+          totalAmount: 1000,
+          createdBy: 'test',
+        },
+      });
+
+      const id = await createDraft('Presupuesto con', catId);
+      const conPresupuesto = await confirmExpense(id);
+      expect(conPresupuesto.success).toBe(true);
+      if (!conPresupuesto.success) return;
+      expect(conPresupuesto.budgetWarning).toBeDefined();
+      expect(conPresupuesto.budgetWarning?.message).toContain('presupuesto mensual');
+      // No bloqueante: confirmado y con asiento sobre la cuenta de la categoría.
+      expect((await readExpense(id)).status).toBe('CONFIRMED');
+      expect(debitLine(await fetchEntryLines(id)).accountId).toBe(alqId);
+    });
+
+    it('caso 13: se borra la cuenta de la categoría → SET NULL y el egreso usa la por defecto', async () => {
+      const temp = await prisma.account.create({
+        data: {
+          companyId,
+          code: 'T757-TEMP',
+          name: `${PREFIX}Cuenta temporal`,
+          type: 'EXPENSE',
+          nature: 'DEBIT',
+        },
+        select: { id: true },
+      });
+      const catId = await createCategory('Cuenta borrada', temp.id);
+      const id = await createDraft('Cuenta de categoría borrada', catId);
+
+      await prisma.account.delete({ where: { id: temp.id } });
+      expect((await readCategory(catId)).accountId).toBeNull();
+
+      const result = await confirmExpense(id);
+      expect(result.success).toBe(true);
+      expect(debitLine(await fetchEntryLines(id)).accountId).toBe(gastosId);
     });
   });
 });

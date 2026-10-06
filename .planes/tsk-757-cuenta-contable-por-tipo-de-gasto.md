@@ -1,7 +1,7 @@
 # TSK-757 — Cuenta contable por tipo de gasto
 
 **Fecha de inicio:** 2026-10-06
-**Estado:** Implementación en progreso (Fase 3 de 9 completada)
+**Estado:** Implementación en progreso (Fase 4 de 9 completada)
 
 ---
 
@@ -528,9 +528,9 @@ Otras decisiones de esta planificación:
 - **Objetivo:** al confirmar, el Debe va a la cuenta de la categoría o a la por defecto; la
   pre-validación, el presupuesto y el asiento usan la **misma** cuenta resuelta.
 - **Tareas:**
-  - [ ] `EXP/actions.server.ts` `confirmExpense` (:538): el `select` del egreso suma
+  - [x] `EXP/actions.server.ts` `confirmExpense` (:538): el `select` del egreso suma
         `category: { select: { name: true, accountId: true } }`.
-  - [ ] Reemplazar `EXPENSE_ENTRY_FIELDS` / `assertExpenseEntryAccounts` (:486-530) por
+  - [x] Reemplazar `EXPENSE_ENTRY_FIELDS` / `assertExpenseEntryAccounts` (:486-530) por
         `assertExpenseEntryAccounts(companyId, documentLabel, settings, category)` que:
         (1) faltantes con `findMissingSettingsAccounts(settings,
         requiredExpenseSettingsFields(category.accountId))` → mensaje de TSK-728; si falta
@@ -540,22 +540,22 @@ Otras decisiones de esta planificación:
         `payablesAccountId` en una sola consulta (como hoy); si falla la de la categoría →
         `buildCategoryAccountNotImputableMessage`; si falla una de Ajustes → mensaje actual.
         Devuelve `{ debitAccountId }`.
-  - [ ] Presupuesto (:568-586): `checkBudgetForExpense(debitAccountId, …)` (R1). Actualizar el
+  - [x] Presupuesto (:568-586): `checkBudgetForExpense(debitAccountId, …)` (R1). Actualizar el
         JSDoc de `checkBudgetForExpense` (`INT/index.ts` ~:1043) — "cuenta resuelta del egreso".
-  - [ ] `INT/index.ts` `createJournalEntryForExpense` (:962-1033): `select` suma
+  - [x] `INT/index.ts` `createJournalEntryForExpense` (:962-1033): `select` suma
         `category: { select: { name: true, accountId: true } }`; defensa en profundidad con
         `requiredExpenseSettingsFields` + `resolveExpenseDebitAccount` (si null → `BusinessError`
         con el mismo mensaje); la línea de Debe sale de `buildExpenseDebitLine(…)`; actualizar el
         comentario de cabecera (:38 "Debe: Gastos Operativos" → "Debe: cuenta de la categoría o
         de egresos por defecto").
-  - [ ] `src/shared/lib/accounts/settings-account-labels.ts:56`: `expensesAccountId` →
+  - [x] `src/shared/lib/accounts/settings-account-labels.ts:56`: `expensesAccountId` →
         `'Cuenta de egresos por defecto'`.
-  - [ ] `src/modules/accounting/features/settings/components/_CommercialIntegrationForm.tsx:78`:
+  - [x] `src/modules/accounting/features/settings/components/_CommercialIntegrationForm.tsx:78`:
         ayuda → "Se usa al confirmar egresos cuya categoría no tiene cuenta contable propia
         (Comercial → Egresos → Categorías). Si alguna categoría no tiene cuenta, tiene que estar
         asignada."
-  - [ ] `src/modules/commercial/shared/settings-accounts.test.ts:101`: label renombrado.
-  - [ ] `EXP/expense-journal-entry.integration.test.ts`: actualizar casos 2, 3 y 4 al label nuevo
+  - [x] `src/modules/commercial/shared/settings-accounts.test.ts:101`: label renombrado.
+  - [x] `EXP/expense-journal-entry.integration.test.ts`: actualizar casos 2, 3 y 4 al label nuevo
         (:206-256, cabecera :5) sin cambiar su semántica (categoría sin cuenta). Casos nuevos:
     - **8** categoría con cuenta propia y **sin** cuenta por defecto en Ajustes → confirma; Debe
       en la cuenta de la categoría, Haber Cuentas por Pagar con proveedor.
@@ -569,7 +569,7 @@ Otras decisiones de esta planificación:
     - **13** se borra (o se desvincula) la cuenta de la categoría → `onDelete: SetNull` deja la
       categoría en null y el egreso usa la por defecto (R4). Si borrar la cuenta en el test choca
       con otras FK, cubrirlo con `UPDATE` directo a null y anotarlo.
-  - [ ] `npm run test` (todo, incluidos los 7 casos de TSK-728).
+  - [x] `npm run test` (todo, incluidos los 7 casos de TSK-728).
 - **Archivos:** `EXP/actions.server.ts`, `INT/index.ts`,
   `src/shared/lib/accounts/settings-account-labels.ts`,
   `src/modules/accounting/features/settings/components/_CommercialIntegrationForm.tsx`,
@@ -1576,7 +1576,75 @@ constantes `COMPANY_ID`, `USER_ID`, `SUPPLIER_ID`, `EMAIL`/`PASSWORD`, `BASE` po
     quedan como `throw`, según 2.0.
 
 ### Fase 4: Confirmación y asiento con la cuenta resuelta
-- **Estado:** Pendiente
+- **Estado:** Completada
+- **Archivos modificados:**
+  - `src/modules/commercial/features/expenses/actions.server.ts` — `EXPENSE_ENTRY_FIELDS` reemplazado
+    por `ExpenseCategoryForEntry` + `ExpenseAccountToCheck`; `assertExpenseEntryAccounts(companyId,
+    documentLabel, settings, category)` exige los campos de `requiredExpenseSettingsFields`, resuelve con
+    `resolveExpenseDebitAccount`, valida imputabilidad del Debe resuelto + Cuentas por Pagar en una
+    consulta (más la de labels, como antes) y devuelve `{ debitAccountId }`; cuenta de categoría no
+    imputable → `buildCategoryAccountNotImputableMessage` (bloquea, no cae a la por defecto).
+    `confirmExpense`: `select` con `category { name, accountId }` (sin `categoryId`), presupuesto con
+    `checkBudgetForExpense(debitAccountId, …)` siempre (ya no depende de `expensesAccountId`); firma,
+    `$transaction` y `catch` sin cambios. Imports: fuera `buildMissingSettingsAccountsMessage` y
+    `AccountingSettingsAccountField` (sin uso).
+  - `src/modules/accounting/features/integrations/commercial/index.ts` — cabecera "Debe: cuenta de la
+    categoría del egreso, o "Cuenta de egresos por defecto""; `createJournalEntryForExpense` selecciona
+    `category { name, accountId }`, defensa con `requiredExpenseSettingsFields` +
+    `resolveExpenseDebitAccount` → `BusinessError(buildMissingExpenseAccountsMessage(…))`; la línea de
+    Debe sale de `buildExpenseDebitLine` (punto de extensión TSK-738); Haber sin cambios. JSDoc de
+    `checkBudgetForExpense` → "cuenta del Debe ya resuelta". `buildMissingSettingsAccountsMessage` se
+    queda (lo usan recibos/OP).
+  - `src/shared/lib/accounts/settings-account-labels.ts` — `expensesAccountId` → "Cuenta de egresos por
+    defecto".
+  - `src/modules/accounting/features/settings/components/_CommercialIntegrationForm.tsx` — ayuda nueva
+    (cuándo se usa y cuándo tiene que estar asignada).
+  - `src/modules/commercial/shared/settings-accounts.test.ts` — label renombrado.
+  - `src/modules/commercial/features/expenses/expense-journal-entry.integration.test.ts` — cabecera;
+    `createDraft(description, categoryId?)`; casos 2–4 con el label nuevo (el 2 además verifica la salida
+    "o asignale una cuenta contable a la categoría … en Comercial → Egresos → Categorías."); casos 8–13
+    dentro del `describe` "categorías con cuenta (TSK-757)" (reutilizan `T757-ALQ`/`T757-ALQ-VIEJA`).
+- **Notas:**
+  - Tests: integración 19/19 en verde en verbose (7 de TSK-728 + C1–C6 + 8–13; ninguno salteado);
+    `npm run test` completo → 50 archivos / 632 tests en verde. `check-types` 219. eslint sin errores
+    en los 6 archivos (2 warnings preexistentes en `INT/index.ts`: `fiscalYearStart`/`fiscalYearEnd`).
+  - Caso 13: `prisma.account.delete` de una cuenta temporal sin movimientos funcionó sin chocar con FK;
+    no hizo falta el `UPDATE` a null.
+  - Caso 12: el orden lo garantiza la ejecución secuencial del archivo; el presupuesto del caso 5 (sobre
+    `gastosId`) sigue activo, así que además se verifica que un egreso de categoría sin cuenta sigue
+    avisando y uno con cuenta sin presupuesto propio no. Caso 9 también afirma `budgetWarning`
+    undefined por la misma razón.
+  - Desvío menor: la pre-validación chequea `!debit || !settings.payablesAccountId` junto a
+    `missing.length` (no puede pasar tras faltantes vacíos, pero así TypeScript estrecha sin `!`).
+  - `getExpenseById` (3.3.6) no se tocó: es de la Fase 6 (D6).
+  - "Cuenta de Gastos Operativos" queda para la **Fase 8** en: `_CommercialGuide.tsx:1202,1214`,
+    `_AccountingGuide.tsx:252,336`, `docs/modules/commercial.md:635,638,740,948`,
+    `docs/modules/accounting.md:259,271`. `scripts/guia-presentacion/tsk-728.html` y
+    `capturas-tsk728.mjs` son históricos de TSK-728 (no se tocan). El nombre de la cuenta del test
+    `T728G-GASTOS` "Gastos Operativos" es dato de prueba, no el label.
+  - **Prueba en navegador** (Playwright contra :3010, script temporal borrado; empresa "Empresa de
+    Prueba 01 SA"). En dev `expenses_account_id` estaba en NULL: se respetó y se restauró a NULL al final.
+    Categorías sembradas por SQL con marca `TSK757-F4`; egresos creados desde el alta de la UI ($1234,
+    `notes='TSK757-F4'`) y confirmados desde el menú de la fila:
+    - A — categoría "TSK757-F4 Con cuenta" → 4.2.1/02/03 Energía - Explotación, **sin** cuenta por
+      defecto: toast "Egreso confirmado correctamente"; GTO-00004, asiento **38**: Debe 4.2.1/02/03 1234
+      / Haber 2.1.1/02/01 Acreedores Locales 1234.
+    - B — categoría "TSK757-F4 Sin cuenta", por defecto temporal 4.2.1/03/10 Gastos Varios -
+      Administración: GTO-00005, asiento **39**: Debe 4.2.1/03/10 1234 / Haber 2.1.1/02/01 1234.
+    - C — categoría "TSK757-F4 Cuenta inactiva" → cuenta raíz temporal `TSK757-F4` inactiva (con por
+      defecto configurada): toast rojo "No se puede confirmar el gasto GTO-00006: la cuenta TSK757-F4 -
+      Cuenta dada de baja TSK757-F4 de la categoría "TSK757-F4 Cuenta inactiva" no está activa o no es
+      imputable. Corregila en Comercial → Egresos → Categorías."; quedó DRAFT sin asiento (no cayó a la
+      por defecto). Se eliminó desde la UI ("Egreso eliminado correctamente").
+    - Limpieza: borradas la categoría "Cuenta inactiva" y la cuenta `TSK757-F4`. **Quedan** (no se
+      pueden borrar por UI): egresos `70f98beb-d6e5-4cd0-bf73-9ce3e742dd57` (GTO-00004, asiento 38,
+      `96e97680-a964-4a93-91cf-a1b0f90dd65b`) y `d87b35ea-e8d4-4754-976a-e44b008b6866` (GTO-00005,
+      asiento 39, `ccc599a8-4e1a-4cd1-a41c-8587c02e039a`), ambos `notes='TSK757-F4'`; y las categorías
+      **desactivadas** `4c6e48b8-40ab-4958-941c-52a560d82c2c` ("TSK757-F4 Con cuenta") y
+      `48d83ffc-2f7d-4d00-8949-ee888d4794f6` ("TSK757-F4 Sin cuenta"), referenciadas por esos egresos.
+    - El toast se vio en `npm run dev`; la verificación con build de producción (mensaje no redactado)
+      queda para la Fase 7/9, como indica la memoria `errores-negocio-server-actions` (el camino es el
+      mismo `BusinessError` → `toActionResult` de TSK-728).
 
 ### Fase 5: UI de categorías — modal partido y acceso desde el listado
 - **Estado:** Pendiente
