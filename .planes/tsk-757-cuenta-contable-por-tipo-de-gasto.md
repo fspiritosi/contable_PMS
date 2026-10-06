@@ -1,7 +1,7 @@
 # TSK-757 — Cuenta contable por tipo de gasto
 
 **Fecha de inicio:** 2026-10-06
-**Estado:** Implementación en progreso (Fase 6 de 9 completada)
+**Estado:** Implementación en progreso (Fase 7 de 9 completada)
 
 ---
 
@@ -650,19 +650,19 @@ Otras decisiones de esta planificación:
 
 - **Objetivo:** evidencia del flujo completo en la app real y capturas para la presentación.
 - **Tareas:**
-  - [ ] `scripts/guia-presentacion/capturas-tsk757.mjs` (nuevo, patrón `capturas-tsk728.mjs`):
+  - [x] `scripts/guia-presentacion/capturas-tsk757.mjs` (nuevo, patrón `capturas-tsk728.mjs`):
         `chromium.launch().catch(() => chromium.launch({ channel: 'chrome' }))`; login
         `fspiritosi@codecontrol.com.ar` / `Contable2026!` contra `http://localhost:3010` (dev con
         `NEXT_PUBLIC_APP_URL` en ese puerto, memoria `dev-local-capturas-y-login`); siembra por SQL
         categorías/egresos marcados `TSK757-demo%` y limpia al terminar (también ante error).
-  - [ ] Capturas a 1440: 01 listado con botón "Categorías"; 02 modal con columna de cuenta (una
+  - [x] Capturas a 1440: 01 listado con botón "Categorías"; 02 modal con columna de cuenta (una
         con cuenta, una "Por defecto"); 03 edición de una categoría con el combo abierto; 04 alta
         de egreso con el hint "Se imputa a…"; 05 detalle de un borrador (de la categoría); 06
         confirmación OK y detalle de un confirmado (del asiento); 07 asiento en Contabilidad →
         Asientos/Mayor con la cuenta de la categoría; 08 error al confirmar con cuenta de
         categoría inactiva (toast legible); 09 Ajustes con "Cuenta de egresos por defecto" y su
         ayuda.
-  - [ ] Mobile 375×812 (`isMobile: true`): 10 modal de categorías sin scroll horizontal
+  - [x] Mobile 375×812 (`isMobile: true`): 10 modal de categorías sin scroll horizontal
         (`documentElement.scrollWidth ≤ 375`, `[role="dialog"]` dentro del viewport).
 - **Archivos:** `scripts/guia-presentacion/capturas-tsk757.mjs` (nuevo),
   `scripts/guia-presentacion/assets/tsk757-*.png` (nuevas).
@@ -1758,7 +1758,41 @@ constantes `COMPANY_ID`, `USER_ID`, `SUPPLIER_ID`, `EMAIL`/`PASSWORD`, `BASE` po
       38/39, categorías desactivadas "TSK757-F4 Con cuenta" / "TSK757-F4 Sin cuenta").
 
 ### Fase 7: Verificación en navegador y capturas
-- **Estado:** Pendiente
+- **Estado:** Completada
+- **Archivos modificados:**
+  - `scripts/guia-presentacion/capturas-tsk757.mjs` (nuevo) — siembra/limpieza por SQL, recorrido de
+    escritorio y celular con chequeos OK/FAIL (sale con código 1 si alguno falla); `--restore` solo limpia.
+  - `scripts/guia-presentacion/assets/tsk757-*.png` (15 capturas nuevas): 01 listado, 02 modal, 03 combo en
+    edición, 04/04b aviso del alta (de la categoría / por defecto), 05/05b detalle de borradores, 06 toast,
+    06b detalle del confirmado, 07/07b asientos, 08 toast de error, 09 Ajustes, 10/10b celular.
+- **Resultado de la corrida** (dev :3010, Empresa de Prueba 01 SA): **25/25 chequeos OK**, limpieza `0|0|0`
+  y "Cuenta de egresos por defecto" restaurada a NULL.
+  - Siembra: "Alquiler de oficina" → 4.2.1/02/18 Alquiler inmuebles; "Tasas municipales" → 4.2.1/07/04
+    Tasas; "Viáticos de obra" → por defecto (4.2.1/03/10 Gastos Varios - Administración, puesta
+    temporalmente porque en dev está en NULL). Egresos GTO-00006/07/08 en borrador.
+  - Alquiler confirmado: Debe 4.2.1/02/18 350.000 / Haber 2.1.1/02/01 350.000; detalle "(del asiento N° 44)".
+    Viáticos confirmado: Debe 4.2.1/03/10 42.300 (por defecto). ABL con la cuenta temporal inactiva
+    `TSK757-DEMO`: toast rojo "No se puede confirmar el gasto GTO-00007: la cuenta TSK757-DEMO - Gastos varios
+    (dada de baja) de la categoría "Tasas municipales" no está activa o no es imputable. Corregila en Comercial
+    → Egresos → Categorías."; quedó DRAFT sin asiento.
+  - Ajustes: label "Cuenta de egresos por defecto" con su ayuda; el label viejo no aparece.
+  - Celular 375×812 `isMobile`: el modal no desborda por sí mismo (`dialogOverflow` 0, 0/6 filas con
+    desborde, también con una fila en edición). **Informativo (warning, no falla):** la página da
+    `scrollWidth` 443 por la paginación compartida del `DataTable` (preexistente, arreglo en el PR #33 /
+    TSK-726, otra rama sin mergear); con `isMobile` eso ensancha el layout viewport y el diálogo queda en
+    x=16 ancho 411.
+- **Notas / desvíos:**
+  - El chequeo "sin scroll horizontal" de la página pasó de bloqueante (diseño 3.7) a warning por el desborde
+    ajeno de arriba; lo exigido es que el modal y sus filas no desborden.
+  - Se suman 04b, 05b y 07b (camino "por defecto") a lo previsto.
+  - El listado se captura a 1600 de ancho (a 1440 la tabla ya desborda el panel, previo) y el modal con un
+    viewport de 1440×1350 para que entren todas las filas.
+  - Los ítems del menú de fila con permiso aparecen cuando `usePermissions` termina de cargar: el script
+    reintenta abrir el menú hasta encontrar el ítem.
+  - Se reutilizan sin tocar los datos de las Fases 4-6 (GTO-00004/05, asientos 38/39, categorías
+    "TSK757-F4 …" desactivadas); aparecen en las capturas del listado y del modal. Borrar los asientos de la
+    demo deja huecos en la numeración de asientos de dev (40-45), como en los scripts anteriores.
+  - No apareció ningún bug: sin commit `fix`.
 
 ### Fase 8: Documentación — guía in-app, docs y presentación
 - **Estado:** Pendiente
