@@ -128,6 +128,7 @@ export function _FundMovementsTable({
 
       {/* Alta */}
       <_CreateFundMovementModal
+        mode="create"
         open={createOpen}
         onOpenChange={setCreateOpen}
         banks={banks}
@@ -140,6 +141,7 @@ export function _FundMovementsTable({
 
       {/* Edición de borrador */}
       <_CreateFundMovementModal
+        mode="edit"
         open={!!editing}
         onOpenChange={(open) => !open && setEditing(null)}
         banks={banks}

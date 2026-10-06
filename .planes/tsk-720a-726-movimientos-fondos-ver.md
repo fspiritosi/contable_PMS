@@ -1,7 +1,7 @@
 # TSK-720a + TSK-726 — Movimientos de Fondos: ver en solo lectura, sin columna de asiento, modal responsive
 
 **Fecha de inicio:** 2026-10-06
-**Estado:** Implementación en progreso (Fase 2 de 8 completada)
+**Estado:** Implementación en progreso (Fase 3 de 8 completada)
 
 ---
 
@@ -299,7 +299,7 @@ Otras decisiones de esta planificación:
   introducir la prop `mode`, **sin** cambiar lo que hacen alta y edición (guardas de TSK-585
   intactas).
 - **Tareas:**
-  - [ ] `FM/list/hooks/useFundMovementForm.ts` (nuevo): recibe `{ open, mode, movement,
+  - [x] `FM/list/hooks/useFundMovementForm.ts` (nuevo): recibe `{ open, mode, movement,
         onOpenChange, onSuccess }` y devuelve `{ form, lineAccounts, movementDetail, type,
         isContribution, isWithdrawal, isTransfer, isBankCharges, isPartnerMovement, isSubmitting,
         submit }`. Mueve tal cual `useForm` (`:96-108`, con `EMPTY_FUND_MOVEMENT_FORM_VALUES()`),
@@ -310,24 +310,24 @@ Otras decisiones de esta planificación:
         `if (!shouldCleanupFieldsOnTypeChange(mode)) return;`) y `persist`/`submit`
         (`:239-279`, con `mode === 'edit'` en lugar de `isEdit`). Conservar los comentarios de
         TSK-585/717 que explican las guardas.
-  - [ ] `FM/list/components/_FundSelectField.tsx` (nuevo): `FormField` + `Select` de banco/caja
+  - [x] `FM/list/components/_FundSelectField.tsx` (nuevo): `FormField` + `Select` de banco/caja
         con props `name: 'sourceFund' | 'destinationFund'`, `label`, `banks`, `cashRegisters`,
         `disabled`, `snapshotLabel?`; contiene `renderFundOptions` (`:281-304`) y reemplaza los
         bloques duplicados `:408-456`.
-  - [ ] `FM/list/components/_PartnerSelectField.tsx` (nuevo): el `Select` de socio (`:465-490`)
+  - [x] `FM/list/components/_PartnerSelectField.tsx` (nuevo): el `Select` de socio (`:465-490`)
         con `disabled` y `snapshotLabel?`.
-  - [ ] `FM/list/components/_FundMovementTypeField.tsx` (nuevo): el `Select` de tipo
+  - [x] `FM/list/components/_FundMovementTypeField.tsx` (nuevo): el `Select` de tipo
         (`:321-344`) con `disabled`.
-  - [ ] `FM/list/components/_FundMovementAmountDateFields.tsx` (nuevo): Fecha sola en
+  - [x] `FM/list/components/_FundMovementAmountDateFields.tsx` (nuevo): Fecha sola en
         BANK_CHARGES o grid Monto + Fecha (`:356-406`).
-  - [ ] `FM/list/components/_FundMovementFormFooter.tsx` (nuevo): footer por modo — create/edit:
+  - [x] `FM/list/components/_FundMovementFormFooter.tsx` (nuevo): footer por modo — create/edit:
         Cancelar / Guardar / Guardar y Confirmar (`:513-535`); view: "Cerrar" (se usa en la
         Fase 4, pero el componente ya nace con la rama).
-  - [ ] `_CreateFundMovementModal.tsx`: prop `mode: FundMovementModalMode` obligatoria (la
+  - [x] `_CreateFundMovementModal.tsx`: prop `mode: FundMovementModalMode` obligatoria (la
         instancia de alta pasa `mode="create"`, la de edición `mode="edit"` en
         `_FundMovementsTable.tsx:130-152`); título/descripción desde `getModalCopy`; el componente
         queda como composición de las piezas anteriores. Objetivo < 200 líneas.
-  - [ ] Verificar a mano en `:3010` que alta y edición de los 4 tipos siguen igual (incluido
+  - [x] Verificar a mano en `:3010` que alta y edición de los 4 tipos siguen igual (incluido
         reabrir un borrador BANK_CHARGES recién editado: conceptos frescos, sin pisar lo
         tecleado) y `npm run test` (incluye los `*.integration.test.ts` de fund-movements).
 - **Archivos:** `FM/list/hooks/useFundMovementForm.ts`, `FM/list/components/_FundSelectField.tsx`,
@@ -1377,7 +1377,28 @@ Patrón de `capturas-tsk728.mjs` (constantes `COMPANY_ID`, `USER_ID`, `EMAIL`, `
   - Sin desvíos del diseño.
 
 ### Fase 3: Refactor del modal sin cambio de comportamiento (< 200 líneas)
-- **Estado:** Pendiente
+- **Estado:** Completada
+- **Archivos modificados** (`FM/list/`, líneas con `wc -l`):
+  - `hooks/useFundMovementForm.ts` (190) - nuevo: `useForm` con `emptyFundMovementFormValues()`, las dos `useQuery`, `appliedDetailRef` + precarga con `formResetKey`/`formValuesFromMovement`, limpieza por tipo con `shouldCleanupFieldsOnTypeChange`; comentarios de TSK-585/717 movidos tal cual.
+  - `hooks/useFundMovementSubmit.ts` (86) - nuevo: `persist`/`submit` movidos tal cual, `isEdit = mode === 'edit' && Boolean(movement)`, guarda `if (mode === 'view') return`.
+  - `components/_FundMovementTypeField.tsx` (61), `_FundMovementAmountDateFields.tsx` (72), `_FundSelectField.tsx` (115), `_PartnerSelectField.tsx` (74), `_FundMovementFormFooter.tsx` (56) - nuevos, con las props del diseño 3.4.2.
+  - `components/_CreateFundMovementModal.tsx` (541 → 173) - prop `mode` obligatoria, título/descripción con `getModalCopy`, composición de las piezas. Se borraron las copias locales `fundRefFrom` y los valores vacíos duplicados (ahora de `shared/view-mode.ts`).
+  - `components/_FundMovementsTable.tsx` (197 → 199) - solo `mode="create"` / `mode="edit"` en las dos instancias.
+- **Notas — invariantes (3.7.1):**
+  - I1/I2/I3 → `useFundMovementForm`, mismo efecto con clave `formResetKey(mode, id)` (`'new'` / `'edit:<id>'`); `null` al cerrar; espera a `movementDetail` vía `needsMovementDetail`. Navegador: en los 4 tipos, tras reabrir, lo tecleado sigue igual 3 s después (I1) y reabrir tras Cancelar recarga lo guardado (I2); BANK_CHARGES reabierto trae sus conceptos (I3).
+  - I4 → `formValuesFromMovement` (UTC). Navegador: la fecha 2026-10-05 se precarga igual en los 4 tipos (no se corre un día).
+  - I5/I6 → hook; claves `['fund-movement-detail', id]` y `['fund-movement-line-accounts', ids]` idénticas; `enabled` del detalle = `open && movement && needsMovementDetail(mode, type)` (igual a hoy en create/edit). Navegador: los dos conceptos se precargan con su cuenta (`4.2.1/03/09`, `4.2.1/03/10`).
+  - I7 → hook, mismo efecto + guarda de modo; `amount` no se toca. Navegador (alta nueva): aporte→transferencia limpia el socio, transferencia→aporte limpia el origen, gastos→transferencia limpia el destino, salir de gastos vacía los conceptos; el monto (500) queda intacto en todos los pasos.
+  - I8/I10 → `useFundMovementSubmit`, mismo código. Navegador: toasts "Borrador guardado" (alta ×4) y "Borrador actualizado" (edición ×4), modal cerrado y listado refrescado. No se probó "Guardar y Confirmar" (consigna: no confirmar).
+  - I9 → `useFundMovementSubmit` (`invalidateQueries`). Navegador: BANK_CHARGES editado (importe 100→150 y concepto nuevo "Sellado") y reabierto enseguida muestra los 3 conceptos frescos.
+  - I11/I12/I13 → `_FundMovementLinesField.tsx` sin tocar. Navegador: "Agregar concepto" preselecciona `4.2.1/03/09 - Gastos Bancarios - Administración` en alta y en edición; el aviso de cuenta por defecto se ve en edición.
+  - I14/I15 → modal, mismo cálculo de `selectedPartner` y `noFundAccounts` y mismo JSX (en esta fase se muestran en todos los modos; se ocultan en vista en la Fase 4).
+  - I16 → `_FundMovementAmountDateFields` (`showAmount={!isBankCharges}`) y `label` por tipo en `_FundSelectField`. Navegador: Monto presente en 3 tipos y ausente en gastos; los rótulos usados por `getByLabel` son los literales de antes.
+  - I17 → `_FundMovementsTable.tsx` sin cambios en confirmar/eliminar (la extracción a `_FundMovementConfirmDialogs` queda para la Fase 5, como dice el plan). Navegador: los 4 borradores de prueba se eliminaron desde el menú → AlertDialog → "Eliminar" ("Borrador eliminado").
+- **Verificación:** script Playwright temporal (escritorio 1440, `:3010`): 97/97 chequeos OK, sin errores de página; borradores `TSK720A-F3-test …` creados, editados y **eliminados por la UI** (0 restos en `fund_movements`). `npx vitest run FM` 125/125; `check-types` 219 (sin cambio); `eslint` de los archivos tocados: 0 errores, 1 warning `react-hooks/incompatible-library` por `form.watch` en el hook (informativo; el React Compiler no está activado en `next.config.ts`, y es la misma llamada que tenía el modal).
+- **Desvíos / precisiones:**
+  - Reparto con la Fase 4: los campos ya aceptan `disabled` y `snapshotLabel` (y `_FundSelectField`/`_PartnerSelectField` ya aplican `withSnapshotOption`, inerte sin `snapshotLabel`), y el footer nace con la rama "Cerrar"; pero el modal todavía **no** los pasa ni tiene fieldset, resumen ni avisos ocultos: eso es la Fase 4. Con los props sin pasar, el render es idéntico al anterior.
+  - `_FundSelectField` arma los grupos Bancos/Cajas desde `buildFundOptions` (mismas claves/valores `BANK:<id>`/`CASH:<id>` y mismo orden); un grupo vacío no se renderiza, igual que antes.
 
 ### Fase 4: Modo vista del modal
 - **Estado:** Pendiente
