@@ -34,9 +34,11 @@ import { formatAccountLabel } from '@/modules/commercial/shared/line-accounts';
 import { findMissingSettingsAccounts } from '@/modules/commercial/shared/settings-accounts';
 import {
   buildCategoryAccountNotImputableMessage,
+  buildExpenseDebitAccountView,
   buildMissingExpenseAccountsMessage,
   requiredExpenseSettingsFields,
   resolveExpenseDebitAccount,
+  type ExpenseDebitAccountView,
   type ExpenseEntryField,
 } from '@/modules/commercial/shared/expense-accounts';
 
@@ -413,6 +415,52 @@ export async function getExpensesPaginated(searchParams: DataTableSearchParams) 
   }
 }
 
+/** Cuenta de egresos por defecto de Ajustes (`code`/`name`), o null si no está configurada. */
+async function findDefaultExpenseAccount(
+  companyId: string
+): Promise<{ code: string; name: string } | null> {
+  const settings = await prisma.accountingSettings.findUnique({
+    where: { companyId },
+    select: { expensesAccount: { select: { code: true, name: true } } },
+  });
+  return settings?.expensesAccount ?? null;
+}
+
+/**
+ * Cuenta de egresos por defecto, para el aviso "Se imputa a…" del alta cuando la
+ * categoría elegida no tiene cuenta propia (TSK-757, D6).
+ */
+export async function getDefaultExpenseAccount(): Promise<{ code: string; name: string } | null> {
+  await checkPermission('commercial.expenses', 'view', { redirect: true });
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+  return findDefaultExpenseAccount(companyId);
+}
+
+/**
+ * "Cuenta contable" del detalle (TSK-757, D6): con asiento, la de su Debe; en
+ * borrador, la prevista (categoría → por defecto → 'missing'); sin asiento y
+ * fuera de borrador (p. ej. anulado), null. Solo consulta Ajustes si hace falta.
+ */
+async function resolveExpenseDebitAccountView(
+  companyId: string,
+  status: string,
+  accounts: {
+    entryAccount: { code: string; name: string } | null;
+    categoryAccount: { code: string; name: string } | null;
+  }
+): Promise<ExpenseDebitAccountView | null> {
+  const { entryAccount, categoryAccount } = accounts;
+  if (!entryAccount && status !== 'DRAFT') return null;
+  const defaultAccount =
+    !entryAccount && !categoryAccount ? await findDefaultExpenseAccount(companyId) : null;
+  return buildExpenseDebitAccountView({
+    entryAccountLabel: entryAccount ? formatAccountLabel(entryAccount) : null,
+    categoryAccountLabel: categoryAccount ? formatAccountLabel(categoryAccount) : null,
+    defaultAccountLabel: defaultAccount ? formatAccountLabel(defaultAccount) : null,
+  });
+}
+
 /**
  * Obtiene el detalle de un gasto
  */
@@ -437,7 +485,18 @@ export async function getExpenseById(id: string) {
         createdBy: true,
         createdAt: true,
         category: {
-          select: { id: true, name: true },
+          select: { id: true, name: true, account: { select: { code: true, name: true } } },
+        },
+        // TSK-757 (D6): la cuenta del Debe del asiento, si el egreso ya se confirmó
+        journalEntry: {
+          select: {
+            number: true,
+            lines: {
+              where: { debit: { gt: 0 } },
+              select: { account: { select: { code: true, name: true } } },
+              take: 1,
+            },
+          },
         },
         supplier: {
           select: { id: true, businessName: true, tradeName: true, taxId: true },
@@ -475,8 +534,16 @@ export async function getExpenseById(id: string) {
       .filter((item) => item.paymentOrder.status === 'CONFIRMED')
       .reduce((sum, item) => sum + Number(item.amount), 0);
 
+    const { journalEntry, ...rest } = expense;
+    const debitAccount = await resolveExpenseDebitAccountView(companyId, expense.status, {
+      entryAccount: journalEntry?.lines[0]?.account ?? null,
+      categoryAccount: expense.category.account,
+    });
+
     return {
-      ...expense,
+      ...rest,
+      debitAccount,
+      journalEntryNumber: journalEntry?.number ?? null,
       amount: Number(expense.amount),
       date: normalizeDbDate(expense.date),
       dueDate: normalizeDbDateNullable(expense.dueDate),

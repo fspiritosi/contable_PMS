@@ -1,7 +1,7 @@
 # TSK-757 — Cuenta contable por tipo de gasto
 
 **Fecha de inicio:** 2026-10-06
-**Estado:** Implementación en progreso (Fase 5 de 9 completada)
+**Estado:** Implementación en progreso (Fase 6 de 9 completada)
 
 ---
 
@@ -623,12 +623,12 @@ Otras decisiones de esta planificación:
 
 - **Objetivo:** que el usuario sepa a qué cuenta va (o fue) cada egreso sin abrir Contabilidad.
 - **Tareas:**
-  - [ ] `EXP/list/components/_ExpenseAccountHint.tsx` (nuevo): recibe la categoría elegida
+  - [x] `EXP/list/components/_ExpenseAccountHint.tsx` (nuevo): recibe la categoría elegida
         (`account?: { code, name } | null`) y muestra "Se imputa a: 5.2.03 - Alquileres" o "Se
         imputa a la cuenta de egresos por defecto" (`text-xs text-muted-foreground`).
         `_CreateExpenseModal.tsx` lo monta bajo el combo de categoría (~:215-254) buscando la
         categoría en la lista que ya tiene; el archivo crece ≤ 4 líneas.
-  - [ ] `EXP/actions.server.ts` `getExpenseById` (:313): `category.select` suma `accountId` y
+  - [x] `EXP/actions.server.ts` `getExpenseById` (:313): `category.select` suma `accountId` y
         `account { code, name }`; `select` suma `journalEntry: { select: { number: true, lines:
         { where: { debit: { gt: 0 } }, select: { account: { select: { code, name } } }, take: 1 } } }`
         (verificar nombres reales de `JournalEntry`/`JournalEntryLine` en el schema) y lee
@@ -636,7 +636,7 @@ Otras decisiones de esta planificación:
         `debitAccount: { label: string; source: 'entry' | 'category' | 'default' } | null`
         calculado con `resolveExpenseDebitAccount` (sin `Decimal` nuevos: el `debit` no se
         devuelve).
-  - [ ] `EXP/list/components/_ExpenseDebitAccountInfo.tsx` (nuevo): "Cuenta contable" + label +
+  - [x] `EXP/list/components/_ExpenseDebitAccountInfo.tsx` (nuevo): "Cuenta contable" + label +
         origen ("del asiento", "de la categoría", "por defecto"; `null` → "Sin cuenta: configurala
         antes de confirmar"). `_ExpenseDetailModal.tsx:183-184` lo monta junto a "Categoría"
         (crece ≤ 4 líneas).
@@ -1709,7 +1709,53 @@ constantes `COMPANY_ID`, `USER_ID`, `SUPPLIER_ID`, `EMAIL`/`PASSWORD`, `BASE` po
     - Datos que quedan: categoría activa "TSK757-F56 Alquiler" sin cuenta (se usa en la Fase 6).
 
 ### Fase 6: La cuenta visible en el egreso (D6)
-- **Estado:** Pendiente
+- **Estado:** Completada
+- **Archivos modificados:**
+  - `EXP/actions.server.ts` (+71) — `getExpenseById`: `category.account { code, name }` y
+    `journalEntry { number, lines (debit > 0, take 1) { account { code, name } } }`; devuelve
+    `debitAccount: ExpenseDebitAccountView | null` y `journalEntryNumber: number | null`, y **no**
+    devuelve `journalEntry`. Helpers privados `findDefaultExpenseAccount(companyId)` y
+    `resolveExpenseDebitAccountView(companyId, status, { entryAccount, categoryAccount })` (con asiento →
+    `'entry'`; borrador → `buildExpenseDebitAccountView` categoría → por defecto → `'missing'`; sin asiento
+    fuera de borrador → null; Ajustes solo se consulta en borrador sin cuenta de categoría). Nueva action
+    de lectura `getDefaultExpenseAccount()` (`commercial.expenses` view).
+  - `EXP/list/components/_ExpenseAccountHint.tsx` (nuevo, 54) — "Se imputa a: 4.2.1/02/18 - Alquiler
+    inmuebles"; sin cuenta en la categoría, "Se imputa a la cuenta de egresos por defecto: X"; sin
+    ninguna, aviso ámbar "La categoría no tiene cuenta y no hay cuenta de egresos por defecto: asignale
+    una en Categorías o configurala en Contabilidad → Configuración antes de confirmar."
+  - `EXP/list/components/_ExpenseDebitAccountInfo.tsx` (nuevo, 39) — "Cuenta contable" + label + origen
+    ("del asiento N° 38" / "de la categoría" / "por defecto"); `'missing'` → ámbar "Sin cuenta:
+    configurala antes de confirmar".
+  - `EXP/list/components/_CreateExpenseModal.tsx` (340 → 342) y `_ExpenseDetailModal.tsx` (400 → 402):
+    import + montaje.
+  - `EXP/expense-journal-entry.integration.test.ts` — caso **D1** (borrador con cuenta → `'category'`;
+    sin cuenta → `'default'`; sin ninguna → `'missing'`; confirmado → `'entry'` con el label del Debe y el
+    número de asiento, aunque después se quite la cuenta de la categoría; sin `journalEntry` expuesto).
+- **Notas / desvíos:**
+  - **Aviso del alta sin cuenta por defecto**: el diseño mostraba siempre "Se imputa a la cuenta de
+    egresos por defecto". Para que el aviso sea correcto cuando Ajustes no la tiene, el hint consulta
+    `getDefaultExpenseAccount()` (`useQuery(['expenseDefaultAccount'])`, solo si la categoría no tiene
+    cuenta) y nombra la cuenta o avisa en ámbar. Props del componente sin cambios.
+  - **Número de asiento**: se suma `journalEntryNumber` al retorno y la prop opcional `entryNumber` en
+    `_ExpenseDebitAccountInfo` para mostrar "(del asiento N° 38)"; `ExpenseDebitAccountView` no cambia.
+  - Un egreso no borrador sin asiento (p. ej. anulado antes de TSK-728) no muestra el dato (`null`); uno
+    anulado **con** asiento muestra la del asiento (R7: el asiento no se revierte).
+  - Calidad: `npm run test` 50 archivos / 633 tests en verde (integración 20/20, D1 incluido, contra
+    `contable-pms-db`); `check-types` 219; eslint sin errores en los archivos tocados; componentes nuevos
+    < 200 líneas; los dos modales excedidos crecen +2 cada uno (lo previsto).
+  - **Prueba en navegador** (Playwright contra :3010, script temporal borrado, marca `TSK757-F56`):
+    - Alta, categoría "TSK757-F56 Alquiler": sin cuenta y sin por defecto → aviso ámbar; con por defecto
+      temporal 4.2.1/03/10 → "Se imputa a la cuenta de egresos por defecto: 4.2.1/03/10 - Gastos Varios -
+      Administración"; con cuenta 4.2.1/02/18 → "Se imputa a: 4.2.1/02/18 - Alquiler inmuebles".
+    - Borrador GTO-00006 creado desde el alta: detalle "4.2.1/02/18 - Alquiler inmuebles (de la
+      categoría)"; sin cuenta en la categoría → "4.2.1/03/10 - Gastos Varios - Administración (por
+      defecto)"; sin por defecto → "Sin cuenta: configurala antes de confirmar".
+    - GTO-00004 → "4.2.1/02/03 - Energía - Explotación (del asiento N° 38)"; GTO-00005 → "4.2.1/03/10 -
+      Gastos Varios - Administración (del asiento N° 39)" (la categoría "TSK757-F4 Sin cuenta" sigue sin
+      cuenta y la por defecto está en NULL: el detalle lee el asiento, no la configuración actual).
+    - Limpieza: borrados el borrador GTO-00006 y la categoría "TSK757-F56 Alquiler";
+      `expenses_account_id` restaurado a NULL. Quedan solo los datos de la Fase 4 (GTO-00004/05, asientos
+      38/39, categorías desactivadas "TSK757-F4 Con cuenta" / "TSK757-F4 Sin cuenta").
 
 ### Fase 7: Verificación en navegador y capturas
 - **Estado:** Pendiente

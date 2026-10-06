@@ -15,7 +15,8 @@
  * TSK-757: las categorías de gasto guardan su cuenta contable propia (ABM con
  * `ActionResult`, validación multiempresa y combo con `includeIds`), casos C1–C6;
  * y el asiento, la pre-validación y el presupuesto usan la cuenta resuelta
- * (categoría → por defecto; cuenta de categoría no imputable bloquea), casos 8–13.
+ * (categoría → por defecto; cuenta de categoría no imputable bloquea), casos 8–13;
+ * y el detalle (`getExpenseById`) muestra la cuenta del Debe, caso D1.
  * Los casos 1–7 usan una categoría sin cuenta (mismo comportamiento que TSK-728).
  */
 import 'dotenv/config';
@@ -40,6 +41,7 @@ import {
   confirmExpense,
   createExpense,
   createExpenseCategory,
+  getExpenseById,
   getExpenseCategoryAccounts,
   toggleExpenseCategory,
   updateExpenseCategory,
@@ -656,6 +658,48 @@ describe.skipIf(!dbAvailable)('integración e2e: asiento al confirmar un gasto (
       const result = await confirmExpense(id);
       expect(result.success).toBe(true);
       expect(debitLine(await fetchEntryLines(id)).accountId).toBe(gastosId);
+    });
+
+    it('D1: el detalle muestra la cuenta del Debe: prevista en borrador, la del asiento si está confirmado', async () => {
+      const alqLabel = `T757-ALQ - ${PREFIX}Alquileres`;
+      const gastosLabel = `T728G-GASTOS - ${PREFIX}Gastos Operativos`;
+      const conCuenta = await createDraft('Detalle con cuenta', await createCategory('Detalle', alqId));
+      const sinCuenta = await createDraft('Detalle sin cuenta');
+
+      // Borrador: categoría con cuenta → "de la categoría"; sin cuenta → la por defecto
+      const draftCat = await getExpenseById(conCuenta);
+      expect(draftCat.debitAccount).toEqual({ origin: 'category', label: alqLabel });
+      expect(draftCat.journalEntryNumber).toBeNull();
+      expect(draftCat).not.toHaveProperty('journalEntry');
+      expect((await getExpenseById(sinCuenta)).debitAccount).toEqual({
+        origin: 'default',
+        label: gastosLabel,
+      });
+
+      // Borrador sin cuenta en la categoría ni por defecto → 'missing'
+      await setSettings({ expensesAccountId: null });
+      try {
+        expect((await getExpenseById(sinCuenta)).debitAccount).toEqual({
+          origin: 'missing',
+          label: null,
+        });
+      } finally {
+        await setSettings({ expensesAccountId: gastosId });
+      }
+
+      // Confirmado: la cuenta del Debe del asiento, aunque después cambie la de la categoría
+      expect((await confirmExpense(conCuenta)).success).toBe(true);
+      await prisma.expenseCategory.updateMany({
+        where: { companyId, name: `${PREFIX}Detalle` },
+        data: { accountId: null },
+      });
+      const confirmed = await getExpenseById(conCuenta);
+      expect(confirmed.debitAccount).toEqual({ origin: 'entry', label: alqLabel });
+      const entry = await prisma.journalEntry.findUniqueOrThrow({
+        where: { id: (await readExpense(conCuenta)).journalEntryId ?? '' },
+        select: { number: true },
+      });
+      expect(confirmed.journalEntryNumber).toBe(entry.number);
     });
   });
 });
