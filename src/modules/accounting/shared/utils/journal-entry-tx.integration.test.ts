@@ -530,6 +530,20 @@ describe.skipIf(!dbAvailable)('creador único de asientos (TSK-760)', () => {
       expect(row.status).toBe('DRAFT');
     });
 
+    it('dos registros en paralelo del mismo borrador → uno registra y el otro recibe un BusinessError legible', async () => {
+      const c = await setupCompany('Registrar en paralelo');
+      const draft = await create(c);
+
+      const results = await Promise.allSettled([post(c.companyId, draft.id), post(c.companyId, draft.id)]);
+
+      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+      const failed = results.find((r): r is PromiseRejectedResult => r.status === 'rejected');
+      expect(failed?.reason).toMatchObject({
+        name: 'BusinessError',
+        message: `El asiento N° ${draft.number} ya no está en borrador.`,
+      });
+    });
+
     it('DRAFT desbalanceado (sembrado) → rechaza con el texto de balance', async () => {
       const c = await setupCompany('Registrar desbalanceado');
       const seeded = await seedEntry(c, 1, [
@@ -673,6 +687,22 @@ describe.skipIf(!dbAvailable)('creador único de asientos (TSK-760)', () => {
       expect(await counter(c.companyId)).toBe(1);
       const row = await prisma.journalEntry.findUniqueOrThrow({ where: { id: original.id }, select: { status: true } });
       expect(row.status).toBe('POSTED');
+    });
+
+    it('dos anulaciones en paralelo del mismo asiento → una anula, la otra BusinessError legible y sin reversión extra', async () => {
+      const c = await setupCompany('Revertir en paralelo');
+      const original = await create(c, { status: 'POSTED' });
+
+      const results = await Promise.allSettled([reverse(c.companyId, original.id), reverse(c.companyId, original.id)]);
+
+      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+      const failed = results.find((r): r is PromiseRejectedResult => r.status === 'rejected');
+      expect(failed?.reason).toMatchObject({
+        name: 'BusinessError',
+        message: `Solo se pueden anular asientos registrados; el N° ${original.number} está en estado Anulado.`,
+      });
+      expect(await prisma.journalEntry.count({ where: { originalEntryId: original.id } })).toBe(1);
+      expect(await counter(c.companyId)).toBe(2);
     });
 
     it('borrador, inexistente o de otra empresa → BusinessError', async () => {

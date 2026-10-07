@@ -229,8 +229,10 @@ export async function postJournalEntryTx(
     entry.lines.map((line) => line.accountId)
   );
 
-  await tx.journalEntry.update({
-    where: { id: entry.id },
+  // El estado se leyó antes del lock: si otra tx lo registró mientras esperábamos, el
+  // UPDATE condicionado no toca nada (en vez de chocar con el trigger de inmutabilidad).
+  const { count } = await tx.journalEntry.updateMany({
+    where: { id: entry.id, status: 'DRAFT' },
     data: {
       status: 'POSTED',
       postDate: new Date(),
@@ -238,6 +240,7 @@ export async function postJournalEntryTx(
       periodId: period.periodId,
     },
   });
+  if (count === 0) throw new BusinessError(`El asiento N° ${entry.number} ya no está en borrador.`);
 
   logger.debug('Asiento registrado', {
     data: { companyId, entryId: entry.id, number: entry.number, userId: input.userId },
@@ -312,8 +315,10 @@ export async function reverseJournalEntryTx(
     source: input.source ?? `reversal:${original.id}`,
   });
 
-  await tx.journalEntry.update({
-    where: { id: original.id },
+  // Ídem registrar: si otra tx lo anuló mientras esperábamos el lock, no se toca y se
+  // aborta (la reversión recién creada se revierte con la tx).
+  const { count } = await tx.journalEntry.updateMany({
+    where: { id: original.id, status: 'POSTED' },
     data: {
       status: 'REVERSED',
       reversalEntryId: reversal.id,
@@ -321,6 +326,11 @@ export async function reverseJournalEntryTx(
       reversedAt: new Date(),
     },
   });
+  if (count === 0) {
+    throw new BusinessError(
+      `Solo se pueden anular asientos registrados; el N° ${original.number} está en estado Anulado.`
+    );
+  }
 
   logger.debug('Asiento anulado', {
     data: { companyId, entryId: original.id, reversalId: reversal.id, number: reversal.number },
