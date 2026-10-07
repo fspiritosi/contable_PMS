@@ -1,7 +1,7 @@
 # TSK-760 — Cierre contable: el cierre anual no funciona y el bloqueo de períodos se saltea
 
 **Fecha de inicio:** 2026-10-06
-**Estado:** Implementación en progreso (Fases 1, 2 y 4 a 11 de 14 completadas; Fase 3 pendiente del diagnóstico de producción)
+**Estado:** Implementación en progreso (Fases 1, 2 y 4 a 12 de 14 completadas; Fase 3 pendiente del diagnóstico de producción)
 
 ---
 
@@ -742,6 +742,7 @@ recomendación dejaba margen, se eligió lo más simple (marcado con **[simple]*
 | D3 | Backfill de `is_closed` por **unión** (`is_closed` actual o `fin_del_mes <= locked_until_date`), cierre de huecos hacia atrás (invariante secuencial), FY cerrados con todos sus meses cerrados y `locked_until_date` = fin del último mes cerrado contiguo. |
 | D4 | Backfill de `fiscal_year_id`/`period_id` de **todos** los asientos, con `trg_journal_entry_immutable` deshabilitado solo alrededor de ese `UPDATE`, dentro de la misma transacción de la migración. Los asientos que no caen en ningún FY (anteriores al primero) quedan en `NULL` y se reportan con `RAISE NOTICE`. |
 | D5 | La reversión desde Asientos usa la fecha de **hoy** (UTC), y valida la del original **y** la de hoy. |
+| D5 revisado | (Líder, Fase 12) **"Hoy" = día calendario en `America/Argentina/Buenos_Aires`**, representado como ese día a 00:00Z (D8). Vale para todo lugar del servidor que toma "hoy" para fechar un asiento o decidir un vencimiento. Helper puro `todayBusinessDayUtc(now?)` / `todayBusinessDay(now?)` en `UT/utc-month.ts`, zona en la constante única `BUSINESS_TIME_ZONE`, con `Intl.DateTimeFormat` (sin `moment-timezone`, que no está instalado). Motivo: a las 22:40 AR la reversión salía fechada el día siguiente. |
 | D6 | Se bloquea anular desde Asientos lo vinculado por FK (8 tablas de 1.2.5, incluida la columna sin relación de `FundMovement`) y los asientos de cierre/apertura de FY. Los `createdBy='system'` sin vínculo (bancos, transferencias, baja de equipo) se permiten con advertencia en el diálogo. IVA, cambio, inflación, recurrentes y apertura manual, sin restricción. |
 | D7 | B18 a B21 entran. **[simple]** B18 por **exclusión**: los saldos acumulados (`UT/balances.ts`, saldo anterior del Mayor) excluyen los asientos que son `openingEntryId` de un FY con `closingEntryId` no nulo del FY anterior (apertura generada por cierre); se ven en el Diario. No se genera asiento de cierre patrimonial. B19: el Estado de Resultados, Presupuesto vs. real y movimientos por centro de costo excluyen los `closingEntryId`. B20: sin saldos de resultado → `BusinessError` "no hay asientos registrados con resultado en el ejercicio N° X: registrá los borradores". B21: la apertura se calcula **después** de la refundición, dentro de la tx, y `createJournalEntryTx` verifica balance (|debe − haber| < 0,01) para todo asiento que nace POSTED o se registra. |
 | D8 | Todo cálculo de mes y rango en **UTC** (`moment.utc`) y comparación por día calendario UTC. `closeAccountingPeriod`/`reopenAccountingPeriod` reciben `{ year, month }`; el servidor deriva el fin de mes. La grilla se arma desde los `AccountingPeriod` del FY. **[simple]** Fechas de FY nuevas: `startDate` = 00:00:00.000 UTC del primer día y `endDate` = 23:59:59.999 UTC del último (así funcionan las consultas existentes con `gte/lte`); el backfill normaliza también los FY de la migración 20260625. |
@@ -1156,7 +1157,7 @@ Otras decisiones de esta planificación:
 
 - **Objetivo:** el "período está cerrado" llega legible en producción desde todas las pantallas.
 - **Tareas:**
-  - [ ] Pasar a `Promise<ActionResult<…>>` con `BusinessError` + `toActionResult`:
+  - [x] Pasar a `Promise<ActionResult<…>>` con `BusinessError` + `toActionResult`:
         `createJournalEntry`, `postJournalEntry` (`ACC/features/entries/actions.server.ts`),
         `createBankMovement`, `createBankTransfer` (`TRE/bank-movements/actions.server.ts`;
         **ya hechas en la Fase 6**, junto con sus dos diálogos),
@@ -1164,13 +1165,16 @@ Otras decisiones de esta planificación:
         `saveOpeningBalanceEntry`. Junto con `closeAccountingPeriod`/`reopenAccountingPeriod`
         (Fase 8), `closeFiscalYear` (Fase 9) y `reverseJournalEntry` (Fase 10) quedan las 9 de
         1.2.6.
-  - [ ] Adaptar los 7 componentes restantes (`if (!result.success) toast.error(result.error)`):
+  - [x] Adaptar los 7 componentes restantes (`if (!result.success) toast.error(result.error)`):
         `_CreateEntryModal`, `_PostEntryDialog`, `_RecurringEntriesTable`, `_GeneratePendingDialog`,
         `_AccountBalancesForm`, `_CreateBankMovementDialog`, `_BankTransferDialog` (los excedidos
         no crecen más de 3-4 líneas). Con `_ReverseEntryDialog`, `_ClosePreviewDialog` y el panel
         de bloqueo, son los 10 de 1.2.6.
-  - [ ] Actualizar los tests de las fases 4, 6 y 7 de `rejects.toThrow` a
+  - [x] Actualizar los tests de las fases 4, 6 y 7 de `rejects.toThrow` a
         `{ success: false, error: expect.stringContaining('el período está cerrado') }`.
+  - [x] **D5 revisado** (líder): "hoy" del servidor = día calendario de Argentina
+        (`todayBusinessDayUtc`, `UT/utc-month.ts`) en todo lugar de la rama que fecha un asiento
+        o decide un vencimiento con `new Date()`.
 - **Archivos:** las 3 actions y los 7 componentes; tests de fases 4, 6 y 7.
 - **Criterio de completitud:** `grep -n "throw new Error" ` en esas actions solo deja errores
   técnicos; tests verdes; tipos ≤ 219; eslint limpio; commit
@@ -3481,7 +3485,84 @@ que no se toca). No hay carpeta `cypress/`.
 `checkBudgetForExpense`). Sin prueba en navegador: no hay comportamiento visible que cambie.
 
 ### Fase 12: Errores legibles en producción (`ActionResult`) en las actions restantes
-**Estado:** Pendiente
+**Estado:** Completada (2026-10-06)
+
+**`ActionResult`: no quedó nada por migrar.** Las 7 funciones y los 7 componentes de esta fase se adelantaron en
+las Fases 4 (`createJournalEntry`, `postJournalEntry`, `_CreateEntryModal`, `_PostEntryDialog`), 6
+(`createBankMovement`, `createBankTransfer`, `_CreateBankMovementDialog`, `_BankTransferDialog`) y 7
+(`generateRecurringEntry`, `generateAllPendingRecurringEntries`, `saveOpeningBalanceEntry`, `_RecurringEntriesTable`,
+`_GeneratePendingDialog`, `_AccountBalancesForm`). Con `closeAccountingPeriod`/`reopenAccountingPeriod` (8),
+`closeFiscalYear` (9) y `reverseJournalEntry`/`deleteDraftJournalEntry`/`getReversalCheck` (10) están las 9 de 1.2.6 y
+los 10 componentes. Verificado en esta fase:
+- `grep -n "throw new Error"` en esas actions: solo "No autenticado" / "No hay empresa activa" antes del `try` (siguen
+  como `throw`, 2.0). Los `throw new Error` que quedan en esos archivos son de actions fuera de alcance (lecturas,
+  conciliación y borrado de movimientos bancarios, facturas de apertura, `saveAccountingSettings`, ver abajo).
+- Ningún test afirma `rejects.toThrow` sobre una action migrada: los que quedan son de helpers `*Tx` del núcleo
+  (`assertPeriodOpen`, `reopenMonthTx`, integraciones de comprobantes), que lanzan `BusinessError` a propósito, o
+  del `NEXT_REDIRECT` de `checkPermission`.
+- Otras actions con asiento que pasan por el núcleo también devuelven `ActionResult` (desde TSK-721/724c/728 o
+  fases 5–7): `confirmInvoice`, `confirmPurchaseInvoice`, `confirmReceipt`, `confirmPaymentOrder`, `confirmExpense`,
+  `confirmFundMovement`, `softDeleteVehicle`, `postDepreciationEntry`, `postAllPendingDepreciations`,
+  `createValueAdjustment`, IVA, cambio e inflación.
+
+**Corrección "hoy" (D5 revisado, decisión del líder; 2.0).**
+- `UT/utc-month.ts`: `BUSINESS_TIME_ZONE = 'America/Argentina/Buenos_Aires'` (constante única),
+  `todayBusinessDay(now = new Date()): IsoDay` (`Intl.DateTimeFormat#formatToParts` con esa zona; `moment-timezone`
+  no está instalado y no se agregó) y `todayBusinessDayUtc(now?)` = ese día a 00:00Z (`parseIsoDay`, D8). Puro.
+- **Lugares cambiados** (todo `new Date()`/`moment.utc()` como "hoy" para fechar asientos o decidir vencimientos en el
+  código de la rama, `git diff main...HEAD`):
+  1. `ACC/features/entries/actions.server.ts` `reverseJournalEntry`: fecha de la reversión
+     `startOfDayUtc(new Date())` → `todayBusinessDayUtc()` (y con ella la validación del período de "hoy").
+  2. ídem `getReversalCheck`: `date` del diálogo `toUtcDay(new Date())` → `todayBusinessDay()`.
+  3. `INT/equipment/index.ts` `createJournalEntryForAssetSale` y 4. `createJournalEntryForAssetDisposal`: fecha del
+     asiento de baja `new Date()` (hora real, el núcleo la leía por día UTC) → `todayBusinessDayUtc()`.
+  5. `ACC/features/recurring-entries/actions.server.ts` `getRecurringEntries` (`isPending`) y
+     6. `generateAllPendingRecurringEntries` (filtro de pendientes): `nextDueDate <= ahora` →
+     `nextDueDate <= fin del día AR` y `endDate >= inicio del día AR` (helper local `businessToday()`). Antes, una
+     plantilla guardada a mediodía local (como guarda el formulario) no vencía hasta las 12:00, y a las 22:40 AR
+     vencían las de mañana a 00:00Z.
+- **No cambiados (no son "hoy" de negocio):** sellos de tiempo (`postDate`, `reversedAt`, `closedAt`,
+  `confirmedAt`, `reconciledAt`, `postedDate`), corte de imputabilidad `disabledFrom > now` (instante),
+  `Vehicle.terminationDate = new Date()` en `softDeleteVehicle` (dato del equipo, no del asiento; archivo fuera del
+  diff), presupuestos (`moment()` para el año en curso, fuera de alcance) y `getCurrentFiscalYear` (`UT/fiscal-year.ts`,
+  fuera del diff). Los defaults de fecha de los formularios cliente (`_CreateEntryModal`, bancos, recurrentes) ya
+  usan el día local del navegador.
+- Texto del diálogo de anulación: sin cambios ("La anulación se registra con fecha de hoy (DD/MM/YYYY)"); ahora la
+  fecha es la de Argentina.
+
+**Tests** (TDD: primero en rojo, 18 fallando entre los cuatro archivos; después verdes):
+- `UT/utc-month.test.ts` (+7 casos × 2 zonas de proceso, `TZ=UTC` y `TZ=America/Argentina/Buenos_Aires`, fake
+  timers): constante única; 23:30 AR (02:30Z) → día AR; 22:40 AR (01:40Z) → día AR; 00:00 AR (03:00Z) ya es el día
+  siguiente; 23:59:59.999 AR sigue en el anterior; 31/12 21:30 AR (01/01 00:30Z) → 31/12 y mes 12/2026; mediodía.
+- `ENT/reverse-entry.integration.test.ts` (+2): a las 01:40Z del 07/10 `getReversalCheck.date` = '2026-10-06' y la
+  reversión queda 2026-10-06T00:00Z en 10/2026; a las 01:00Z del 01/10 la reversión va al 30/09 y con septiembre
+  cerrado devuelve `{ success: false, error: 'No se puede registrar con fecha 30/09/2026: el período está cerrado…' }`.
+- `ACC/features/recurring-entries/recurring-entries.integration.test.ts` (+1): a las 10:00 AR vence la plantilla de
+  hoy a mediodía local; a las 22:40 AR (01:40Z) no vence la de mañana a 00:00Z.
+- `equipment/features/list/asset-disposal.integration.test.ts`: 1b afirma la fecha del asiento de baja =
+  `todayBusinessDayUtc()`; 4b cierra el mes de `todayBusinessDayUtc()` (antes `new Date()` con `getUTC*`, que
+  fallaba de noche en AR).
+
+**Calidad:** `npm run test` = **63 archivos, 862 tests, verdes**; `check-types` = **219**; `eslint` de los 8 archivos
+tocados sin errores ni warnings. Sin `any` ni `console`. Ningún componente tocado.
+
+**Prueba en navegador** (Playwright contra :3010, reiniciado antes; "Empresa de Prueba 01 SA"; 22:56 AR del 06/10 =
+01:56Z del 07/10; script temporal borrado; capturas `f12-01` a `f12-04` en el scratchpad). Octubre 2026 se cerró
+**temporalmente por SQL** (`accounting_periods.is_closed`) y se reabrió en el `finally`:
+- Anular N° 34 (mes abierto): el diálogo dice "La anulación se registra con fecha de hoy (06/10/2026)." (antes
+  07/10/2026 a esta hora).
+- Con 10/2026 cerrado: Anular N° 34 → toast "No se puede registrar con fecha 06/10/2026: el período está cerrado (mes
+  10/2026 cerrado). Para operar, reabrilo desde Contabilidad → Configuración → Bloqueo de Períodos."; Registrar el
+  borrador N° 53 → el mismo texto; "Generar asiento" de la recurrente (vence 15/10) → "No se puede registrar con
+  fecha 15/10/2026: … (mes 10/2026 cerrado). …".
+- DB después: N° 34 POSTED, N° 53 DRAFT, la recurrente sin generar (`next_due_date` 15/10). Nada cambió.
+
+**Desvíos y notas:**
+- La fase no migró ninguna action a `ActionResult`: ya estaban todas (ver arriba). El trabajo de código es la
+  corrección de "hoy".
+- `saveAccountingSettings` todavía lanza `throw new Error` para las fechas del ejercicio ("no puede ser mayor a un
+  año", "fin posterior al inicio"); §3.6 la pasa a `ActionResult` sin fechas (D11), que es trabajo de la **Fase 3**.
+- En la DB de dev hay un asiento N° 999999 DRAFT `system` "dbg" (10/07/2026) que no es de esta fase; no se tocó.
 
 ### Fase 13: Capturas, documentación, guía in-app y presentación
 **Estado:** Pendiente
