@@ -5,10 +5,8 @@ import {
   BookOpen,
   BookOpenCheck,
   Calculator,
-  CalendarCheck,
   Info,
   Link2,
-  Lock,
   PiggyBank,
   RefreshCcw,
   Settings,
@@ -33,6 +31,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/shared/components/ui/table';
+
+import { _AccountingClosingGuide } from './_AccountingClosingGuide';
 
 export function _AccountingGuide() {
   return (
@@ -167,7 +167,8 @@ export function _AccountingGuide() {
               El total del Debe debe ser igual al total del Haber
             </li>
             <li>
-              Haz clic en <strong>Guardar</strong> (queda en Borrador)
+              Haz clic en <strong>Crear Asiento</strong> (queda en Borrador). La fecha tiene que
+              caer en un mes abierto
             </li>
           </ol>
 
@@ -179,15 +180,19 @@ export function _AccountingGuide() {
             <span>→</span>
             <Badge>Registrado</Badge>
             <span>→</span>
-            <Badge variant="destructive">Reversado</Badge>
+            <Badge variant="destructive">Anulado</Badge>
           </div>
           <ul className="list-disc pl-6 space-y-1 text-muted-foreground mt-2">
             <li>
               <strong>Registrar</strong>: confirma el asiento (irreversible)
             </li>
             <li>
-              <strong>Reversar</strong>: crea un asiento inverso que anula el
-              original
+              <strong>Anular</strong>: crea un asiento inverso con fecha de hoy
+              que anula el original (ver &quot;Anular y eliminar asientos&quot;)
+            </li>
+            <li>
+              <strong>Eliminar borrador</strong>: borra un asiento manual que
+              todavía no se registró
             </li>
           </ul>
 
@@ -527,38 +532,8 @@ export function _AccountingGuide() {
         </CardContent>
       </Card>
 
-      {/* Cierre de Ejercicio */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <CalendarCheck className="h-5 w-5" />
-            Cierre de Ejercicio Fiscal
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <ol className="list-decimal pl-6 space-y-2 text-muted-foreground">
-            <li>
-              Configura las fechas del ejercicio en{' '}
-              <strong>Contabilidad → Configuración</strong>
-            </li>
-            <li>
-              Asegúrate de que la <strong>cuenta de resultado</strong> esté
-              configurada
-            </li>
-            <li>
-              Ve a <strong>Contabilidad → Cierre de Ejercicio</strong>
-            </li>
-            <li>
-              Revisa la vista previa del asiento de cierre (cancela cuentas de
-              resultado)
-            </li>
-            <li>
-              Confirma el cierre: se genera el asiento y el ejercicio queda{' '}
-              <strong>cerrado</strong>
-            </li>
-          </ol>
-        </CardContent>
-      </Card>
+      {/* Cierre de meses, cierre de ejercicio y anulación (TSK-760) */}
+      <_AccountingClosingGuide />
 
       {/* Configuración */}
       <Card>
@@ -574,7 +549,14 @@ export function _AccountingGuide() {
           </p>
           <ul className="list-disc pl-6 space-y-1 text-muted-foreground">
             <li>
-              <strong>Ejercicio fiscal</strong>: fecha de inicio y fin
+              <strong>Ejercicio fiscal</strong>: fecha de inicio y fin. Se
+              cargan una sola vez; cuando la empresa ya tiene asientos o meses
+              cerrados quedan de solo lectura y cambian solas al cerrar el
+              ejercicio
+            </li>
+            <li>
+              <strong>Bloqueo de Períodos</strong>: cierre y reapertura de
+              meses en orden (ver &quot;Cierre de meses&quot;)
             </li>
             <li>
               <strong>Cuentas de integración</strong>: mapeo de cuentas para
@@ -689,54 +671,6 @@ export function _AccountingGuide() {
             </li>
             <li>Se mantiene un historial completo de revisiones</li>
           </ul>
-        </CardContent>
-      </Card>
-
-      {/* Bloqueo de Períodos */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Lock className="h-5 w-5" />
-            Bloqueo de Períodos
-          </CardTitle>
-          <CardDescription>
-            Impedir modificaciones en períodos cerrados
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <p>
-            El bloqueo de períodos impide que se registren o modifiquen asientos
-            contables en meses ya cerrados, protegiendo la integridad de la
-            información contable.
-          </p>
-          <ol className="list-decimal pl-6 space-y-2 text-muted-foreground">
-            <li>
-              Ve a <strong>Contabilidad → Configuración</strong>
-            </li>
-            <li>
-              En la sección <strong>Bloqueo de Períodos</strong>, verás una
-              grilla con los meses del ejercicio fiscal
-            </li>
-            <li>
-              Cada mes muestra un icono de candado (bloqueado) o candado abierto
-              (desbloqueado)
-            </li>
-            <li>
-              Haz clic en el <strong>primer mes desbloqueado</strong> para
-              bloquearlo
-            </li>
-            <li>
-              Haz clic en el <strong>último mes bloqueado</strong> para
-              desbloquearlo
-            </li>
-            <li>Confirma la acción en el diálogo</li>
-          </ol>
-          <p className="text-sm text-muted-foreground mt-2">
-            Al bloquear un período, cualquier intento de registrar un asiento
-            con fecha dentro de ese período será rechazado por el sistema. El
-            bloqueo es progresivo: se bloquean todos los meses hasta el
-            seleccionado.
-          </p>
         </CardContent>
       </Card>
 

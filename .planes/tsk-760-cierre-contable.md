@@ -1,7 +1,7 @@
 # TSK-760 — Cierre contable: el cierre anual no funciona y el bloqueo de períodos se saltea
 
 **Fecha de inicio:** 2026-10-06
-**Estado:** Implementación en progreso (Fases 1 a 12 de 14 completadas; pendiente correr el diagnóstico en producción antes del deploy)
+**Estado:** Implementación en progreso (Fases 1 a 13 de 14 completadas; pendiente el diagnóstico de producción antes del deploy)
 
 ---
 
@@ -1185,7 +1185,7 @@ Otras decisiones de esta planificación:
 - **Objetivo:** que la clienta entienda qué cambia antes de que le pase, y que el equipo tenga la
   documentación al día.
 - **Tareas:**
-  - [ ] `GP/capturas-tsk760.mjs` (molde `capturas-tsk728.mjs`, puerto 3010 con override de
+  - [x] `GP/capturas-tsk760.mjs` (molde `capturas-tsk728.mjs`, puerto 3010 con override de
         `NEXT_PUBLIC_APP_URL`, memoria `dev-local-capturas-y-login`), sembrando por SQL una empresa
         demo con FY y borradores marcados `TSK760-demo`: 01 lista de meses del bloqueo; 02
         diálogo "Marzo tiene N borradores → Registrar y cerrar"; 03 toast al registrar un asiento
@@ -1194,7 +1194,7 @@ Otras decisiones de esta planificación:
         apertura); 07 Balance después del cierre (sin duplicar); 08 anular asiento de factura →
         mensaje; 09 aviso al anular un movimiento bancario; 10 fechas de ejercicio de solo lectura
         en Ajustes; 11-12 (`--prod`) toasts de bloqueo contra el build en :3011. `--restore`.
-  - [ ] Guía in-app `src/modules/help/features/guide/components/_AccountingGuide.tsx`: reescribir
+  - [x] Guía in-app `src/modules/help/features/guide/components/_AccountingGuide.tsx`: reescribir
         "Cierre de ejercicio" (`:530-560`) y "Bloqueo de períodos" (`:695-740`). Si el archivo
         (917 líneas) obliga, partir las dos secciones en `_AccountingClosingGuide.tsx`. Texto base
         para la clienta:
@@ -1217,12 +1217,12 @@ Otras decisiones de esta planificación:
       ticket (758)."
     - **Fechas del ejercicio:** "Las fechas del ejercicio en Ajustes ya no se editan una vez
       que hay movimientos."
-  - [ ] `docs/modules/accounting.md` §Cierre de Ejercicio (`:112-130`) y §Bloqueo de Períodos
+  - [x] `docs/modules/accounting.md` §Cierre de Ejercicio (`:112-130`) y §Bloqueo de Períodos
         (`:221-243`, tabla nueva: una regla para todos los creadores); sección "Núcleo de asientos"
         (`assertPeriodOpen`, `createJournalEntryTx`, `reverseJournalEntryTx`,
         `getEntryDocumentLink`, mes UTC). `docs/architecture/data-model.md`: invariantes de
         `FiscalYear`/`AccountingPeriod`/`lockedUntilDate` y convención OPENING/CLOSING.
-  - [ ] Presentación: `GP/tsk-760.html` (molde `tsk-728.html`) con: qué estaba mal (en simple), qué
+  - [x] Presentación: `GP/tsk-760.html` (molde `tsk-728.html`) con: qué estaba mal (en simple), qué
         cambia (los 5 textos de arriba + escenarios 1 a 9 de 1.6.2 relevantes según el diagnóstico
         de producción), qué tiene que hacer la clienta después del deploy (revisar borradores en
         meses bloqueados, cerrar los meses en orden antes del primer cierre anual de 2027) y las
@@ -3735,7 +3735,81 @@ tocados sin errores ni warnings. Sin `any` ni `console`. Ningún componente toca
 - En la DB de dev hay un asiento N° 999999 DRAFT `system` "dbg" (10/07/2026) que no es de esta fase; no se tocó.
 
 ### Fase 13: Capturas, documentación, guía in-app y presentación
-**Estado:** Pendiente
+**Estado:** Completada (2026-10-06)
+
+**Archivos creados** (`GP/` = `scripts/guia-presentacion/`):
+- `GP/capturas-tsk760.mjs`: siembra por SQL una empresa propia con nombre realista, **"Distribuidora del Sur SA"**
+  (ids fijos `76076013-…`, CUIT ficticio, el usuario de dev como dueño y empresa activa por `user_preferences`):
+  plan de 11 cuentas (una de sumatoria, `1.1.1/00/00 Disponibilidades`), Ajustes 2025 con Resultado/Gastos/
+  Proveedores/Banco/Caja, ejercicio N° 1 2025 con 14 períodos (enero y febrero cerrados, bloqueo 28/02/2025), 50
+  asientos realistas de 2025 (aporte de capital + compras, ventas, cobranzas y sueldos de cada mes; en marzo 3
+  borradores manuales, uno con la cuenta de sumatoria) y el egreso GTO-00001 del 20/02/2025 en borrador. Recorre
+  24 pasos con chequeos de pantalla **y** de base (sale con código 1 si alguno falla), verifica en cada captura que
+  el texto visible no contenga `TSK|demo|test|no usar|verificación interna|prueba|dbg`, y limpia la empresa
+  entera al empezar, al terminar, ante una excepción y ante SIGINT/SIGTERM: `SET LOCAL session_replication_role =
+  'replica'` **solo** dentro de la transacción de limpieza y solo sobre filas de esa empresa (líneas de sus
+  asientos, períodos de sus ejercicios, toda tabla con `company_id` = la empresa, la empresa), y restaura la
+  empresa activa a "Empresa de Prueba 01 SA". `--clean` solo limpia.
+- `GP/assets/tsk760-*.png` (27): 01 grilla, 02 diálogo con 3 borradores, 03/03b todo o nada (toast y pantalla),
+  04/05 eliminar borrador, 06 registrar y cerrar (toast y pantalla), 07 fuera de orden (segunda ventana
+  desactualizada), 08 reabrir, 09/09b asiento manual en febrero cerrado, 10/10b egreso en febrero cerrado, 11
+  fechas de solo lectura, 12 checklist pendiente, 13 listo, 14 vista previa, 15 toast, 16 estado posterior, 17
+  Balance al 31/01/2026, 18 Estado de Resultados 2025, 19 grilla con la nota del ejercicio cerrado, 20/21 anular
+  manual (fecha de hoy AR) y toast, 22 anular asiento de egreso bloqueado, 23/24 móvil 375.
+- `GP/tsk-760.html` y `docs/presentaciones/TSK-760-cierre-contable.pdf` (11 páginas A4).
+- `src/modules/help/features/guide/components/_AccountingClosingGuide.tsx` (163 líneas): cierre de meses y
+  borradores, cierre de ejercicio, anular y eliminar asientos.
+
+**Archivos modificados:**
+- `_AccountingGuide.tsx` (917 → 853): las cards viejas "Cierre de Ejercicio" y "Bloqueo de Períodos" se
+  reemplazan por `<_AccountingClosingGuide />`; Asientos: "Crear Asiento" con fecha en mes abierto, estado
+  "Anulado", Anular (fecha de hoy) y Eliminar borrador; Configuración: fechas de solo lectura y Bloqueo.
+- `docs/modules/accounting.md`: ciclo de vida, validación, Reversión (anular) + Eliminar borrador, Numeración,
+  sección nueva **Núcleo de asientos** (helpers, `assertPeriodOpen`, tabla de mensajes, `createJournalEntryTx`,
+  errores, convención de días UTC y "hoy" en Argentina), Cierre de Ejercicio reescrito (requisitos, flujo,
+  exclusión de apertura/refundición en reportes, defecto previo de `isBalanced`), Ejercicio Fiscal, Bloqueo de
+  Períodos (actions, permisos, tabla de impacto única), Saldos de Apertura (B25, H3, C7).
+- `docs/architecture/data-model.md`: `JournalEntry` (fiscalYearId/periodId, campos de reversión), `FiscalYear` y
+  `AccountingPeriod` en la tabla, invariantes de ejercicios/períodos/`lockedUntilDate`, relaciones.
+- `docs/conventions/coding-standards.md`: convención "Asientos contables: `createJournalEntryTx`" con el grep de
+  verificación.
+- Dos correcciones chicas encontradas por las capturas:
+  - `FYC/fiscal-year-close.ts`: "Cerrado el …" del último ejercicio cerrado mostraba el día **UTC** del instante
+    de cierre (a las 23:40 AR decía el día siguiente); ahora `todayBusinessDay(closedAt)` (D5 revisado).
+  - `ENT/components/_CreateEntryModal.tsx`: `max-w-3xl` → `sm:max-w-3xl`. El `sm:max-w-lg` del `DialogContent`
+    base ganaba en escritorio y el formulario quedaba recortado y desplazado (previo a 760).
+
+**Resultado del script** (corrida final, 2026-10-06 ~23:50 AR): "Todos los chequeos pasaron"; textos reales:
+"No se cerró 03/2025: el borrador N° 12 no se puede registrar. La cuenta 1.1.1/00/00 no es imputable (tiene
+subcuentas). Si es un asiento manual que ya no sirve, podés eliminarlo desde Asientos." · "Borrador N° 12
+eliminado" · "Se registraron 2 borradores y se cerró marzo 2025" · "Solo se puede cerrar el primer mes abierto:
+04/2025." · "No se puede registrar con fecha 15/02/2025 (y 20/02/2025 en el egreso): el período está cerrado (mes
+02/2025 cerrado). Para operar, reabrilo desde …" · "Ejercicio N° 1 cerrado: refundición N° 51 y apertura N° 52.
+Queda abierto el ejercicio N° 2." · Total Activo $ 12.831.000,00 al 31/12/2025 y al 31/01/2026 (= SQL) · Estado de
+Resultados 2025 = $ 4.831.000,00 · "La anulación se registra con fecha de hoy (06/10/2026)." (23:4x AR) · "Asiento
+N° 53 anulado con el asiento N° 55" · "Este asiento pertenece al egreso GTO-00002 y no se puede anular desde
+Asientos: anulá el comprobante." · móvil `scrollWidth` 375.
+
+**Calidad:** `check-types` = **219**; `eslint` de los `.tsx`/`.ts` tocados sin errores (1 warning previo en
+`_CreateEntryModal`: `error` sin usar); `npm run test` = **64 archivos, 873 tests, verdes**. PDF revisado página por
+página como imagen.
+
+**Datos que quedaron en la DB de dev:** ninguno nuevo (la empresa del script se borra entera; verificado 0 filas y
+empresa activa restaurada). Sigue la "TSK760 Demo cierre anual (no usar)" de la Fase 9 (no se usó ni se tocó).
+
+**Desvíos y notas:**
+- Se sembró una empresa propia en lugar de "Empresa de Prueba 01 SA" (el plan, §3.7.4): su nombre dice
+  "Prueba" y el cierre anual es irreversible. Por eso tampoco hizo falta la base copia (`--copia`) ni `--restore`:
+  todo, incluido el cierre anual, corre en una sola pasada contra dev y se borra. Las capturas `--prod` (11-12 del
+  plan) quedan para la Fase 14.
+- Abril a diciembre se cierran por SQL antes del cierre anual (el cierre de un mes ya se mostró en 01-08).
+- El aviso "El balance no está equilibrado" (defecto previo de `getBalanceSheet.isBalanced`, Fase 9) no se
+  captura: la 17 recorta las tablas de Activo, Pasivo y Patrimonio. La presentación lo explica en un recuadro
+  ("detalle anterior, se corrige aparte"). **Pendiente decidir el ticket aparte.**
+- La segunda pantalla del paso 07 va en otro contexto del navegador: como pestaña de la misma ventana dejaba la
+  principal en segundo plano y Chrome congelaba sus animaciones (los toasts no terminaban de entrar).
+- Presentación, sección 8 ("qué pasa el día del deploy"): los borradores en meses bloqueados se redactaron de
+  forma genérica; el número concreto sale del diagnóstico de producción.
 
 ### Fase 14: Verificación final y notas de deploy
 **Estado:** Pendiente

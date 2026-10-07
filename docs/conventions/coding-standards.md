@@ -280,6 +280,27 @@ await prisma.$transaction(async (tx) => {
 });
 ```
 
+### Asientos contables: `createJournalEntryTx`
+
+Todo asiento contable se crea con `createJournalEntryTx(tx, …)`
+(`src/modules/accounting/shared/utils/journal-entry-tx.ts`; desde `commercial/` y `equipment/` por
+`@/modules/accounting/features/integrations/core`), dentro de la transaccion del documento que lo
+origina. Nunca `tx.journalEntry.create` ni `lastEntryNumber + 1`:
+
+- valida el periodo (`assertPeriodOpen`: ejercicio, mes y bloqueo, con lock de la empresa), las
+  lineas (balance, sin 0/0) y las cuentas (empresa + imputable), numera con `nextEntryNumberTx` y
+  carga `fiscalYearId`/`periodId`;
+- registrar un borrador: `postJournalEntryTx`; anular: `reverseJournalEntryTx` (copia auxiliares,
+  centro de costo y moneda invertidos y valida ambas fechas);
+- fechas: dia calendario a 00:00Z (`parseIsoDay`); "hoy" del servidor = `todayBusinessDayUtc()`
+  (dia de Argentina), nunca `new Date()` como fecha de asiento;
+- los rechazos son `BusinessError`: la action los devuelve con `toActionResult` (ver arriba), nunca
+  `return null` ni `logger.warn` en silencio.
+
+Verificacion: `grep -rn "journalEntry.create(\|lastEntryNumber + 1" src/modules` (sin tests) solo
+debe encontrar `journal-entry-tx.ts`. Detalle en
+[docs/modules/accounting.md](../modules/accounting.md#nucleo-de-asientos-tsk-760).
+
 ---
 
 ## `app/` = Solo Rutas
