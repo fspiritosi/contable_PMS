@@ -436,6 +436,41 @@ GROUP BY 1 ORDER BY 1;
 
 \echo ''
 \echo '=============================================================================='
+\echo '17) Facturas/NC/ND de venta y compra cuyo asiento no cuadra (R-1)'
+\echo '    no_cuadra_total = el Debe o el Haber del asiento difiere del total guardado'
+\echo '    del comprobante. desbalanceado = Debe <> Haber. Hasta la R-1 el asiento sumaba'
+\echo '    el IVA redondeado por línea y el comprobante el IVA sobre la suma: diferencias'
+\echo '    de 1-2 centavos (dif_max). de_ellos_draft: el asiento quedó en borrador y, si'
+\echo '    está desbalanceado, no se podrá registrar (traba el cierre de su mes).'
+\echo '=============================================================================='
+WITH doc AS (
+  SELECT 'VENTA' AS tipo, d.company_id, d.total, d.journal_entry_id FROM sales_invoices d
+   WHERE d.status <> 'DRAFT' AND d.journal_entry_id IS NOT NULL
+  UNION ALL
+  SELECT 'COMPRA', d.company_id, d.total, d.journal_entry_id FROM purchase_invoices d
+   WHERE d.status <> 'DRAFT' AND d.journal_entry_id IS NOT NULL
+), cmp AS (
+  SELECT doc.tipo, doc.company_id, j.status::text AS estado_asiento,
+         sum(l.debit) AS debe, sum(l.credit) AS haber, doc.total
+  FROM doc JOIN journal_entries j ON j.id = doc.journal_entry_id
+  JOIN journal_entry_lines l ON l.entry_id = j.id
+  GROUP BY doc.tipo, doc.company_id, doc.journal_entry_id, j.status, doc.total
+)
+SELECT c.name AS empresa, cmp.tipo, count(*) AS comprobantes,
+       count(*) FILTER (WHERE cmp.debe <> cmp.total OR cmp.haber <> cmp.total) AS no_cuadra_total,
+       count(*) FILTER (WHERE cmp.debe <> cmp.haber) AS desbalanceado,
+       count(*) FILTER (WHERE (cmp.debe <> cmp.total OR cmp.haber <> cmp.total)
+                          AND cmp.estado_asiento = 'POSTED') AS de_ellos_posted,
+       count(*) FILTER (WHERE (cmp.debe <> cmp.total OR cmp.haber <> cmp.total)
+                          AND cmp.estado_asiento = 'DRAFT') AS de_ellos_draft,
+       max(greatest(abs(cmp.debe - cmp.total), abs(cmp.haber - cmp.total))) AS dif_max
+FROM cmp JOIN companies c ON c.id = cmp.company_id
+GROUP BY 1, 2
+HAVING count(*) FILTER (WHERE cmp.debe <> cmp.total OR cmp.haber <> cmp.total OR cmp.debe <> cmp.haber) > 0
+ORDER BY 1, 2;
+
+\echo ''
+\echo '=============================================================================='
 \echo 'RESUMEN — números para decidir (detalle en las secciones de arriba)'
 \echo '=============================================================================='
 WITH own AS (
@@ -530,7 +565,17 @@ SELECT * FROM (VALUES
       JOIN accounts a ON a.id = l.account_id
       WHERE j.status = 'POSTED' AND a.type IN ('REVENUE','EXPENSE') AND NOT a.is_active
       GROUP BY 1 HAVING sum(l.debit - l.credit) <> 0) z),
-   '> 0 = confirma H5/C4')
+   '> 0 = confirma H5/C4'),
+  ('U. facturas/NC/ND con asiento que no cuadra con el total o desbalanceado (17, R-1)',
+   (SELECT count(*)::text FROM (
+      SELECT d.total, d.journal_entry_id FROM sales_invoices d
+       WHERE d.status <> 'DRAFT' AND d.journal_entry_id IS NOT NULL
+      UNION ALL SELECT d.total, d.journal_entry_id FROM purchase_invoices d
+       WHERE d.status <> 'DRAFT' AND d.journal_entry_id IS NOT NULL) x
+    JOIN LATERAL (SELECT sum(l.debit) AS debe, sum(l.credit) AS haber
+                  FROM journal_entry_lines l WHERE l.entry_id = x.journal_entry_id) e ON true
+    WHERE e.debe <> x.total OR e.haber <> x.total OR e.debe <> e.haber),
+   '> 0 = asientos de comprobantes de antes de la R-1: corregir a mano (ver 17)')
 ) AS v(indicador, valor, como_leerlo);
 
 \set QUIET on
@@ -564,6 +609,13 @@ ZONA HORARIA (B22):
   local: la hipótesis cae para esa empresa y el backfill lo interpreta por día
   (fin de mes local = día 1 siguiente 02:59:59.999 UTC). H > 0 con otra hora:
   bloqueo cargado por otra vía (script o test); mirar la sección 1.
+IVA DE FACTURAS DE VARIAS LÍNEAS (R-1):
+  U > 0  comprobantes ya confirmados cuyo asiento difiere del total en centavos
+         (el asiento sumaba el IVA redondeado por línea; el comprobante, el IVA
+         sobre la suma). La R-1 corrige los que se confirmen desde el deploy; los
+         existentes NO se tocan: si están en POSTED y desbalanceados, ajuste manual
+         del contador; si su asiento está en DRAFT y desbalanceado, no se podrá
+         registrar y trabará el cierre de su mes (ver 17: de_ellos_draft).
 HUELLA (14): guardar la de antes y comparar con la de después del deploy.
 ==============================================================================
 TXT

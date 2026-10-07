@@ -48,6 +48,7 @@ import { logger } from '@/shared/lib/logger';
 import { BusinessError } from '@/shared/lib/action-result';
 import { createJournalEntryTx } from '@/modules/accounting/shared/utils/journal-entry-tx';
 import { NOT_CLOSING_ENTRY_SQL } from '@/modules/accounting/shared/utils/closing-entries';
+import { reconcileDocumentEntryAmounts } from '@/modules/accounting/shared/utils/document-entry-rounding';
 import { isCreditNote } from '@/modules/commercial/shared/voucher-utils';
 import { expandByCostCenter } from '@/modules/commercial/shared/cost-center';
 import { buildMissingTributeAccountsMessage } from '@/modules/commercial/shared/perceptions';
@@ -227,6 +228,58 @@ async function createJournalEntry(
 }
 
 // ============================================
+// HELPER: IVA por alícuota y ajuste al comprobante (TSK-760, R-1)
+// ============================================
+
+interface InvoiceLineVat {
+  lineType: string;
+  vatRate: Prisma.Decimal;
+  vatAmount: Prisma.Decimal;
+}
+
+/** Suma el IVA de las líneas gravadas por alícuota, en el orden en que aparecen. */
+function groupVatByRate(invoiceLines: InvoiceLineVat[]): Map<number, number> {
+  const vatByRate = new Map<number, number>();
+  for (const line of invoiceLines) {
+    if (line.lineType !== 'TAXED') continue;
+    const rate = parseFloat(line.vatRate.toString());
+    const vat = parseFloat(line.vatAmount.toString());
+    if (vat <= 0) continue;
+    vatByRate.set(rate, (vatByRate.get(rate) ?? 0) + vat);
+  }
+  return vatByRate;
+}
+
+/**
+ * Importes de neto (por cuenta + centro) e IVA (por alícuota) del asiento,
+ * ajustados al total y al IVA guardados del comprobante (ver
+ * `document-entry-rounding.ts`). Percepciones e impuestos internos no se tocan.
+ */
+function reconcileInvoiceAmounts(
+  invoice: {
+    total: Prisma.Decimal;
+    vatAmount: Prisma.Decimal;
+    internalTaxes: Prisma.Decimal;
+    perceptions: Array<{ amount: Prisma.Decimal }>;
+    lines: unknown[];
+  },
+  expanded: Array<{ total: number }>,
+  vatByRate: Map<number, number>
+) {
+  return reconcileDocumentEntryAmounts({
+    documentTotal: Number(invoice.total),
+    documentVat: Number(invoice.vatAmount),
+    net: expanded.map((e) => e.total),
+    vat: [...vatByRate.values()],
+    other: [
+      ...invoice.perceptions.map((p) => Number(p.amount)).filter((a) => a > 0),
+      Math.max(0, Number(invoice.internalTaxes)),
+    ],
+    documentLineCount: invoice.lines.length,
+  });
+}
+
+// ============================================
 // INTEGRACIÓN: Factura de Venta
 // ============================================
 
@@ -327,7 +380,22 @@ export async function createJournalEntryForSalesInvoice(
       }))
     );
 
-    for (const { accountId, costCenterId, total: accountTotal } of expanded) {
+    // IVA discriminado por alícuota
+    const vatByRate = groupVatByRate(invoice.lines);
+    for (const [rate] of vatByRate) {
+      if (!getVatAccountId(settings, rate, 'DEBIT')) {
+        // Antes: warn + continue → asiento descuadrado que moría en
+        // validateBalance con un mensaje que no decía qué faltaba (TSK-721).
+        throw new BusinessError(buildMissingTributeAccountsMessage([`IVA Débito Fiscal ${rate}%`]));
+      }
+    }
+
+    // El comprobante manda (TSK-760, R-1): neto e IVA ajustados al total y al
+    // IVA guardados del comprobante, que se calculan sobre la suma.
+    const amounts = reconcileInvoiceAmounts(invoice, expanded, vatByRate);
+
+    expanded.forEach(({ accountId, costCenterId }, i) => {
+      const accountTotal = amounts.net[i];
       lines.push({
         accountId,
         debit: isNC ? accountTotal : 0,
@@ -335,32 +403,17 @@ export async function createJournalEntryForSalesInvoice(
         description: `Ventas - ${invoice.fullNumber}`,
         ...(costCenterId && { costCenterId }),
       });
-    }
+    });
 
-    // IVA discriminado por alícuota
-    const vatByRate = new Map<number, number>();
-    for (const line of invoice.lines) {
-      if (line.lineType !== 'TAXED') continue;
-      const rate = parseFloat(line.vatRate.toString());
-      const vat = parseFloat(line.vatAmount.toString());
-      if (vat <= 0) continue;
-      vatByRate.set(rate, (vatByRate.get(rate) ?? 0) + vat);
-    }
-
-    for (const [rate, vatTotal] of vatByRate) {
-      const accountId = getVatAccountId(settings, rate, 'DEBIT');
-      if (!accountId) {
-        // Antes: warn + continue → asiento descuadrado que moría en
-        // validateBalance con un mensaje que no decía qué faltaba (TSK-721).
-        throw new BusinessError(buildMissingTributeAccountsMessage([`IVA Débito Fiscal ${rate}%`]));
-      }
+    [...vatByRate.keys()].forEach((rate, i) => {
+      const vatTotal = amounts.vat[i];
       lines.push({
-        accountId,
+        accountId: getVatAccountId(settings, rate, 'DEBIT')!,
         debit: isNC ? vatTotal : 0,
         credit: isNC ? 0 : vatTotal,
         description: `IVA DF ${rate}% - ${invoice.fullNumber}`,
       });
-    }
+    });
 
     // Percepciones cobradas (pasivo)
     for (const perc of invoice.perceptions) {
@@ -512,40 +565,37 @@ export async function createJournalEntryForPurchaseInvoice(
       }))
     );
 
-    const lines: JournalEntryLineInput[] = expanded.map(
-      ({ accountId, costCenterId, total: accountTotal }) => ({
-        accountId,
-        debit: isNC ? 0 : accountTotal,
-        credit: isNC ? accountTotal : 0,
-        description: `Compras - ${invoice.fullNumber}`,
-        ...(costCenterId && { costCenterId }),
-      })
-    );
-
     // IVA discriminado por alícuota
-    const vatByRate = new Map<number, number>();
-    for (const line of invoice.lines) {
-      if (line.lineType !== 'TAXED') continue;
-      const rate = parseFloat(line.vatRate.toString());
-      const vat = parseFloat(line.vatAmount.toString());
-      if (vat <= 0) continue;
-      vatByRate.set(rate, (vatByRate.get(rate) ?? 0) + vat);
-    }
-
-    for (const [rate, vatTotal] of vatByRate) {
-      const accountId = getVatAccountId(settings, rate, 'CREDIT');
-      if (!accountId) {
+    const vatByRate = groupVatByRate(invoice.lines);
+    for (const [rate] of vatByRate) {
+      if (!getVatAccountId(settings, rate, 'CREDIT')) {
         // Antes: warn + continue → asiento descuadrado que moría en
         // validateBalance con un mensaje que no decía qué faltaba (TSK-721).
         throw new BusinessError(buildMissingTributeAccountsMessage([`IVA Crédito Fiscal ${rate}%`]));
       }
+    }
+
+    // El comprobante manda (TSK-760, R-1): neto e IVA ajustados al total y al
+    // IVA guardados del comprobante, que se calculan sobre la suma.
+    const amounts = reconcileInvoiceAmounts(invoice, expanded, vatByRate);
+
+    const lines: JournalEntryLineInput[] = expanded.map(({ accountId, costCenterId }, i) => ({
+      accountId,
+      debit: isNC ? 0 : amounts.net[i],
+      credit: isNC ? amounts.net[i] : 0,
+      description: `Compras - ${invoice.fullNumber}`,
+      ...(costCenterId && { costCenterId }),
+    }));
+
+    [...vatByRate.keys()].forEach((rate, i) => {
+      const vatTotal = amounts.vat[i];
       lines.push({
-        accountId,
+        accountId: getVatAccountId(settings, rate, 'CREDIT')!,
         debit: isNC ? 0 : vatTotal,
         credit: isNC ? vatTotal : 0,
         description: `IVA CF ${rate}% - ${invoice.fullNumber}`,
       });
-    }
+    });
 
     // Percepciones sufridas (activo, crédito fiscal)
     for (const perc of invoice.perceptions) {

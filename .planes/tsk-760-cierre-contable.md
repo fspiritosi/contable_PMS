@@ -1,7 +1,7 @@
 # TSK-760 — Cierre contable: el cierre anual no funciona y el bloqueo de períodos se saltea
 
 **Fecha de inicio:** 2026-10-06
-**Estado:** Completado — pendiente diagnóstico de producción antes del deploy (verificación: APROBADO CON CONDICIONES, ver §5.6)
+**Estado:** Completado — pendiente diagnóstico de producción antes del deploy
 
 ---
 
@@ -3877,7 +3877,42 @@ empresa activa restaurada. Huella del diagnóstico `--local` después de todo: `
 6. **Avisar a la clienta** con `docs/presentaciones/TSK-760-cierre-contable.pdf` (sección 8 completada con los
    números reales de J, K, L y Q): meses que quedaron cerrados, borradores en esos meses, comprobantes en borrador
    que no se van a poder confirmar sin reabrir, y que el cierre de 2026 se hace cerrando los meses en orden.
-7. **Antes del deploy, decidir la condición de §5.6** (redondeo de IVA de 1 centavo en facturas de varias líneas).
+7. ~~Antes del deploy, decidir la condición de §5.6~~ **Resuelta** (ver "Corrección R-1 post-verificación"). En el
+   diagnóstico mirar **U** (sección 17): comprobantes ya confirmados con asiento que no cuadra con su total o
+   desbalanceado; la corrección no los toca.
+
+### Corrección R-1 post-verificación
+
+**Estado:** Completada (2026-10-07). **Criterio (líder): el comprobante manda.** El total del comprobante no cambia
+(es lo que ve ARCA y el cliente); el asiento se ajusta a él.
+
+- **Causa:** el comprobante calcula el IVA (y en compras también el subtotal) sobre la **suma** y redondea una vez
+  (`sales/.../invoices/list/actions.server.ts` `calculateInvoiceTotalsWithGlobalDiscount`, `:546-549`/`:783`;
+  `purchases/.../actions.server.ts:941-981`, redondeo por la DB), mientras que el asiento sumaba los importes de
+  **línea** ya redondeados (`INT/commercial` `vatByRate` y `expandByCostCenter`). Dos líneas de $1,07 al 21% →
+  comprobante IVA 0,45 / total 2,59, asiento 0,44 / 2,58. En compras, además, cantidades fraccionarias (0,5 × 1,01 =
+  0,505 → 0,51 por línea, subtotal 1,01 en el comprobante) descuadraban el neto: 2 centavos en el test.
+- **Cambio:** helper puro `ACC/shared/utils/document-entry-rounding.ts` (`reconcileDocumentEntryAmounts`, en
+  centavos enteros): (1) las líneas de IVA del asiento (una por alícuota/cuenta) suman el `vatAmount` de cabecera, la
+  diferencia va a la de **mayor importe**; (2) si aún queda diferencia contra el `total` (neto redondeado distinto),
+  va a la línea de **neto** de mayor importe (cuenta + centro). Percepciones e impuestos internos van tal cual; el IVA
+  sigue sin repartirse por centro (TSK-583); la resolución de cuentas (TSK-721) no cambia (las cuentas de IVA faltantes
+  se validan antes del ajuste, mismo mensaje). Solo se absorbe redondeo: hasta 1 centavo por línea del comprobante y
+  nunca deja una línea en 0 o negativa; una diferencia mayor (p. ej. descuento global de ventas, que el asiento no
+  contempla: previo, no es de este ticket) se deja y la rechaza el núcleo como hoy. `INT/commercial/index.ts`:
+  helpers `groupVatByRate`/`reconcileInvoiceAmounts` (`:241-280`), venta `:383-416`, compra `:568-598`. Aplica a
+  facturas, NC y ND de venta y compra (mismo armado, el lado lo da `isNC`).
+- **Tests (rojo primero):** `document-entry-rounding.test.ts` (10 unitarios); `sales-invoice-vat-rounding.integration`
+  (2 × $1,07 al 21%, 21% + 10,5%, NC) y `purchase-invoice-vat-rounding.integration` (ídem por `createPurchaseInvoice`
+  real + percepción + cantidades fraccionarias + NC). Antes del cambio los 8 de integración fallaban con "El asiento no
+  está balanceado … Diferencia: $0.01" ($0.02 el de cantidades fraccionarias). `npm run test`: 67 archivos, 893 tests
+  verdes; `check-types` = 219; eslint de los tocados sin errores (2 warnings previos, `:1108/1112`).
+- **Diagnóstico:** `prisma/scripts/diagnostico-tsk760.sh` sección **17** (por empresa y tipo: comprobantes no
+  borrador con asiento cuyo Debe o Haber ≠ total, o Debe ≠ Haber; cuántos con asiento POSTED/DRAFT y `dif_max`) y
+  letra **U** en el RESUMEN. `--local`: corre sin error, U = 0 (dev tiene 4 compras confirmadas, todas cuadran).
+  Correrlo en prod antes del deploy: U > 0 = asientos existentes descuadrados en centavos (los de `main` que pasaban
+  por la comparación en coma flotante); no se corrigen solos.
+
 
 ## 5. Verificación
 
@@ -3901,7 +3936,7 @@ la migración, y los creadores de comerciales (`INT/commercial`), fondos y banco
 | Migración | Idempotente (guardas en cada paso, probada dos veces en la copia y en dev), `BEGIN/COMMIT` propios, trigger deshabilitado solo alrededor del `UPDATE` del paso 4 y red de seguridad en el paso 8 (`RAISE EXCEPTION` si no quedó `O`). `INSERT` sin `id` válido: `fiscal_years.id`/`accounting_periods.id` tienen `DEFAULT gen_random_uuid()` en la DB. Datos raros que mide el diagnóstico: rango de Ajustes inválido (sin FY + NOTICE), FY con dos OPENING/CLOSING (no pisa la clave única, NOTICE), asientos fuera de tope (NULL + NOTICE), fin de FY a las 02:59:59.999. Única causa de fallo previsible: A = false o trigger inexistente (B ≠ 2), ambos en el diagnóstico. |
 | Numeración | Solo `nextEntryNumberTx`; concurrencia cubierta por test (10 en paralelo, y fondos/bancos/recurrentes en paralelo). |
 
-**R-1 (condición) — 1 centavo de redondeo de IVA en facturas de varias líneas.** El total de la factura se calcula con
+**R-1 (condición, RESUELTA después de la verificación — ver §4 "Corrección R-1 post-verificación") — 1 centavo de redondeo de IVA en facturas de varias líneas.** El total de la factura se calcula con
 el IVA **agregado** (`Σ subtotal × alícuota`, redondeado una vez; `sales/.../invoices/list/actions.server.ts:546-549`
 y `:783`; compras igual, `purchases/.../actions.server.ts:941-962`, redondeo por la DB), pero el asiento suma el IVA
 **línea por línea** ya redondeado (`INT/commercial/index.ts:345` y `:530`). Con dos o más líneas la diferencia de
@@ -3987,15 +4022,16 @@ detenido por PID; :3010 responde 200.
 
 ### 5.6 Resultado final
 
-**Estado:** APROBADO CON CONDICIONES
+**Estado:** APROBADO CON CONDICIONES → condición R-1 **resuelta**; queda solo el diagnóstico de producción.
 
 La rama cumple los 7 criterios de aceptación, la calidad está en verde y los mensajes llegan legibles en producción.
-Se corrigió un defecto chico de concurrencia (`4041322`). Queda una regresión acotada (R-1) y el paso obligatorio de
-producción.
+Se corrigió un defecto chico de concurrencia (`4041322`) y la regresión R-1 (opción (a): el IVA del asiento cuadra con
+el del comprobante, ver §4 "Corrección R-1 post-verificación"). Queda el paso obligatorio de producción.
 
 **Acciones pendientes:**
-1. **R-1:** decidir y, si se elige la opción (a), corregir el redondeo de IVA de 1 centavo en el asiento de facturas
-   de venta/compra de varias líneas **antes del deploy** (hoy confirman ~la mitad de esos casos; con la rama, ninguno).
+1. ~~**R-1:** corregir el redondeo de IVA de 1 centavo en el asiento de facturas de venta/compra de varias líneas~~
+   **Resuelta** (opción (a), §4 "Corrección R-1 post-verificación"). En el diagnóstico de prod, revisar **U**
+   (sección 17): asientos ya existentes que no cuadran con su comprobante.
 2. Correr `prisma/scripts/diagnostico-tsk760.sh` en producción y decidir con la tabla "letra → suposición" (§4,
    Fase 3) antes de deployar; seguir las notas de deploy de §4, Fase 14.
 3. Completar la sección 8 de la presentación con los números reales (J, K, L, Q) y avisar a la clienta.
