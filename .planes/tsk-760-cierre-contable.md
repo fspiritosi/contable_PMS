@@ -1,7 +1,7 @@
 # TSK-760 — Cierre contable: el cierre anual no funciona y el bloqueo de períodos se saltea
 
 **Fecha de inicio:** 2026-10-06
-**Estado:** Implementación en progreso (Fases 1, 2 y 4 a 12 de 14 completadas; Fase 3 pendiente del diagnóstico de producción)
+**Estado:** Implementación en progreso (Fases 1 a 12 de 14 completadas; pendiente correr el diagnóstico en producción antes del deploy)
 
 ---
 
@@ -879,7 +879,7 @@ Otras decisiones de esta planificación:
   `locked_until_date` digan lo mismo y que los asientos tengan `fiscal_year_id`/`period_id`;
   que no vuelva a pasar (B23, D11).
 - **Tareas:**
-  - [ ] `npx prisma migrate dev --create-only --name tsk_760_fiscal_years_backfill` y escribir el
+  - [x] `npx prisma migrate dev --create-only --name tsk_760_fiscal_years_backfill` y escribir el
         SQL a mano (estilo 20260625), **idempotente** (`INSERT … WHERE NOT EXISTS`,
         `UPDATE … WHERE … IS NULL`, `GREATEST`) y en **una transacción**
         (`BEGIN; … COMMIT;` explícitos si Prisma no envuelve; verificar con `ctx7` en Diseño):
@@ -898,7 +898,7 @@ Otras decisiones de esta planificación:
     5. `last_entry_number = GREATEST(last_entry_number, max(number))` por empresa (consulta 7).
     6. `RAISE NOTICE` con conteos: FY creados, meses cerrados por unión y por hueco, asientos
        sin FY (anteriores al primero) por empresa.
-  - [ ] Probar **antes de aplicar** sobre una copia: `docker exec contable-pms-db pg_dump` →
+  - [x] Probar **antes de aplicar** sobre una copia: `docker exec contable-pms-db pg_dump` →
         `createdb contable_tsk760_copia` → restaurar; sembrar escenarios con
         `prisma/scripts/tsk760-escenarios-migracion.sql` (nuevo, solo local): (a) empresa sin FY
         con ejercicio vencido; (b) FY de 20260625 con `lockedUntilDate` y meses `is_closed=false`
@@ -908,21 +908,21 @@ Otras decisiones de esta planificación:
         Correr `DATABASE_URL=…/contable_tsk760_copia npx prisma migrate deploy` **dos veces**
         (idempotencia: la segunda no cambia nada, comparar `diagnostico-tsk760.sh --db` antes y
         después), y verificar que los triggers quedan `tgenabled = 'O'`.
-  - [ ] Test de regresión de la migración: `ACC/features/fiscal-year-close/fy-backfill.integration.test.ts`
+  - [x] ~~Test de regresión de la migración~~ (reemplazado por `prisma/scripts/tsk760-escenarios-verificar.sql`, ver sección 4): `ACC/features/fiscal-year-close/fy-backfill.integration.test.ts`
         siembra los escenarios (a)-(g) en empresas propias, ejecuta el `migration.sql` con un
         cliente `pg` (consulta simple multi-sentencia) y verifica el resultado; una segunda
         ejecución no cambia filas.
-  - [ ] Recién entonces `npm run db:migrate` (aplica en `contable-pms-db`); **nunca**
+  - [x] Recién entonces `npm run db:migrate` (se usó `migrate deploy`: drift ajeno, ver sección 4) (aplica en `contable-pms-db`); **nunca**
         `migrate reset`. Si hay drift ajeno: `npx prisma migrate status` y frenar.
-  - [ ] B23/D11 en `ACC/features/settings/actions.server.ts` `saveAccountingSettings`: en la
+  - [x] B23/D11 en `ACC/features/settings/actions.server.ts` `saveAccountingSettings`: en la
         misma tx, si no hay FY → `ensureFiscalYearTx` con el rango (FY 1); si hay FY y cambian las
         fechas → solo permitido con un único FY sin asientos ni meses cerrados (regenera sus
         períodos), si no `BusinessError`; pasa a `ActionResult`. `getAccountingSettings` devuelve
         también `fiscalYearLocked: boolean` y el rango del FY abierto más antiguo.
-  - [ ] Formulario de Ajustes (componente de fechas de ejercicio en `ACC/features/settings/components/`):
+  - [x] Formulario de Ajustes (componente de fechas de ejercicio en `ACC/features/settings/components/`):
         fechas de solo lectura con la leyenda "Las fechas salen del ejercicio N° X; se cambian
         cerrando el ejercicio", y manda `YYYY-MM-DD` (sin `new Date('…T00:00:00')` local, B22).
-  - [ ] Tests: `ACC/features/settings/accounting-settings.integration.test.ts`: primera vez crea
+  - [x] Tests: `ACC/features/settings/accounting-settings.integration.test.ts`: primera vez crea
         FY 1 con períodos; cambiar fechas con asientos → `{ success: false }`; sin asientos →
         regenera períodos.
 - **Archivos:** `prisma/migrations/<ts>_tsk_760_fiscal_years_backfill/migration.sql` (nuevo);
@@ -2736,7 +2736,177 @@ componentes cliente. Sin `any` ni `console`. Ningún caller cambiado.
   cliente.
 
 ### Fase 3: Migración de datos y sincronización de Ajustes con el ejercicio
-**Estado:** Pendiente
+**Estado:** Completada (2026-10-06/07) **sin** la salida del diagnóstico de producción (decisión del líder:
+implementar ahora y ajustar si producción revela algo; ver la tabla "letra → suposición" al final).
+
+**Archivos creados:**
+- `prisma/migrations/20261007020224_tsk_760_fiscal_years_backfill/migration.sql`: SQL a mano, `BEGIN;`/`COMMIT;`
+  explícitos (H1), idempotente. El timestamp va **después** de `20261006214031_tsk_757_expense_category_account`
+  (aplicada en la base de dev desde la rama de 757, ver desvíos).
+- `prisma/scripts/tsk760-escenarios-migracion.sql`: siembra 9 empresas `TSK760-MIG-x` (ids fijos
+  `76076076-0003-4000-8000-000000000NNN`) en la **copia**; se niega a correr sobre `contable_pms`.
+- `prisma/scripts/tsk760-escenarios-verificar.sql`: ~45 afirmaciones (`RAISE EXCEPTION` en la primera que falla,
+  termina en `ROLLBACK`) por escenario + invariantes globales (FY normalizados, exactamente un OPENING y un CLOSING
+  por FY, ningún MONTHLY fuera de rango, ningún asiento con FY y sin período ni en un período de otro FY,
+  consulta 6 vacía, triggers `O`).
+- `ACC/features/settings/fiscal-year-settings.ts` (`server-only`, sin `'use server'`, H7):
+  `buildFiscalYearSettingsTx` y `saveFiscalYearSettingsTx`.
+- `ACC/features/settings/accounting-settings.integration.test.ts` (7 tests, prefijo `TSK760-AJ-`).
+
+**SQL final, resumido** (diferencias con §3.2.2 en **negrita**):
+1. Normaliza FY a `día 00:00` / `día 23:59:59.999`. **Un fin a las `02:59:59.999` (fin del día local guardado con
+   el servidor en UTC-3) cuenta como el día anterior** (`pg_temp.tsk760_dia_fin`). OPENING/CLOSING `0/13` (o de otro
+   mes) → mes real de inicio/fin, **sin pisar la clave única si un FY tuviera dos** (quedan y se informan).
+2. FY 1 desde Ajustes para empresas sin FY (**solo si el rango es válido**: fin > inicio; si no, se informa) y FY
+   contiguos de 12 meses hasta cubrir hoy (UTC) o el último asiento, **ignorando para ese objetivo los asientos más
+   allá de hoy + 1 año** (un 2030 mal tipeado no crea el FY 2027).
+3. Períodos: un MONTHLY por mes del rango + OPENING + CLOSING (`ON CONFLICT` / `NOT EXISTS`).
+4. `DISABLE TRIGGER trg_journal_entry_immutable` → un único `UPDATE` de `fiscal_year_id/period_id` → `ENABLE`.
+   FY por **día UTC** (`j.date::date BETWEEN`, como `findFiscalYearForDateTx`), **`DISTINCT ON` por el de menor
+   número si se solaparan**; **sin FY → `NULL`** (antes el diseño dejaba el valor viejo). Período: refundición →
+   CLOSING; apertura generada o "Asiento de Apertura" del día de inicio → OPENING; **si ya está en el
+   OPENING/CLOSING de ese FY se conserva** (reversión de una apertura, Fase 7: si no, el backfill la habría movido a
+   MONTHLY y la segunda corrida del código no coincidiría); si no, MONTHLY del mes UTC (corrige los mal imputados
+   por hora local).
+5. **Borrado de MONTHLY fuera de rango sin asientos, movido a después del paso 4** (así también se van los que solo
+   referenciaban asientos que el paso 4 reubicó).
+6. Cierre: unión con `locked_until_date` (D3), FY cerrado → todos sus períodos, **OPENING del FY que sigue a uno
+   cerrado → cerrado (C7, como `closeFiscalYearTx`)**, huecos, `locked_until_date` = fin del último MONTHLY cerrado
+   (o NULL), Ajustes = FY abierto más antiguo (D11).
+7. Contador C1 (fin de la racha contigua; un aislado no lo mueve).
+8. **Red de seguridad: si el trigger no quedó `O`, `RAISE EXCEPTION` (rollback de todo)**, y `NOTICE` de: empresas
+   sin FY por rango inválido, asientos sin FY (por empresa, con rango de fechas), asientos con FY y sin período, FY
+   con dos OPENING/CLOSING, números aislados.
+
+Trigger "re-habilitado aunque falle": está garantizado por la transacción. Se probó en la copia `BEGIN; ALTER TABLE …
+DISABLE TRIGGER …; SELECT 1/0; COMMIT;` → error, rollback, `tgenabled = 'O'`. Prisma 7 ejecuta el archivo tal cual
+(`migrate deploy` lo aplicó con `BEGIN/COMMIT` y `DO $$` sin problemas). Si cualquier paso falla, la base queda como
+estaba y Prisma marca P3009 (`migrate resolve --rolled-back` antes de redeployar, §3.7.6).
+
+**Prueba en la copia** (`contable_tsk760_copia`, `pg_dump -Fc` de `contable_pms` + `pg_restore` dentro del
+contenedor; borrada al final): siembra → diagnóstico → `DATABASE_URL=…/contable_tsk760_copia npx prisma migrate
+deploy` → verificación → segunda corrida por `psql -f` → huellas.
+
+| Empresa | Siembra | Resultado (verificado por `tsk760-escenarios-verificar.sql`: OK) |
+|---|---|---|
+| 001 A (a, F) | Ajustes 2024 a las 03:00Z, sin FY, asientos 2024, 2025 (uno el día 1 a las 00:30Z) y 03/2026, "Asiento de Apertura" 01/01/2024 03:00Z | FY 1 2024, FY 2 2025, FY 3 2026 (12 MONTHLY + OPENING + CLOSING c/u); apertura → OPENING FY 1; 00:30Z del 01/02 → 02/2025; Ajustes = FY 1 (abierto más antiguo) |
+| 002 B (b, d, 12) | FY de 20260625 (03:00Z, OPENING 0, CLOSING 13, MONTHLY de 12/2025 a 01/2027), bloqueo UI `2026-04-01 02:59:59.999`, DRAFT feb, POSTED mar, REVERSED + reversión ene, DRAFT abr, DRAFT 20/12/2025 apuntando al MONTHLY 12/2025 | FY normalizado, OPENING 2026-1 / CLOSING 2026-12, 12 MONTHLY (12/2025 y 01/2027 borrados), ene-mar cerrados, abr abierto, bloqueo `2026-03-31 23:59:59.999`; POSTED y REVERSED con FY/período (trigger de vuelta en `O`); DRAFT de 2025 → `NULL/NULL` |
+| 003 C (c) | FY normalizado, ene-feb `is_closed`, bloqueo NULL; POSTED del 01/05 00:00Z imputado a abril; apertura REVERSED y su reversión POSTED en OPENING | bloqueo `2026-02-28 23:59:59.999`; el del 01/05 → 05/2026; ambas aperturas siguen en OPENING |
+| 005 E (e, Q, R) | Ajustes 2025 sin FY; asientos 15/12/2024, 2025, 10/03/2027 y 10/01/2030 | FY 2025, 2026 y 2027 (por el asiento de 2027); 2024 y 2030 → `NULL` e informados |
+| 006 F (f) | marzo cerrado, ene-feb abiertos | ene-mar cerrados, bloqueo 31/03 |
+| 007 G (g, G, T, 12) | FY 1 2025 cerrado por el código viejo (noviembre y CLOSING abiertos, refundición vinculada); FY 2 hasta `2027-01-01 02:59:59.999` con 13 MONTHLY y CLOSING 2027-1, apertura vinculada, OPENING abierto; Ajustes en 2025; cuenta REVENUE inactiva con saldo POSTED | FY 1: 14 períodos cerrados; FY 2: fin 2026-12-31 23:59:59.999, 12 MONTHLY, CLOSING 2026-12, OPENING cerrado (C7); Ajustes = FY 2; bloqueo 31/12/2025; refundición → CLOSING FY 1, apertura → OPENING FY 2; cuenta intacta |
+| 008 H (h, O, P) | contador 10, asientos 10, 11, 12 y 999999 | contador 12; NOTICE por el 999999 |
+| 009 I (robustez) | Ajustes con fin anterior al inicio y un asiento | sin FY, Ajustes intactos, asiento `NULL`, NOTICE |
+| 010 J (meses incompletos) | Ajustes 15/01/2026 → 14/01/2027 sin FY | FY 1 con ese rango y 13 MONTHLY; el asiento del 10/01/2027 → 01/2027 del FY 1 |
+
+Las empresas reales de la copia (las de dev) también: "Empresa de Prueba 01 SA" 43/43 asientos con FY y período,
+Ajustes 03:00Z → normalizados; "TSK760 Demo cierre anual" (creada por el código de la Fase 9) sin cambios salvo sus
+6 asientos sembrados sin FY.
+
+**Idempotencia (copia):** huella de §3.2.4 + `updated_at` de FY, períodos y Ajustes, antes y después de la segunda
+corrida — **idénticas**: `fy 5a99e588…`, `periodos c0ac3886…`, `asientos f31ccc20…`, `ajustes 818e7c85…`,
+`updated_at 9699cb53…`. Segunda corrida: todos los `UPDATE/INSERT/DELETE 0`, NOTICE "ejercicios siguientes creados:
+0" y "paso 6: … 0 …", triggers `O`.
+
+**Diagnóstico en la copia, resumen antes → después:** A true→true, B 2→2, C 0→0, D 11→11, **E 5→1** (queda la de
+rango inválido), **F 4→3**, G 2→2, **H 2→5**, **I 1→0**, J 2→2, **K 18→0**, L 0, M 0, N 0, **O 5→0**, P 2→2,
+**Q 11→13**, R 1→1, S 0, T 1→1. Consulta 2 después: sin ejercicio solo los 4 esperados (002 N° 6, 005 N° 1 y 4, 009).
+Lectura de los que "suben": Q se mide contra el inicio de Ajustes y Ajustes pasa al FY abierto más antiguo, así que
+después del deploy Q también cuenta los asientos de ejercicios **cerrados** (007 y la demo de la Fase 9); F cuenta
+empresas cuyo FY abierto más antiguo ya venció (001: hay que cerrar 2024 y 2025 en orden; 005 y 009). H sube porque
+el bloqueo pasa a derivarse de los meses cerrados (003, 006 tenían meses cerrados sin bloqueo).
+
+**Base de dev:** `npx prisma migrate deploy` (no `migrate dev`, ver desvíos) → aplicada; `npm run db:generate`; dev
+server :3010 reiniciado. Diagnóstico `--local` antes/después idéntico en el resumen (A true, B 2, C 0, D 2, E 0, F 0,
+G 1, H 1, I 0, J–O 0, P 1, Q 8, R–T 0) y consulta 2: los 38 asientos sin ejercicio quedaron con FY y período (52/52).
+Segunda corrida por `psql` en dev: todo 0, huellas iguales (`fy 4de61e6e…`, `periodos 2f46e785…`, `asientos
+75d384df…`, `ajustes 3c857d9f…`, `updated_at 18173c29…`). NOTICE: el 999999 de "Empresa de Prueba 01 SA".
+
+**Ajustes (B23/D11/C3/H6):**
+- `SET/validators.ts` (puro, lo usan formulario y servidor): `FiscalYearSettingsView`, `validateFiscalYearRange`
+  (fecha válida, fin > inicio, día 1 a fin de mes, ≤ 12 meses; textos de `validateFiscalYear` + el de §3.3.6) y
+  `fiscalYearSettingsSchema` (Zod con `'YYYY-MM-DD'`).
+- `SET/actions.server.ts`: `getFiscalYearSettings()` (settings `view`) y `saveFiscalYearSettings({ startDay, endDay })`
+  → `ActionResult<{ fiscalYearNumber }>` (settings `update`). `saveFiscalYearSettingsTx`: valida, `upsert` de Ajustes,
+  **lock de Ajustes** (se serializa con `assertPeriodOpen`), y: sin FY → crea el N° 1 con períodos
+  (`createFiscalYearWithPeriodsTx`; también con asientos viejos sin FY, p. ej. la empresa de rango inválido); mismas
+  fechas que el FY abierto más antiguo → no-op exitoso; fechas nuevas → solo si **no hay asientos, ni meses ni FY
+  cerrados** (C3), en cuyo caso el N° 1 conserva su id, toma las fechas, se regeneran sus períodos y se borran los FY
+  siguientes vacíos; si no, `BusinessError` con el texto de §3.3.6.
+- `saveAccountingSettings(input)` → `ActionResult`, **solo cuentas** (sin `companyId` del cliente ni fechas):
+  `commercialIntegrationSchema.safeParse` en el servidor y `updateMany`; sin Ajustes → "Configurá primero el
+  ejercicio fiscal.".
+- `_AccountingSettingsForm.tsx` (122 → 125): `{ fiscalYear }`; sin `datesEditable` muestra las fechas como texto con
+  "Las fechas salen del ejercicio N° X; cambian solas al cerrar el ejercicio."; editable: `type="date"` con el valor
+  `'YYYY-MM-DD'` tal cual (sin `new Date('…T00:00:00')`, B22), leyenda de meses completos, toasts con `ActionResult` e
+  `invalidateQueries` del estado de Bloqueo de Períodos (si no, la grilla seguía diciendo "Configurá primero el
+  ejercicio fiscal" tras crear el FY).
+- `_CommercialIntegrationForm.tsx` (434 → 418): ya no lee Ajustes ni reenvía fechas (H6); sin prop `companyId`.
+- `AccountingSettings.tsx`: pasa `getFiscalYearSettings()`. `ACC/shared/types`: borrado `accountingSettingsSchema` y
+  su tipo (sin otros usos).
+
+**Tests** (TDD: escritos primero, 11/11 en rojo; después verdes): `validators.test.ts` +4 (meses completos,
+bisiesto, irregular de 12, 13 meses, fin anterior, fecha inexistente 2027-02-29, esquema);
+`accounting-settings.integration.test.ts` 7: primera vez crea Ajustes + FY 1 (00:00Z/23:59:59.999Z, OPENING 1, 12
+MONTHLY, CLOSING 12) y vista editable; empresa con Ajustes 03:00Z sin FY → guardar crea el FY 1 (14 períodos) y
+normaliza Ajustes; meses incompletos / > 12 / fin anterior → `{ success: false }` sin crear nada; sin asientos →
+regenera (07/2026–06/2027, mismo id); con un asiento → texto exacto, FY intacto, vista `datesEditable: false`, y
+guardar las mismas fechas da `success`; con un mes cerrado → rechazo; `saveAccountingSettings` sin Ajustes → texto,
+con Ajustes guarda cuentas y `requireCostCenter` sin tocar fechas ni FY.
+
+**Calidad:** `npm run test` = **64 archivos, 873 tests, verdes** (con la DB de dev ya migrada); `check-types` =
+**219**; `eslint` de `SET/` y `ACC/shared/types` sin errores ni warnings; sin `any` ni `console`.
+
+**Prueba en navegador** (Playwright contra :3010 reiniciado; script temporal borrado; capturas `f3-01` a `f3-04` en
+el scratchpad):
+- "Empresa de Prueba 01 SA" (con asientos): fechas 01/01/2026 – 31/12/2026 en texto, sin inputs, leyenda del
+  ejercicio N° 1. "Guardar Configuración" de Integración Comercial → "Configuración de integración guardada
+  correctamente"; fechas de Ajustes intactas.
+- Empresa temporal "TSK760 Demo Ajustes F3 (no usar)" (sin Ajustes, el usuario de dev como dueño, activada por
+  `user_preferences`): formulario vacío; 15/01–31/12 → mensaje de meses completos en el formulario; 01/01–31/12 →
+  "Ejercicio N° 1 guardado", FY con 14 períodos y la grilla de Bloqueo de Períodos aparece; con la pantalla abierta
+  se insertó un asiento por SQL y 01/02/2026–31/01/2027 → toast "No se pueden cambiar las fechas del ejercicio N° 1:
+  la empresa ya tiene asientos o meses cerrados. Las fechas cambian solas al cerrar el ejercicio.", FY sin cambios;
+  al recargar, solo lectura. Móvil 390 px: `scrollWidth` 390.
+- Limpieza: empresa temporal borrada (asiento DRAFT, FY, Ajustes, cuentas, miembro); empresa activa restaurada a
+  "Empresa de Prueba 01 SA".
+
+**Datos que quedaron en la DB de dev:** la migración aplicada (FY/período en los 52 asientos; Ajustes de "Empresa de
+Prueba 01 SA" normalizados a 00:00Z / 23:59:59.999Z). Nada más.
+
+**Desvíos y notas:**
+- **`migrate dev` no se pudo usar:** la base de dev tiene aplicada `20261006214031_tsk_757_expense_category_account`
+  (rama de 757, PR #34) que esta rama no tiene, y `migrate dev` (también `--create-only`) pide **reset**. No se
+  reseteó: la carpeta se creó a mano y se aplicó con `migrate deploy` (lo mismo que hace producción). `migrate
+  status` queda "up to date". Al mergear 757 no hay conflicto de orden (757 < 760).
+- **Sin `fy-backfill.integration.test.ts`:** la migración es global (toca todas las empresas) y toma `ACCESS
+  EXCLUSIVE` sobre `journal_entries`; correrla desde Vitest contra la base compartida, con los demás archivos de test
+  en paralelo, modificaría sus empresas y bloquearía sus inserts. Se reemplazó por el par siembra/verificación SQL
+  sobre la copia, reproducible.
+- D11 vs. C3: las fechas son editables con **varios** FY si no hay asientos ni cierres (caso real: empresa que cargó
+  Ajustes hace años y nunca operó; la migración le crea FY hasta hoy y, con la regla "único FY", no podría corregir
+  sus fechas). Se descartan los FY siguientes vacíos.
+- `getAccountingSettings(companyId)` queda (la usa la página para las cuentas); `getFiscalYearSettings` es la nueva.
+- No se agregó `prisma/scripts/tsk760-backfill-asientos.sql` (§3.7.6 paso 4): queda para la Fase 14.
+
+**Diagnóstico de producción → qué suposición invalidaría** (correrlo antes del deploy y revisar esta tabla):
+
+| Letra / sección | Suposición de la migración | Valor que la invalida y qué hacer |
+|---|---|---|
+| A | El usuario de la base es dueño de `journal_entries` (`DISABLE TRIGGER`) | `false` → la migración falla entera (P3009, sin cambios). No deployar; dar ownership o correr como dueño |
+| B | Los dos triggers están `O` antes | ≠ 2 → alguien los tocó; la red del paso 8 solo mira el de asientos. Revisar antes |
+| E | Las empresas sin FY tienen un rango de Ajustes válido | E > 0 con `meses_completos` (sección 1) **nulo o fin ≤ inicio** → no reciben FY (NOTICE); corregir Ajustes después del deploy desde la UI (guardar crea el FY 1) |
+| F | Un ejercicio vencido se resuelve creando FY de 12 meses contiguos hasta hoy | F > 0 con un ejercicio irregular o con asientos que muestran otro calendario (p. ej. FY julio-junio pero asientos de enero a diciembre) → los FY creados no siguen el calendario real; revisar sección 1 y 3 y, si hace falta, corregir antes |
+| G | Los FY cerrados vienen del código viejo con fechas a medianoche o al fin del día (`02:59:59.999` se lee como el día anterior) y su apertura está en el FY siguiente | G > 0 con `fin_raw` (sección 12) en otra hora de madrugada (p. ej. `03:00:00` del día 1 siguiente) → el FY normalizado se estiraría un día al año siguiente; con refundiciones fuera del último día o aperturas vinculadas al FY cerrado (no al siguiente) → el paso 4 las pone en el FY por fecha, revisar 5 y 12 a mano |
+| sección 12 | Cada FY tiene a lo sumo un OPENING y un CLOSING; FY sin solaparse ni huecos, numerados en orden cronológico | `apertura_mes`/`cierre_mes` con dos valores (p. ej. `0,1`) → queda el duplicado (NOTICE) y el núcleo usa uno cualquiera: limpiar a mano. Rangos solapados → asientos al FY de menor número. Huecos entre FY → `ensureFiscalYearTx` rechaza esas fechas ("no pertenece a ningún ejercicio"). `igual_a_ajustes = f` → Ajustes pasa a las fechas del FY (el FY manda) |
+| sección 1 `meses_completos` | — | `f` → el FY 1 se crea con el rango irregular (13 MONTHLY si cruza meses parciales) y los siguientes arrancan a mitad de mes; funciona, pero conviene que la clienta corrija Ajustes mientras no tenga asientos |
+| O | Las colisiones de numeración son la racha `contador+1…` | O muy grande (cientos) → indicaría caminos que escriben números sin tocar el contador hace tiempo; el contador sube igual hasta el fin de la racha |
+| P | Los números aislados son pocos y altos (tipo 999999) | P > 0 con aislados **cerca** del contador (p. ej. contador 120, aislados 125-140) → `nextEntryNumberTx` los saltea al alcanzarlos (bien), pero la numeración tendrá saltos visibles; avisar |
+| Q | Lo anterior al primer ejercicio es poco y viejo (queda sin FY, se informa) | Q > 0 con `antes_inicio_fecha_ult_90d` o `antes_inicio_draft` > 0 (sección 13) → la clienta opera fechas anteriores al inicio de Ajustes: esos DRAFT no se podrán registrar ("anterior al inicio del primer ejercicio"). Considerar corregir el inicio de Ajustes **antes** del deploy (después ya hay asientos y la UI no deja) |
+| R | Lo posterior a hoy + 1 año son errores de tipeo | R > 0 con fechas cercanas al tope o muchas → no son typos: hay que crear esos FY a mano o corregir fechas |
+| T | La migración no toca cuentas; el cierre ya las incluye (C4/H5) | T > 0 no invalida la migración; confirma C4. Solo informar |
+| I / H | El bloqueo heredado se interpreta por día (`::date`); `02:59:59.999` del día 1 cierra el mes anterior | H > 0 con `bloqueo_hora` distinta de `00:00`, `03:00`, `23:59:59.999` y `02:59:59.999` (sección 1) → origen desconocido; revisar si el día elegido es el que la clienta quiso bloquear |
+| K, J, L | (no son suposiciones: miden el cambio de comportamiento) | > 0 → avisar a la clienta antes del deploy (§3.7.6) |
 
 ### Fase 4: Creadores I — asientos manuales y registrar
 **Estado:** Completada (2026-10-06)
