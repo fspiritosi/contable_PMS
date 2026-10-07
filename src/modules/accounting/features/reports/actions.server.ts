@@ -17,6 +17,7 @@ import {
   notCloseGeneratedOpeningWhere,
   notClosingEntryWhere,
 } from '../../shared/utils/closing-entries';
+import { entriesWithoutDocumentWhere } from '../../shared/utils/entry-document-link';
 import { isCreditNote } from '@/modules/commercial/shared/voucher-utils';
 import { getActiveCompanyId } from '@/shared/lib/company';
 import {
@@ -646,15 +647,15 @@ export async function getEntriesWithoutDocuments(
   try {
     logger.info('Obteniendo asientos sin respaldo', { data: { companyId, from, to } });
 
+    // TSK-760: el mismo criterio de "tiene documento" que la anulación desde Asientos
+    // (8 tablas, incluidos egresos, fondos, depreciación y revalúo, más cierre/apertura).
+    const withoutDocument = await entriesWithoutDocumentWhere(prisma, companyId);
     const entries = await prisma.journalEntry.findMany({
       where: {
         companyId,
         date: { gte: from, lte: to },
         originalEntryId: null,
-        salesInvoices: { none: {} },
-        purchaseInvoices: { none: {} },
-        receipts: { none: {} },
-        paymentOrders: { none: {} },
+        ...withoutDocument,
       },
       orderBy: [{ date: 'asc' }, { number: 'asc' }],
       select: {

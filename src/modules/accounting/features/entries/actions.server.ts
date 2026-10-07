@@ -9,8 +9,15 @@ import { BusinessError, toActionResult, type ActionResult } from '@/shared/lib/a
 import { Prisma } from '@/generated/prisma/client';
 import { revalidateAccountingRoutes } from '../../shared/utils';
 import { journalEntrySchema, type CreateJournalEntryInput } from '../../shared/types';
-import { createJournalEntryTx, postJournalEntryTx } from '../../shared/utils/journal-entry-tx';
-import { validateJournalEntryAccounts, validateAccountNatures, validatePeriodLock, validateAuxiliaries, resolveFiscalPeriod } from './validators';
+import { createJournalEntryTx, postJournalEntryTx, reverseJournalEntryTx } from '../../shared/utils/journal-entry-tx';
+import {
+  buildDocumentLinkedMessage,
+  getEntryDocumentLink,
+  type EntryDocumentLink,
+} from '../../shared/utils/entry-document-link';
+import type { IsoDay } from '../../shared/utils/journal-entry-types';
+import { startOfDayUtc, toUtcDay } from '../../shared/utils/utc-month';
+import { validateJournalEntryAccounts, validateAccountNatures, validateAuxiliaries } from './validators';
 
 import { JournalEntryStatus } from '@/generated/prisma/enums';
 
@@ -95,142 +102,150 @@ export async function postJournalEntry(entryId: string): Promise<ActionResult<{ 
   }
 }
 
+/** Aviso para los asientos de sistema sin documento vinculado (D6): se anulan, pero solo el asiento. */
+const SYSTEM_ENTRY_WARNING =
+  'Este asiento lo generó el sistema sin un comprobante vinculado (por ejemplo, un movimiento ' +
+  'bancario, una transferencia o la baja de un equipo). Anularlo no revierte el saldo bancario ni ' +
+  'el estado del equipo: corregilos a mano si corresponde.';
+
+export interface ReversalCheck {
+  /** Documento al que pertenece el asiento (si lo hay, no se puede anular desde Asientos). */
+  link: EntryDocumentLink | null;
+  /** Motivo del bloqueo, listo para mostrar (`null` si se puede anular). */
+  blockedMessage: string | null;
+  /** Advertencia para asientos de sistema sin vínculo (D6). */
+  warning: string | null;
+  /** Fecha con la que se registraría la anulación: hoy, en UTC (D5). */
+  date: IsoDay;
+}
+
 /**
- * Anula un asiento contable
+ * Qué pasaría al anular el asiento desde Asientos (lo usa el diálogo para avisar o
+ * bloquear antes de confirmar). Solo lectura.
  */
-export async function reverseJournalEntry(companyId: string, entryId: string) {
+export async function getReversalCheck(entryId: string): Promise<ActionResult<ReversalCheck>> {
   const userId = await getCurrentUserId();
   if (!userId) throw new Error('No autenticado');
   await checkPermission('accounting.entries', 'approve', { redirect: true });
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
 
   try {
-    const entry = await prisma.journalEntry.findUnique({
-      where: { id: entryId },
-      select: {
-        id: true,
-        companyId: true,
-        number: true,
-        date: true,
-        description: true,
-        status: true,
-        postDate: true,
-        createdBy: true,
-        createdAt: true,
-        updatedAt: true,
-        lines: {
-          select: {
-            id: true,
-            entryId: true,
-            accountId: true,
-            description: true,
-            debit: true,
-            credit: true,
-          },
-        },
-      },
+    const entry = await prisma.journalEntry.findFirst({
+      where: { id: entryId, companyId },
+      select: { createdBy: true },
     });
+    if (!entry) throw new BusinessError('Asiento no encontrado.');
 
-    if (!entry) {
-      throw new Error('Asiento no encontrado');
-    }
+    const link = await getEntryDocumentLink(prisma, companyId, entryId);
+    return {
+      success: true,
+      link,
+      blockedMessage: link ? buildDocumentLinkedMessage(link) : null,
+      warning: !link && entry.createdBy === 'system' ? SYSTEM_ENTRY_WARNING : null,
+      date: toUtcDay(new Date()),
+    };
+  } catch (error) {
+    return toActionResult(error, 'Error al verificar la anulación del asiento');
+  }
+}
 
-    if (entry.companyId !== companyId) {
-      throw new Error('El asiento no pertenece a la empresa');
-    }
+/**
+ * Anula un asiento registrado desde Asientos (TSK-760, Fase 10: B10, D5, D6).
+ *
+ * Rechaza los asientos que pertenecen a un documento (8 tablas + refundición/apertura):
+ * se anulan desde su comprobante. La reversión se registra con fecha de hoy (UTC) y
+ * `reverseJournalEntryTx` valida el período del original y el de hoy, y copia todas las
+ * columnas de línea invertidas (auxiliares, centro de costo, moneda).
+ */
+export async function reverseJournalEntry(input: {
+  entryId: string;
+}): Promise<ActionResult<{ reversalNumber: number }>> {
+  const userId = await getCurrentUserId();
+  if (!userId) throw new Error('No autenticado');
+  await checkPermission('accounting.entries', 'approve', { redirect: true });
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+  const { entryId } = input;
 
-    // Validar que el período no esté bloqueado
-    await validatePeriodLock(companyId, entry.date);
-
-    if (entry.status !== JournalEntryStatus.POSTED) {
-      throw new Error('Solo se pueden anular asientos registrados');
-    }
-
-    // Resolver período para la fecha actual (la reversión se registra hoy)
-    const fiscal = await resolveFiscalPeriod(companyId, new Date());
-
-    // Crear asiento de reversión
+  try {
     const result = await prisma.$transaction(async (tx) => {
-      // Incremento atómico: UPDATE ... RETURNING evita race conditions
-      const [{ last_entry_number: nextNumber }] = await tx.$queryRaw<[{ last_entry_number: number }]>`
-        UPDATE accounting_settings
-        SET last_entry_number = last_entry_number + 1, updated_at = NOW()
-        WHERE company_id = ${companyId}::uuid
-        RETURNING last_entry_number
-      `;
-
-      // Crear asiento de reversión primero
-      const reversalEntry = await tx.journalEntry.create({
-        data: {
-          companyId,
-          number: nextNumber,
-          date: new Date(),
-          description: `Anulación del asiento N° ${entry.number} - ${entry.description}`,
-          status: JournalEntryStatus.POSTED,
-          postDate: new Date(),
-          createdBy: userId,
-          originalEntryId: entryId,
-          fiscalYearId: fiscal?.fiscalYearId,
-          periodId: fiscal?.periodId,
-          lines: {
-            create: entry.lines.map(line => ({
-              accountId: line.accountId,
-              description: line.description,
-              debit: line.credit,
-              credit: line.debit,
-            })),
-          },
-        },
-        select: {
-          id: true,
-          companyId: true,
-          number: true,
-          date: true,
-          description: true,
-          status: true,
-          postDate: true,
-          createdBy: true,
-          createdAt: true,
-          updatedAt: true,
-          lines: {
-            select: {
-              id: true,
-              entryId: true,
-              accountId: true,
-              description: true,
-              debit: true,
-              credit: true,
-              account: {
-                select: {
-                  code: true,
-                  name: true,
-                },
-              },
-            },
-          },
-        },
+      const link = await getEntryDocumentLink(tx, companyId, entryId);
+      if (link) throw new BusinessError(buildDocumentLinkedMessage(link));
+      return reverseJournalEntryTx(tx, {
+        companyId,
+        entryId,
+        date: startOfDayUtc(new Date()),
+        createdBy: userId,
+        source: `manual-reversal:${entryId}`,
       });
-
-      // Marcar el asiento original como anulado
-      await tx.journalEntry.update({
-        where: { id: entryId },
-        data: {
-          status: JournalEntryStatus.REVERSED,
-          reversalEntryId: reversalEntry.id, // Link al asiento de reversión
-          reversedBy: userId,
-          reversedAt: new Date(),
-        },
-      });
-
-      return reversalEntry;
     });
 
-    logger.info('Asiento contable anulado', { data: { entryId, reversalId: result.id, userId } });
+    logger.info('Asiento contable anulado', {
+      data: { entryId, reversalId: result.reversal.id, number: result.reversal.number, userId },
+    });
     revalidateAccountingRoutes(companyId);
 
-    return result;
+    return { success: true, reversalNumber: result.reversal.number };
   } catch (error) {
-    logger.error('Error al anular asiento contable', { data: { error, entryId, userId } });
-    throw error;
+    return toActionResult(error, 'Error al anular asiento contable');
+  }
+}
+
+const ENTRY_STATUS_LABELS: Record<JournalEntryStatus, string> = {
+  DRAFT: 'Borrador',
+  POSTED: 'Registrado',
+  REVERSED: 'Anulado',
+};
+
+/**
+ * Elimina un borrador manual (TSK-760, C6): para que un borrador imposible de
+ * registrar no trabe el cierre de su mes (H9). Solo DRAFT de la empresa activa, sin
+ * documento vinculado y no generado por el sistema. No valida período (su fin es
+ * justamente destrabar un mes). Las líneas caen por cascada.
+ */
+export async function deleteDraftJournalEntry(entryId: string): Promise<ActionResult<{ number: number }>> {
+  const userId = await getCurrentUserId();
+  if (!userId) throw new Error('No autenticado');
+  await checkPermission('accounting.entries', 'delete', { redirect: true });
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  try {
+    const number = await prisma.$transaction(async (tx) => {
+      const entry = await tx.journalEntry.findFirst({
+        where: { id: entryId, companyId },
+        select: { number: true, status: true, createdBy: true },
+      });
+      if (!entry) throw new BusinessError('Asiento no encontrado.');
+      if (entry.status !== JournalEntryStatus.DRAFT) {
+        throw new BusinessError(
+          `Solo se eliminan borradores; el asiento N° ${entry.number} está en estado ` +
+            `${ENTRY_STATUS_LABELS[entry.status]}.`
+        );
+      }
+      const link = await getEntryDocumentLink(tx, companyId, entryId);
+      if (link) throw new BusinessError(buildDocumentLinkedMessage(link, 'delete'));
+      if (entry.createdBy === 'system') {
+        throw new BusinessError(
+          `El borrador N° ${entry.number} lo generó el sistema (por ejemplo, un movimiento bancario): ` +
+            'solo se eliminan borradores manuales.'
+        );
+      }
+      // `status: DRAFT` en el where: si otro lo registró entre la lectura y el borrado, no borra.
+      const deleted = await tx.journalEntry.deleteMany({
+        where: { id: entryId, companyId, status: JournalEntryStatus.DRAFT },
+      });
+      if (deleted.count !== 1) throw new BusinessError(`El asiento N° ${entry.number} ya no está en borrador.`);
+      return entry.number;
+    });
+
+    logger.info('Borrador de asiento eliminado', { data: { entryId, number, userId } });
+    revalidateAccountingRoutes(companyId);
+
+    return { success: true, number };
+  } catch (error) {
+    return toActionResult(error, 'Error al eliminar el borrador');
   }
 }
 

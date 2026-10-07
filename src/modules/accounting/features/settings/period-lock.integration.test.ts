@@ -349,7 +349,8 @@ describe.skipIf(!dbAvailable)('cierre y reapertura de meses (TSK-760, Fase 8)', 
         success: false,
         error:
           'No se cerró 01/2026: el borrador N° 3 no se puede registrar. ' +
-          'El asiento no está balanceado. Debe: $100.00, Haber: $90.00, Diferencia: $10.00',
+          'El asiento no está balanceado. Debe: $100.00, Haber: $90.00, Diferencia: $10.00. ' +
+          'Si es un asiento manual que ya no sirve, podés eliminarlo desde Asientos.',
       });
       expect(checkPermission).toHaveBeenCalledWith('accounting.entries', 'approve', {
         redirect: true,
@@ -398,7 +399,8 @@ describe.skipIf(!dbAvailable)('cierre y reapertura de meses (TSK-760, Fase 8)', 
         success: false,
         error:
           'No se cerró 01/2026: el borrador N° 4 no se puede registrar. ' +
-          'La cuenta T760-RUBRO no es imputable (tiene subcuentas).',
+          'La cuenta T760-RUBRO no es imputable (tiene subcuentas). ' +
+          'Si es un asiento manual que ya no sirve, podés eliminarlo desde Asientos.',
       });
       expect(
         await prisma.journalEntry.count({ where: { companyId: c.companyId, status: 'POSTED' } })

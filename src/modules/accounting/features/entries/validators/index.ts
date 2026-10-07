@@ -7,7 +7,6 @@
  * la numeración los valida el núcleo (`createJournalEntryTx` / `postJournalEntryTx`).
  */
 import { type CreateJournalEntryInput } from '../../../shared/types';
-import moment from 'moment';
 
 import { prisma } from '@/shared/lib/prisma';
 import { BusinessError } from '@/shared/lib/action-result';
@@ -90,58 +89,6 @@ export async function validateAuxiliaries(
 }
 
 /**
- * Valida que la fecha no esté en un período bloqueado.
- * Usa el modelo AccountingPeriod si hay períodos creados; fallback a lockedUntilDate.
- *
- * @deprecated TSK-760: solo la usa `reverseJournalEntry` hasta la Fase 10, que la
- * reemplaza por `reverseJournalEntryTx` (y entonces se borra). Usar `assertPeriodOpen`.
- */
-export async function validatePeriodLock(
-  companyId: string,
-  date: Date,
-  settings?: { lockedUntilDate: Date | null } | null
-) {
-  const entryDate = moment(date);
-
-  const period = await prisma.accountingPeriod.findFirst({
-    where: {
-      fiscalYear: { companyId },
-      year: entryDate.year(),
-      month: entryDate.month() + 1,
-      type: 'MONTHLY',
-    },
-    select: { isClosed: true },
-  });
-
-  if (period) {
-    if (period.isClosed) {
-      throw new Error(
-        `No se puede operar en el período ${entryDate.format('MM/YYYY')}. ` +
-        `El período está cerrado.`
-      );
-    }
-    return;
-  }
-
-  // Fallback: lockedUntilDate (backward compat)
-  const lockSettings = settings ?? await prisma.accountingSettings.findUnique({
-    where: { companyId },
-    select: { lockedUntilDate: true },
-  });
-
-  if (lockSettings?.lockedUntilDate) {
-    const lockDate = moment(lockSettings.lockedUntilDate);
-
-    if (entryDate.isSameOrBefore(lockDate, 'day')) {
-      throw new Error(
-        `No se puede operar en el período ${entryDate.format('MM/YYYY')}. ` +
-        `Los períodos están bloqueados hasta ${lockDate.format('MM/YYYY')}.`
-      );
-    }
-  }
-}
-
-/**
  * Valida que las cuentas se usen según su naturaleza (DEBIT/CREDIT)
  * Emite warnings, no errores (permite flexibilidad contable)
  */
@@ -189,41 +136,4 @@ export async function validateAccountNatures(
   }
 
   return warnings;
-}
-
-/**
- * Resuelve el fiscalYearId y periodId para una fecha dada.
- * Retorna null si no se encuentra ejercicio (no bloquea, el asiento queda sin período).
- *
- * @deprecated TSK-760: solo la usa `reverseJournalEntry` hasta la Fase 10. Usar
- * `assertPeriodOpen`, que además crea el ejercicio y valida el cierre.
- */
-export async function resolveFiscalPeriod(companyId: string, date: Date) {
-  const entryDate = moment(date);
-
-  const fiscalYear = await prisma.fiscalYear.findFirst({
-    where: {
-      companyId,
-      startDate: { lte: date },
-      endDate: { gte: date },
-    },
-    select: { id: true },
-  });
-
-  if (!fiscalYear) return null;
-
-  const period = await prisma.accountingPeriod.findFirst({
-    where: {
-      fiscalYearId: fiscalYear.id,
-      year: entryDate.year(),
-      month: entryDate.month() + 1,
-      type: 'MONTHLY',
-    },
-    select: { id: true },
-  });
-
-  return {
-    fiscalYearId: fiscalYear.id,
-    periodId: period?.id ?? null,
-  };
 }

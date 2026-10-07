@@ -1,7 +1,7 @@
 # TSK-760 — Cierre contable: el cierre anual no funciona y el bloqueo de períodos se saltea
 
 **Fecha de inicio:** 2026-10-06
-**Estado:** Implementación en progreso (Fases 1, 2 y 4 a 9 de 14 completadas; Fase 3 pendiente del diagnóstico de producción)
+**Estado:** Implementación en progreso (Fases 1, 2 y 4 a 10 de 14 completadas; Fase 3 pendiente del diagnóstico de producción)
 
 ---
 
@@ -1099,7 +1099,7 @@ Otras decisiones de esta planificación:
 - **Objetivo:** la anulación copia todo, valida ambas fechas y no deja anular asientos de
   documentos.
 - **Tareas:**
-  - [ ] `UT/entry-document-link.ts`: `getEntryDocumentLink(tx, entryId)` → `{ kind, label,
+  - [x] `UT/entry-document-link.ts`: `getEntryDocumentLink(tx, entryId)` → `{ kind, label,
         number } | null` sobre las 8 tablas de 1.2.5 (incluida `fund_movements.journal_entry_id`
         sin relación) y `fiscal_years.closing/opening_entry_id`. `getEntriesWithoutDocuments`
         (`ACC/features/reports/actions.server.ts:623`) lo reutiliza.
@@ -1108,12 +1108,12 @@ Otras decisiones de esta planificación:
         todas las columnas de línea invertidas (auxiliares, `costCenterId`, moneda) vía
         `createJournalEntryTx`, y pasa el original a REVERSED con `reversalEntryId` en **un solo**
         `UPDATE` (trigger).
-  - [ ] `ACC/features/entries/actions.server.ts` `reverseJournalEntry` → `ActionResult`: si hay
+  - [x] `ACC/features/entries/actions.server.ts` `reverseJournalEntry` → `ActionResult`: si hay
         documento vinculado → `BusinessError` "Este asiento es de la factura A-0001-00000012:
         anulalo desde el comprobante". `getReversalWarning(entryId)` para los `system` sin vínculo
         (D6).
-  - [ ] `_ReverseEntryDialog.tsx`: `useQuery` del aviso + `toast.error(result.error)`.
-  - [ ] **C6 — "Eliminar borrador"** (decisión del líder, 3.7.7): `deleteDraftJournalEntry(entryId)`
+  - [x] `_ReverseEntryDialog.tsx`: `useQuery` del aviso + `toast.error(result.error)`.
+  - [x] **C6 — "Eliminar borrador"** (decisión del líder, 3.7.7): `deleteDraftJournalEntry(entryId)`
         en `ACC/features/entries/actions.server.ts` → `ActionResult`, con
         `checkPermission('accounting.entries', 'delete')` (el permiso existe: `ACTIONS.delete` es
         genérico en `src/shared/lib/permissions/constants.ts` y `accounting.entries` es módulo).
@@ -1128,7 +1128,7 @@ Otras decisiones de esta planificación:
         eliminarlo si es manual. Va en esta fase porque depende de `getEntryDocumentLink`.
         Test en `reverse-entry.integration.test.ts` (o `delete-draft-entry.integration.test.ts`):
         borra DRAFT manual; rechaza POSTED, DRAFT de factura/gasto/fondos y de otra empresa.
-  - [ ] `ACC/features/entries/reverse-entry.integration.test.ts`: copia auxiliares, moneda y
+  - [x] `ACC/features/entries/reverse-entry.integration.test.ts`: copia auxiliares, moneda y
         centro de costo; original en mes cerrado → rechaza; hoy en mes cerrado → rechaza; asiento
         de factura / gasto / fondos / cierre → rechaza nombrando el documento; manual → anula.
 - **Archivos:** `UT/entry-document-link.ts` (nuevo), `UT/journal-entry-tx.ts`,
@@ -3359,7 +3359,98 @@ borrarla hace falta `session_replication_role = 'replica'`. "Empresa de Prueba 0
 - `docs/` y guía in-app quedan para la Fase 13.
 
 ### Fase 10: Reversión desde Asientos (+ "Eliminar borrador", C6)
-**Estado:** Pendiente
+**Estado:** Completada (2026-10-06)
+
+**Archivos creados** (`ACC/` = `src/modules/accounting/`, `UT/` = `ACC/shared/utils/`, `ENT/` = `ACC/features/entries/`):
+- `UT/entry-document-link.ts` (`server-only`, sin `'use server'`): `getEntryDocumentLink(tx, companyId, entryId)`
+  (un `findFirst` con las 7 relaciones inversas + refundición/apertura de FY, y un `fundMovement.findFirst` por la
+  columna sin relación), `entriesWithoutDocumentWhere(tx, companyId)` y `buildDocumentLinkedMessage(link, 'reverse' |
+  'delete')` con los textos de §3.3.7 (contrae "a el" → "al": "pertenece al egreso GTO-00007").
+- `ENT/components/_DeleteDraftEntryDialog.tsx` (68): `AlertDialog` + `useMutation` de `deleteDraftJournalEntry`.
+- `ENT/components/_EntryActionsMenu.tsx` (72): el menú de la fila con sus tres diálogos (Registrar y Eliminar
+  borrador en DRAFT, Anular en POSTED), cada uno con su permiso (`approve` / `delete`).
+- `ENT/reverse-entry.integration.test.ts` (18 tests, prefijo `TSK760-RV-`).
+
+**Archivos modificados:**
+- `ENT/actions.server.ts`:
+  - `reverseJournalEntry({ entryId })` → `ActionResult<{ reversalNumber }>` (§3.6): sin `companyId` del cliente; en
+    una tx, `getEntryDocumentLink` → `BusinessError` con el texto de §3.3.7 si hay documento (D6), y si no
+    `reverseJournalEntryTx` (Fase 7) con fecha `startOfDayUtc(hoy)` (D5): valida el período del original (con
+    `subject` "No se puede anular el asiento N° X (fecha …)") y el de hoy, y copia auxiliares, centro de costo y
+    moneda invertidos (B10). Se fueron el `UPDATE … + 1` propio, el `journalEntry.create` y `validatePeriodLock`.
+  - `getReversalCheck(entryId)` → `ActionResult<{ link, blockedMessage, warning, date }>` (§3.6, más
+    `blockedMessage` para que el cliente no arme el texto): aviso para `createdBy = 'system'` sin vínculo (D6).
+  - `deleteDraftJournalEntry(entryId)` → `ActionResult<{ number }>` (C6): `accounting.entries` `delete`; solo DRAFT
+    de la empresa activa, sin documento y no `'system'`; borra con `deleteMany({ id, companyId, status: DRAFT })`
+    (si otro lo registró entre lectura y borrado, no borra). No valida período (H9).
+- `ENT/validators/index.ts`: **borrados** `validatePeriodLock` y `resolveFiscalPeriod` (deprecados en Fase 4, sin
+  callers) y el `import moment`.
+- `ENT/components/_ReverseEntryDialog.tsx` (105): `useQuery(['accounting', 'reversalCheck', id])` + `useMutation`;
+  bloqueo en rojo con el botón deshabilitado ("Cerrar"), aviso ámbar para sistema sin vínculo, "La anulación se
+  registra con fecha de hoy (DD/MM/YYYY)"; `Button` propio (no se cierra antes de terminar).
+- `ENT/components/_EntriesTable.tsx` (353 → 302): el menú y los diálogos pasan a `_EntryActionsMenu`; de paso, la
+  fila usa `React.Fragment key` (se va el warning de `key` previo, visto en Fases 4 y 9).
+- `ACC/features/reports/actions.server.ts`: `getEntriesWithoutDocuments` usa `entriesWithoutDocumentWhere` (ahora
+  excluye también egresos, fondos, depreciación, revalúo y cierre/apertura). `cost-center-movements.integration.test.ts`:
+  `vi.mock('server-only')` (importa esas actions).
+- `ACC/features/settings/period-closing.ts`: el "No se cerró MM/YYYY: el borrador N° X no se puede registrar. …" de
+  D2 agrega "Si es un asiento manual que ya no sirve, podés eliminarlo desde Asientos." cuando el borrador es
+  manual (no `'system'` y sin documento). `period-lock.integration.test.ts`: los 2 textos exactos actualizados.
+
+**Tests** (TDD: escritos primero, 17/17 en rojo por las actions inexistentes; con la implementación, verdes; luego
++1 de `entriesWithoutDocumentWhere`). "Hoy" fijo en 06/10/2026 15:00Z con `vi.useFakeTimers({ toFake: ['Date'] })`:
+- anular un manual POSTED: reversión N° = original + 1, fecha 2026-10-06T00:00Z, MONTHLY 10/2026, POSTED,
+  `originalEntryId`; original REVERSED con `reversedBy`; líneas invertidas con `supplierId`, `costCenterId`,
+  `currency` USD, `originalAmount` y `exchangeRate`; permiso `approve`.
+- mes del original cerrado → texto exacto con `subject`, sin consumir número, sigue POSTED; mes de hoy cerrado →
+  "No se puede registrar con fecha 06/10/2026: … (mes 10/2026 cerrado)."
+- factura de compra, egreso, movimiento de fondos (columna sin relación) y refundición → textos exactos de §3.3.7,
+  siguen POSTED; borrador → "Solo se pueden anular asientos registrados; el N° X está en estado Borrador."; otra
+  empresa → "Asiento no encontrado."; `'system'` sin vínculo → se anula.
+- `getReversalCheck`: manual (todo `null`, `date` '2026-10-06'), sistema sin vínculo (aviso "no revierte el saldo
+  bancario ni el estado del equipo"), vinculado (`link` + `blockedMessage`).
+- `entriesWithoutDocumentWhere`: de manual + factura + fondos + refundición queda solo el manual.
+- `deleteDraftJournalEntry`: borra el DRAFT manual y sus líneas (permiso `delete`); rechaza POSTED ("Solo se
+  eliminan borradores; el asiento N° X está en estado Registrado."), DRAFT de factura (texto con el comprobante) y de
+  fondos, DRAFT `'system'` sin vínculo, de otra empresa; sin permiso (`checkPermission` rechaza) no borra nada.
+
+**Calidad:** `npm run test` = **63 archivos, 845 tests, verdes**; `check-types` = **219**; `eslint` de los archivos
+tocados sin errores (warnings previos: `error` en `_CreateEntryModal`, dos interfaces sin uso en `reports`). Sin
+`any` ni `console`. Componentes < 200 salvo `_EntriesTable` (302, ya excedido; bajó 51). No quedan empresas de test.
+
+**Prueba en navegador** (Playwright contra :3010, "Empresa de Prueba 01 SA"; script temporal borrado; capturas
+`f10-01` a `f10-08` en el scratchpad). Se **reinició el dev server** antes de probar (cambió la firma de
+`reverseJournalEntry`; en la Fase 9 Turbopack no había recargado un archivo `'use server'`).
+- N° 51 (DRAFT de la compra 0001-97244388): "Eliminar borrador" → toast "Este asiento pertenece a la factura de
+  compra 0001-97244388 y no se puede eliminar: solo se eliminan borradores manuales." Registrar → POSTED. Anular →
+  el diálogo muestra en rojo "Este asiento pertenece a la factura de compra 0001-97244388 y no se puede anular desde
+  Asientos: anulá el comprobante." con "Anular" deshabilitado.
+- N° 50 (manual "Verificación interna TSK-760"): el diálogo dice "La anulación se registra con fecha de hoy
+  (07/10/2026)" → toast "Asiento N° 50 anulado con el asiento N° 70". DB: 50 REVERSED; 70 POSTED, 07/10/2026,
+  con período, Caja D $1 / Caja chica H $1 (invertidas).
+- Nuevo asiento manual 06/10/2026 Caja chica / Caja $1 → "Asiento N° 71 creado en borrador"; "Eliminar borrador" →
+  "Borrador N° 71 eliminado" y la fila desaparece.
+
+**Datos que quedaron en la DB de dev:**
+- **N° 51** `803231de-164c-40ce-b99b-4fe210b68250` (compra 0001-97244388) pasó de DRAFT a **POSTED** (inmutable),
+  para tener un asiento registrado de comprobante (no había ninguno en dev).
+- **N° 50** `dd45a66d-5e64-4a0e-8b94-fdecba6e4bde` **REVERSED**; **N° 70** (reversión, POSTED, 07/10/2026).
+- N° 71 creado y eliminado: queda como hueco. `last_entry_number` = 71. Ningún período cerrado.
+
+**Desvíos y notas:**
+- **Fecha de la reversión = hoy en UTC (D5):** a las 22:40 AR el diálogo y el asiento dicen 07/10/2026 (en UTC ya es
+  el día siguiente). Es lo que pide el diseño y el diálogo lo muestra antes de confirmar; si molesta, la alternativa
+  es mandar el día local desde el cliente (los formularios de Fase 6 y 7 ya usan mediodía local).
+- El aviso de D6 sale para todo `'system'` sin vínculo, lo que incluye IVA e inflación (también `'system'`); el texto
+  es genérico ("por ejemplo, un movimiento bancario, una transferencia o la baja de un equipo"). Recurrentes y
+  diferencia de cambio (`userId`) no lo muestran.
+- Etiqueta de egresos: "el egreso GTO-…" (el diseño decía "el gasto"): así se llaman en el sidebar y en los toasts.
+- `getReversalCheck` agrega `blockedMessage`; `deleteDraftJournalEntry` devuelve `{ number }` (para el toast).
+- "Eliminar borrador" también rechaza los DRAFT `'system'` sin vínculo (bancos, transferencias, baja): borrarlos
+  dejaría el movimiento sin asiento. Para destrabar un mes con uno de esos hay que reabrir/corregir el origen.
+- `_EntryActionsMenu` (nuevo) en vez de crecer `_EntriesTable` 3-4 líneas: el menú y los diálogos salen de la
+  tabla (−51 líneas).
+- `docs/` y la guía in-app quedan para la Fase 13.
 
 ### Fase 11: Borrado de código muerto
 **Estado:** Pendiente

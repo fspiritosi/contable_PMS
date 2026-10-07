@@ -18,7 +18,9 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { prisma } from '@/shared/lib/prisma';
 
-// Frontera aislada: sesión, permisos y empresa activa.
+// Frontera aislada: sesión, permisos y empresa activa. `server-only`: las actions de
+// reportes importan `entry-document-link` (TSK-760, Fase 10).
+vi.mock('server-only', () => ({}));
 vi.mock('@/shared/lib/current-user', () => ({ getCurrentUserId: vi.fn() }));
 vi.mock('@/shared/lib/company', () => ({ getActiveCompanyId: vi.fn() }));
 vi.mock('@/shared/lib/permissions', () => ({

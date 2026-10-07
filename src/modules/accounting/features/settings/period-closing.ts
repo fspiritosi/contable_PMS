@@ -15,6 +15,7 @@ import 'server-only';
 
 import { BusinessError } from '@/shared/lib/action-result';
 
+import { getEntryDocumentLink } from '../../shared/utils/entry-document-link';
 import { postJournalEntryTx } from '../../shared/utils/journal-entry-tx';
 import type { IsoDay, Tx, YearMonth } from '../../shared/utils/journal-entry-types';
 import {
@@ -101,8 +102,15 @@ async function draftsOfMonthTx(tx: Tx, companyId: string, ym: YearMonth) {
       date: { gte: startOfMonthUtc(ym), lte: endOfMonthUtc(ym) },
     },
     orderBy: { number: 'asc' },
-    select: { id: true, number: true },
+    select: { id: true, number: true, createdBy: true },
   });
+}
+
+/** Sugerencia para un borrador manual trabado (C6): se puede eliminar desde Asientos. */
+async function deleteHintTx(tx: Tx, companyId: string, entry: { id: string; createdBy: string }) {
+  if (entry.createdBy === 'system') return '';
+  if (await getEntryDocumentLink(tx, companyId, entry.id)) return '';
+  return 'Si es un asiento manual que ya no sirve, podés eliminarlo desde Asientos.';
 }
 
 export interface CloseMonthTxInput extends YearMonth {
@@ -141,9 +149,9 @@ export async function closeMonthTx(
       await postJournalEntryTx(tx, { companyId, entryId: entry.id, userId });
     } catch (error) {
       if (!(error instanceof BusinessError)) throw error;
-      throw new BusinessError(
-        `No se cerró ${formatMonth(ym)}: el borrador N° ${entry.number} no se puede registrar. ${error.message}`
-      );
+      const cause = `No se cerró ${formatMonth(ym)}: el borrador N° ${entry.number} no se puede registrar. ${error.message}`;
+      const hint = await deleteHintTx(tx, companyId, entry);
+      throw new BusinessError(hint ? `${cause}${cause.endsWith('.') ? '' : '.'} ${hint}` : cause);
     }
   }
 
