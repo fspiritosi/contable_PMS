@@ -32,6 +32,8 @@ export type ExpenseFormInput = z.infer<typeof expenseFormSchema>;
 export const expenseCategoryFormSchema = z.object({
   name: z.string().min(1, 'El nombre es requerido'),
   description: z.string().optional().nullable(),
+  /** TSK-757: cuenta contable propia. undefined = no tocar (update); null = usar la por defecto. */
+  accountId: z.string().uuid('Cuenta contable inválida').nullable().optional(),
 });
 
 export type ExpenseCategoryFormInput = z.infer<typeof expenseCategoryFormSchema>;

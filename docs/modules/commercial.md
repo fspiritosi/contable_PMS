@@ -682,10 +682,10 @@ gastos, `budgetWarning?`.
 
 | Efecto | Condición | Detalle |
 |--------|-----------|---------|
-| Pre-validación | Siempre, antes de `$transaction` | `assertExpenseEntryAccounts` (privado en `expenses/actions.server.ts`): `BusinessError` si falta "Cuenta de Gastos Operativos" o "Cuentas por Pagar" en Ajustes, o si alguna no es imputable (TSK-728) |
-| Verificación presupuestaria | Si hay presupuesto para `expensesAccountId` | `checkBudgetForExpense`; **no bloqueante**: `budgetWarning { message, executedPercent }` en el resultado, `toast.warning` en tabla y detalle |
+| Pre-validación | Siempre, antes de `$transaction` | `assertExpenseEntryAccounts` (privado en `expenses/actions.server.ts`): exige "Cuentas por Pagar" siempre y "Cuenta de egresos por defecto" solo si la categoría no tiene cuenta (`requiredExpenseSettingsFields`); resuelve el Debe con `resolveExpenseDebitAccount` y valida que la cuenta resuelta y Pagar sean imputables. Cuenta de la categoría no imputable → `BusinessError` que nombra categoría y cuenta, **sin** caer a la por defecto (TSK-728, TSK-757) |
+| Verificación presupuestaria | Si hay presupuesto para la **cuenta resuelta del Debe** | `checkBudgetForExpense(debitAccountId, …)`; **no bloqueante**: `budgetWarning { message, executedPercent }` en el resultado, `toast.warning` en tabla y detalle |
 | Expense.status | Siempre | DRAFT → CONFIRMED |
-| Asiento Contable | Siempre | Dr: Gastos Operativos → Cr: Ctas por Pagar. Si el asiento falla, la confirmación se revierte (TSK-728) |
+| Asiento Contable | Siempre | Dr: cuenta de la categoría (o "Cuenta de egresos por defecto") → Cr: Ctas por Pagar. Si el asiento falla, la confirmación se revierte (TSK-728) |
 
 ---
 
@@ -787,11 +787,12 @@ Cada documento comercial confirmado genera un asiento contable automático:
 | NC Compra | Ctas por Pagar | Cuenta de egresos del ítem (o Compras por defecto) + IVA Crédito |
 | Recibo | Caja/Banco + Ret. Sufridas | Ctas por Cobrar |
 | Orden de Pago | Ctas por Pagar | Caja/Banco + Ret. Emitidas |
-| Gasto | Gastos Operativos | Ctas por Pagar |
+| Gasto | Cuenta de la categoría (o Egresos por defecto) | Ctas por Pagar |
 | Mov. Bancario Manual | Según tipo (DEPOSIT/WITHDRAWAL) | Contraparte seleccionada |
 
 **Mapeos de cuentas** (configurados en AccountingSettings):
 - `salesAccount` / `purchasesAccount`: Cuenta de ventas / compras **por defecto** (solo para líneas cuyo ítem no tiene cuenta propia; ver abajo)
+- `expensesAccount`: Cuenta de egresos **por defecto** (solo para egresos cuya categoría no tiene cuenta propia; ver "Cuenta del egreso por categoría (TSK-757)" abajo)
 - `receivablesAccount`: Cuentas por Cobrar
 - `payablesAccount`: Cuentas por Pagar
 - `defaultCashAccount`: Cuenta de Caja
@@ -894,6 +895,49 @@ respaldo. Regla: `ítem → por defecto → error que nombra la línea`.
   (**Imputación contable**) o en masa (**Editar en Lote**, `defaultIncomeAccountId` /
   `defaultExpenseAccountId`).
 
+### Cuenta del egreso por categoría (TSK-757)
+
+La cuenta del Debe de un egreso la define su **categoría** (`ExpenseCategory.accountId`, opcional);
+la de Ajustes es un respaldo. Regla: `categoría → "Cuenta de egresos por defecto" → error`.
+
+- Helper puro `modules/commercial/shared/expense-accounts.ts` (sin Prisma, tests P1–P14):
+  `resolveExpenseDebitAccount` (devuelve cuenta y origen `category` / `default`, o `null`),
+  `requiredExpenseSettingsFields` (Pagar siempre; `expensesAccountId` solo sin cuenta de
+  categoría), `buildMissingExpenseAccountsMessage` (ofrece las dos salidas: asignar cuenta a la
+  categoría en `EXPENSE_CATEGORIES_PATH` o configurar la por defecto),
+  `buildCategoryAccountNotImputableMessage`, `describeExpenseDebitSource` y
+  `buildExpenseDebitAccountView` (dato "Cuenta contable" del detalle).
+- **`buildExpenseDebitLine`** arma la línea de Debe del asiento. Es el punto de extensión de
+  **TSK-738**: sumará `costCenterId` a `ExpenseDebitLineInput` sin cambiar a los llamadores.
+- La pre-validación (`confirmExpense`) y el asiento (`createJournalEntryForExpense`, defensa en
+  profundidad) usan la misma resolución. **Sin fallback silencioso**: si la cuenta de la categoría
+  está inactiva o no es imputable, se bloquea (criterio de TSK-717), aunque haya por defecto.
+- La cuenta **no se guarda en `Expense`**: se resuelve al confirmar. Los egresos ya confirmados no
+  cambian (sin backfill); el detalle de un confirmado muestra la cuenta del Debe **del asiento**
+  ("del asiento N° …"), no la de la categoría actual. Borrar una cuenta usada por una categoría
+  deja `accountId` en `NULL` (`onDelete: SetNull`): la categoría vuelve a "por defecto".
+- **Presupuestos**: el aviso compara contra la cuenta resuelta. Un presupuesto armado sobre la
+  cuenta por defecto deja de ver los egresos de categorías con cuenta propia (es lo correcto
+  contablemente; está avisado en la guía y en la presentación).
+- **ABM de categorías** (modal "Categorías de egreso", abierto desde el botón **Categorías** de la
+  barra del listado — `_ExpensesToolbarActions` — y desde "Gestionar" en el alta):
+  `_CategoryManagementModal` (contenedor), `_CategoryCreateForm`, `_CategoryRow` (vista/edición
+  inline), `_CategoryAccountField` (`AccountCombobox` con
+  `clearLabel` "Sin asignar (usar la cuenta de egresos por defecto)") y el hook
+  `hooks/useExpenseCategoryMutations`. El combo lee `getExpenseCategoryAccounts(includeIds?)`:
+  cuentas `EXPENSE` imputables + la guardada (patrón `includeIds` de TSK-724c). Las mutaciones
+  (`createExpenseCategory`, `updateExpenseCategory`, `toggleExpenseCategory`) devuelven
+  `ActionResult` (nombre duplicado, categoría inexistente, cuenta de otra empresa); en
+  `updateExpenseCategory`, `accountId` `undefined` = no tocar, `null` = volver a por defecto.
+  Permisos: `commercial.expenses` (`create` / `update`), sin permiso nuevo.
+- **Visibilidad**: `_ExpenseAccountHint` (bajo el combo de categoría del alta: "Se imputa a: …",
+  o la cuenta por defecto con `getDefaultExpenseAccount()`, o aviso ámbar si no hay ninguna) y
+  `_ExpenseDebitAccountInfo` (detalle: "de la categoría", "por defecto", "del asiento N° …" o
+  "Sin cuenta: configurala antes de confirmar"). `getExpenseById` devuelve `debitAccount` y
+  `journalEntryNumber`.
+- **Fuera de alcance**: el egreso sigue siendo un importe único, sin IVA ni percepciones
+  (comprobantes con IVA discriminado → factura de compra). Solo cuentas `EXPENSE` en la categoría.
+
 ### Reparto por Centro de Costo (TSK-583)
 
 Cada línea de factura (compra o venta) puede repartirse entre varios centros de costo por
@@ -995,8 +1039,9 @@ Tanto Recibos como Órdenes de Pago soportan retenciones impositivas:
   línea además de Cobrar/Pagar (ver [Cuentas de medios de pago](#cuentas-de-medios-de-pago-tsk-728))
 
 ### Gasto (Egreso)
-- Al confirmar: "Cuenta de Gastos Operativos" y "Cuentas por Pagar" configuradas e imputables
-  (TSK-728); el presupuesto solo avisa
+- Al confirmar: la cuenta del Debe resuelta (categoría → "Cuenta de egresos por defecto") y
+  "Cuentas por Pagar", configuradas e imputables (TSK-728, TSK-757); la cuenta de la categoría no
+  imputable bloquea sin caer a la por defecto; el presupuesto solo avisa
 
 ### Stock
 - Ajustes EXIT/LOSS: verificar stock suficiente
@@ -1038,7 +1083,7 @@ Tanto Recibos como Órdenes de Pago soportan retenciones impositivas:
 | Facturas de Venta | `modules/commercial/features/sales/features/invoices/list/actions.server.ts` |
 | Recibos de Cobro | `modules/commercial/features/treasury/features/receipts/actions.server.ts` (`confirmReceipt`, `getReceiptEntryPreview`) |
 | Órdenes de Pago | `modules/commercial/features/treasury/features/payment-orders/actions.server.ts` (`confirmPaymentOrder`, `getPaymentOrderEntryPreview`) |
-| Gastos (Egresos) | `modules/commercial/features/expenses/actions.server.ts` (`confirmExpense`, `assertExpenseEntryAccounts`) |
+| Gastos (Egresos) | `modules/commercial/features/expenses/actions.server.ts` (`confirmExpense`, `assertExpenseEntryAccounts`, ABM de categorías con `ActionResult`, `getExpenseCategoryAccounts`, `getDefaultExpenseAccount`) |
 | Movimientos Bancarios | `modules/commercial/features/treasury/features/bank-movements/actions.server.ts` |
 | Socios | `modules/commercial/features/treasury/features/partners/features/list/actions.server.ts` (`getPartnerContributionAccounts`, `deletePartner`) |
 | Movimientos de Fondos | `modules/commercial/features/treasury/features/fund-movements/list/actions.server.ts` (`confirmFundMovement`, `resolvePartnerCapitalAccount`, `getFundMovementCatalogs`) |
@@ -1071,6 +1116,7 @@ Tanto Recibos como Órdenes de Pago soportan retenciones impositivas:
 | `modules/commercial/shared/credit-note-compensation.ts` | Auto-compensación FIFO de NC contra facturas abiertas |
 | `modules/commercial/shared/line-accounts.ts` | Resolución de la cuenta contable de cada línea (ítem → por defecto → error que nombra la línea) y sus mensajes (TSK-721) |
 | `modules/commercial/features/products/shared/imputation-filter.ts` | `missingImputations`, `buildImputationWhere`: badges y facet «Imputación» de ítems sin cuenta (TSK-721) |
+| `modules/commercial/shared/expense-accounts.ts` | Cuenta del Debe del egreso (categoría → por defecto → error), sus mensajes y `buildExpenseDebitLine` (punto de extensión de TSK-738) (TSK-757) |
 | `modules/commercial/shared/settings-accounts.ts` | Cuentas de Ajustes faltantes y su mensaje con el label literal (TSK-728) |
 | `modules/commercial/shared/payment-accounts.ts` | Resolución de la cuenta de cada medio de pago (propia → por defecto → faltante / omitido) y sus mensajes (TSK-728) |
 | `modules/commercial/features/treasury/shared/entry-preflight.ts` | Pre-validación + vista previa del asiento de recibos y OP (`EntryPreflight`), `server-only` (TSK-728) |

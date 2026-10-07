@@ -448,7 +448,7 @@ Reglas:
 
 | Modelo | Descripcion |
 |--------|-------------|
-| `ExpenseCategory` | Categoria de gasto |
+| `ExpenseCategory` | Categoria de gasto. `accountId?` (TSK-757): cuenta contable propia (FK `Account`, relacion `ExpenseCategoryAccount`, `onDelete: SetNull`, indice `[accountId]`; inversa `Account.expenseCategories`). Si es `null`, el asiento del egreso usa `AccountingSettings.expensesAccountId` ("Cuenta de egresos por defecto"). Migracion aditiva `20261006214031_tsk_757_expense_category_account`, sin backfill |
 | `Expense` | Gasto (description, amount, date, status, supplierId?) |
 | `ExpenseAttachment` | Adjunto de gasto |
 

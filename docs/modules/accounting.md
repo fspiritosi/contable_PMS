@@ -256,7 +256,7 @@ Cuentas contables asignadas a funciones del sistema:
 | `defaultCashAccountId` | Caja **por defecto**: respaldo cuando la caja de un pago no tiene `CashRegister.accountId` (TSK-728) |
 | `defaultBankAccountId` | Banco **por defecto**: respaldo cuando la cuenta bancaria de un pago no tiene `BankAccount.accountId` (TSK-728) |
 | `bankChargesAccountId` | Gastos bancarios **por defecto** (TSK-718): preseleccion de la cuenta de cada concepto nuevo de un movimiento de fondos `BANK_CHARGES`. Es solo UI: el asiento usa `FundMovementLine.accountId`, no esta cuenta |
-| `expensesAccountId` | Gastos Operativos (requerida por el asiento del gasto, TSK-728) |
+| `expensesAccountId` | Egresos **por defecto** (TSK-757): Debe del asiento de los egresos cuya `ExpenseCategory` no tiene `accountId`. Requerida mientras alguna categoria usada no tenga cuenta (antes "Gastos Operativos", obligatoria siempre, TSK-728) |
 | `resultAccountId` | Resultado del Ejercicio |
 
 **Labels**: la fuente unica es `src/shared/lib/accounts/settings-account-labels.ts`
@@ -268,8 +268,9 @@ Configuración»); un test de `settings/validators.test.ts` verifica que cada `*
 schema tenga label (TSK-728). Ejemplos: "Cuenta de ventas por defecto", "Cuenta de compras por
 defecto" (seccion Cuentas de Resultado), "Cuentas por Cobrar", "Cuentas por Pagar", "Caja por
 Defecto", "Banco por Defecto", "Gastos bancarios por defecto" (seccion Cuentas de Tesoreria),
-"Cuenta de Gastos Operativos", "Ret. IVA Sufrida". Las ayudas dicen cuando se usa cada una; la de
-compras avisa que tiene que estar asignada si se cargan compras sin item.
+"Cuenta de egresos por defecto", "Ret. IVA Sufrida". Las ayudas dicen cuando se usa cada una; la de
+compras avisa que tiene que estar asignada si se cargan compras sin item, y la de egresos, si alguna
+categoria de egreso no tiene cuenta propia (TSK-757).
 
 ### Resolucion de la cuenta de linea (TSK-721)
 
@@ -461,6 +462,10 @@ DRAFT ──(activateBudget)──> ACTIVE ──(closeBudget)──> CLOSED
 - **Coloreo de desvios**: Verde (< 80%), amarillo (80-100%), rojo (> 100%). Para REVENUE la logica se invierte (mas ejecucion es favorable).
 - **Revisiones formales**: Al revisar un presupuesto ACTIVE se guarda snapshot de montos anteriores y nuevos con motivo. Historial visible en el detalle.
 - **Cuentas hoja**: Solo se asignan presupuestos a cuentas sin hijos (`children: { none: {} }`).
+- **Egresos** (TSK-757): `checkBudgetForExpense` (`integrations/commercial`) avisa contra la cuenta
+  **resuelta** del Debe del egreso (la de su categoria o, si no tiene, la de egresos por defecto),
+  y la ejecucion se calcula por asientos. Al asignarle cuenta a una categoria, sus egresos nuevos
+  dejan de consumir el presupuesto de la cuenta por defecto y pasan a la de la categoria.
 
 ### Permisos
 

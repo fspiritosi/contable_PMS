@@ -21,6 +21,7 @@ import { getColumns, type ExpenseListItem } from '../columns';
 import { EXPENSE_STATUS_LABELS } from '../../validators';
 import { _CreateExpenseModal } from './_CreateExpenseModal';
 import { _ExpenseDetailModal } from './_ExpenseDetailModal';
+import { _ExpensesToolbarActions } from './_ExpensesToolbarActions';
 
 interface FacetCounts {
   status: Record<string, number>;
@@ -208,7 +209,7 @@ export function _ExpensesTable({ data, totalRows, searchParams, facetCounts, cat
         facetedFilters={facetedFilters}
         tableId="commercial-expenses"
         showFilterToggle
-        toolbarActions={canCreate ? <_CreateExpenseModal onSuccess={() => router.refresh()} /> : undefined}
+        toolbarActions={<_ExpensesToolbarActions canCreate={canCreate} onCreated={() => router.refresh()} />}
       />
 
       {/* Diálogo de Confirmación */}

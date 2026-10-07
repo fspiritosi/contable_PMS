@@ -33,6 +33,7 @@ import { cn } from '@/shared/lib/utils';
 import { getExpenseById, confirmExpense, cancelExpense } from '../../actions.server';
 import { EXPENSE_STATUS_LABELS } from '../../validators';
 import { _ExpenseAttachments } from '../../components/_ExpenseAttachments';
+import { _ExpenseDebitAccountInfo } from './_ExpenseDebitAccountInfo';
 import { _LinkToProjectionModal } from '@/modules/commercial/shared/components/_LinkToProjectionModal';
 
 type ExpenseDetail = Awaited<ReturnType<typeof getExpenseById>>;
@@ -183,6 +184,7 @@ export function _ExpenseDetailModal({ expenseId, open, onOpenChange, onSuccess }
                       <p className="text-sm text-muted-foreground">Categoría</p>
                       <p className="font-medium">{expense.category.name}</p>
                     </div>
+                    <_ExpenseDebitAccountInfo debitAccount={expense.debitAccount} entryNumber={expense.journalEntryNumber} />
                     <div>
                       <p className="text-sm text-muted-foreground">Fecha</p>
                       <p className="font-medium">{moment(expense.date).format('DD/MM/YYYY')}</p>

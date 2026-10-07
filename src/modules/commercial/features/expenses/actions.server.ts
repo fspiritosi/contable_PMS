@@ -8,25 +8,39 @@ import { revalidatePath } from 'next/cache';
 import { Prisma } from '@/generated/prisma/client';
 import type { DataTableSearchParams } from '@/shared/components/common/DataTable';
 import { parseSearchParams, stateToPrismaParams, buildFiltersWhere, buildDateRangeFiltersWhere } from '@/shared/components/common/DataTable/helpers';
-import type { ExpenseFormInput, ExpenseCategoryFormInput } from './validators';
+import {
+  expenseCategoryFormSchema,
+  type ExpenseFormInput,
+  type ExpenseCategoryFormInput,
+} from './validators';
 import {
   createJournalEntryForExpense,
   checkBudgetForExpense,
 } from '@/modules/accounting/features/integrations/commercial';
 import moment from 'moment';
 import { checkPermission } from '@/shared/lib/permissions';
-import { BusinessError, toActionResult, type ActionResult } from '@/shared/lib/action-result';
+import {
+  BusinessError,
+  toActionResult,
+  type ActionFailure,
+  type ActionResult,
+} from '@/shared/lib/action-result';
 import { buildImputableAccountsWhere } from '@/shared/lib/accounts/imputable-accounts';
 import {
   ACCOUNTING_SETTINGS_PATH,
   settingsAccountLabel,
-  type AccountingSettingsAccountField,
 } from '@/shared/lib/accounts/settings-account-labels';
 import { formatAccountLabel } from '@/modules/commercial/shared/line-accounts';
+import { findMissingSettingsAccounts } from '@/modules/commercial/shared/settings-accounts';
 import {
-  buildMissingSettingsAccountsMessage,
-  findMissingSettingsAccounts,
-} from '@/modules/commercial/shared/settings-accounts';
+  buildCategoryAccountNotImputableMessage,
+  buildExpenseDebitAccountView,
+  buildMissingExpenseAccountsMessage,
+  requiredExpenseSettingsFields,
+  resolveExpenseDebitAccount,
+  type ExpenseDebitAccountView,
+  type ExpenseEntryField,
+} from '@/modules/commercial/shared/expense-accounts';
 
 /**
  * Normaliza una fecha @db.Date (medianoche UTC) a mediodía UTC
@@ -44,6 +58,15 @@ function normalizeDbDateNullable(date: Date | null): Date | null {
 // CATEGORÍAS DE GASTOS
 // ============================================
 
+/** Cuenta contable de la categoría (TSK-757), reutilizado por las lecturas. */
+const CATEGORY_ACCOUNT_SELECT = {
+  id: true,
+  code: true,
+  name: true,
+} as const satisfies Prisma.AccountSelect;
+
+const DUPLICATE_CATEGORY_MESSAGE = 'Ya existe una categoría con ese nombre';
+
 /**
  * Obtiene las categorías de gastos activas de la empresa
  */
@@ -59,6 +82,7 @@ export async function getExpenseCategories() {
       name: true,
       description: true,
       isActive: true,
+      account: { select: CATEGORY_ACCOUNT_SELECT },
     },
     orderBy: { name: 'asc' },
   });
@@ -79,6 +103,8 @@ export async function getAllExpenseCategories() {
       name: true,
       description: true,
       isActive: true,
+      accountId: true,
+      account: { select: CATEGORY_ACCOUNT_SELECT },
       _count: { select: { expenses: true } },
     },
     orderBy: { name: 'asc' },
@@ -86,9 +112,82 @@ export async function getAllExpenseCategories() {
 }
 
 /**
- * Crea una nueva categoría de gastos
+ * Cuentas ofrecidas en el combo de la categoría (TSK-757): imputables de tipo
+ * EXPENSE (D2) + las ya guardadas aunque hoy no sean imputables (`includeIds`,
+ * patrón `getVehicleTypeAssetAccounts`). El `where` imputable ya tiene su propio
+ * `OR` por `disabledFrom`, por eso se envuelve en otro `OR` y no se mezcla.
  */
-export async function createExpenseCategory(data: ExpenseCategoryFormInput) {
+export async function getExpenseCategoryAccounts(
+  includeIds?: string[]
+): Promise<{ id: string; code: string; name: string }[]> {
+  await checkPermission('commercial.expenses', 'view', { redirect: true });
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  const imputable = buildImputableAccountsWhere({ companyId, types: ['EXPENSE'] });
+  return prisma.account.findMany({
+    where:
+      includeIds && includeIds.length > 0
+        ? { OR: [imputable, { companyId, id: { in: includeIds } }] }
+        : imputable,
+    select: CATEGORY_ACCOUNT_SELECT,
+    orderBy: { code: 'asc' },
+  });
+}
+
+/**
+ * La cuenta elegida es de la empresa activa (TSK-757). No exige que sea
+ * imputable: el combo ya filtra y una cuenta que dejó de serlo se conserva a
+ * propósito (`includeIds`); quien la rechaza es la confirmación del egreso.
+ */
+async function assertCategoryAccountBelongsToCompany(
+  accountId: string,
+  companyId: string
+): Promise<void> {
+  const account = await prisma.account.findFirst({
+    where: { id: accountId, companyId },
+    select: { id: true },
+  });
+  if (!account) {
+    throw new BusinessError('La cuenta contable seleccionada no pertenece a la empresa');
+  }
+}
+
+/** Primer mensaje de Zod como BusinessError (las actions no confían en el cliente). */
+function parseCategoryInput(data: ExpenseCategoryFormInput): ExpenseCategoryFormInput {
+  const parsed = expenseCategoryFormSchema.safeParse(data);
+  if (!parsed.success) {
+    throw new BusinessError(parsed.error.issues[0]?.message ?? 'Datos de categoría inválidos');
+  }
+  return parsed.data;
+}
+
+/**
+ * Traduce el error de una mutación de categorías: nombre duplicado (P2002) es de
+ * negocio; las `BusinessError` se loguean como `warn`; el resto lo loguea
+ * `toActionResult` como `error` y lo reemplaza por el mensaje genérico.
+ */
+function toCategoryActionFailure(
+  error: unknown,
+  contexto: string,
+  logData: Record<string, unknown> = {}
+): ActionFailure {
+  const normalized =
+    error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002'
+      ? new BusinessError(DUPLICATE_CATEGORY_MESSAGE)
+      : error;
+  if (normalized instanceof BusinessError) {
+    logger.warn(contexto, { data: { ...logData, reason: normalized.message } });
+  }
+  return toActionResult(normalized, contexto);
+}
+
+/**
+ * Crea una nueva categoría de gastos, con su cuenta contable opcional (TSK-757).
+ */
+export async function createExpenseCategory(
+  data: ExpenseCategoryFormInput
+): Promise<ActionResult<{ id: string }>> {
   await checkPermission('commercial.expenses', 'create', { redirect: true });
   const userId = await getCurrentUserId();
   if (!userId) throw new Error('No autenticado');
@@ -97,31 +196,38 @@ export async function createExpenseCategory(data: ExpenseCategoryFormInput) {
   if (!companyId) throw new Error('No hay empresa activa');
 
   try {
+    const input = parseCategoryInput(data);
+    if (input.accountId) await assertCategoryAccountBelongsToCompany(input.accountId, companyId);
+
     const category = await prisma.expenseCategory.create({
       data: {
         companyId,
-        name: data.name,
-        description: data.description || null,
+        name: input.name,
+        description: input.description || null,
+        accountId: input.accountId ?? null,
       },
+      select: { id: true, name: true },
     });
 
-    logger.info('Categoría de gasto creada', { data: { categoryId: category.id, name: category.name } });
+    logger.info('Categoría de gasto creada', {
+      data: { categoryId: category.id, name: category.name, accountId: input.accountId ?? null },
+    });
     revalidatePath('/dashboard/commercial/expenses');
 
     return { success: true, id: category.id };
   } catch (error) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-      throw new Error('Ya existe una categoría con ese nombre');
-    }
-    logger.error('Error al crear categoría de gasto', { data: { error } });
-    throw new Error('Error al crear categoría de gasto');
+    return toCategoryActionFailure(error, 'Error al crear categoría de gasto', { name: data.name });
   }
 }
 
 /**
- * Actualiza una categoría de gastos
+ * Actualiza una categoría de gastos. `accountId`: `undefined` = no tocar;
+ * `null` = volver a la cuenta de egresos por defecto; string = cuenta propia.
  */
-export async function updateExpenseCategory(id: string, data: ExpenseCategoryFormInput) {
+export async function updateExpenseCategory(
+  id: string,
+  data: ExpenseCategoryFormInput
+): Promise<ActionResult> {
   await checkPermission('commercial.expenses', 'update', { redirect: true });
   const userId = await getCurrentUserId();
   if (!userId) throw new Error('No autenticado');
@@ -130,34 +236,37 @@ export async function updateExpenseCategory(id: string, data: ExpenseCategoryFor
   if (!companyId) throw new Error('No hay empresa activa');
 
   try {
+    const input = parseCategoryInput(data);
+    if (input.accountId) await assertCategoryAccountBelongsToCompany(input.accountId, companyId);
+
     const category = await prisma.expenseCategory.updateMany({
       where: { id, companyId },
       data: {
-        name: data.name,
-        description: data.description || null,
+        name: input.name,
+        description: input.description || null,
+        ...(input.accountId !== undefined && { accountId: input.accountId }),
       },
     });
 
-    if (category.count === 0) throw new Error('Categoría no encontrada');
+    if (category.count === 0) throw new BusinessError('Categoría no encontrada');
 
-    logger.info('Categoría de gasto actualizada', { data: { categoryId: id } });
+    logger.info('Categoría de gasto actualizada', {
+      data: { categoryId: id, accountId: input.accountId },
+    });
     revalidatePath('/dashboard/commercial/expenses');
 
     return { success: true };
   } catch (error) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-      throw new Error('Ya existe una categoría con ese nombre');
-    }
-    logger.error('Error al actualizar categoría de gasto', { data: { error, id } });
-    if (error instanceof Error) throw error;
-    throw new Error('Error al actualizar categoría de gasto');
+    return toCategoryActionFailure(error, 'Error al actualizar categoría de gasto', { id });
   }
 }
 
 /**
- * Activa/desactiva una categoría de gastos
+ * Activa/desactiva una categoría de gastos. Devuelve el estado nuevo.
  */
-export async function toggleExpenseCategory(id: string) {
+export async function toggleExpenseCategory(
+  id: string
+): Promise<ActionResult<{ isActive: boolean }>> {
   await checkPermission('commercial.expenses', 'update', { redirect: true });
   const userId = await getCurrentUserId();
   if (!userId) throw new Error('No autenticado');
@@ -171,21 +280,20 @@ export async function toggleExpenseCategory(id: string) {
       select: { isActive: true },
     });
 
-    if (!category) throw new Error('Categoría no encontrada');
+    if (!category) throw new BusinessError('Categoría no encontrada');
 
+    const isActive = !category.isActive;
     await prisma.expenseCategory.updateMany({
       where: { id, companyId },
-      data: { isActive: !category.isActive },
+      data: { isActive },
     });
 
-    logger.info('Categoría de gasto toggled', { data: { categoryId: id, isActive: !category.isActive } });
+    logger.info('Categoría de gasto toggled', { data: { categoryId: id, isActive } });
     revalidatePath('/dashboard/commercial/expenses');
 
-    return { success: true };
+    return { success: true, isActive };
   } catch (error) {
-    logger.error('Error al toggle categoría de gasto', { data: { error, id } });
-    if (error instanceof Error) throw error;
-    throw new Error('Error al cambiar estado de categoría');
+    return toCategoryActionFailure(error, 'Error al cambiar estado de categoría', { id });
   }
 }
 
@@ -307,6 +415,52 @@ export async function getExpensesPaginated(searchParams: DataTableSearchParams) 
   }
 }
 
+/** Cuenta de egresos por defecto de Ajustes (`code`/`name`), o null si no está configurada. */
+async function findDefaultExpenseAccount(
+  companyId: string
+): Promise<{ code: string; name: string } | null> {
+  const settings = await prisma.accountingSettings.findUnique({
+    where: { companyId },
+    select: { expensesAccount: { select: { code: true, name: true } } },
+  });
+  return settings?.expensesAccount ?? null;
+}
+
+/**
+ * Cuenta de egresos por defecto, para el aviso "Se imputa a…" del alta cuando la
+ * categoría elegida no tiene cuenta propia (TSK-757, D6).
+ */
+export async function getDefaultExpenseAccount(): Promise<{ code: string; name: string } | null> {
+  await checkPermission('commercial.expenses', 'view', { redirect: true });
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+  return findDefaultExpenseAccount(companyId);
+}
+
+/**
+ * "Cuenta contable" del detalle (TSK-757, D6): con asiento, la de su Debe; en
+ * borrador, la prevista (categoría → por defecto → 'missing'); sin asiento y
+ * fuera de borrador (p. ej. anulado), null. Solo consulta Ajustes si hace falta.
+ */
+async function resolveExpenseDebitAccountView(
+  companyId: string,
+  status: string,
+  accounts: {
+    entryAccount: { code: string; name: string } | null;
+    categoryAccount: { code: string; name: string } | null;
+  }
+): Promise<ExpenseDebitAccountView | null> {
+  const { entryAccount, categoryAccount } = accounts;
+  if (!entryAccount && status !== 'DRAFT') return null;
+  const defaultAccount =
+    !entryAccount && !categoryAccount ? await findDefaultExpenseAccount(companyId) : null;
+  return buildExpenseDebitAccountView({
+    entryAccountLabel: entryAccount ? formatAccountLabel(entryAccount) : null,
+    categoryAccountLabel: categoryAccount ? formatAccountLabel(categoryAccount) : null,
+    defaultAccountLabel: defaultAccount ? formatAccountLabel(defaultAccount) : null,
+  });
+}
+
 /**
  * Obtiene el detalle de un gasto
  */
@@ -331,7 +485,18 @@ export async function getExpenseById(id: string) {
         createdBy: true,
         createdAt: true,
         category: {
-          select: { id: true, name: true },
+          select: { id: true, name: true, account: { select: { code: true, name: true } } },
+        },
+        // TSK-757 (D6): la cuenta del Debe del asiento, si el egreso ya se confirmó
+        journalEntry: {
+          select: {
+            number: true,
+            lines: {
+              where: { debit: { gt: 0 } },
+              select: { account: { select: { code: true, name: true } } },
+              take: 1,
+            },
+          },
         },
         supplier: {
           select: { id: true, businessName: true, tradeName: true, taxId: true },
@@ -369,8 +534,16 @@ export async function getExpenseById(id: string) {
       .filter((item) => item.paymentOrder.status === 'CONFIRMED')
       .reduce((sum, item) => sum + Number(item.amount), 0);
 
+    const { journalEntry, ...rest } = expense;
+    const debitAccount = await resolveExpenseDebitAccountView(companyId, expense.status, {
+      entryAccount: journalEntry?.lines[0]?.account ?? null,
+      categoryAccount: expense.category.account,
+    });
+
     return {
-      ...expense,
+      ...rest,
+      debitAccount,
+      journalEntryNumber: journalEntry?.number ?? null,
       amount: Number(expense.amount),
       date: normalizeDbDate(expense.date),
       dueDate: normalizeDbDateNullable(expense.dueDate),
@@ -483,29 +656,45 @@ export async function updateExpense(id: string, data: ExpenseFormInput) {
   }
 }
 
-/** Cuentas de Ajustes que usa el asiento del gasto: Debe Gastos Operativos / Haber Cuentas por Pagar. */
-const EXPENSE_ENTRY_FIELDS = ['expensesAccountId', 'payablesAccountId'] as const satisfies readonly AccountingSettingsAccountField[];
-type ExpenseEntryField = (typeof EXPENSE_ENTRY_FIELDS)[number];
+/** Categoría del egreso tal como la necesita la pre-validación del asiento (TSK-757). */
+interface ExpenseCategoryForEntry {
+  name: string;
+  accountId: string | null;
+}
+
+/** Cuenta a validar: la del Debe resuelto (categoría o por defecto) o un campo de Ajustes. */
+type ExpenseAccountToCheck =
+  | { kind: 'category'; accountId: string }
+  | { kind: 'settings'; field: ExpenseEntryField; accountId: string };
 
 /**
- * Pre-validación del asiento del gasto (TSK-728): las dos cuentas de Ajustes
- * cargadas e imputables. Lanza `BusinessError` con el label real del campo.
+ * Pre-validación del asiento del gasto (TSK-728 + TSK-757). Exige las cuentas de Ajustes
+ * según la categoría, resuelve la cuenta del Debe (la de la categoría o la de egresos por
+ * defecto) y verifica que la resuelta y Cuentas por Pagar sean imputables. Si la cuenta
+ * propia de la categoría no es imputable BLOQUEA (nunca cae a la por defecto, TSK-717).
+ * Devuelve la cuenta del Debe, que usan el presupuesto y el asiento.
  */
 async function assertExpenseEntryAccounts(
   companyId: string,
   documentLabel: string,
-  settings: { expensesAccountId: string | null; payablesAccountId: string | null }
-): Promise<void> {
-  const missing = findMissingSettingsAccounts(settings, EXPENSE_ENTRY_FIELDS);
-  if (missing.length > 0) {
-    throw new BusinessError(buildMissingSettingsAccountsMessage(documentLabel, missing));
+  settings: { expensesAccountId: string | null; payablesAccountId: string | null },
+  category: ExpenseCategoryForEntry
+): Promise<{ debitAccountId: string }> {
+  const missing = findMissingSettingsAccounts(settings, requiredExpenseSettingsFields(category.accountId));
+  const debit = resolveExpenseDebitAccount({
+    categoryAccountId: category.accountId,
+    defaultAccountId: settings.expensesAccountId,
+  });
+  if (missing.length > 0 || !debit || !settings.payablesAccountId) {
+    throw new BusinessError(buildMissingExpenseAccountsMessage(documentLabel, missing, category.name));
   }
 
-  const toCheck: { field: ExpenseEntryField; accountId: string }[] = [];
-  for (const field of EXPENSE_ENTRY_FIELDS) {
-    const accountId = settings[field];
-    if (accountId) toCheck.push({ field, accountId });
-  }
+  const toCheck: ExpenseAccountToCheck[] = [
+    debit.source === 'category'
+      ? { kind: 'category', accountId: debit.accountId }
+      : { kind: 'settings', field: 'expensesAccountId', accountId: debit.accountId },
+    { kind: 'settings', field: 'payablesAccountId', accountId: settings.payablesAccountId },
+  ];
   const ids = toCheck.map((a) => a.accountId);
   const [imputable, all] = await Promise.all([
     prisma.account.findMany({
@@ -516,9 +705,14 @@ async function assertExpenseEntryAccounts(
   ]);
   const imputableIds = new Set(imputable.map((a) => a.id));
   const failed = toCheck.find((a) => !imputableIds.has(a.accountId));
-  if (!failed) return;
+  if (!failed) return { debitAccountId: debit.accountId };
 
   const info = all.find((a) => a.id === failed.accountId);
+  if (failed.kind === 'category') {
+    throw new BusinessError(
+      buildCategoryAccountNotImputableMessage(documentLabel, category.name, info ? formatAccountLabel(info) : null)
+    );
+  }
   const cuenta = info
     ? `la cuenta ${formatAccountLabel(info)} (configurada como ${settingsAccountLabel(failed.field)}) no está activa o no es imputable`
     : `la cuenta configurada como ${settingsAccountLabel(failed.field)} ya no existe en el plan de cuentas`;
@@ -530,7 +724,8 @@ async function assertExpenseEntryAccounts(
 /**
  * Confirma un gasto.
  * Antes de confirmar, verifica si el gasto excede el presupuesto mensual
- * de la cuenta de gastos. Si lo excede, retorna un budgetWarning (no bloqueante).
+ * de la cuenta del Debe (la de su categoría o la de egresos por defecto, TSK-757).
+ * Si lo excede, retorna un budgetWarning (no bloqueante).
  *
  * Los errores esperables (gasto ya confirmado, cuenta de Ajustes faltante o no
  * imputable, período cerrado) vuelven como `{ success: false, error }` (TSK-728).
@@ -548,7 +743,14 @@ export async function confirmExpense(
   try {
     const expense = await prisma.expense.findFirst({
       where: { id, companyId, status: 'DRAFT' },
-      select: { id: true, fullNumber: true, description: true, amount: true, categoryId: true, date: true },
+      select: {
+        id: true,
+        fullNumber: true,
+        description: true,
+        amount: true,
+        date: true,
+        category: { select: { name: true, accountId: true } },
+      },
     });
 
     if (!expense) throw new BusinessError('Gasto no encontrado o ya confirmado');
@@ -563,24 +765,27 @@ export async function confirmExpense(
         `No se encontró configuración contable para la empresa. Configurala en ${ACCOUNTING_SETTINGS_PATH}.`
       );
     }
-    await assertExpenseEntryAccounts(companyId, `el gasto ${expense.fullNumber}`, settings);
+    const { debitAccountId } = await assertExpenseEntryAccounts(
+      companyId,
+      `el gasto ${expense.fullNumber}`,
+      settings,
+      expense.category
+    );
 
-    // Verificación presupuestaria (no bloqueante)
+    // Verificación presupuestaria (no bloqueante), sobre la cuenta RESUELTA del Debe (TSK-757)
     let budgetWarning: { message: string; executedPercent: number } | undefined;
     try {
-      if (settings.expensesAccountId) {
-        const check = await checkBudgetForExpense(
-          settings.expensesAccountId,
-          Number(expense.amount),
-          companyId,
-          expense.date
-        );
-        if (check?.hasWarning) {
-          budgetWarning = {
-            message: check.message,
-            executedPercent: check.executedPercent,
-          };
-        }
+      const check = await checkBudgetForExpense(
+        debitAccountId,
+        Number(expense.amount),
+        companyId,
+        expense.date
+      );
+      if (check?.hasWarning) {
+        budgetWarning = {
+          message: check.message,
+          executedPercent: check.executedPercent,
+        };
       }
     } catch (error) {
       logger.warn('Error en verificación presupuestaria (no bloqueante)', {

@@ -39,6 +39,7 @@ import { expenseFormSchema, type ExpenseFormInput } from '../../validators';
 import { createExpense, updateExpense, getExpenseById, getExpenseCategories } from '../../actions.server';
 import { getSuppliersForSelect } from '@/modules/commercial/features/purchases/features/invoices/list/actions.server';
 import { _CategoryManagementModal } from '../../components/_CategoryManagementModal';
+import { _ExpenseAccountHint } from './_ExpenseAccountHint';
 
 interface CreateExpenseModalProps {
   expenseId?: string;
@@ -249,6 +250,7 @@ export function _CreateExpenseModal({ expenseId, open: controlledOpen, onOpenCha
                     ))}
                   </SelectContent>
                 </Select>
+                <_ExpenseAccountHint category={categories.find((c) => c.id === field.value)} />
                 <FormMessage />
               </FormItem>
             )}
