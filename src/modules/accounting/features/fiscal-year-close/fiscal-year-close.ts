@@ -47,6 +47,7 @@ import {
   monthKeyUtc,
   monthsBetweenUtc,
   startOfDayUtc,
+  todayBusinessDay,
   toUtcDay,
 } from '../../shared/utils/utc-month';
 
@@ -221,7 +222,8 @@ export async function buildFiscalYearStatusTx(
         number: lastClosedFy.number,
         closingEntryNumber: lastClosedFy.closingEntry?.number ?? null,
         openingEntryNumber: nextOfLastClosed?.openingEntry?.number ?? null,
-        closedAt: lastClosedFy.closedAt ? toUtcDay(lastClosedFy.closedAt) : null,
+        // Instante real del cierre: se muestra el día de Argentina (D5 revisado), no el UTC.
+        closedAt: lastClosedFy.closedAt ? todayBusinessDay(lastClosedFy.closedAt) : null,
       }
     : null;
 

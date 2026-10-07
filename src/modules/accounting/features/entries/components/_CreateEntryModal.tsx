@@ -107,7 +107,7 @@ export function _CreateEntryModal({ onClose }: CreateEntryModalProps) {
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-3xl">
+      <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>Nuevo Asiento Contable</DialogTitle>
           <DialogDescription>
