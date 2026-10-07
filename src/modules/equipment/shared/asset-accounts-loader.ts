@@ -65,7 +65,6 @@ export interface LoadedVehicleAssetAccounts {
   accounts: Record<string, LoadedAccountInfo>;
   /** Cuenta de resultado por venta/baja: sigue siendo global. */
   assetDisposalGainLossAccountId: string | null;
-  lockedUntilDate: Date | null;
 }
 
 export interface AssertedAssetAccounts {
@@ -131,7 +130,6 @@ export async function loadVehiclesAssetAccounts(
         accumulatedDepreciationAccountId: true,
         depreciationExpenseAccountId: true,
         assetDisposalGainLossAccountId: true,
-        lockedUntilDate: true,
       },
     }),
   ]);
@@ -209,7 +207,6 @@ export async function loadVehiclesAssetAccounts(
       resolved,
       accounts,
       assetDisposalGainLossAccountId: settings?.assetDisposalGainLossAccountId ?? null,
-      lockedUntilDate: settings?.lockedUntilDate ?? null,
     });
   }
 

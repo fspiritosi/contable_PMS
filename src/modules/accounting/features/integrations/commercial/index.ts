@@ -46,6 +46,7 @@ import { BudgetStatus, AccountNature } from '@/generated/prisma/enums';
 import { prisma } from '@/shared/lib/prisma';
 import { logger } from '@/shared/lib/logger';
 import { BusinessError } from '@/shared/lib/action-result';
+import { createJournalEntryTx } from '@/modules/accounting/shared/utils/journal-entry-tx';
 import { isCreditNote } from '@/modules/commercial/shared/voucher-utils';
 import { expandByCostCenter } from '@/modules/commercial/shared/cost-center';
 import { buildMissingTributeAccountsMessage } from '@/modules/commercial/shared/perceptions';
@@ -95,6 +96,8 @@ interface CreateJournalEntryInput {
   date: Date;
   description: string;
   lines: JournalEntryLineInput[];
+  /** Origen para el log (p. ej. 'sales-invoice:<id>'). */
+  source?: string;
 }
 
 // ============================================
@@ -176,112 +179,47 @@ function getWithholdingAccountId(
 }
 
 // ============================================
-// HELPER: Validar balance del asiento
-// ============================================
-
-function validateBalance(lines: JournalEntryLineInput[]): void {
-  const totalDebit = lines.reduce((sum, line) => sum + line.debit, 0);
-  const totalCredit = lines.reduce((sum, line) => sum + line.credit, 0);
-
-  // Permitir diferencia de centavos por redondeo
-  if (Math.abs(totalDebit - totalCredit) > 0.01) {
-    throw new Error(
-      `El asiento no está balanceado. Debe: ${totalDebit.toFixed(2)}, Haber: ${totalCredit.toFixed(2)}`
-    );
-  }
-}
-
-// ============================================
 // HELPER: Crear asiento contable
 // ============================================
 
+/**
+ * Crea el asiento del documento con el núcleo único (TSK-760, fase 5): valida
+ * líneas y balance, cuentas de la empresa e imputables, período (ejercicio
+ * cerrado, mes cerrado o `lockedUntilDate`, dentro de la tx con el lock de la
+ * empresa), numera de forma atómica y carga `fiscalYearId`/`periodId`. Nace en
+ * DRAFT con `createdBy: 'system'`, como hasta ahora. Cualquier rechazo es
+ * `BusinessError` y aborta la transacción del documento (no queda confirmado
+ * ni se consume número).
+ */
 async function createJournalEntry(
   input: CreateJournalEntryInput,
   tx: PrismaTransactionClient
 ): Promise<string> {
-  const { companyId, date, description, lines } = input;
+  const { companyId, date, description, lines, source } = input;
 
-  // Validar balance
-  validateBalance(lines);
-
-  // Verificar bloqueo de período
-  const settings = await tx.accountingSettings.findUnique({
-    where: { companyId },
-    select: { lockedUntilDate: true },
-  });
-
-  if (!settings) {
-    throw new BusinessError('No se encontró configuración contable');
-  }
-
-  if (settings.lockedUntilDate && moment(date).isSameOrBefore(moment(settings.lockedUntilDate), 'day')) {
-    throw new BusinessError(
-      `No se puede generar el asiento contable: el período está cerrado para la fecha ${moment(date).format('DD/MM/YYYY')}. Contacte al contador para reabrir el período.`
-    );
-  }
-
-  // Resolver ejercicio y período
-  const fiscalYear = await tx.fiscalYear.findFirst({
-    where: { companyId, startDate: { lte: date }, endDate: { gte: date } },
-    select: { id: true },
-  });
-  let periodId: string | undefined;
-  if (fiscalYear) {
-    const entryMoment = moment(date);
-    const period = await tx.accountingPeriod.findFirst({
-      where: {
-        fiscalYearId: fiscalYear.id,
-        year: entryMoment.year(),
-        month: entryMoment.month() + 1,
-        type: 'MONTHLY',
-      },
-      select: { id: true },
-    });
-    periodId = period?.id;
-  }
-
-  // Incremento atómico: UPDATE ... RETURNING evita race conditions
-  const [{ last_entry_number: nextNumber }] = await tx.$queryRaw<[{ last_entry_number: number }]>`
-    UPDATE accounting_settings
-    SET last_entry_number = last_entry_number + 1, updated_at = NOW()
-    WHERE company_id = ${companyId}::uuid
-    RETURNING last_entry_number
-  `;
-
-  // Crear asiento
-  const entry = await tx.journalEntry.create({
-    data: {
-      companyId,
-      number: nextNumber,
-      date,
-      description,
-      createdBy: 'system',
-      fiscalYearId: fiscalYear?.id,
-      periodId,
-      lines: {
-        create: lines.map((line) => ({
-          accountId: line.accountId,
-          debit: new Prisma.Decimal(line.debit),
-          credit: new Prisma.Decimal(line.credit),
-          description: line.description,
-          customerId: line.customerId,
-          supplierId: line.supplierId,
-          costCenterId: line.costCenterId,
-          currency: line.currency ?? 'ARS',
-          originalAmount: line.originalAmount != null ? new Prisma.Decimal(line.originalAmount) : null,
-          exchangeRate: line.exchangeRate != null ? new Prisma.Decimal(line.exchangeRate) : null,
-        })),
-      },
-    },
+  const entry = await createJournalEntryTx(tx, {
+    companyId,
+    date,
+    description,
+    status: 'DRAFT',
+    createdBy: 'system',
+    source,
+    lines: lines.map((line) => ({
+      accountId: line.accountId,
+      debit: new Prisma.Decimal(line.debit),
+      credit: new Prisma.Decimal(line.credit),
+      description: line.description,
+      customerId: line.customerId ?? null,
+      supplierId: line.supplierId ?? null,
+      costCenterId: line.costCenterId ?? null,
+      currency: line.currency ?? 'ARS',
+      originalAmount: line.originalAmount != null ? new Prisma.Decimal(line.originalAmount) : null,
+      exchangeRate: line.exchangeRate != null ? new Prisma.Decimal(line.exchangeRate) : null,
+    })),
   });
 
   logger.info('Asiento contable creado automáticamente', {
-    data: {
-      entryId: entry.id,
-      number: nextNumber,
-      totalDebit: lines.reduce((sum, line) => sum + line.debit, 0),
-      totalCredit: lines.reduce((sum, line) => sum + line.credit, 0),
-    },
+    data: { entryId: entry.id, number: entry.number, source },
   });
 
   return entry.id;
@@ -469,6 +407,7 @@ export async function createJournalEntryForSalesInvoice(
         date: invoice.issueDate,
         description: `${docLabel} ${invoice.fullNumber}`,
         lines,
+        source: `sales-invoice:${invoiceId}`,
       },
       tx
     );
@@ -666,6 +605,7 @@ export async function createJournalEntryForPurchaseInvoice(
         date: invoice.issueDate,
         description: `${docLabel} ${invoice.fullNumber}`,
         lines,
+        source: `purchase-invoice:${invoiceId}`,
       },
       tx
     );
@@ -800,6 +740,7 @@ export async function createJournalEntryForReceipt(
         date: receipt.date,
         description: `Recibo de cobro ${receipt.fullNumber}`,
         lines,
+        source: `receipt:${receiptId}`,
       },
       tx
     );
@@ -942,6 +883,7 @@ export async function createJournalEntryForPaymentOrder(
         date: paymentOrder.date,
         description: `Orden de pago ${paymentOrder.fullNumber}`,
         lines,
+        source: `payment-order:${paymentOrderId}`,
       },
       tx
     );
@@ -1017,6 +959,7 @@ export async function createJournalEntryForExpense(
         date: expense.date,
         description: `Gasto ${expense.fullNumber} - ${expense.description}`,
         lines,
+        source: `expense:${expenseId}`,
       },
       tx
     );
@@ -1265,6 +1208,7 @@ export async function createJournalEntryForCOGS(
         date: invoice.issueDate,
         description: `CMV - ${docLabel} ${invoice.fullNumber}`,
         lines,
+        source: `cogs:${invoiceId}`,
       },
       tx
     );

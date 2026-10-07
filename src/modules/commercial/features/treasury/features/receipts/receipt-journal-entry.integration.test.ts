@@ -32,6 +32,11 @@ vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 
 import { getActiveCompanyId } from '@/shared/lib/company';
 import { getCurrentUserId } from '@/shared/lib/current-user';
+import {
+  closeMonthForTest,
+  readEntryPeriod,
+  readLastEntryNumber,
+} from '@/modules/accounting/shared/test-utils/period-test-helpers';
 
 // Código real de producción.
 import { confirmReceipt, createReceipt, getReceiptEntryPreview } from './actions.server';
@@ -566,6 +571,44 @@ describe.skipIf(!dbAvailable)(
       const blocked = await getReceiptEntryPreview(sinCuenta.id);
       expect(blocked.error).toMatch(/Banco sin cuenta/);
       expect(blocked.warnings).toEqual([]);
+    });
+
+    it('caso 14a (TSK-760, B3): mes cerrado por período sin lockedUntilDate → error legible, sin número ni caja, sigue en borrador', async () => {
+      const { id } = await createDraft([cashPayment('1000', cajaPrincipalId)]);
+      const reopen = await closeMonthForTest(companyId, new Date('2026-03-10'));
+      const counterBefore = await readLastEntryNumber(companyId);
+      try {
+        const result = await confirmReceipt(id);
+        expect(result.success).toBe(false);
+        if (result.success) return;
+        expect(result.error).toContain(
+          'No se puede registrar con fecha 10/03/2026: el período está cerrado (mes 03/2026 cerrado).'
+        );
+
+        const doc = await readReceipt(id);
+        expect(doc.status).toBe('DRAFT');
+        expect(doc.journalEntryId).toBeNull();
+        expect(await readLastEntryNumber(companyId)).toBe(counterBefore);
+        const movements = await prisma.cashMovement.count({
+          where: { cashRegisterId: cajaPrincipalId, reference: doc.fullNumber },
+        });
+        expect(movements).toBe(0);
+      } finally {
+        await reopen();
+      }
+    });
+
+    it('caso 14b (TSK-760): el asiento del recibo nace DRAFT con ejercicio y período del mes', async () => {
+      const { id } = await createDraft([cashPayment('1000', cajaPrincipalId)]);
+      expect((await confirmReceipt(id)).success).toBe(true);
+
+      const doc = await readReceipt(id);
+      const entry = await readEntryPeriod(doc.journalEntryId!);
+      expect(entry.status).toBe('DRAFT');
+      expect(entry.createdBy).toBe('system');
+      expect(entry.fiscalYearId).not.toBeNull();
+      expect(entry.period).toMatchObject({ year: 2026, month: 3, type: 'MONTHLY' });
+      expect(entry.period?.fiscalYearId).toBe(entry.fiscalYearId);
     });
   }
 );

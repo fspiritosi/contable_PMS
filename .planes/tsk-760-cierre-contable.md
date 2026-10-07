@@ -1,7 +1,7 @@
 # TSK-760 — Cierre contable: el cierre anual no funciona y el bloqueo de períodos se saltea
 
 **Fecha de inicio:** 2026-10-06
-**Estado:** Implementación en progreso (Fases 1, 2 y 4 de 14 completadas; Fase 3 pendiente del diagnóstico de producción)
+**Estado:** Implementación en progreso (Fases 1, 2, 4 y 5 de 14 completadas; Fase 3 pendiente del diagnóstico de producción)
 
 ---
 
@@ -959,16 +959,16 @@ Otras decisiones de esta planificación:
 - **Objetivo:** documentos comerciales y de bienes de uso validan las tres condiciones dentro de
   la tx.
 - **Tareas:**
-  - [ ] `INT/commercial/index.ts` helper común (`:198`): reemplazar el chequeo de
+  - [x] `INT/commercial/index.ts` helper común (`:198`): reemplazar el chequeo de
         `lockedUntilDate`, el resolver de período con `moment()` local y la numeración por
         `createJournalEntryTx`. Venta, compra, recibo, OP y gasto heredan.
-  - [ ] `INT/equipment/index.ts` (`:64`): ídem.
-  - [ ] `DEP/actions.server.ts`: `postEntryTx` (`:692`), `postDepreciationEntry` (`:795`, mover el
+  - [x] `INT/equipment/index.ts` (`:64`): ídem.
+  - [x] `DEP/actions.server.ts`: `postEntryTx` (`:692`), `postDepreciationEntry` (`:795`, mover el
         chequeo de `:842-849` dentro de la tx), `createValueAdjustment` (`:990`, ídem `:1057-1064`)
         y `resolveFiscalPeriodTx` (`:45`, borrar). `postAllPendingDepreciations` (`:871`): los
         períodos cerrados dejan de filtrarse en silencio y se informan en `errors[]` con el mes
         (escenario 10).
-  - [ ] Tests: los existentes que esperan "período está cerrado" (`receipt-journal-entry`,
+  - [x] Tests: los existentes que esperan "período está cerrado" (`receipt-journal-entry`,
         `payment-order-journal-entry`, `expense-journal-entry`, `sales-invoice-line-accounts`,
         `purchase-invoice-line-accounts`, `asset-disposal`) siguen verdes sin tocar el texto;
         agregar en cada uno un caso "mes cerrado por `AccountingPeriod` sin `lockedUntilDate`"
@@ -2804,7 +2804,107 @@ usar en el `catch` de la carga de cuentas). Sin `any` ni `console`.
   warning previo de React (`key` en `_EntriesTable`, archivo no tocado).
 
 ### Fase 5: Creadores II — comerciales, equipos y depreciación
-**Estado:** Pendiente
+**Estado:** Completada (2026-10-06)
+
+**Archivos modificados** (`INT/` = `src/modules/accounting/features/integrations/`,
+`DEP/` = `src/modules/equipment/features/depreciation/`):
+- `INT/commercial/index.ts`: el `createJournalEntry` interno (venta, compra, recibo, OP, gasto
+  y el CMV muerto) pasa a ser un envoltorio de `createJournalEntryTx` (DRAFT, `'system'`,
+  `source` = `sales-invoice:<id>`, `purchase-invoice:<id>`, `receipt:<id>`, `payment-order:<id>`,
+  `expense:<id>`, `cogs:<id>`). Se borraron `validateBalance`, el chequeo de `lockedUntilDate`,
+  el resolver de FY/período con `moment()` local y el `UPDATE … RETURNING` propio. Las líneas
+  pasan con todas sus columnas (auxiliares, `costCenterId`, moneda) como `Prisma.Decimal`; la
+  construcción de líneas de cada documento (`expandByCostCenter`, percepciones, impuestos
+  internos, cuentas por ítem/socio/categoría) **no se tocó**.
+- `INT/equipment/index.ts`: ídem para la baja por venta y por pérdida/devolución
+  (`source` = `asset-sale:<vehicleId>` / `asset-disposal:<vehicleId>`). Se fue `moment`.
+- `DEP/actions.server.ts`:
+  - `resolveFiscalPeriodTx` borrado; `postEntryTx` crea el asiento con `createJournalEntryTx`
+    (`source` = `depreciation:<scheduleEntryId>`), con el importe como `Decimal` del período.
+  - `postDepreciationEntry` y `createValueAdjustment`: se quitó el chequeo previo de
+    `loaded.lockedUntilDate` fuera de la tx; el período lo valida el núcleo dentro de la tx. El
+    texto "El período MM/YYYY está bloqueado" pasa al estándar de §3.3.2.
+  - `postAllPendingDepreciations`: ya no filtra `scheduledDate > lockedUntilDate` (escenario 10);
+    en el bucle, `BusinessError` → `errors[]` con `Equipo X: <mensaje>` y sigue; cualquier otro
+    error se relanza (aborta la masiva entera: después de un error SQL la tx de Postgres queda
+    abortada). Antes cualquier error se juntaba como texto.
+- `src/modules/equipment/shared/asset-accounts-loader.ts`: quitado `lockedUntilDate` de
+  `LoadedVehicleAssetAccounts` (sin lectores tras esta fase).
+
+**Archivos creados:**
+- `ACC/shared/test-utils/period-test-helpers.ts`: `closeMonthForTest` (cierra el MONTHLY por
+  `AccountingPeriod.isClosed` sin tocar `lockedUntilDate`, creando FY/períodos con el núcleo;
+  devuelve la función que lo reabre), `readLastEntryNumber`, `readEntryPeriod`.
+- `DEP/depreciation-period-lock.integration.test.ts` (4 tests, prefijo `TSK760-DEP-`).
+
+**Tests** (TDD: con la implementación guardada en `git stash`, los 12 casos nuevos de período
+cerrado fallaron; los de FY/período de comprobantes ya pasaban con el código viejo porque el FY
+lo había creado el caso anterior; con la implementación, todo verde):
+- Agregados a los 6 existentes: "mes cerrado por `AccountingPeriod` sin `lockedUntilDate`" (B3:
+  texto estándar con el mes, documento en DRAFT sin `journalEntryId`, contador sin cambios y,
+  en recibo y OP, sin movimiento de caja) y "asiento DRAFT `'system'` con `fiscalYearId` y período
+  MONTHLY del mes del documento": `expense-journal-entry` (casos 8 y 9),
+  `purchase-invoice-line-accounts` (8b, 8c), `sales-invoice-line-accounts` (9, 10),
+  `receipt-journal-entry` (14a, 14b), `payment-order-journal-entry` (15a, 15b),
+  `asset-disposal` (1b: período del mes de hoy; 4b: baja rechazada con el mes de hoy cerrado).
+  Los casos existentes con `lockedUntilDate` siguen verdes sin tocar el texto.
+- `depreciation-period-lock`: individual (mes cerrado → texto exacto, sin marca ni número;
+  abierto → DRAFT con FY y período 01/2026); revalúo (mes cerrado → sin ajuste, valor libro y
+  contador intactos; abierto → asiento 04/2026); masiva con febrero cerrado (equipo de ene-mar:
+  error de 02/2026 + "período 3 omitido"; equipo de mar-may: se contabiliza; `posted` = 2 y
+  contador + 2); masiva con `lockedUntilDate` 28/02 (escenario 10: el período de febrero aparece
+  en `errors[]` con "bloqueado hasta 28/02/2026", antes se omitía en silencio).
+- `vi.mock('server-only', () => ({}))` agregado a `expense-journal-entry`,
+  `purchase-invoice-line-accounts`, `purchase-invoice-tributes`, `sales-invoice-line-accounts`,
+  `cost-center` y `perceptions` (el núcleo abre con `import 'server-only'`).
+- `cost-center`, `perceptions`, `purchase-invoice-tributes`, `asset-accounts` (depreciación),
+  `cost-center-movements` y `fund-movement-*`: verdes sin cambios de lógica.
+
+**Calidad:** `npm run test` = **55 archivos, 740 tests, verdes**; `check-types` = **219**;
+`eslint` de los archivos tocados sin errores (quedan 2 warnings previos en
+`checkBudgetForExpense`: `fiscalYearStart`/`fiscalYearEnd` sin usar). Sin `any` ni `console`.
+Tras correr los tests no quedan empresas, cuentas, FY ni períodos de test en la base (verificado
+por `psql`).
+
+**Prueba en navegador** (Playwright contra :3010, "Empresa de Prueba 01 SA"; script temporal
+borrado). Durante la prueba se apagó `require_cost_center` (las líneas de la compra demo no
+tienen centro) y se puso "Cuenta de Gastos Operativos" = 4.2.1/03/10 (en dev está vacía); ambos
+restaurados (`require_cost_center = t`, `expenses_account_id = NULL`).
+- Septiembre 2026 cerrado por SQL (`accounting_periods.is_closed`, sin `lockedUntilDate`):
+  confirmar la compra 0001-97244388 y el egreso GTO-00001 → toasts "No se puede registrar con
+  fecha 08/09/2026 (22/09/2026): el período está cerrado (mes 09/2026 cerrado). Para operar,
+  reabrilo desde Contabilidad → Configuración → Bloqueo de Períodos."; ambos siguen DRAFT sin
+  asiento y el contador sigue en 50/51.
+- Septiembre reabierto: "Factura confirmada correctamente" y "Egreso confirmado correctamente";
+  asientos DRAFT con FY 1 y período MONTHLY 2026/09.
+
+**Datos que quedaron en la DB de dev:**
+- Compra **0001-97244388** CONFIRMED con asiento **N° 51**
+  `803231de-164c-40ce-b99b-4fe210b68250` (DRAFT, FY 1, período 09/2026).
+- Egreso **GTO-00001** (marca `TSK728-demo`) CONFIRMED con asiento **N° 52**
+  `4156c4a2-fac5-4e99-ab65-f938bec01781` (DRAFT, FY 1, período 09/2026).
+- `last_entry_number` = 52. Ningún período cerrado; `locked_until_date` nulo.
+
+**Desvíos y notas:**
+- **Conflicto esperado con PR #34 (TSK-757, sin mergear):** en esta rama
+  `createJournalEntryForExpense` sigue debitando la `expensesAccountId` global de Ajustes; solo
+  cambió el helper interno al que llama (`createJournalEntry` → `createJournalEntryTx`). #34
+  reescribe esa función para usar la cuenta de la categoría de egreso. Al mergear #34 (antes o
+  después de esta rama) habrá conflicto en `createJournalEntryForExpense` (y probablemente en
+  `expense-journal-entry.integration.test.ts`): resolverlo conservando la resolución de cuenta
+  de 757 y la llamada a `createJournalEntry` (núcleo) de esta fase, y agregar al test de 757 el
+  `vi.mock('server-only')`.
+- Balance: el `validateBalance` de las integraciones toleraba `> 0,01` con coma flotante; ahora
+  rige `validateEntryLines` (`≥ 0,01` con `Decimal`, C5). Un comprobante con una diferencia de
+  exactamente un centavo entre total y líneas, que antes podía pasar según el redondeo del
+  `float`, ahora se rechaza con `BusinessError` legible. No se encontró ninguno en los tests.
+- Defensa en profundidad: `assertAccountsUsableTx` también rechaza cuentas no hoja o de otra
+  empresa en estos asientos (las pre-validaciones de 717/721/724c siguen antes de la tx).
+- Los tests existentes no necesitaron `cleanupAccountingCompany`: sus asientos son DRAFT (se
+  borran sin trigger) y el FY creado al vuelo cae por cascada al borrar la empresa. El test
+  nuevo de depreciación sí lo usa.
+- `createJournalEntryForCOGS` (muerto) sigue tragando errores; se borra en la Fase 11.
+- La baja de equipos sigue fechada con `new Date()` (hoy), como antes.
 
 ### Fase 6: Creadores III — tesorería
 **Estado:** Pendiente

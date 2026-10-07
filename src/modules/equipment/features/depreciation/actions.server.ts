@@ -1,6 +1,5 @@
 'use server';
 
-import moment from 'moment';
 import { Prisma } from '@/generated/prisma/client';
 import { getActiveCompanyId } from '@/shared/lib/company';
 import { logger } from '@/shared/lib/logger';
@@ -36,30 +35,12 @@ import {
   type DepreciationConfigInput,
   type ValueAdjustmentInput,
 } from './validators';
+import { createJournalEntryTx } from '@/modules/accounting/features/integrations/core';
 
 type PrismaTransactionClient = Omit<
   typeof prisma,
   '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'
 >;
-
-async function resolveFiscalPeriodTx(companyId: string, date: Date, tx: PrismaTransactionClient) {
-  const fiscalYear = await tx.fiscalYear.findFirst({
-    where: { companyId, startDate: { lte: date }, endDate: { gte: date } },
-    select: { id: true },
-  });
-  if (!fiscalYear) return { fiscalYearId: undefined, periodId: undefined };
-  const entryMoment = moment(date);
-  const period = await tx.accountingPeriod.findFirst({
-    where: {
-      fiscalYearId: fiscalYear.id,
-      year: entryMoment.year(),
-      month: entryMoment.month() + 1,
-      type: 'MONTHLY',
-    },
-    select: { id: true },
-  });
-  return { fiscalYearId: fiscalYear.id, periodId: period?.id };
-}
 
 // ============================================
 // CONSULTAS
@@ -698,44 +679,31 @@ async function postEntryTx(
   companyId: string,
   userId: string
 ) {
-  const amount = Number(entry.amount);
-  const fiscal = await resolveFiscalPeriodTx(companyId, entry.scheduledDate, tx);
+  const amount = new Prisma.Decimal(entry.amount.toString());
 
-  // Incremento atómico: UPDATE ... RETURNING evita race conditions
-  const [{ last_entry_number: nextNumber }] = await tx.$queryRaw<[{ last_entry_number: number }]>`
-    UPDATE accounting_settings
-    SET last_entry_number = last_entry_number + 1, updated_at = NOW()
-    WHERE company_id = ${companyId}::uuid
-    RETURNING last_entry_number
-  `;
-
-  const journalEntry = await tx.journalEntry.create({
-    data: {
-      companyId,
-      number: nextNumber,
-      date: entry.scheduledDate,
-      description: `Depreciación período ${entry.periodNumber}: Equipo ${vehicleLabel}`,
-      createdBy: 'system',
-      fiscalYearId: fiscal.fiscalYearId,
-      periodId: fiscal.periodId,
-      lines: {
-        create: [
-          {
-            accountId: accounts.depreciationExpenseAccountId,
-            debit: new Prisma.Decimal(amount),
-            credit: new Prisma.Decimal(0),
-            description: `Gasto depreciación - Equipo ${vehicleLabel}`,
-          },
-          {
-            accountId: accounts.accumulatedDepreciationAccountId,
-            debit: new Prisma.Decimal(0),
-            credit: new Prisma.Decimal(amount),
-            description: `Depreciación acumulada - Equipo ${vehicleLabel}`,
-          },
-        ],
+  // Núcleo único (TSK-760, fase 5): período (ejercicio, mes y bloqueo) validado
+  // dentro de la tx con el lock de la empresa, número atómico y FY/período.
+  const journalEntry = await createJournalEntryTx(tx, {
+    companyId,
+    date: entry.scheduledDate,
+    description: `Depreciación período ${entry.periodNumber}: Equipo ${vehicleLabel}`,
+    status: 'DRAFT',
+    createdBy: 'system',
+    source: `depreciation:${entry.id}`,
+    lines: [
+      {
+        accountId: accounts.depreciationExpenseAccountId,
+        debit: amount,
+        credit: new Prisma.Decimal(0),
+        description: `Gasto depreciación - Equipo ${vehicleLabel}`,
       },
-    },
-    select: { id: true, number: true },
+      {
+        accountId: accounts.accumulatedDepreciationAccountId,
+        debit: new Prisma.Decimal(0),
+        credit: amount,
+        description: `Depreciación acumulada - Equipo ${vehicleLabel}`,
+      },
+    ],
   });
 
   // Marcar período como contabilizado
@@ -837,16 +805,7 @@ export async function postDepreciationEntry(
     if (!loaded) throw new BusinessError('Equipo no encontrado');
     const accounts = toEntryAccounts(loaded);
 
-    // Verificar bloqueo de período
-    if (
-      loaded.lockedUntilDate &&
-      moment(entry.scheduledDate).isSameOrBefore(moment(loaded.lockedUntilDate), 'day')
-    ) {
-      throw new BusinessError(
-        `No se puede contabilizar la depreciación. El período ${moment(entry.scheduledDate).format('MM/YYYY')} está bloqueado.`
-      );
-    }
-
+    // El período (ejercicio, mes y bloqueo) lo valida el núcleo dentro de la tx.
     const result = await prisma.$transaction((tx) =>
       postEntryTx(tx, entry, loaded.vehicleLabel, accounts, companyId, userId)
     );
@@ -879,19 +838,12 @@ export async function postAllPendingDepreciations(
   if (!userId) throw new Error('No autenticado');
 
   try {
-    const settings = await prisma.accountingSettings.findUnique({
-      where: { companyId },
-      select: { lockedUntilDate: true },
-    });
-
-    // Todos los períodos pendientes hasta la fecha (excluyendo períodos bloqueados)
+    // Todos los períodos pendientes hasta la fecha. Los de meses cerrados ya no se
+    // filtran en silencio (TSK-760, escenario 10): el núcleo los rechaza y quedan en errors[].
     const pendingEntries = await prisma.depreciationScheduleEntry.findMany({
       where: {
         isPosted: false,
-        scheduledDate: {
-          lte: upToDate,
-          ...(settings?.lockedUntilDate ? { gt: settings.lockedUntilDate } : {}),
-        },
+        scheduledDate: { lte: upToDate },
         depreciation: { companyId, status: 'ACTIVE' },
       },
       include: pendingEntryInclude,
@@ -956,10 +908,14 @@ export async function postAllPendingDepreciations(
           await postEntryTx(tx, entry, label, accountsByVehicle.get(vehicleId)!, companyId, userId);
           posted++;
         } catch (entryError) {
+          // Solo los errores de negocio (período cerrado, cuenta, balance) se informan y
+          // se sigue: se lanzan antes de cualquier escritura fallida. Un error de SQL deja
+          // la transacción de Postgres abortada, así que se relanza.
+          if (!(entryError instanceof BusinessError)) throw entryError;
           errors.push({
             vehicleId,
             label,
-            message: `Equipo ${label}: ${entryError instanceof Error ? entryError.message : 'Error desconocido'}`,
+            message: `Equipo ${label}: ${entryError.message}`,
           });
         }
       }
@@ -1053,15 +1009,6 @@ export async function createValueAdjustment(
       assetDisposalGainLossAccountId: asserted.assetDisposalGainLossAccountId!,
     };
 
-    if (
-      loaded.lockedUntilDate &&
-      moment(data.date).isSameOrBefore(moment(loaded.lockedUntilDate), 'day')
-    ) {
-      throw new BusinessError(
-        `No se puede registrar el ajuste de valor: el período está cerrado para la fecha ${moment(data.date).format('DD/MM/YYYY')}.`
-      );
-    }
-
     const vehicleLabel = loaded.vehicleLabel;
     const absAmount = Math.abs(differenceAmount);
     const lines =
@@ -1096,30 +1043,16 @@ export async function createValueAdjustment(
           ];
 
     const journalEntryId = await prisma.$transaction(async (tx) => {
-      const fiscal = await resolveFiscalPeriodTx(companyId, data.date, tx);
-
-      // Incremento atómico: UPDATE ... RETURNING evita race conditions
-      const [{ last_entry_number: nextNumber }] = await tx.$queryRaw<
-        [{ last_entry_number: number }]
-      >`
-        UPDATE accounting_settings
-        SET last_entry_number = last_entry_number + 1, updated_at = NOW()
-        WHERE company_id = ${companyId}::uuid
-        RETURNING last_entry_number
-      `;
-
-      const journalEntry = await tx.journalEntry.create({
-        data: {
-          companyId,
-          number: nextNumber,
-          date: data.date,
-          description: `Ajuste de valor equipo ${vehicleLabel}: ${data.reason}`,
-          createdBy: 'system',
-          fiscalYearId: fiscal.fiscalYearId,
-          periodId: fiscal.periodId,
-          lines: { create: lines },
-        },
-        select: { id: true },
+      // Núcleo único (TSK-760, fase 5): período validado dentro de la tx, número
+      // atómico y FY/período. Un período cerrado aborta el ajuste entero.
+      const journalEntry = await createJournalEntryTx(tx, {
+        companyId,
+        date: data.date,
+        description: `Ajuste de valor equipo ${vehicleLabel}: ${data.reason}`,
+        status: 'DRAFT',
+        createdBy: 'system',
+        source: `value-adjustment:${vehicleId}`,
+        lines,
       });
 
       await tx.assetValueAdjustment.create({

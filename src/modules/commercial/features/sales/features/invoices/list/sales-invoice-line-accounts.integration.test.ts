@@ -20,6 +20,9 @@
 import 'dotenv/config';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
+// El núcleo contable (TSK-760) abre con `import 'server-only'` (marcador de Next).
+vi.mock('server-only', () => ({}));
+
 import { prisma } from '@/shared/lib/prisma';
 
 // Frontera aislada: sesión, permisos, empresa activa y caché de Next.
@@ -34,6 +37,11 @@ vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 import { createJournalEntryForSalesInvoice } from '@/modules/accounting/features/integrations/commercial';
 import { getActiveCompanyId } from '@/shared/lib/company';
 import { getCurrentUserId } from '@/shared/lib/current-user';
+import {
+  closeMonthForTest,
+  readEntryPeriod,
+  readLastEntryNumber,
+} from '@/modules/accounting/shared/test-utils/period-test-helpers';
 
 // Código real de producción.
 import { confirmInvoice } from './actions.server';
@@ -412,6 +420,42 @@ describe.skipIf(!dbAvailable)(
           data: { lockedUntilDate: null },
         });
       }
+    });
+
+    it('caso 9 (TSK-760, B3): mes cerrado por período sin lockedUntilDate → error legible, sin número, sigue en borrador', async () => {
+      await setSalesAccount(null);
+      const id = await createDraftSale(conCuentaId, 'Rodado en mes cerrado');
+      const reopen = await closeMonthForTest(companyId, new Date('2026-03-10'));
+      const counterBefore = await readLastEntryNumber(companyId);
+      try {
+        const result = await confirmInvoice(id);
+        expect(result.success).toBe(false);
+        if (result.success) return;
+        expect(result.error).toContain(
+          'No se puede registrar con fecha 10/03/2026: el período está cerrado (mes 03/2026 cerrado).'
+        );
+
+        const invoice = await readInvoice(id);
+        expect(invoice.status).toBe('DRAFT');
+        expect(invoice.journalEntryId).toBeNull();
+        expect(await readLastEntryNumber(companyId)).toBe(counterBefore);
+      } finally {
+        await reopen();
+      }
+    });
+
+    it('caso 10 (TSK-760): el asiento de la venta nace DRAFT con ejercicio y período del mes', async () => {
+      await setSalesAccount(null);
+      const id = await createDraftSale(conCuentaId, 'Rodado con ejercicio');
+      expect((await confirmInvoice(id)).success).toBe(true);
+
+      const invoice = await readInvoice(id);
+      const entry = await readEntryPeriod(invoice.journalEntryId!);
+      expect(entry.status).toBe('DRAFT');
+      expect(entry.createdBy).toBe('system');
+      expect(entry.fiscalYearId).not.toBeNull();
+      expect(entry.period).toMatchObject({ year: 2026, month: 3, type: 'MONTHLY' });
+      expect(entry.period?.fiscalYearId).toBe(entry.fiscalYearId);
     });
   }
 );
