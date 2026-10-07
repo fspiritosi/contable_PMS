@@ -17,13 +17,11 @@ import { Loader2 } from 'lucide-react';
 import { generateAllPendingRecurringEntries } from '../actions.server';
 
 interface GeneratePendingDialogProps {
-  companyId: string;
   pendingCount: number;
   onClose: () => void;
 }
 
 export function _GeneratePendingDialog({
-  companyId,
   pendingCount,
   onClose,
 }: GeneratePendingDialogProps) {
@@ -34,7 +32,8 @@ export function _GeneratePendingDialog({
   const handleGenerate = async () => {
     setIsLoading(true);
     try {
-      const res = await generateAllPendingRecurringEntries(companyId);
+      const res = await generateAllPendingRecurringEntries();
+      if (!res.success) return void toast.error(res.error);
       setResult(res);
       if (res.generated > 0) {
         toast.success(`${res.generated} asiento${res.generated !== 1 ? 's' : ''} generado${res.generated !== 1 ? 's' : ''}`);

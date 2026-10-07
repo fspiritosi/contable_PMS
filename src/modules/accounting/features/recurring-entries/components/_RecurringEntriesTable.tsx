@@ -64,7 +64,8 @@ export function _RecurringEntriesTable({ companyId, entries, accounts }: Recurri
   const handleGenerate = async (entry: RecurringEntryItem) => {
     setGeneratingId(entry.id);
     try {
-      const result = await generateRecurringEntry(companyId, entry.id);
+      const result = await generateRecurringEntry(entry.id);
+      if (!result.success) return void toast.error(result.error);
       toast.success(`Asiento N° ${result.number} generado desde "${entry.name}"`);
       router.refresh();
     } catch (error) {
@@ -200,7 +201,6 @@ export function _RecurringEntriesTable({ companyId, entries, accounts }: Recurri
 
       {showGeneratePending && (
         <_GeneratePendingDialog
-          companyId={companyId}
           pendingCount={pendingCount}
           onClose={() => setShowGeneratePending(false)}
         />

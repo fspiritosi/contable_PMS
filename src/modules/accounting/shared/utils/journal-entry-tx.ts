@@ -14,9 +14,10 @@ import 'server-only';
 import { BusinessError } from '@/shared/lib/action-result';
 import { logger } from '@/shared/lib/logger';
 
-import { validateEntryLines, type JournalEntryLineDraft } from './journal-entry-lines';
+import { invertLines, validateEntryLines, type JournalEntryLineDraft } from './journal-entry-lines';
 import type { CreatableEntryStatus, EntryPeriodType, Tx } from './journal-entry-types';
 import { assertPeriodOpen, NO_SETTINGS_MESSAGE } from './period-lock';
+import { formatDayUtc } from './utc-month';
 
 export interface CreateJournalEntryTxInput {
   companyId: string;
@@ -44,6 +45,38 @@ export interface PostJournalEntryTxInput {
   companyId: string;
   entryId: string;
   userId: string;
+}
+
+export interface ReverseJournalEntryTxInput {
+  companyId: string;
+  entryId: string;
+  /** Fecha de la reversión (se valida su período, además del del original). */
+  date: Date;
+  /** userId de quien anula (también va a `reversedBy`). */
+  createdBy: string;
+  /**
+   * Tipo del período de la reversión (default MONTHLY). La edición de saldos de
+   * apertura (B25) revierte con la misma fecha en el período OPENING.
+   */
+  periodType?: EntryPeriodType;
+  /** Etiqueta del origen para el log; no se persiste. */
+  source?: string;
+}
+
+export interface ReversedJournalEntry {
+  original: { id: string; number: number };
+  reversal: CreatedJournalEntry;
+}
+
+const STATUS_LABELS: Record<string, string> = {
+  DRAFT: 'Borrador',
+  POSTED: 'Registrado',
+  REVERSED: 'Anulado',
+};
+
+/** Tipo de período guardado → tipo con el que se valida (sin período: MONTHLY). */
+function toEntryPeriodType(stored: string | null | undefined): EntryPeriodType {
+  return stored === 'OPENING' || stored === 'CLOSING' ? stored : 'MONTHLY';
 }
 
 /**
@@ -186,9 +219,7 @@ export async function postJournalEntryTx(
     throw new BusinessError(`El asiento N° ${entry.number} ya no está en borrador.`);
   }
 
-  const storedType = entry.period?.type;
-  const periodType: EntryPeriodType =
-    storedType === 'OPENING' || storedType === 'CLOSING' ? storedType : 'MONTHLY';
+  const periodType = toEntryPeriodType(entry.period?.type);
   const period = await assertPeriodOpen(tx, companyId, entry.date, { periodType });
 
   validateEntryLines(entry.lines);
@@ -213,4 +244,87 @@ export async function postJournalEntryTx(
   });
 
   return { id: entry.id, number: entry.number };
+}
+
+/**
+ * Anula un asiento POSTED (A4, diseño §3.1.6): valida el período del original (con el
+ * tipo de su período) y el de la fecha de reversión, crea la reversión POSTED con
+ * todas las columnas de línea invertidas (auxiliares, centro de costo, moneda) y pasa
+ * el original a REVERSED en un solo UPDATE (el trigger solo admite esa transición).
+ *
+ * Puro: sin checkPermission ni $transaction propios, y sin mirar si el asiento
+ * pertenece a un documento (eso lo decide el llamador). Lo usan la edición de saldos
+ * de apertura (Fase 7, B25) y la anulación desde Asientos (Fase 10).
+ */
+export async function reverseJournalEntryTx(
+  tx: Tx,
+  input: ReverseJournalEntryTxInput
+): Promise<ReversedJournalEntry> {
+  const { companyId, entryId } = input;
+
+  const original = await tx.journalEntry.findFirst({
+    where: { id: entryId, companyId },
+    select: {
+      id: true,
+      number: true,
+      status: true,
+      date: true,
+      description: true,
+      period: { select: { type: true } },
+      lines: {
+        select: {
+          accountId: true,
+          debit: true,
+          credit: true,
+          description: true,
+          customerId: true,
+          supplierId: true,
+          costCenterId: true,
+          currency: true,
+          originalAmount: true,
+          exchangeRate: true,
+        },
+      },
+    },
+  });
+  if (!original) throw new BusinessError('Asiento no encontrado.');
+  if (original.status !== 'POSTED') {
+    throw new BusinessError(
+      `Solo se pueden anular asientos registrados; el N° ${original.number} está en estado ` +
+        `${STATUS_LABELS[original.status] ?? original.status}.`
+    );
+  }
+
+  await assertPeriodOpen(tx, companyId, original.date, {
+    periodType: toEntryPeriodType(original.period?.type),
+    subject: `No se puede anular el asiento N° ${original.number} (fecha ${formatDayUtc(original.date)})`,
+  });
+
+  const reversal = await createJournalEntryTx(tx, {
+    companyId,
+    date: input.date,
+    description: `Anulación del asiento N° ${original.number} - ${original.description}`,
+    lines: invertLines(original.lines),
+    status: 'POSTED',
+    createdBy: input.createdBy,
+    periodType: input.periodType,
+    originalEntryId: original.id,
+    source: input.source ?? `reversal:${original.id}`,
+  });
+
+  await tx.journalEntry.update({
+    where: { id: original.id },
+    data: {
+      status: 'REVERSED',
+      reversalEntryId: reversal.id,
+      reversedBy: input.createdBy,
+      reversedAt: new Date(),
+    },
+  });
+
+  logger.debug('Asiento anulado', {
+    data: { companyId, entryId: original.id, reversalId: reversal.id, number: reversal.number },
+  });
+
+  return { original: { id: original.id, number: original.number }, reversal };
 }

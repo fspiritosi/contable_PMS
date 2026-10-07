@@ -187,14 +187,13 @@ export function _AccountBalancesForm({
           !!existingEntry
         );
 
-        if (result.success) {
-          toast.success(
-            existingEntry
-              ? `Asiento de apertura N° ${result.entryNumber} actualizado`
-              : `Asiento de apertura N° ${result.entryNumber} creado`
-          );
-          router.refresh();
-        }
+        if (!result.success) return void toast.error(result.error);
+        toast.success(
+          existingEntry
+            ? `Asiento de apertura N° ${result.entryNumber} actualizado`
+            : `Asiento de apertura N° ${result.entryNumber} creado`
+        );
+        router.refresh();
       } catch (error) {
         const msg =
           error instanceof Error ? error.message : 'Error desconocido';
@@ -209,7 +208,7 @@ export function _AccountBalancesForm({
         <CardTitle className="flex items-center justify-between">
           <span>Asiento de Apertura</span>
           <span className="text-sm font-normal text-muted-foreground">
-            Fecha: {moment(settings.fiscalYearStart).format('DD/MM/YYYY')}
+            Fecha: {moment.utc(settings.fiscalYearStart).format('DD/MM/YYYY')}
           </span>
         </CardTitle>
       </CardHeader>
@@ -364,7 +363,7 @@ export function _AccountBalancesForm({
                         </AlertDialogTitle>
                         <AlertDialogDescription>
                           {existingEntry
-                            ? 'Se reemplazarán las líneas del asiento existente con los nuevos saldos.'
+                            ? 'Se anulará el asiento vigente (con una reversión en la misma fecha) y se registrará uno nuevo con estos saldos.'
                             : 'Se creará un asiento contable POSTED con los saldos ingresados. La fecha será el inicio del ejercicio fiscal.'}
                         </AlertDialogDescription>
                       </AlertDialogHeader>

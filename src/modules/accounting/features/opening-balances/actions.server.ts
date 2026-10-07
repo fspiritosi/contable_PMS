@@ -6,7 +6,12 @@ import { logger } from '@/shared/lib/logger';
 import { getActiveCompanyId } from '@/shared/lib/company';
 import { checkPermission } from '@/shared/lib/permissions';
 import { buildImputableAccountsWhere } from '@/shared/lib/accounts/imputable-accounts';
-import { revalidateAccountingRoutes } from '../../shared/utils';
+import { BusinessError, toActionResult, type ActionResult } from '@/shared/lib/action-result';
+import type { Prisma } from '@/generated/prisma/client';
+import { endOfDayUtc, revalidateAccountingRoutes, startOfDayUtc } from '../../shared/utils';
+import { createJournalEntryTx, reverseJournalEntryTx } from '../../shared/utils/journal-entry-tx';
+import type { Tx } from '../../shared/utils/journal-entry-types';
+import { ensureFiscalYearTx, lockAccountingSettingsTx } from '../../shared/utils/period-lock';
 import {
   AccountType,
   AccountNature,
@@ -28,6 +33,52 @@ import { revalidatePath } from 'next/cache';
 const OPENING_ENTRY_DESCRIPTION = 'Asiento de Apertura';
 const OPENING_BALANCE_MARKER = 'opening-balance';
 const APERTURA_ACCOUNT_NAME = 'Apertura';
+
+/**
+ * Asiento de apertura vigente del ejercicio (TSK-760, H3). Se busca por ejercicio y,
+ * para los cargados antes de TSK-760 (sin `fiscalYearId`), por el **día UTC** del
+ * inicio: la fecha exacta difiere en hora (03:00 UTC del formulario viejo vs.
+ * 00:00 UTC normalizado) y compararla por igualdad permitía duplicar la apertura.
+ * Excluye las reversiones (`originalEntryId`) y los anulados (solo POSTED).
+ */
+function openingEntryWhere(
+  companyId: string,
+  fiscalYearId: string | null,
+  startDay: Date
+): Prisma.JournalEntryWhereInput {
+  return {
+    companyId,
+    description: OPENING_ENTRY_DESCRIPTION,
+    status: JournalEntryStatus.POSTED,
+    originalEntryId: null,
+    OR: [
+      ...(fiscalYearId ? [{ fiscalYearId }] : []),
+      { fiscalYearId: null, date: { gte: startOfDayUtc(startDay), lte: endOfDayUtc(startDay) } },
+    ],
+  };
+}
+
+/** Ejercicio abierto más antiguo (el de los saldos de apertura); sin ejercicio, nulo. */
+function findOldestOpenFiscalYear(db: Tx, companyId: string) {
+  return db.fiscalYear.findFirst({
+    where: { companyId, isClosed: false },
+    orderBy: { number: 'asc' },
+    select: { id: true, number: true, startDate: true },
+  });
+}
+
+/**
+ * Ejercicio donde va la apertura, con el lock de Ajustes tomado: el abierto más
+ * antiguo o, si la empresa todavía no tiene ejercicios (Fase 3 pendiente), el FY 1
+ * creado desde Ajustes (D1).
+ */
+async function resolveOpeningFiscalYearTx(tx: Tx, companyId: string) {
+  const settings = await lockAccountingSettingsTx(tx, companyId);
+  const oldestOpen = await findOldestOpenFiscalYear(tx, companyId);
+  if (oldestOpen) return oldestOpen;
+  const created = await ensureFiscalYearTx(tx, settings, settings.fiscalYearStart);
+  return { id: created.id, number: created.number, startDate: created.startDate };
+}
 
 // ============================================
 // QUERIES
@@ -106,13 +157,14 @@ export async function getOpeningBalancesPageData() {
     // Detectar asiento de apertura existente
     let existingOpeningEntry = null;
     if (settings) {
+      const fiscalYear = await findOldestOpenFiscalYear(prisma, companyId);
       const entry = await prisma.journalEntry.findFirst({
-        where: {
+        where: openingEntryWhere(
           companyId,
-          description: OPENING_ENTRY_DESCRIPTION,
-          date: settings.fiscalYearStart,
-          status: JournalEntryStatus.POSTED,
-        },
+          fiscalYear?.id ?? null,
+          fiscalYear?.startDate ?? settings.fiscalYearStart
+        ),
+        orderBy: { number: 'desc' },
         select: {
           id: true,
           number: true,
@@ -307,12 +359,18 @@ async function getOrCreateAperturaAccount(
 }
 
 /**
- * Guarda el asiento de saldos de apertura
+ * Guarda el asiento de saldos de apertura (TSK-760, #19). Nace POSTED en el período
+ * OPENING del ejercicio abierto más antiguo, fechado el día de inicio (UTC), con el
+ * núcleo (`createJournalEntryTx`: período, ejercicio, número atómico y balance).
+ *
+ * Editar (`replaceExisting`, B25/C2): los asientos POSTED son inmutables (trigger),
+ * así que se revierte el vigente con su misma fecha en el período OPENING
+ * (`reverseJournalEntryTx`) y se crea uno nuevo, todo en la misma transacción.
  */
 export async function saveOpeningBalanceEntry(
   input: OpeningBalanceFormInput,
   replaceExisting: boolean
-) {
+): Promise<ActionResult<{ entryId: string; entryNumber: number }>> {
   const userId = await getCurrentUserId();
   if (!userId) throw new Error('No autenticado');
 
@@ -320,39 +378,29 @@ export async function saveOpeningBalanceEntry(
   if (!companyId) throw new Error('No se encontró la empresa activa');
   await checkPermission('accounting.opening-balances', 'create', { redirect: true });
 
-  // Validar input
-  const parsed = openingBalanceFormSchema.safeParse(input);
-  if (!parsed.success) {
-    throw new Error(
-      `Datos inválidos: ${parsed.error.issues.map((e) => e.message).join(', ')}`
-    );
-  }
-
   try {
+    const parsed = openingBalanceFormSchema.safeParse(input);
+    if (!parsed.success) {
+      throw new BusinessError(
+        `Datos inválidos: ${parsed.error.issues.map((e) => e.message).join(', ')}`
+      );
+    }
+
     const settings = await prisma.accountingSettings.findUnique({
       where: { companyId },
+      select: { id: true },
     });
-
     if (!settings) {
-      throw new Error('La empresa no tiene configuración contable');
+      throw new BusinessError('La empresa no tiene configuración contable');
     }
 
     // Filtrar líneas con monto 0
-    const nonZeroBalances = parsed.data.balances.filter(
-      (b) => b.debit > 0 || b.credit > 0
-    );
-
+    const nonZeroBalances = parsed.data.balances.filter((b) => b.debit > 0 || b.credit > 0);
     if (nonZeroBalances.length === 0) {
-      throw new Error('Debe ingresar al menos un saldo');
+      throw new BusinessError('Debe ingresar al menos un saldo');
     }
-
-    // Validar que cada línea tenga solo Debe o solo Haber
-    for (const balance of nonZeroBalances) {
-      if (balance.debit > 0 && balance.credit > 0) {
-        throw new Error(
-          'Cada cuenta debe tener solo Debe o solo Haber, no ambos'
-        );
-      }
+    if (nonZeroBalances.some((b) => b.debit > 0 && b.credit > 0)) {
+      throw new BusinessError('Cada cuenta debe tener solo Debe o solo Haber, no ambos');
     }
 
     // Verificar que las cuentas existen y pertenecen a la empresa
@@ -361,28 +409,26 @@ export async function saveOpeningBalanceEntry(
       where: { id: { in: accountIds }, companyId, isActive: true },
       select: { id: true },
     });
-    if (accounts.length !== accountIds.length) {
-      throw new Error('Algunas cuentas no existen o no están activas');
+    if (accounts.length !== new Set(accountIds).size) {
+      throw new BusinessError('Algunas cuentas no existen o no están activas');
     }
 
-    // Calcular totales
     const totalDebit = nonZeroBalances.reduce((sum, b) => sum + b.debit, 0);
     const totalCredit = nonZeroBalances.reduce((sum, b) => sum + b.credit, 0);
-    const difference = totalDebit - totalCredit;
+    const difference = Math.round((totalDebit - totalCredit) * 100) / 100;
 
     const result = await prisma.$transaction(async (tx) => {
-      // Obtener o crear cuenta Apertura
+      const fiscalYear = await resolveOpeningFiscalYearTx(tx, companyId);
+      const date = startOfDayUtc(fiscalYear.startDate);
       const aperturaAccount = await getOrCreateAperturaAccount(companyId, tx);
 
-      // Construir líneas del asiento
       const lines = nonZeroBalances.map((b) => ({
         accountId: b.accountId,
         debit: b.debit,
         credit: b.credit,
       }));
-
-      // Agregar línea de balanceo (cuenta Apertura)
-      if (Math.abs(difference) > 0.001) {
+      // Línea de balanceo (cuenta Apertura)
+      if (difference !== 0) {
         lines.push({
           accountId: aperturaAccount.id,
           debit: difference < 0 ? Math.abs(difference) : 0,
@@ -390,106 +436,57 @@ export async function saveOpeningBalanceEntry(
         });
       }
 
-      // Verificar balance final
-      const finalDebit = lines.reduce((sum, l) => sum + l.debit, 0);
-      const finalCredit = lines.reduce((sum, l) => sum + l.credit, 0);
-      if (Math.abs(finalDebit - finalCredit) > 0.01) {
-        throw new Error('Error interno: el asiento no está balanceado');
+      const existing = await tx.journalEntry.findFirst({
+        where: openingEntryWhere(companyId, fiscalYear.id, fiscalYear.startDate),
+        orderBy: { number: 'desc' },
+        select: { id: true, date: true },
+      });
+      if (replaceExisting && !existing) {
+        throw new BusinessError('No se encontró el asiento de apertura existente');
+      }
+      if (!replaceExisting && existing) {
+        throw new BusinessError('Ya existe un asiento de apertura. Usá la opción de editar.');
       }
 
-      if (replaceExisting) {
-        // Buscar asiento existente
-        const existing = await tx.journalEntry.findFirst({
-          where: {
+      const reversed = existing
+        ? await reverseJournalEntryTx(tx, {
             companyId,
-            description: OPENING_ENTRY_DESCRIPTION,
-            date: settings.fiscalYearStart,
-            status: JournalEntryStatus.POSTED,
-          },
-          select: { id: true, number: true },
-        });
-
-        if (!existing) {
-          throw new Error('No se encontró el asiento de apertura existente');
-        }
-
-        // Borrar líneas viejas y crear nuevas
-        await tx.journalEntryLine.deleteMany({
-          where: { entryId: existing.id },
-        });
-
-        await tx.journalEntry.update({
-          where: { id: existing.id },
-          data: {
-            date: settings.fiscalYearStart,
-            lines: {
-              create: lines,
-            },
-          },
-        });
-
-        logger.info('Asiento de apertura actualizado', {
-          data: { entryId: existing.id, entryNumber: existing.number, userId },
-        });
-
-        return { entryId: existing.id, entryNumber: existing.number };
-      } else {
-        // Verificar que no exista ya
-        const existing = await tx.journalEntry.findFirst({
-          where: {
-            companyId,
-            description: OPENING_ENTRY_DESCRIPTION,
-            date: settings.fiscalYearStart,
-            status: JournalEntryStatus.POSTED,
-          },
-          select: { id: true },
-        });
-
-        if (existing) {
-          throw new Error(
-            'Ya existe un asiento de apertura. Usá la opción de editar.'
-          );
-        }
-
-        const newNumber = settings.lastEntryNumber + 1;
-
-        const entry = await tx.journalEntry.create({
-          data: {
-            companyId,
-            number: newNumber,
-            date: settings.fiscalYearStart,
-            description: OPENING_ENTRY_DESCRIPTION,
-            status: JournalEntryStatus.POSTED,
-            postDate: new Date(),
+            entryId: existing.id,
+            date: existing.date,
             createdBy: userId,
-            lines: {
-              create: lines,
-            },
-          },
-          select: { id: true, number: true },
-        });
+            periodType: 'OPENING',
+            source: 'opening-balance',
+          })
+        : null;
 
-        await tx.accountingSettings.update({
-          where: { companyId },
-          data: { lastEntryNumber: newNumber },
-        });
+      const entry = await createJournalEntryTx(tx, {
+        companyId,
+        date,
+        description: OPENING_ENTRY_DESCRIPTION,
+        lines,
+        status: 'POSTED',
+        createdBy: userId,
+        periodType: 'OPENING',
+        source: 'opening-balance',
+      });
 
-        logger.info('Asiento de apertura creado', {
-          data: { entryId: entry.id, entryNumber: entry.number, userId },
-        });
-
-        return { entryId: entry.id, entryNumber: entry.number };
-      }
+      return { entry, reversed };
     });
 
+    logger.info(result.reversed ? 'Asiento de apertura reemplazado' : 'Asiento de apertura creado', {
+      data: {
+        entryId: result.entry.id,
+        entryNumber: result.entry.number,
+        reversedEntryId: result.reversed?.original.id,
+        reversalNumber: result.reversed?.reversal.number,
+        userId,
+      },
+    });
     revalidateAccountingRoutes(companyId);
 
-    return { success: true, ...result };
+    return { success: true, entryId: result.entry.id, entryNumber: result.entry.number };
   } catch (error) {
-    logger.error('Error al guardar asiento de apertura', {
-      data: { error, companyId, userId },
-    });
-    throw error;
+    return toActionResult(error, 'Error al guardar asiento de apertura');
   }
 }
 

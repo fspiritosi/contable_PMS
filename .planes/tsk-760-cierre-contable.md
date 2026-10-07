@@ -1,7 +1,7 @@
 # TSK-760 — Cierre contable: el cierre anual no funciona y el bloqueo de períodos se saltea
 
 **Fecha de inicio:** 2026-10-06
-**Estado:** Implementación en progreso (Fases 1, 2, 4, 5 y 6 de 14 completadas; Fase 3 pendiente del diagnóstico de producción)
+**Estado:** Implementación en progreso (Fases 1, 2 y 4 a 7 de 14 completadas; Fase 3 pendiente del diagnóstico de producción)
 
 ---
 
@@ -1005,15 +1005,15 @@ Otras decisiones de esta planificación:
 - **Objetivo:** recurrentes, saldos de apertura, IVA, diferencia de cambio e inflación usan el
   núcleo.
 - **Tareas:**
-  - [ ] `ACC/features/recurring-entries/actions.server.ts` `generateRecurringEntry` (`:177`) y
+  - [x] `ACC/features/recurring-entries/actions.server.ts` `generateRecurringEntry` (`:177`) y
         `generateAllPendingRecurringEntries` (`:269`, el período cerrado va a `errors[]` con el mes).
-  - [ ] `ACC/features/opening-balances/actions.server.ts` `saveOpeningBalanceEntry` (`:312`):
+  - [x] `ACC/features/opening-balances/actions.server.ts` `saveOpeningBalanceEntry` (`:312`):
         POSTED, con `periodType: 'OPENING'` del FY de la fecha y balance verificado.
-  - [ ] `ACC/features/vat-settlement/actions.server.ts` (`:102`),
+  - [x] `ACC/features/vat-settlement/actions.server.ts` (`:102`),
         `ACC/features/exchange-rates/actions.server.ts` (`:254`),
         `ACC/features/inflation-adjustment/actions.server.ts` (`:258`): `createJournalEntryTx`
         (sin UI, migración barata, R1).
-  - [ ] Tests nuevos `ACC/features/{recurring-entries,opening-balances}/*.integration.test.ts`
+  - [x] Tests nuevos `ACC/features/{recurring-entries,opening-balances}/*.integration.test.ts`
         (abierto/cerrado, numeración, FY/período) y un test mínimo combinado
         `ACC/features/vat-settlement/generators-period-lock.integration.test.ts` para IVA, cambio e
         inflación (rechazo en mes cerrado y FY/período cargados).
@@ -1103,8 +1103,8 @@ Otras decisiones de esta planificación:
         number } | null` sobre las 8 tablas de 1.2.5 (incluida `fund_movements.journal_entry_id`
         sin relación) y `fiscal_years.closing/opening_entry_id`. `getEntriesWithoutDocuments`
         (`ACC/features/reports/actions.server.ts:623`) lo reutiliza.
-  - [ ] `UT/journal-entry-tx.ts` `reverseJournalEntryTx(tx, { companyId, entryId, date,
-        createdBy })`: valida período del original y de la fecha de reversión, crea el asiento con
+  - [x] `UT/journal-entry-tx.ts` `reverseJournalEntryTx(tx, { companyId, entryId, date,
+        createdBy })` (**hecho en la Fase 7** para B25, con tests; acá solo se usa): valida período del original y de la fecha de reversión, crea el asiento con
         todas las columnas de línea invertidas (auxiliares, `costCenterId`, moneda) vía
         `createJournalEntryTx`, y pasa el original a REVERSED con `reversalEntryId` en **un solo**
         `UPDATE` (trigger).
@@ -2996,7 +2996,137 @@ borrado). Borrador de fondos sembrado por SQL: aporte de Juan Perez al Santander
   (dos transferencias simultáneas del mismo banco pueden pisar el saldo). Candidato a ticket aparte.
 
 ### Fase 7: Creadores IV — generadores contables
-**Estado:** Pendiente
+**Estado:** Completada (2026-10-06)
+
+**Archivos modificados** (`ACC/` = `src/modules/accounting/`, `UT/` = `ACC/shared/utils/`):
+- `UT/journal-entry-tx.ts`: **`reverseJournalEntryTx`** (adelantado de la Fase 10 porque B25 lo
+  necesita; firma de §3.3.4 más `periodType?` y `source?`, ver desvíos). Puro: lee el original
+  (POSTED, de la empresa) con todas las columnas de línea, valida su período con el tipo de su
+  período y `subject` "No se puede anular el asiento N° X (fecha DD/MM/YYYY)", crea la reversión
+  POSTED con `invertLines` vía `createJournalEntryTx` (`originalEntryId`, descripción
+  "Anulación del asiento N° X - …", valida el período de la fecha de reversión) y pasa el
+  original a REVERSED con `reversalEntryId`/`reversedBy`/`reversedAt` en un solo `UPDATE`. Sin
+  `checkPermission`, `$transaction` ni chequeo de documento (eso es del llamador). Mensajes de
+  §3.3.4 ("Asiento no encontrado.", "Solo se pueden anular asientos registrados; el N° X está en
+  estado Borrador/Anulado."). `toEntryPeriodType` compartido con `postJournalEntryTx`.
+  **La Fase 10 lo reutiliza** (solo le falta el wrapper `reverseJournalEntry` con
+  `getEntryDocumentLink`). Reexportado en `INT/core/index.ts`.
+- `ACC/features/recurring-entries/actions.server.ts` (#18): función interna
+  `generateRecurringEntryForCompany` → `createJournalEntryTx` (DRAFT, userId,
+  `source` = `recurring-entry:<id>`) y avance de `nextDueDate`/`lastGenerated` en la misma tx.
+  `generateRecurringEntry(recurringEntryId)` → `ActionResult<{ id; number }>` y
+  `generateAllPendingRecurringEntries()` → `ActionResult<{ generated; errors }>` (§3.6): **sin
+  `companyId` del cliente** (sale de `getActiveCompanyId()`); cada plantilla en su propia tx, el
+  rechazo va a `errors[]` como `<nombre>: <mensaje con el mes>` y la plantilla queda pendiente.
+  `calculateNextDueDate` y la etiqueta `MM/YYYY` de la descripción pasan a UTC (`moment.utc`,
+  `formatMonth(monthKeyUtc)`): en hora local el 31/01 00:00Z avanzaba al 01/03 y el día 1 se
+  etiquetaba con el mes anterior.
+- `_RecurringEntriesTable.tsx` (210, sin crecer) y `_GeneratePendingDialog.tsx` (101):
+  `if (!result.success) return void toast.error(result.error)`; el diálogo ya no recibe
+  `companyId`. `_CreateRecurringEntryDialog.tsx` (321, sin crecer): fecha de inicio por defecto
+  y la elegida en los `type="date"` a **mediodía local** (`'T12:00:00'`), como en la Fase 6
+  (antes `new Date('YYYY-MM-DD')` = 00:00Z, que el propio input mostraba como el día anterior).
+- `ACC/features/opening-balances/actions.server.ts` (#19, B25, H3):
+  `saveOpeningBalanceEntry` → `ActionResult<{ entryId; entryNumber }>`. En una tx: lock de Ajustes,
+  ejercicio **abierto más antiguo** (o FY 1 con `ensureFiscalYearTx` si la empresa no tiene
+  ejercicios: no depende de la Fase 3), fecha = su día de inicio (00:00Z), cuenta Apertura,
+  búsqueda del vigente con `openingEntryWhere`: por `fiscalYearId` **o** (sin ejercicio, cargado
+  antes de TSK-760) por **día UTC** del inicio, POSTED, sin `originalEntryId` (excluye
+  reversiones). Crear con vigente → "Ya existe un asiento de apertura. Usá la opción de editar.";
+  editar sin vigente → "No se encontró el asiento de apertura existente". **Editar** =
+  `reverseJournalEntryTx` del vigente con su misma fecha y `periodType: 'OPENING'` + nuevo
+  `createJournalEntryTx` (POSTED, OPENING). Validaciones previas → `BusinessError` (mismos
+  textos). `getOpeningBalancesPageData` usa la misma búsqueda (con el FY abierto más antiguo, o la
+  fecha de Ajustes si todavía no hay FY).
+- `_AccountBalancesForm.tsx` (387 → 386): `ActionResult`; "Fecha:" con `moment.utc` (con la
+  fecha normalizada a 00:00Z el `moment` local mostraba 31/12); texto del diálogo de edición:
+  "Se anulará el asiento vigente (con una reversión en la misma fecha) y se registrará uno nuevo
+  con estos saldos." (antes decía que reemplazaba las líneas).
+- `ACC/features/vat-settlement/actions.server.ts` (#15): `createJournalEntryTx` (POSTED,
+  `'system'`, fecha `endOfMonthUtc`); rango del preview en UTC (`startOfMonthUtc`/`endOfMonthUtc`)
+  y período `MM/YYYY` con `formatMonth`; se omiten líneas 0/0 (sin DF, sin CF o saldo cero: las
+  rechaza el CHECK). → `ActionResult<{ id; number; preview }>`.
+- `ACC/features/exchange-rates/actions.server.ts` (#16): `createJournalEntryTx` (POSTED, userId);
+  ahora carga ejercicio y período; descripción con `formatDayUtc`. → `ActionResult<{ id; number }>`.
+- `ACC/features/inflation-adjustment/actions.server.ts` (#17): `createJournalEntryTx` (POSTED,
+  `'system'`, fecha `endOfMonthUtc`); rangos de `calculateRECPAM` en UTC; contrapartida redondeada
+  a centavos y omitida si da 0. → `ActionResult<{ id; number }>`. Los "no hay índice cargado" y
+  "Configuración contable no encontrada" de los previews pasan a `BusinessError`.
+
+**Tests** (TDD: los 20 nuevos fallaron primero — firma vieja, `reverseJournalEntryTx`
+inexistente, el "editar" de apertura chocaba con el trigger —; con la implementación, verdes):
+- `UT/journal-entry-tx.integration.test.ts` + 4 de `reverseJournalEntryTx`: copia invertida de
+  auxiliares, moneda, `originalAmount`/`exchangeRate` y `costCenterId`, original REVERSED con
+  `reversalEntryId`/`reversedBy`/`reversedAt`; `periodType: 'OPENING'` con la misma fecha; mes del
+  original cerrado → texto con `subject` sin consumir número; borrador / otra empresa. Su
+  `afterAll` ahora limpia los asientos de todas las empresas antes de borrar auxiliares (la
+  reversión usa auxiliares de la empresa principal: borrarlos primero disparaba el `SET NULL`
+  sobre líneas POSTED).
+- `ACC/features/recurring-entries/recurring-entries.integration.test.ts` (6, `TSK760-REC-`): mes
+  abierto (DRAFT, FY/período 03/2026, número, descripción, plantilla avanzada); mes cerrado
+  (`closeMonthForTest`) → `{ success: false }` con el texto exacto, sin consumir número ni avanzar
+  la plantilla, y reabierto se genera; 31/01 → 28/02 (UTC); dos en paralelo → 1 y 2; plantilla
+  de otra empresa; **masiva con febrero cerrado** → `generated: 1`, `errors: ["<nombre>: No se
+  puede registrar con fecha 10/02/2026: … (mes 02/2026 cerrado) …"]`, la de febrero sigue pendiente.
+- `ACC/features/opening-balances/opening-balances.integration.test.ts` (7, `TSK760-OB-`): crear
+  (POSTED, OPENING, 01/01 00:00Z, FY 1, cuenta Apertura balanceando, la página lo encuentra);
+  crear dos veces → rechazo sin duplicar; **B25**: editar → original REVERSED, reversión N° 2
+  POSTED en OPENING con la misma fecha, nuevo N° 3, un solo vigente, la página muestra el nuevo, y
+  editar otra vez revierte el último; **H3**: apertura sembrada sin ejercicio a las 03:00Z (Ajustes
+  del formulario viejo) → detectada, no se duplica y se reemplaza; OPENING cerrado (C7) → "…
+  (apertura del ejercicio N° 1 cerrada)." sin consumir número; editar sin vigente; sin Ajustes.
+- `ACC/features/vat-settlement/generators-period-lock.integration.test.ts` (3, `TSK760-GEN-`):
+  IVA, diferencia de cambio e inflación con marzo cerrado → texto exacto sin consumir número;
+  abierto → POSTED con FY/período 03/2026, número, `createdBy` y líneas esperadas (IVA e inflación
+  fechados 31/03 23:59:59.999Z).
+
+**Calidad:** `npm run test` = **59 archivos, 771 tests, verdes**; `check-types` = **219**; `eslint`
+de los archivos tocados sin errores ni warnings. Sin `any` ni `console`. No quedan empresas de
+test. `grep "lastEntryNumber + 1\|journalEntry.create(" src/modules` → solo el núcleo y los
+pendientes de las Fases 9 (`closeFiscalYear` ×2), 10 (`reverseJournalEntry`) y 11
+(`INT/treasury`).
+
+**Prueba en navegador** (Playwright contra :3010, "Empresa de Prueba 01 SA"; scripts temporales
+borrados). Plantilla recurrente sembrada por SQL (vence 15/09/2026, Caja chica / Caja $1).
+- Septiembre cerrado por SQL: "Generar asiento" → toast "No se puede registrar con fecha
+  15/09/2026: el período está cerrado (mes 09/2026 cerrado). Para operar, reabrilo desde …";
+  plantilla sin cambios. Reabierto: "Asiento N° 55 generado desde …"; DRAFT, MONTHLY 2026/09,
+  descripción "… - 09/2026", plantilla al 15/10/2026.
+- Saldos de apertura con el OPENING cerrado por SQL: "No se puede registrar con fecha 01/01/2026:
+  el período está cerrado (apertura del ejercicio N° 1 cerrada)." Reabierto: "Asiento de apertura
+  N° 65 creado" (Caja chica $1, 01/01/2026, OPENING); **Editar** a $2 → "Asiento de apertura N° 67
+  actualizado": N° 65 REVERSED, N° 66 reversión POSTED en OPENING, N° 67 vigente; el banner
+  muestra el N° 67 (no duplica). En la primera corrida la edición devolvió una vez el mensaje
+  genérico; no se pudo reproducir en 4 corridas más (con traza temporal del error en
+  `toActionResult`, ya revertida): probablemente un corte transitorio del dev server; anotado para
+  la verificación en modo producción (Fase 14).
+
+**Datos que quedaron en la DB de dev** (todo "Verificación interna TSK-760 F7 (no usar)" o
+apertura de prueba):
+- Plantilla recurrente `ba3c39ec-bdf8-4da2-94b5-feac34db6832` (activa, próxima 15/10/2026) y su
+  asiento **N° 55** `b88ea27d-3e52-4a6f-aa7a-43a52c215535` (DRAFT, 15/09/2026).
+- Cuenta **3.0.1 "Apertura"** `a969c731-9039-4ff0-81e7-4e792e2c3c96` (la crea la action).
+- Apertura: **N° 65** `9394616d-ba61-4188-a14f-0d3aec9b038b` REVERSED, **N° 66**
+  `c7ce101c-8b25-439d-b9b5-d09a707b0ac8` (reversión) y **N° 67**
+  `42bbf830-6448-40cd-994d-88ca34151325` vigente (Caja chica D / Apertura H $2,00), POSTED en el
+  OPENING del FY 1. Los números 56 a 64 (corridas repetidas de la edición) se borraron con
+  `session_replication_role = 'replica'`: quedan como hueco. `last_entry_number` = 67. Ningún
+  período cerrado.
+
+**Desvíos y notas:**
+- `reverseJournalEntryTx` entra en esta fase (el plan lo ubicaba en la 10) porque B25 lo necesita.
+  Agrega a la firma de §3.3.4 `periodType?` (default MONTHLY; la apertura revierte en OPENING con
+  la misma fecha, §3.3.10 #19) y `source?`.
+- IVA, diferencia de cambio e inflación: §3.6 decía que conservaban la firma y seguían lanzando;
+  se pasaron a `ActionResult` por el criterio del líder (toda action tocada). No tienen callers.
+- Las actions de recurrentes pierden el parámetro `companyId` (§3.6): `getRecurringEntries`,
+  `createRecurringEntry` y `deleteRecurringEntry` (no tocadas) todavía lo reciben del cliente.
+- Las fechas de cierre de mes del IVA y la inflación se guardan a las 23:59:59.999Z (diseño:
+  `endOfMonthUtc`), no a medianoche.
+- La guía in-app y `docs/` (texto de "Editar" saldos de apertura) quedan para la Fase 13.
+- **La Fase 12 ya no tiene que tocar** `generateRecurringEntry`, `generateAllPendingRecurringEntries`,
+  `saveOpeningBalanceEntry`, `_RecurringEntriesTable`, `_GeneratePendingDialog` ni
+  `_AccountBalancesForm`.
 
 ### Fase 8: Cierre y reapertura de meses
 **Estado:** Pendiente

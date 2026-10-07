@@ -1,12 +1,14 @@
 ﻿'use server';
 
+import { BusinessError, toActionResult, type ActionResult } from '@/shared/lib/action-result';
+import { getActiveCompanyId } from '@/shared/lib/company';
 import { getCurrentUserId } from '@/shared/lib/current-user';
 import { prisma } from '@/shared/lib/prisma';
 import { logger } from '@/shared/lib/logger';
 import { checkPermission } from '@/shared/lib/permissions';
-import { JournalEntryStatus } from '@/generated/prisma/enums';
 import { type RecurringFrequency } from '@/generated/prisma/enums';
-import { revalidateAccountingRoutes } from '../../shared/utils';
+import { formatMonth, monthKeyUtc, revalidateAccountingRoutes } from '../../shared/utils';
+import { createJournalEntryTx } from '../../shared/utils/journal-entry-tx';
 import { recurringEntrySchema } from './validators';
 import moment from 'moment';
 
@@ -14,7 +16,9 @@ import moment from 'moment';
  * Calcula la siguiente fecha de generación según frecuencia
  */
 function calculateNextDueDate(currentDate: Date, frequency: RecurringFrequency): Date {
-  const m = moment(currentDate);
+  // En UTC (TSK-760, D8): las fechas de día se guardan a medianoche UTC; en hora local
+  // el 31/01 00:00Z es el 30/01 y "un mes después" caía el 01/03.
+  const m = moment.utc(currentDate);
   switch (frequency) {
     case 'MONTHLY':
       return m.add(1, 'month').toDate();
@@ -172,104 +176,94 @@ export async function deleteRecurringEntry(companyId: string, id: string) {
 }
 
 /**
- * Genera un asiento contable desde una plantilla recurrente
+ * Genera el asiento de una plantilla para la empresa activa (TSK-760, #18). El asiento
+ * nace DRAFT con el núcleo (`createJournalEntryTx`: período cerrado, ejercicio,
+ * período y número atómico) y la plantilla avanza en la misma transacción. Con el mes
+ * del vencimiento cerrado no se crea nada: la plantilla queda pendiente y el mensaje
+ * dice qué mes reabrir.
  */
-export async function generateRecurringEntry(companyId: string, recurringEntryId: string) {
-  const userId = await getCurrentUserId();
-  if (!userId) throw new Error('No autenticado');
-  await checkPermission('accounting.recurring-entries', 'create', { redirect: true });
-
+async function generateRecurringEntryForCompany(
+  companyId: string,
+  recurringEntryId: string,
+  userId: string
+): Promise<ActionResult<{ id: string; number: number }>> {
   try {
-    const recurring = await prisma.recurringEntry.findUnique({
-      where: { id: recurringEntryId },
-      include: {
-        lines: true,
+    const recurring = await prisma.recurringEntry.findFirst({
+      where: { id: recurringEntryId, companyId },
+      select: {
+        id: true,
+        name: true,
+        isActive: true,
+        frequency: true,
+        nextDueDate: true,
+        lines: { select: { accountId: true, description: true, debit: true, credit: true } },
       },
     });
+    if (!recurring) throw new BusinessError('Asiento recurrente no encontrado');
+    if (!recurring.isActive) throw new BusinessError('El asiento recurrente está inactivo');
 
-    if (!recurring || recurring.companyId !== companyId) {
-      throw new Error('Asiento recurrente no encontrado');
-    }
+    const dueDate = recurring.nextDueDate;
+    const description = `${recurring.name} - ${formatMonth(monthKeyUtc(dueDate))}`;
 
-    if (!recurring.isActive) {
-      throw new Error('El asiento recurrente está inactivo');
-    }
-
-    const settings = await prisma.accountingSettings.findUnique({
-      where: { companyId },
-    });
-
-    if (!settings) {
-      throw new Error('No hay configuración contable');
-    }
-
-    const periodLabel = moment(recurring.nextDueDate).format('MM/YYYY');
-    const description = `${recurring.name} - ${periodLabel}`;
-
-    const result = await prisma.$transaction(async (tx) => {
-      const nextNumber = settings.lastEntryNumber + 1;
-
-      const entry = await tx.journalEntry.create({
-        data: {
-          companyId,
-          number: nextNumber,
-          date: recurring.nextDueDate,
-          description,
-          createdBy: userId,
-          status: JournalEntryStatus.DRAFT,
-          lines: {
-            create: recurring.lines.map((line) => ({
-              accountId: line.accountId,
-              description: line.description,
-              debit: line.debit,
-              credit: line.credit,
-            })),
-          },
-        },
-        select: {
-          id: true,
-          number: true,
-        },
+    const entry = await prisma.$transaction(async (tx) => {
+      const created = await createJournalEntryTx(tx, {
+        companyId,
+        date: dueDate,
+        description,
+        lines: recurring.lines,
+        status: 'DRAFT',
+        createdBy: userId,
+        source: `recurring-entry:${recurring.id}`,
       });
-
-      await tx.accountingSettings.update({
-        where: { companyId },
-        data: { lastEntryNumber: nextNumber },
-      });
-
-      // Actualizar la plantilla recurrente
-      const newNextDueDate = calculateNextDueDate(recurring.nextDueDate, recurring.frequency);
-
       await tx.recurringEntry.update({
-        where: { id: recurringEntryId },
+        where: { id: recurring.id },
         data: {
-          lastGenerated: recurring.nextDueDate,
-          nextDueDate: newNextDueDate,
+          lastGenerated: dueDate,
+          nextDueDate: calculateNextDueDate(dueDate, recurring.frequency),
         },
       });
-
-      return entry;
+      return created;
     });
 
     logger.info('Asiento generado desde plantilla recurrente', {
-      data: { recurringEntryId, entryId: result.id, userId },
+      data: { recurringEntryId, entryId: entry.id, number: entry.number, userId },
     });
-
-    revalidateAccountingRoutes(companyId);
-    return result;
+    return { success: true, id: entry.id, number: entry.number };
   } catch (error) {
-    logger.error('Error al generar asiento recurrente', { data: { error, recurringEntryId, userId } });
-    throw error;
+    return toActionResult(error, 'Error al generar asiento recurrente');
   }
 }
 
 /**
- * Genera todos los asientos recurrentes pendientes
+ * Genera un asiento contable desde una plantilla recurrente
  */
-export async function generateAllPendingRecurringEntries(companyId: string) {
+export async function generateRecurringEntry(
+  recurringEntryId: string
+): Promise<ActionResult<{ id: string; number: number }>> {
   const userId = await getCurrentUserId();
   if (!userId) throw new Error('No autenticado');
   await checkPermission('accounting.recurring-entries', 'create', { redirect: true });
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  const result = await generateRecurringEntryForCompany(companyId, recurringEntryId, userId);
+  if (result.success) revalidateAccountingRoutes(companyId);
+  return result;
+}
+
+/**
+ * Genera todos los asientos recurrentes pendientes. Cada plantilla va en su propia
+ * transacción: la que cae en un mes cerrado (o falla por otro motivo) se informa en
+ * `errors[]` con el mensaje (que nombra el mes) y queda pendiente; las demás se generan.
+ */
+export async function generateAllPendingRecurringEntries(): Promise<
+  ActionResult<{ generated: number; errors: string[] }>
+> {
+  const userId = await getCurrentUserId();
+  if (!userId) throw new Error('No autenticado');
+  await checkPermission('accounting.recurring-entries', 'create', { redirect: true });
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
 
   try {
     const now = new Date();
@@ -278,25 +272,19 @@ export async function generateAllPendingRecurringEntries(companyId: string) {
         companyId,
         isActive: true,
         nextDueDate: { lte: now },
-        OR: [
-          { endDate: null },
-          { endDate: { gte: now } },
-        ],
+        OR: [{ endDate: null }, { endDate: { gte: now } }],
       },
       select: { id: true, name: true },
+      orderBy: { nextDueDate: 'asc' },
     });
 
     let generated = 0;
     const errors: string[] = [];
 
     for (const entry of pending) {
-      try {
-        await generateRecurringEntry(companyId, entry.id);
-        generated++;
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Error desconocido';
-        errors.push(`${entry.name}: ${msg}`);
-      }
+      const result = await generateRecurringEntryForCompany(companyId, entry.id, userId);
+      if (result.success) generated++;
+      else errors.push(`${entry.name}: ${result.error}`);
     }
 
     logger.info('Generación masiva de asientos recurrentes', {
@@ -304,9 +292,8 @@ export async function generateAllPendingRecurringEntries(companyId: string) {
     });
 
     revalidateAccountingRoutes(companyId);
-    return { generated, errors };
+    return { success: true, generated, errors };
   } catch (error) {
-    logger.error('Error en generación masiva de recurrentes', { data: { error, companyId } });
-    throw error;
+    return toActionResult(error, 'Error en generación masiva de recurrentes');
   }
 }

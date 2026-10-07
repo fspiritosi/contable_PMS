@@ -22,7 +22,12 @@ import { prisma } from '@/shared/lib/prisma';
 vi.mock('server-only', () => ({}));
 
 import { cleanupAccountingCompany } from '../test-utils/cleanup-accounting-company';
-import { createJournalEntryTx, nextEntryNumberTx, postJournalEntryTx } from './journal-entry-tx';
+import {
+  createJournalEntryTx,
+  nextEntryNumberTx,
+  postJournalEntryTx,
+  reverseJournalEntryTx,
+} from './journal-entry-tx';
 import type { JournalEntryLineDraft } from './journal-entry-lines';
 import type { Tx } from './journal-entry-types';
 import { lockAccountingSettingsTx } from './period-lock';
@@ -191,8 +196,10 @@ describe.skipIf(!dbAvailable)('creador único de asientos (TSK-760)', () => {
   });
 
   afterAll(async () => {
+    // Primero los asientos de todas las empresas: las reversiones usan auxiliares de la
+    // principal y borrarlos antes dispararía el SET NULL sobre líneas POSTED.
+    for (const companyId of companyIds) await cleanupAccountingCompany(companyId);
     for (const companyId of companyIds) {
-      await cleanupAccountingCompany(companyId);
       await prisma.accountingSettings.deleteMany({ where: { companyId } });
       await prisma.costCenter.deleteMany({ where: { companyId } });
       await prisma.supplier.deleteMany({ where: { companyId } });
@@ -532,6 +539,149 @@ describe.skipIf(!dbAvailable)('creador único de asientos (TSK-760)', () => {
       await expect(post(c.companyId, seeded.id)).rejects.toThrow(
         'El asiento no está balanceado. Debe: $100.00, Haber: $90.00, Diferencia: $10.00'
       );
+    });
+  });
+
+  // Fase 7 (B25): la edición de saldos de apertura revierte el vigente. La Fase 10
+  // reutiliza este helper para la anulación desde Asientos.
+  describe('reverseJournalEntryTx', () => {
+    const reverse = (
+      companyId: string,
+      entryId: string,
+      overrides: Partial<Parameters<typeof reverseJournalEntryTx>[1]> = {}
+    ) =>
+      inTx((tx) =>
+        reverseJournalEntryTx(tx, {
+          companyId,
+          entryId,
+          date: new Date('2026-04-02T00:00:00.000Z'),
+          createdBy: USER,
+          ...overrides,
+        })
+      );
+
+    it('crea la reversión POSTED con todas las columnas invertidas y deja el original REVERSED', async () => {
+      const c = await setupCompany('Revertir');
+      const original = await create(c, {
+        status: 'POSTED',
+        description: `${PREFIX}a revertir`,
+        lines: [
+          {
+            accountId: c.cajaId,
+            debit: 1200,
+            credit: 0,
+            description: 'Cobro USD',
+            customerId,
+            currency: 'USD',
+            originalAmount: 1,
+            exchangeRate: 1200,
+          },
+          { accountId: c.ventasId, debit: 0, credit: 1200, supplierId, costCenterId },
+        ],
+      });
+
+      const result = await reverse(c.companyId, original.id);
+
+      expect(result.original).toEqual({ id: original.id, number: 1 });
+      expect(result.reversal).toMatchObject({ number: 2, status: 'POSTED' });
+      const reversal = await prisma.journalEntry.findUniqueOrThrow({
+        where: { id: result.reversal.id },
+        select: {
+          status: true,
+          description: true,
+          originalEntryId: true,
+          createdBy: true,
+          postDate: true,
+          period: { select: { type: true, year: true, month: true } },
+          lines: {
+            select: {
+              accountId: true,
+              debit: true,
+              credit: true,
+              description: true,
+              customerId: true,
+              supplierId: true,
+              costCenterId: true,
+              currency: true,
+              originalAmount: true,
+              exchangeRate: true,
+            },
+          },
+        },
+      });
+      expect(reversal).toMatchObject({
+        status: 'POSTED',
+        description: `Anulación del asiento N° 1 - ${PREFIX}a revertir`,
+        originalEntryId: original.id,
+        createdBy: USER,
+        period: { type: 'MONTHLY', year: 2026, month: 4 },
+      });
+      expect(reversal.postDate).not.toBeNull();
+      const caja = reversal.lines.find((l) => l.accountId === c.cajaId);
+      const ventas = reversal.lines.find((l) => l.accountId === c.ventasId);
+      expect(caja).toMatchObject({ description: 'Cobro USD', customerId, currency: 'USD' });
+      expect(Number(caja?.debit)).toBe(0);
+      expect(Number(caja?.credit)).toBe(1200);
+      expect(Number(caja?.originalAmount)).toBe(1);
+      expect(Number(caja?.exchangeRate)).toBe(1200);
+      expect(ventas).toMatchObject({ supplierId, costCenterId, currency: 'ARS' });
+      expect(Number(ventas?.debit)).toBe(1200);
+      expect(Number(ventas?.credit)).toBe(0);
+
+      const updated = await prisma.journalEntry.findUniqueOrThrow({
+        where: { id: original.id },
+        select: { status: true, reversalEntryId: true, reversedBy: true, reversedAt: true },
+      });
+      expect(updated).toMatchObject({ status: 'REVERSED', reversalEntryId: result.reversal.id, reversedBy: USER });
+      expect(updated.reversedAt).not.toBeNull();
+    });
+
+    it('con periodType OPENING y la misma fecha, la reversión queda en el período de apertura', async () => {
+      const c = await setupCompany('Revertir apertura');
+      const opening = await create(c, {
+        date: new Date('2026-01-01T00:00:00.000Z'),
+        periodType: 'OPENING',
+        status: 'POSTED',
+      });
+
+      const result = await reverse(c.companyId, opening.id, {
+        date: new Date('2026-01-01T00:00:00.000Z'),
+        periodType: 'OPENING',
+      });
+
+      const row = await prisma.journalEntry.findUniqueOrThrow({
+        where: { id: result.reversal.id },
+        select: { period: { select: { type: true } } },
+      });
+      expect(row.period?.type).toBe('OPENING');
+    });
+
+    it('mes del original cerrado → texto con el asiento y su fecha, sin consumir número', async () => {
+      const c = await setupCompany('Revertir mes cerrado');
+      const original = await create(c, { status: 'POSTED' });
+      await prisma.accountingPeriod.updateMany({
+        where: { fiscalYear: { companyId: c.companyId }, type: 'MONTHLY', year: 2026, month: 3 },
+        data: { isClosed: true },
+      });
+
+      const error = await rejection(reverse(c.companyId, original.id));
+      expect(error.name).toBe('BusinessError');
+      expect(error.message).toBe(
+        'No se puede anular el asiento N° 1 (fecha 10/03/2026): el período está cerrado (mes 03/2026 cerrado). ' +
+          'Para operar, reabrilo desde Contabilidad → Configuración → Bloqueo de Períodos.'
+      );
+      expect(await counter(c.companyId)).toBe(1);
+      const row = await prisma.journalEntry.findUniqueOrThrow({ where: { id: original.id }, select: { status: true } });
+      expect(row.status).toBe('POSTED');
+    });
+
+    it('borrador, inexistente o de otra empresa → BusinessError', async () => {
+      const c = await setupCompany('Revertir borrador');
+      const draft = await create(c);
+      await expect(reverse(c.companyId, draft.id)).rejects.toThrow(
+        'Solo se pueden anular asientos registrados; el N° 1 está en estado Borrador.'
+      );
+      await expect(reverse(otherCompanyId, draft.id)).rejects.toThrow('Asiento no encontrado.');
     });
   });
 });
