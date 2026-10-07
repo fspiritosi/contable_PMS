@@ -1,7 +1,7 @@
 # TSK-760 — Cierre contable: el cierre anual no funciona y el bloqueo de períodos se saltea
 
 **Fecha de inicio:** 2026-10-06
-**Estado:** Implementación en progreso (Fase 1 de 14 completada)
+**Estado:** Implementación en progreso (Fase 2 de 14 completada)
 
 ---
 
@@ -835,36 +835,36 @@ Otras decisiones de esta planificación:
 - **Objetivo:** una sola definición de período cerrado y un solo creador de asientos, testeados,
   sin que todavía los use nadie.
 - **Tareas:**
-  - [ ] `UT/utc-month.test.ts` (rojo) y `UT/utc-month.ts`: `toUtcDay(date)`,
+  - [x] `UT/utc-month.test.ts` (rojo) y `UT/utc-month.ts`: `toUtcDay(date)`,
         `monthKeyUtc(date)` → `{ year, month }`, `endOfMonthUtc({ year, month })`,
         `isOnOrBeforeDayUtc(a, b)`, `monthsBetweenUtc(start, end)` (lista de meses del FY,
         irregulares incluidos), `formatMonth({ year, month })` → `MM/YYYY`. Casos: día 1 00:00Z y
         02:59Z caen en el mes del día 1 (B22); fin de mes de febrero bisiesto; FY irregular de 18
         meses; `TZ=America/Argentina/Buenos_Aires` y `TZ=UTC` dan lo mismo (correr el test con
         ambas en el script de `vitest`, o fijar `process.env.TZ` en el test).
-  - [ ] `UT/period-lock.test.ts` (puro) y `UT/period-lock.ts`: función pura
+  - [x] `UT/period-lock.test.ts` (puro) y `UT/period-lock.ts`: función pura
         `evaluatePeriodClosure({ date, fiscalYear, period, lockedUntilDate })` → `{ closed: false }
         | { closed: true, reason: 'FISCAL_YEAR' | 'PERIOD' | 'LOCKED_UNTIL' }` y
         `buildPeriodClosedMessage(date, reason, fyNumber)`. Casos: cada condición sola; OR de las
         tres con datos desincronizados (escenarios 1 y 2 de 1.6.2); día exacto de `lockedUntilDate`
         con hora 02:59:59.999 (cerrado).
-  - [ ] `UT/period-lock.ts`: `ensureFiscalYearTx` (D1) y `assertPeriodOpen` (lock `FOR UPDATE`
+  - [x] `UT/period-lock.ts`: `ensureFiscalYearTx` (D1) y `assertPeriodOpen` (lock `FOR UPDATE`
         sobre `accounting_settings`, D12 con `periodType`). `UT/journal-entry-tx.ts`:
         `nextEntryNumberTx`, `createJournalEntryTx`, `postJournalEntryTx` y la validación pura
         `validateEntryLines(lines, { requireBalance })` (en `UT/journal-entry-lines.ts` con su
         `.test.ts`: 0/0, negativos, desbalance, tolerancia 0,01).
-  - [ ] `UT/period-lock.integration.test.ts` contra la DB local, empresa propia con Ajustes:
+  - [x] `UT/period-lock.integration.test.ts` contra la DB local, empresa propia con Ajustes:
         sin FY → crea FY 1 al pedir una fecha del rango de Ajustes; fecha del FY siguiente → lo
         crea contiguo con sus períodos; dos ejercicios adelante → rechaza; anterior al primero →
         rechaza con el texto de D1; mes cerrado / FY cerrado / `lockedUntilDate` → rechaza con el
         mes y la causa; OPENING/CLOSING (D12).
-  - [ ] `UT/journal-entry-tx.integration.test.ts`: número correlativo; **concurrencia**: 10
+  - [x] `UT/journal-entry-tx.integration.test.ts`: número correlativo; **concurrencia**: 10
         `createJournalEntryTx` en paralelo (`Promise.all` de `$transaction`) → números únicos y
         contador = 10; cierre de mes concurrente con creación (una tx cierra con `FOR UPDATE`
         tomado, la otra espera y falla con "período está cerrado"); POSTED desbalanceado →
         `BusinessError`; `fiscalYearId`/`periodId` siempre cargados; copia de auxiliares, moneda y
         `costCenterId`.
-  - [ ] Reexportar desde `INT/index.ts` lo que usan `commercial/` y `equipment/` (D9).
+  - [x] Reexportar desde `INT/index.ts` lo que usan `commercial/` y `equipment/` (D9).
 - **Archivos:** `UT/utc-month.ts`, `UT/period-lock.ts`, `UT/journal-entry-tx.ts`,
   `UT/journal-entry-lines.ts` y sus `.test.ts` / `.integration.test.ts` (nuevos);
   `UT/index.ts`, `INT/index.ts` (exports).
@@ -2642,7 +2642,93 @@ Sin cambios respecto de la Fase 13; agregar en `docs/modules/accounting.md` la t
   la salida acá.
 
 ### Fase 2: Núcleo — mes UTC, `assertPeriodOpen`, numeración y `createJournalEntryTx` (TDD)
-**Estado:** Pendiente
+**Estado:** Completada (2026-10-06)
+
+**Archivos creados** (`UT/` = `src/modules/accounting/shared/utils/`):
+- `UT/journal-entry-types.ts`: `Tx`, `IsoDay`, `YearMonth`, `EntryPeriodType`,
+  `CreatableEntryStatus`, `Amount` (sin `server-only`).
+- `UT/utc-month.ts` (puro, `moment.utc`): las 15 funciones de §3.3.1.
+- `UT/period-closure.ts` (puro): `evaluatePeriodClosure` y `buildPeriodClosedMessage` con los
+  textos exactos de §3.3.2.
+- `UT/journal-entry-lines.ts` (puro, `Decimal`): `validateEntryLines` (C5: también DRAFT) e
+  `invertLines`.
+- `UT/period-lock.ts` (`server-only`): `lockAccountingSettingsTx` (SQL exacto `FOR UPDATE`),
+  `findFiscalYearForDateTx`, `ensureFiscalYearTx` (D1), `createFiscalYearWithPeriodsTx`,
+  `ensurePeriodsTx`, `assertPeriodOpen` (A2/D12), `listMonthlyPeriodsTx`,
+  `syncLockedUntilDateTx`; exporta `NO_SETTINGS_MESSAGE`.
+- `UT/journal-entry-tx.ts` (`server-only`): `assertAccountsUsableTx`, `nextEntryNumberTx` (SQL
+  exacto de C1: racha contigua + salteo de ocupados), `createJournalEntryTx`, `postJournalEntryTx`.
+- `ACC/features/integrations/core/index.ts`: reexporta `createJournalEntryTx`,
+  `postJournalEntryTx`, `assertPeriodOpen` y sus tipos (D9).
+- `ACC/shared/test-utils/cleanup-accounting-company.ts`: limpieza de tests (R7, §3.7.1) con
+  `SET LOCAL session_replication_role = 'replica'`, borrando líneas → asientos → períodos →
+  ejercicios (con `replica` tampoco corren las cascadas de FK).
+
+**Archivos modificados:**
+- `UT/index.ts`: reexporta **solo** los módulos puros (`utc-month`, `period-closure`,
+  `journal-entry-lines`, tipos). Los `server-only` no, porque este índice lo importan componentes
+  cliente (`_MonthlyBalanceView`, `_IncomeStatementReport`, …).
+
+**Tests (111 nuevos, todos verdes; TDD: se escribieron primero y fallaron por módulo inexistente):**
+- `UT/utc-month.test.ts` (44 = 22 × 2 zonas): la batería entera corre con `TZ=UTC` y con
+  `TZ=America/Argentina/Buenos_Aires` (`vi.resetModules` + import dinámico) y verifica que la zona
+  efectivamente cambió; día 1 00:00Z/02:59Z, febrero bisiesto, FY de 18 y 6 meses, Ajustes a las
+  03:00Z → 12 meses, `isOnOrBeforeDayUtc`, `parseIsoDay` inválido → `BusinessError`, formatos.
+- `UT/period-closure.test.ts` (18): cada causa sola, escenarios 1 y 2 de 1.6.2, precedencia, día
+  exacto de `lockedUntilDate` a las 02:59:59.999, OPENING/CLOSING ignoran el bloqueo, los 5 textos
+  exactos más el de `subject`.
+- `UT/journal-entry-lines.test.ts` (13): 0/1 línea, 0/0, negativo, NaN/Infinity, ambos lados,
+  desbalance (texto actual), 0,01 rechaza y 0,009 pasa, `0.1 + 0.2` vs `0.3`, `Decimal` de Prisma,
+  `invertLines` conserva auxiliares/centro/moneda.
+- `UT/period-lock.integration.test.ts` (18): NO_SETTINGS; sin FY → FY 1 normalizado (00:00Z /
+  23:59:59.999Z) con OPENING + 12 MONTHLY + CLOSING; fecha dentro → no crea; FY siguiente contiguo
+  con 14 períodos; sin FY y fecha del siguiente → FY 1 y 2; TOO_FAR_AHEAD; BEFORE_FIRST_FY; borde
+  31/12 23:59Z vs 01/01 00:30Z; mes / FY / `lockedUntilDate` con texto exacto; sin FY y fecha ≤
+  bloqueo → LOCKED_UNTIL **sin crear FY** (contado dentro de la misma tx); OPENING/CLOSING (D12);
+  autorreparación con `ensurePeriodsTx`; `syncLockedUntilDateTx` con hueco y con FY cerrado.
+- `UT/journal-entry-tx.integration.test.ts` (18): correlativo; **concurrencia: 10
+  `$transaction(createJournalEntryTx)` en `Promise.all` (DRAFT y POSTED alternados) → números
+  1..10 sin repetir, contador = 10, un único FY creado**; C1 salto de ocupados (contador 5 + 6 y 7
+  sembrados → 8) y número aislado 999999 que no dispara la numeración (→ 1); NO_SETTINGS; **cierre
+  concurrente**: la tx A toma el lock y retiene, la creación B queda esperando (se verifica que no
+  terminó a los 300 ms), A cierra marzo y confirma, B falla con "el período está cerrado (mes
+  03/2026 cerrado)" sin consumir número; DRAFT/POSTED con `fiscalYearId`/`periodId` y `postDate`;
+  copia de auxiliares, moneda, `originalAmount`, `exchangeRate` y `costCenterId`; OPENING;
+  desbalance DRAFT y POSTED sin consumir número; cuenta ajena y no hoja; mes cerrado;
+  `postJournalEntryTx`: corrige asiento viejo sin FY/período, no-DRAFT, inexistente/ajeno, FY
+  cerrado (B4), DRAFT desbalanceado sembrado.
+- Cada integración usa empresas propias (`TSK760-PL-…`, `TSK760-JE-…`); `afterAll` limpia y
+  afirma 0 empresas, cuentas, asientos, FY y períodos remanentes (verificado además por `psql`).
+
+**Calidad:** `npm run test` = **53 archivos, 712 tests, todos verdes** (línea base 48/601);
+`npm run check-types` = **219** (igual a la línea base); `eslint` sin errores en los archivos
+nuevos. `UT/index.ts` conserva un error y un warning **previos** (el `require('next/cache')` de
+`revalidateAccountingRoutes`, verificado contra `HEAD`); no se tocó porque ese índice lo importan
+componentes cliente. Sin `any` ni `console`. Ningún caller cambiado.
+
+**Desvíos (mínimos):**
+- El plan ubicaba `evaluatePeriodClosure` en `UT/period-lock.ts` y la reexportación en
+  `INT/index.ts` (que no existe); se siguió el Diseño: `UT/period-closure.ts` (puro) y
+  `INT/core/index.ts` (§3.1.1).
+- `reverseJournalEntryTx` y `fiscal-year-close-math` figuran en la tabla de tests de Fase 2 de
+  §3.7.1, pero el plan los asigna a las Fases 10 y 9: quedan para esas fases. `invertLines`
+  (puro, trivial) sí entró con su test. `syncLockedUntilDateTx`/`listMonthlyPeriodsTx` se
+  adelantaron (los pide §3.7.1 para esta fase; los usa la Fase 8).
+- Ejemplo de TOO_FAR_AHEAD de §3.3.3 ("05/03/2028 … N° 2, hasta 31/12/2027") es internamente
+  inconsistente (esa fecha cae en el FY inmediato siguiente al N° 2); se respeta la plantilla del
+  texto y el test usa FY 1 2026 con fecha 05/03/2028 → "(N° 1, hasta 31/12/2026)".
+- `ensureFiscalYearTx`: una fecha entre dos FY no contiguos (no debería existir) lanza
+  `BusinessError` "La fecha … no pertenece a ningún ejercicio…" (caso no previsto en el diseño).
+- `ensurePeriodsTx` crea OPENING/CLOSING solo si el FY no tiene **ninguno** de ese tipo (no solo
+  por clave única), para no duplicarlos sobre FY de 20260625 con `month = 0/13` antes de la Fase 3.
+- `findFiscalYearForDateTx` compara por día UTC (`startDate <= fin del día`, `endDate >= inicio
+  del día`), y `ensureFiscalYearTx` busca el FY por día: tolera FY todavía sin normalizar.
+- `parseIsoDay` inválido: `BusinessError` "Fecha inválida: X. Usá el formato AAAA-MM-DD." (texto
+  no fijado por el diseño). `formatMonthLabel` usa una tabla propia de meses (el locale `es` de
+  moment devuelve "mar." con punto).
+- `LineTotals` usa el tipo `Prisma.Decimal` de `client` y el valor de `@/generated/prisma/browser`
+  (el namespace del navegador solo exporta el valor), para que `journal-entry-lines` sea usable en
+  cliente.
 
 ### Fase 3: Migración de datos y sincronización de Ajustes con el ejercicio
 **Estado:** Pendiente
