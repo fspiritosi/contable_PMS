@@ -1,7 +1,7 @@
 # TSK-760 — Cierre contable: el cierre anual no funciona y el bloqueo de períodos se saltea
 
 **Fecha de inicio:** 2026-10-06
-**Estado:** Implementación en progreso (Fases 1 a 13 de 14 completadas; pendiente el diagnóstico de producción antes del deploy)
+**Estado:** Completado — pendiente diagnóstico de producción antes del deploy (verificación: APROBADO CON CONDICIONES, ver §5.6)
 
 ---
 
@@ -1239,15 +1239,15 @@ Otras decisiones de esta planificación:
 
 - **Objetivo:** dejar el PR listo para deployar con evidencia.
 - **Tareas:**
-  - [ ] `npm run check-types` ≤ 219; `npx eslint` de todos los archivos tocados sin errores;
-        `npm run test` verde (todo); `npm run build` OK.
-  - [ ] Modo producción: `NEXT_PUBLIC_APP_URL=http://localhost:3011 npm run build && npm run
+  - [x] `npm run check-types` ≤ 219; `npx eslint` de todos los archivos tocados sin errores;
+        `npm run test` verde (todo); `npm run build` OK. (eslint: 1 error **previo** en `UT/index.ts`, ver §5.2.)
+  - [x] Modo producción: `NEXT_PUBLIC_APP_URL=http://localhost:3011 npm run build && npm run
         start -- -p 3011`; con `GP/capturas-tsk760.mjs --prod` disparar asiento manual, registrar,
         movimiento bancario, recurrente, anulación de asiento de factura y cierre anual con
         borradores, y ver el **texto real** en el toast (no el digest redactado).
-  - [ ] Recorrer los 7 criterios de aceptación de 1.1 y marcar con qué test/captura se cumple.
-  - [ ] Correr `diagnostico-tsk760.sh --local` final y guardar la salida en la sección 5.
-  - [ ] Notas de deploy para el PR:
+  - [x] Recorrer los 7 criterios de aceptación de 1.1 y marcar con qué test/captura se cumple.
+  - [x] Correr `diagnostico-tsk760.sh --local` final y guardar la salida en la sección 5.
+  - [x] Notas de deploy para el PR:
     1. **Antes de deployar:** correr `prisma/scripts/diagnostico-tsk760.sh` en el servidor y
        revisar consultas 0 (el usuario de la migración es dueño de `journal_entries`), 1, 4, 6, 8 y
        13; si 4/6/8 tienen filas, avisar a la clienta con la presentación.
@@ -1261,8 +1261,9 @@ Otras decisiones de esta planificación:
     5. Sin permisos ni módulos nuevos; sin variables de entorno nuevas (`TZ` no hace falta: el
        código ya no depende de la zona del servidor).
     6. Comportamiento visible: link al PDF.
-  - [ ] Completar sección 5 del `.planes` y el `completion_summary` del ticket (memoria
-        `cc-tickets-resueltos-sin-comentarios`).
+  - [x] Completar sección 5 del `.planes`.
+  - [ ] `completion_summary` del ticket (memoria `cc-tickets-resueltos-sin-comentarios`): **pendiente**,
+        depende del diagnóstico de producción y del deploy (el resumen tiene que decir qué pasó en prod).
 - **Archivos:** `.planes/tsk-760-cierre-contable.md` (secciones 4 y 5), descripción del PR.
 - **Criterio de completitud:** todo lo anterior en verde y documentado; commit
   `chore(accounting): verificación final del cierre contable (TSK-760, fase 14)`.
@@ -3812,7 +3813,192 @@ empresa activa restaurada). Sigue la "TSK760 Demo cierre anual (no usar)" de la 
   forma genérica; el número concreto sale del diagnóstico de producción.
 
 ### Fase 14: Verificación final y notas de deploy
-**Estado:** Pendiente
+**Estado:** Completada (2026-10-07) — salvo el `completion_summary` del ticket, que espera el diagnóstico de
+producción y el deploy.
+
+**Calidad (rama completa, `git diff main...HEAD`):** `check-types` = **219** (= línea base); `eslint` de los 99
+`.ts/.tsx` tocados: **1 error previo** (`UT/index.ts:146`, `require('next/cache')` de `revalidateAccountingRoutes`,
+existe igual en `main`; el índice lo importan componentes cliente, no se toca) y 7 warnings previos; sin `console.` ni
+`any` en líneas agregadas; `npm run test` = **64 archivos, 875 tests, verdes, 0 salteados** (28 archivos de
+integración contra la DB corrieron); componentes nuevos < 200 (máx. `_AccountingClosingGuide` 169); grep de creación:
+`journalEntry.create(` / `last_entry_number + 1` solo en `UT/journal-entry-tx.ts` (y la siembra local
+`prisma/scripts/tsk760-escenarios-migracion.sql`); `NEXT_PUBLIC_APP_URL=http://localhost:3011 npm run build` OK.
+
+**Corrección de la verificación** (commit `4041322`): `postJournalEntryTx` y `reverseJournalEntryTx` leían el estado
+antes del lock; dos "Registrar" (o dos "Anular") simultáneos del mismo asiento terminaban en el trigger de
+inmutabilidad con el mensaje genérico. Ahora el `UPDATE` va condicionado al estado y, si no toca filas, lanza el
+`BusinessError` de siempre. +2 tests de concurrencia (rojos antes, verdes después).
+
+**Prueba en modo producción** (build en :3011, Playwright; el script temporal se borró): ver §5.4. Ningún toast salió
+redactado. `capturas-tsk760.mjs http://localhost:3011`: "Todos los chequeos pasaron"; regeneró 5 PNG que solo
+difieren en fechas/números y se restauraron con `git checkout`.
+
+**Datos de dev:** "Empresa de Prueba 01 SA" quedó como estaba (0 meses cerrados, `locked_until_date` NULL, contador
+71, N° 51 POSTED, 52 y 54 DRAFT); la empresa temporal de la verificación y la del script de capturas, borradas;
+empresa activa restaurada. Huella del diagnóstico `--local` después de todo: `fy 4de61e6e…`, `periodos 2f46e785…`,
+`asientos 75d384df…`, `ajustes 3c857d9f…` (idéntica a la de la Fase 3: la verificación no dejó rastros).
+
+**Diagnóstico `--local` final:** A true, B 2, C 0, D 2, E 0, F 0, G 1, H 1, I–O 0, P 1, Q 8, R–T 0. Consulta 2: los
+52 asientos de dev con ejercicio y período. G/H/Q son la empresa "TSK760 Demo cierre anual (no usar)" de la Fase 9
+(ejercicio 2025 cerrado; Ajustes ya apunta a 2026, por eso sus 8 asientos de 2025 cuentan como "antes del inicio").
+
+#### Notas de deploy (texto para el PR)
+
+1. **Diagnóstico de producción (solo lectura), antes de todo:** en el servidor,
+   `bash prisma/scripts/diagnostico-tsk760.sh > diag-antes.txt` (corre por `sudo docker exec … psql` contra
+   `contablemas-contablemas` y además imprime `date`/`TZ` del contenedor de la app).
+2. **Decidir con el RESUMEN y la tabla "letra → suposición" de la Fase 3** (sección 4):
+   - **No deployar** si A = false (el usuario de la base no es dueño de `journal_entries`: la migración falla entera,
+     P3009), B ≠ 2 (triggers tocados) o C > 0 (migración fallida pendiente).
+   - Revisar a mano antes de seguir si G > 0 (ya hubo un cierre anual con el código viejo: secciones 5, 9 y 12), F > 0
+     con calendario irregular, E > 0 con rango de Ajustes inválido, P con aislados cerca del contador, Q con
+     borradores recientes anteriores al inicio (corregir el inicio de Ajustes **antes**: después ya no se puede) o
+     R > 0.
+   - J, K, L > 0 = cambio de comportamiento visible: van al aviso a la clienta (paso 6).
+   - Guardar la huella (consulta 14) de `diag-antes.txt`.
+3. **Backup:** `sudo docker exec $(sudo docker ps -q --filter name=contablemas-contablemas) sh -c 'pg_dump -U
+   "$POSTGRES_USER" -Fc "$POSTGRES_DB"' > contable-antes-tsk760.dump` y comprobar que pesa más de 0 bytes.
+4. **Deploy.** La migración `20261007020224_tsk_760_fiscal_years_backfill` la aplica `docker-entrypoint.sh` al
+   arrancar: transaccional (`BEGIN/COMMIT` propios) e idempotente; toma `ACCESS EXCLUSIVE` sobre `journal_entries`
+   unos segundos. Sin permisos, módulos ni variables de entorno nuevas (`TZ` no hace falta).
+5. **Verificar:**
+   - `sudo docker exec $(sudo docker ps -q --filter name=contablemas-frontend) node node_modules/prisma/build/index.js
+     migrate status` → "up to date". Si figura fallida (P3009): la base quedó como antes; corregir, `migrate resolve
+     --rolled-back 20261007020224_tsk_760_fiscal_years_backfill` y redeployar (restaurar el backup solo si algo más
+     falló).
+   - `bash prisma/scripts/diagnostico-tsk760.sh > diag-despues.txt`. Esperado: E = 0 (salvo rango inválido,
+     informado), K = 0, O = 0, B = 2; consulta 2 sin asientos sin ejercicio salvo los de la 13. La huella **cambia**
+     respecto de `diag-antes.txt` (es lo que hace la migración).
+   - Si la consulta 2 muestra asientos sin ejercicio creados por la réplica vieja durante el deploy, re-correr la
+     migración por psql (es idempotente, probada dos veces seguidas en la copia):
+     `sudo docker exec -i $(sudo docker ps -q --filter name=contablemas-contablemas) sh -c 'psql -U "$POSTGRES_USER"
+     -d "$POSTGRES_DB" -v ON_ERROR_STOP=1' < prisma/migrations/20261007020224_tsk_760_fiscal_years_backfill/migration.sql`
+     y volver a correr el diagnóstico: una tercera corrida no debe mover la huella.
+6. **Avisar a la clienta** con `docs/presentaciones/TSK-760-cierre-contable.pdf` (sección 8 completada con los
+   números reales de J, K, L y Q): meses que quedaron cerrados, borradores en esos meses, comprobantes en borrador
+   que no se van a poder confirmar sin reabrir, y que el cierre de 2026 se hace cerrando los meses en orden.
+7. **Antes del deploy, decidir la condición de §5.6** (redondeo de IVA de 1 centavo en facturas de varias líneas).
 
 ## 5. Verificación
-_Pendiente - ejecutar `/verificar tsk-760-cierre-contable`_
+
+**Fecha:** 2026-10-07 · **Verificador:** revisión independiente (Fase 14 / `/verificar`) sobre
+`fix/tsk-760-cierre-contable` (fases 1–13 + `4041322`).
+
+### 5.1 Revisión de código
+
+Archivos críticos revisados completos: `UT/{period-lock,journal-entry-tx,journal-entry-lines,period-closure,utc-month,
+closing-entries,fiscal-year-close-math,entry-document-link}.ts`, `SET/period-closing.ts`, `FYC/fiscal-year-close.ts`,
+la migración, y los creadores de comerciales (`INT/commercial`), fondos y bancos.
+
+| Riesgo | Resultado |
+|---|---|
+| **Orden de locks / deadlock** | Correcto. Toda operación que crea, registra, anula o cambia un período toma primero `accounting_settings` `FOR UPDATE` (`lockAccountingSettingsTx`, `period-lock.ts:85`): `assertPeriodOpen` (`:271`), `closeMonthTx`/`reopenMonthTx` vía `loadMonthsTx` (`period-closing.ts:85`), `closeFiscalYearTx` (`fiscal-year-close.ts:302`). Los creadores de documentos bloquean documento → Ajustes; el cierre de mes y el anual no tocan documentos, y las únicas filas que el cierre de mes actualiza (borradores, períodos) solo se tocan con el lock ya tomado. Las FK (`KEY SHARE` sobre FY/período al insertar asientos) no generan ciclo: quien las toma ya tiene el lock. No se encontró ciclo posible entre `closeMonth` y `createJournalEntry`. |
+| Estado leído antes del lock | `postJournalEntryTx`/`reverseJournalEntryTx` leían el estado antes del lock: doble registro/anulación simultánea → choque con el trigger y mensaje genérico (no corrupción). **Corregido** (`4041322`). |
+| Validación fuera de la tx | Ningún creador valida período fuera de la tx: el grep de `lockedUntilDate`/`assertPeriodOpen`/`isClosed` en `src/modules` solo encuentra el núcleo, el cierre y lecturas de UI/estado. |
+| TSK-728 (documento CONFIRMED sin asiento) | Se mantiene: venta, compra, recibo, OP, egreso, fondos, bancos, baja de equipo y depreciación crean el asiento con la `tx` del documento y relanzan (`INT/commercial` `catch` → `throw error`); el `UPDATE` del documento va en la misma tx. Única excepción a propósito: bancos sin Ajustes (2.0). |
+| **Redondeo de balance con `Decimal` (TSK-583/644)** | Repartos de centro de costo (`prorateAmount` + `round2`) y percepciones (importes de 2 decimales) cuadran exacto. **Hallazgo (condición, no corregido):** ver abajo, R-1. |
+| Exclusión apertura/refundición (B18/B19) | Solo por vínculo de FY (`fiscal_years.opening_entry_id`/`closing_entry_id`), que escribe únicamente `closeFiscalYearTx` (`fiscal-year-close.ts:377,384`; grep). El "Asiento de Apertura" manual no se excluye de ningún reporte (la migración solo lo pasa al período OPENING; la exclusión no mira el período). |
+| Migración | Idempotente (guardas en cada paso, probada dos veces en la copia y en dev), `BEGIN/COMMIT` propios, trigger deshabilitado solo alrededor del `UPDATE` del paso 4 y red de seguridad en el paso 8 (`RAISE EXCEPTION` si no quedó `O`). `INSERT` sin `id` válido: `fiscal_years.id`/`accounting_periods.id` tienen `DEFAULT gen_random_uuid()` en la DB. Datos raros que mide el diagnóstico: rango de Ajustes inválido (sin FY + NOTICE), FY con dos OPENING/CLOSING (no pisa la clave única, NOTICE), asientos fuera de tope (NULL + NOTICE), fin de FY a las 02:59:59.999. Única causa de fallo previsible: A = false o trigger inexistente (B ≠ 2), ambos en el diagnóstico. |
+| Numeración | Solo `nextEntryNumberTx`; concurrencia cubierta por test (10 en paralelo, y fondos/bancos/recurrentes en paralelo). |
+
+**R-1 (condición) — 1 centavo de redondeo de IVA en facturas de varias líneas.** El total de la factura se calcula con
+el IVA **agregado** (`Σ subtotal × alícuota`, redondeado una vez; `sales/.../invoices/list/actions.server.ts:546-549`
+y `:783`; compras igual, `purchases/.../actions.server.ts:941-962`, redondeo por la DB), pero el asiento suma el IVA
+**línea por línea** ya redondeado (`INT/commercial/index.ts:345` y `:530`). Con dos o más líneas la diferencia de
+±0,01 es frecuente (simulación: ~25 % de las facturas de dos líneas al 21 %; ej. dos líneas de $1,07 → total 2,59,
+asiento 2,58). En `main`, `validateBalance` aceptaba `|d − h| > 0,01` en coma flotante, así que la mitad de esos casos
+pasaba por azar (`2,59 − 2,58 = 0,00999…`) y la otra mitad ya fallaba; con `validateEntryLines` (`Decimal`, rechaza
+`≥ 0,01`, C5) **fallan todos**: "El asiento no está balanceado. … Diferencia: $0.01" al confirmar. Es un defecto previo
+de cálculo (no de este ticket) que la rama vuelve determinista: hay facturas que hoy se confirman y después del deploy
+no. No se corrigió porque toca el armado de líneas de comerciales (TSK-721/644) y es una decisión contable: (a) en
+`INT/commercial`, imputar la diferencia de redondeo (≤ 0,005 × líneas) a la línea de IVA de mayor importe; o (b)
+calcular el IVA del comprobante como suma de los IVA de línea redondeados (cambia el total, afecta AFIP); o (c)
+aceptar `≤ 0,01` exacto en `validateEntryLines` (deja asientos POSTED desbalanceados por un centavo, contra B21).
+Recomendado: (a), con test, antes del deploy.
+
+Observaciones menores (no bloquean): una confirmación de documento (timeout por defecto de Prisma, 5 s) que llega
+mientras corre un "Registrar N borradores y cerrar" largo (hasta 30 s) puede vencer esperando el lock y mostrar el
+mensaje genérico; `confirmFundMovement` sigue mirando el estado DRAFT fuera de la tx (previo, doble confirmación
+concurrente); `saveFiscalYearSettingsTx` hace `upsert` antes del lock (dos primeras configuraciones simultáneas →
+P2002). Todo previo o de baja probabilidad; anotado para 758.
+
+### 5.2 Build / Lint
+
+| Chequeo | Resultado |
+|---|---|
+| `npm run check-types` | 219 errores `TS` (= línea base, ninguno nuevo) |
+| `eslint` de los 99 `.ts/.tsx` del diff | 1 error **previo** (`UT/index.ts:146`, `require()` también en `main:138`), 7 warnings previos |
+| `console.` / `: any` / `as any` en líneas agregadas | 0 |
+| Componentes nuevos | todos < 200 (máx. 169) |
+| Grep de creación de asientos | solo `UT/journal-entry-tx.ts` |
+| `NEXT_PUBLIC_APP_URL=http://localhost:3011 npm run build` | OK |
+
+### 5.3 Tests
+
+`npm run test`: **64 archivos, 875 tests, todos verdes, 0 salteados** (incluye 28 archivos `*.integration.test.ts`
+contra `contable-pms-db`; línea base del ticket 48/601). Criterios de aceptación:
+
+| # | Criterio | Evidencia |
+|---|---|---|
+| 1 | Cerrar meses en orden y luego el cierre anual, sin error | `SET/period-lock.integration.test.ts` (orden, fuera de orden), `FYC/fiscal-year-close.integration.test.ts` (cierre feliz, B18–B21, B24, segundo cierre); capturas 01–16 en modo producción |
+| 2 | Empresas sin FY lo tienen tras la migración | migración probada en la copia (escenarios a–j, `tsk760-escenarios-verificar.sql` OK) y en dev; diagnóstico E = 0 |
+| 3 | Ningún creador acepta período cerrado (error legible), todos con FY/período y número atómico | un test por creador: `entries`, 6 de comprobantes/equipos, `depreciation-period-lock`, `fund-movement-lines`, `bank-movement-period-lock`, `recurring-entries`, `opening-balances`, `generators-period-lock`; `journal-entry-tx` (concurrencia de numeración); grep de creación; toasts reales en §5.4 |
+| 4 | No se registra un DRAFT en FY cerrado y el cierre anual informa los DRAFT | `entries` y `journal-entry-tx` (B4); `fiscal-year-close` (texto de borradores); captura 12 |
+| 5 | Desbloquear nunca reabre un FY cerrado | `period-lock` (B5: piso, texto "pertenece al ejercicio N° 1"); captura 19 |
+| 6 | Reversión copia auxiliares y moneda, valida ambas fechas, no anula asientos de documentos | `reverse-entry.integration.test.ts`, `journal-entry-tx` (copia completa, mes del original, mes de hoy, doble anulación); §5.4 |
+| 7 | Tests de integración por creador y del helper | ver fila 3 + `period-lock.integration`, `journal-entry-tx.integration` |
+
+### 5.4 Verificación funcional (build de producción en :3011)
+
+Login con el usuario de dev; "Empresa de Prueba 01 SA" (octubre y enero cerrados por SQL solo durante la prueba) y una
+empresa temporal sembrada y borrada al final. Textos **exactos** de los toasts (ninguno redactado):
+
+| Caso | Toast / texto |
+|---|---|
+| Asiento manual en mes cerrado (05/10/2026) | "No se puede registrar con fecha 05/10/2026: el período está cerrado (mes 10/2026 cerrado). Para operar, reabrilo desde Contabilidad → Configuración → Bloqueo de Períodos." |
+| Registrar borrador en mes cerrado (N° 54) | "No se puede registrar con fecha 07/10/2026: el período está cerrado (mes 10/2026 cerrado). Para operar, reabrilo desde Contabilidad → Configuración → Bloqueo de Períodos." |
+| Cerrar fuera de orden (pantalla desactualizada) | "Solo se puede cerrar el primer mes abierto: 02/2026." (y en el script de capturas: "… 04/2025.") |
+| "Registrar los N borradores y cerrar" con uno inválido (capturas) | "No se cerró 03/2025: el borrador N° 12 no se puede registrar. La cuenta 1.1.1/00/00 no es imputable (tiene subcuentas). Si es un asiento manual que ya no sirve, podés eliminarlo desde Asientos." |
+| Anular el asiento de un comprobante (N° 51) | diálogo: "Este asiento pertenece a la factura de compra 0001-97244388 y no se puede anular desde Asientos: anulá el comprobante." con "Anular" deshabilitado |
+| Eliminar un borrador vinculado (N° 52) | "Este asiento pertenece al egreso GTO-00001 y no se puede eliminar: solo se eliminan borradores manuales." |
+| Guardar fechas de ejercicio con asientos | "No se pueden cambiar las fechas del ejercicio N° 1: la empresa ya tiene asientos o meses cerrados. Las fechas cambian solas al cerrar el ejercicio." |
+| Saldos de apertura: crear + **editar 3 veces** (lo de la Fase 7) | "Asiento de apertura N° 1 creado" · "N° 3 actualizado" · "N° 5 actualizado" · "N° 7 actualizado" (DB: 1, 3, 5 REVERSED; 2, 4, 6 reversiones; 7 vigente). 3/3 sin mensaje genérico |
+| Egreso en mes cerrado (capturas) | "No se puede registrar con fecha 20/02/2025: el período está cerrado (mes 02/2025 cerrado). …" |
+| Cierre anual (capturas) | "Ejercicio N° 1 cerrado: refundición N° 51 y apertura N° 52. Queda abierto el ejercicio N° 2." |
+
+`capturas-tsk760.mjs http://localhost:3011`: todos los chequeos de pantalla y de base pasaron (incluidos Balance al
+31/01/2026 sin duplicar y Estado de Resultados 2025 ≠ 0 en el build de producción, la duda de la Fase 9). Estado de
+"Empresa de Prueba 01 SA" al empezar y al terminar: 0 meses cerrados, `locked_until_date` NULL, contador 71. :3011
+detenido por PID; :3010 responde 200.
+
+### 5.5 Cumplimiento de reglas
+
+| Regla | Estado |
+|---|---|
+| `checkPermission` en actions / `PermissionGuard` / `usePermissions` | ✓ (sin permisos nuevos, D10) |
+| `ActionResult` + `BusinessError` en actions con motivo para el usuario | ✓ (verificado en build de producción) |
+| moment.js (sin date-fns), `logger` (sin `console`), sin `any` | ✓ |
+| `AlertDialog` (sin `confirm()`) | ✓ |
+| React Query (fuera el `useEffect` de `_ClosePreviewDialog`) | ✓ |
+| Server Components por defecto, `_` en client, componentes < 200 | ✓ nuevos; los ya excedidos no crecieron (`_EntriesTable` bajó a 302) |
+| `Decimal` → `Number()` hacia el cliente | ✓ |
+| Tests (Vitest, no Cypress) | ✓ |
+| `docs/`, guía in-app, presentación al cliente | ✓ (Fase 13); la sección 8 del PDF espera los números del diagnóstico de prod |
+
+### 5.6 Resultado final
+
+**Estado:** APROBADO CON CONDICIONES
+
+La rama cumple los 7 criterios de aceptación, la calidad está en verde y los mensajes llegan legibles en producción.
+Se corrigió un defecto chico de concurrencia (`4041322`). Queda una regresión acotada (R-1) y el paso obligatorio de
+producción.
+
+**Acciones pendientes:**
+1. **R-1:** decidir y, si se elige la opción (a), corregir el redondeo de IVA de 1 centavo en el asiento de facturas
+   de venta/compra de varias líneas **antes del deploy** (hoy confirman ~la mitad de esos casos; con la rama, ninguno).
+2. Correr `prisma/scripts/diagnostico-tsk760.sh` en producción y decidir con la tabla "letra → suposición" (§4,
+   Fase 3) antes de deployar; seguir las notas de deploy de §4, Fase 14.
+3. Completar la sección 8 de la presentación con los números reales (J, K, L, Q) y avisar a la clienta.
+4. Después del deploy: `completion_summary` del ticket (memoria `cc-tickets-resueltos-sin-comentarios`).
+5. Tickets aparte ya anotados: `getBalanceSheet.isBalanced` (Fase 9), saldo de origen leído fuera de la tx en
+   `createBankTransfer` (Fase 6), merge con PR #34 (TSK-757, conflicto previsto en `createJournalEntryForExpense`).
