@@ -1,7 +1,7 @@
 # TSK-760 — Cierre contable: el cierre anual no funciona y el bloqueo de períodos se saltea
 
 **Fecha de inicio:** 2026-10-06
-**Estado:** Implementación en progreso (Fases 1, 2, 4 y 5 de 14 completadas; Fase 3 pendiente del diagnóstico de producción)
+**Estado:** Implementación en progreso (Fases 1, 2, 4, 5 y 6 de 14 completadas; Fase 3 pendiente del diagnóstico de producción)
 
 ---
 
@@ -985,13 +985,13 @@ Otras decisiones de esta planificación:
 - **Objetivo:** movimientos de fondos, bancarios y transferencias validan período y numeran
   atómico (B3, B7, B8).
 - **Tareas:**
-  - [ ] `TRE/fund-movements/list/actions.server.ts` `createJournalEntryForFundMovement` (`:447`):
+  - [x] `TRE/fund-movements/list/actions.server.ts` `createJournalEntryForFundMovement` (`:447`):
         `createJournalEntryTx` (deja de usar `lastEntryNumber + 1`).
-  - [ ] `TRE/bank-movements/actions.server.ts`: `createJournalEntryForBankMovement` (`:162`),
+  - [x] `TRE/bank-movements/actions.server.ts`: `createJournalEntryForBankMovement` (`:162`),
         transferencia banco → banco (`:1026`/`:1117`) y banco ↔ caja (`:1232`) con
         `createJournalEntryTx`. Se conserva "sin Ajustes no hay asiento" (2.0), pero con Ajustes y
         período cerrado se rechaza el movimiento entero (no se graba el movimiento sin asiento).
-  - [ ] Tests: `fund-movement-lines.integration.test.ts` + caso mes cerrado y numeración; nuevo
+  - [x] Tests: `fund-movement-lines.integration.test.ts` + caso mes cerrado y numeración; nuevo
         `TRE/bank-movements/bank-movement-period-lock.integration.test.ts`: movimiento manual y las
         dos transferencias en mes abierto (asiento con FY/período/número) y cerrado (rechazo, sin
         movimiento grabado).
@@ -1158,7 +1158,8 @@ Otras decisiones de esta planificación:
 - **Tareas:**
   - [ ] Pasar a `Promise<ActionResult<…>>` con `BusinessError` + `toActionResult`:
         `createJournalEntry`, `postJournalEntry` (`ACC/features/entries/actions.server.ts`),
-        `createBankMovement`, `createBankTransfer` (`TRE/bank-movements/actions.server.ts`),
+        `createBankMovement`, `createBankTransfer` (`TRE/bank-movements/actions.server.ts`;
+        **ya hechas en la Fase 6**, junto con sus dos diálogos),
         `generateRecurringEntry`, `generateAllPendingRecurringEntries`,
         `saveOpeningBalanceEntry`. Junto con `closeAccountingPeriod`/`reopenAccountingPeriod`
         (Fase 8), `closeFiscalYear` (Fase 9) y `reverseJournalEntry` (Fase 10) quedan las 9 de
@@ -2907,7 +2908,92 @@ restaurados (`require_cost_center = t`, `expenses_account_id = NULL`).
 - La baja de equipos sigue fechada con `new Date()` (hoy), como antes.
 
 ### Fase 6: Creadores III — tesorería
-**Estado:** Pendiente
+**Estado:** Completada (2026-10-06)
+
+**Archivos modificados** (`TRE/` = `src/modules/commercial/features/treasury/features/`):
+- `TRE/fund-movements/list/actions.server.ts`: `createJournalEntryForFundMovement` conserva su
+  chequeo de partida doble con `Decimal` y crea el asiento con `createJournalEntryTx` (DRAFT,
+  `'system'`, `source` = `fund-movement:<id>`); se fueron `lastEntryNumber + 1` y el `update` del
+  contador. `confirmFundMovement` sigue devolviendo `ActionResult` (TSK-481/721) y ahora rechaza
+  "sin Ajustes" **antes** de tocar saldos (mismo texto que antes; las lecturas `settings?.` pasan a
+  `settings.`). El armado de líneas por tipo (TSK-585 conceptos de BANK_CHARGES, TSK-717 cuenta de
+  capital por socio, TSK-718/721) y la transacción única con saldos de banco/caja no cambian. El
+  asiento sigue naciendo **DRAFT** como antes. **No se tocó ningún componente de fund-movements**
+  (sin conflicto con PR #33, que refactoriza la UI pero no `actions.server.ts`).
+- `TRE/bank-movements/actions.server.ts`:
+  - Helper nuevo `createTreasuryEntryTx(tx, …)`: sin Ajustes → `logger.warn` y sin asiento (se
+    conserva, decisión 2.0); con Ajustes → `createJournalEntryTx` (DRAFT, `'system'`). Lo usan el
+    movimiento manual y las dos transferencias. `buildTransferLines` arma las dos líneas (diseño
+    §3.3.10, #13-14). Sin cuenta contable en el banco/caja, sigue sin asiento (como antes).
+  - `createBankMovement` y `createBankTransfer` → `Promise<ActionResult<{ id }>>` (la transferencia
+    devuelve el id del movimiento de salida): `BusinessError` en las validaciones (banco/caja/cuenta
+    inexistente, caja sin sesión, Zod con `safeParse` → primer mensaje) y `toActionResult` en el
+    `catch`. "No autenticado"/"sin empresa activa" siguen como `throw` (§3.6). Con Ajustes y mes
+    cerrado se rechaza el movimiento **entero** (no se graba sin asiento).
+- `TRE/../bank-accounts/detail/components/_CreateBankMovementDialog.tsx` y `_BankTransferDialog.tsx`
+  (+1 línea cada uno): `if (!result.success) return void toast.error(result.error)`. Además la
+  fecha por defecto pasa de `new Date()` (hora real) a **mediodía local de hoy**, la misma
+  convención que ya usaba el `onChange` del campo (`'T12:00:00'`). Visto en el navegador: a las
+  21:40 AR el `new Date()` es el día siguiente en UTC y el toast decía "fecha 07/10/2026" con el
+  formulario mostrando 06/10/2026 (y el último día del mes, después de las 21:00, imputaría al mes
+  siguiente). Con el cambio, el mensaje y el período coinciden con lo que ve el usuario.
+
+**Tests** (TDD: primero en rojo, 9 fallas — 3 de fondos y 6 de bancos —; con la implementación,
+todo verde):
+- `fund-movement-lines.integration.test.ts`, caso 7 (3 tests): mes abierto → asiento DRAFT
+  `'system'` con FY y período MONTHLY 04/2026, número = contador + 1 (también en
+  `journalEntryNumber`); mes cerrado (`closeMonthForTest`, B3) → `confirmFundMovement` devuelve el
+  texto estándar, sin consumir número, sin cambiar el saldo del banco ni crear `BankMovement`, el
+  borrador sigue DRAFT sin asiento y, reabierto el mes, se confirma; **dos confirmaciones en
+  paralelo** → números consecutivos sin choque (con `lastEntryNumber + 1` una fallaba por `P2002`).
+- `TRE/bank-movements/bank-movement-period-lock.integration.test.ts` (nuevo, 8 tests, prefijo
+  `TSK760-BNK-`, limpieza con `cleanupAccountingCompany`): movimiento manual abierto (asiento con
+  FY/período/número), cerrado (rechazo, sin movimiento, saldo y contador intactos), dos en paralelo
+  (números consecutivos), empresa sin Ajustes (movimiento sin asiento); banco→banco y banco→caja
+  abiertos (saldos, `CashMovement`, asiento) y cerrados (sin `BankMovement` ni `CashMovement`,
+  saldos de banco y de sesión de caja intactos, contador sin cambios).
+- `vi.mock('server-only')` agregado a `fund-movement-lines` y `fund-movement-partner-account`.
+  `fund-movement-partner-account` verde sin otros cambios.
+
+**Calidad:** `npm run test` = **56 archivos, 751 tests, verdes**; `check-types` = **219**; `eslint`
+de los archivos tocados sin errores (el directorio `bank-movements/` tiene 2 errores previos en
+`lib/import-export.server.ts`, no tocado). Sin `any` ni `console`. No quedan empresas de test.
+
+**Prueba en navegador** (Playwright contra :3010, "Empresa de Prueba 01 SA"; script temporal
+borrado). Borrador de fondos sembrado por SQL: aporte de Juan Perez al Santander, $1,00, 06/10/2026.
+- Octubre cerrado por SQL (`accounting_periods.is_closed`): Confirmar el aporte (menú de la fila) →
+  toast "No se puede registrar con fecha 06/10/2026: el período está cerrado (mes 10/2026 cerrado).
+  Para operar, reabrilo desde Contabilidad → Configuración → Bloqueo de Períodos."; Transferir
+  Santander → Caja Principal $1 → mismo toast. Contador (52), saldo del banco, saldo esperado de la
+  caja, borrador DRAFT y cantidad de movimientos de banco/caja: sin cambios.
+- Octubre reabierto: "Movimiento confirmado" y "Transferencia realizada correctamente"; asientos
+  N° 53 (fondos) y N° 54 (banco→caja) DRAFT con FY 1 y período MONTHLY 2026/10.
+- Repetida la transferencia cerrada con la fecha por defecto corregida: el toast dice 06/10/2026.
+  Octubre quedó abierto (0 períodos cerrados).
+
+**Datos que quedaron en la DB de dev** (todo con la descripción "Verificación interna TSK-760 F6 … (no usar)"):
+- Movimiento de fondos `f436a986-2df7-4e61-abda-1f7e5549cbad` CONFIRMED (aporte Juan Perez $1,00 al
+  Santander) con asiento **N° 53** `8c7cebf1-b6d5-4cfe-9349-2168eca50ee7` (DRAFT) y `BankMovement`
+  DEPOSIT $1,00 `c6292b10-078b-4385-b28e-303582a3b33f`.
+- Transferencia banco→caja $1,00: `BankMovement` TRANSFER_OUT `36626de7-68a9-44fa-b66f-6e77d678d71b`,
+  `CashMovement` INCOME `9d61ece8-3d7d-4c31-90ef-f17d19708f54` y asiento **N° 54**
+  `7838638a-657d-4341-b761-2aef86abfb3e` (DRAFT).
+- Saldos: Santander sin cambio neto (+1 −1 = $1.515.754,56); sesión de Caja Principal +$1,00
+  (140.000,00 → 140.001,00). `last_entry_number` = 54. Ningún período cerrado.
+
+**Desvíos y notas:**
+- Como en la Fase 4 (instrucción del líder: toda action tocada devuelve `ActionResult`),
+  `createBankMovement`/`createBankTransfer` y sus dos diálogos se pasaron acá. **La Fase 12 ya no
+  tiene que tocar** esas dos actions ni `_CreateBankMovementDialog`/`_BankTransferDialog`.
+- Sin Ajustes, `confirmFundMovement` ahora falla antes de mover saldos (antes fallaba dentro de la
+  tx, con el mismo texto y el mismo resultado final por rollback).
+- Defensa en profundidad: `assertAccountsUsableTx` rechaza ahora una contrapartida no hoja en el
+  movimiento manual (antes solo se exigía `isActive`), con `BusinessError` legible.
+- Fechas con hora real: los movimientos bancarios importados desde Excel y los de otros caminos
+  siguen guardando la fecha que llega; el núcleo la interpreta por día UTC (fuera de alcance, 2.4).
+  Solo se corrigió el valor por defecto de los dos diálogos tocados.
+- Preexistente, no tocado: `createBankTransfer` lee el saldo del banco origen **fuera** de la tx
+  (dos transferencias simultáneas del mismo banco pueden pisar el saldo). Candidato a ticket aparte.
 
 ### Fase 7: Creadores IV — generadores contables
 **Estado:** Pendiente

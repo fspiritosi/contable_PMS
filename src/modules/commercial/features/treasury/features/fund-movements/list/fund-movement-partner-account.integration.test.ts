@@ -24,6 +24,7 @@ import { prisma } from '@/shared/lib/prisma';
 import type { FundMovementFormInput } from '../shared/validators';
 
 // Frontera aislada: sesión/permisos/empresa activa/caché de Next.
+vi.mock('server-only', () => ({}));
 vi.mock('@/shared/lib/current-user', () => ({ getCurrentUserId: vi.fn() }));
 vi.mock('@/shared/lib/company', () => ({ getActiveCompanyId: vi.fn() }));
 vi.mock('@/shared/lib/permissions', () => ({

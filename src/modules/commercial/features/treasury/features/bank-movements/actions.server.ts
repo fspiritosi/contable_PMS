@@ -17,6 +17,11 @@ import {
 } from '@/shared/components/common/DataTable/helpers';
 import { bankMovementSchema, bankTransferSchema, type BankMovementFormData, type BankTransferFormData } from '../../shared/validators';
 import { checkPermission } from '@/shared/lib/permissions';
+import { BusinessError, toActionResult, type ActionResult } from '@/shared/lib/action-result';
+import {
+  createJournalEntryTx,
+  type JournalEntryLineDraft,
+} from '@/modules/accounting/features/integrations/core';
 import moment from 'moment';
 
 // Tipo para el cliente de transacción de Prisma
@@ -25,10 +30,26 @@ type PrismaTransactionClient = Omit<
   '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'
 >;
 
+/** Primer mensaje de Zod como `BusinessError` (el form ya valida; esto es defensa). */
+function parseOrBusinessError<T>(
+  result: { success: true; data: T } | { success: false; error: { issues: { message: string }[] } }
+): T {
+  if (!result.success) {
+    throw new BusinessError(result.error.issues[0]?.message ?? 'Datos inválidos');
+  }
+  return result.data;
+}
+
 /**
- * Crea un nuevo movimiento bancario y genera asiento contable
+ * Crea un nuevo movimiento bancario y genera asiento contable.
+ *
+ * Errores como dato (`ActionResult`, TSK-760): un mes cerrado rechaza el
+ * movimiento entero (no se graba sin asiento) y el motivo llega legible también
+ * en producción.
  */
-export async function createBankMovement(data: BankMovementFormData) {
+export async function createBankMovement(
+  data: BankMovementFormData
+): Promise<ActionResult<{ id: string }>> {
   await checkPermission('commercial.treasury.bank-accounts', 'create', { redirect: true });
   const userId = await getCurrentUserId();
   if (!userId) throw new Error('No autenticado');
@@ -38,7 +59,7 @@ export async function createBankMovement(data: BankMovementFormData) {
 
   try {
     // Validar datos
-    const validated = bankMovementSchema.parse(data);
+    const validated = parseOrBusinessError(bankMovementSchema.safeParse(data));
 
     // Verificar que la cuenta bancaria existe y está activa
     const bankAccount = await prisma.bankAccount.findFirst({
@@ -57,7 +78,7 @@ export async function createBankMovement(data: BankMovementFormData) {
     });
 
     if (!bankAccount) {
-      throw new Error('Cuenta bancaria no encontrada o inactiva');
+      throw new BusinessError('Cuenta bancaria no encontrada o inactiva');
     }
 
     // Verificar que la cuenta contable contrapartida existe
@@ -75,7 +96,7 @@ export async function createBankMovement(data: BankMovementFormData) {
     });
 
     if (!counterpartAccount) {
-      throw new Error('Cuenta contable no encontrada o inactiva');
+      throw new BusinessError('Cuenta contable no encontrada o inactiva');
     }
 
     const amount = new Prisma.Decimal(validated.amount);
@@ -120,7 +141,7 @@ export async function createBankMovement(data: BankMovementFormData) {
             companyId,
             date: validated.date,
             description: validated.description,
-            amount: parseFloat(validated.amount),
+            amount,
             isIncome,
             bankAccountId: bankAccount.accountId,
             counterpartAccountId: validated.accountId,
@@ -148,23 +169,93 @@ export async function createBankMovement(data: BankMovementFormData) {
 
     return { success: true, id: movement.id };
   } catch (error) {
-    logger.error('Error al crear movimiento bancario', { data: { error } });
-    if (error instanceof Error) {
-      throw error;
-    }
-    throw new Error('Error al crear movimiento bancario');
+    return toActionResult(error, 'Error al crear movimiento bancario');
   }
 }
 
 /**
- * Genera asiento contable para un movimiento bancario manual
+ * Asiento DRAFT `'system'` de un movimiento bancario o una transferencia, dentro
+ * de la transacción del llamador (TSK-760, fase 6).
+ *
+ * - Sin Ajustes contables la empresa no usa contabilidad: no hay asiento y el
+ *   movimiento se graba igual (decisión 2.0 del plan, se conserva).
+ * - Con Ajustes, el núcleo (`createJournalEntryTx`) valida el período, numera
+ *   atómico y carga ejercicio/período. Un mes cerrado lanza `BusinessError` y la
+ *   transacción entera (movimientos y saldos) se deshace.
+ */
+async function createTreasuryEntryTx(
+  tx: PrismaTransactionClient,
+  input: {
+    companyId: string;
+    date: Date;
+    description: string;
+    lines: JournalEntryLineDraft[];
+    source: string;
+  }
+): Promise<{ id: string; number: number } | null> {
+  const settings = await tx.accountingSettings.findUnique({
+    where: { companyId: input.companyId },
+    select: { id: true },
+  });
+  if (!settings) {
+    logger.warn('No se encontró configuración contable, no se generará asiento', {
+      data: { companyId: input.companyId, source: input.source },
+    });
+    return null;
+  }
+
+  const entry = await createJournalEntryTx(tx, {
+    companyId: input.companyId,
+    date: input.date,
+    description: input.description,
+    lines: input.lines,
+    status: 'DRAFT',
+    createdBy: 'system',
+    source: input.source,
+  });
+  logger.info('Asiento contable generado para movimiento de tesorería', {
+    data: { entryId: entry.id, number: entry.number, source: input.source },
+  });
+  return { id: entry.id, number: entry.number };
+}
+
+/** Dos líneas: Debe `debitAccountId` · Haber `creditAccountId`, por `amount`. */
+function buildTransferLines(input: {
+  debitAccountId: string;
+  creditAccountId: string;
+  amount: Prisma.Decimal;
+  debitDescription: string;
+  creditDescription: string;
+}): JournalEntryLineDraft[] {
+  const zero = new Prisma.Decimal(0);
+  return [
+    {
+      accountId: input.debitAccountId,
+      debit: input.amount,
+      credit: zero,
+      description: input.debitDescription,
+    },
+    {
+      accountId: input.creditAccountId,
+      debit: zero,
+      credit: input.amount,
+      description: input.creditDescription,
+    },
+  ];
+}
+
+/**
+ * Genera asiento contable para un movimiento bancario manual.
+ *
+ * Ingreso (DEPOSIT, TRANSFER_IN, INTEREST, CHECK): Debe banco · Haber contrapartida.
+ * Egreso (WITHDRAWAL, TRANSFER_OUT, DEBIT, FEE): Debe contrapartida · Haber banco.
  */
 async function createJournalEntryForBankMovement(
   input: {
     companyId: string;
     date: Date;
     description: string;
-    amount: number;
+    amount: Prisma.Decimal;
     isIncome: boolean;
     bankAccountId: string;
     counterpartAccountId: string;
@@ -173,80 +264,31 @@ async function createJournalEntryForBankMovement(
   },
   tx: PrismaTransactionClient
 ) {
-  const { companyId, date, description, amount, isIncome, bankAccountId, counterpartAccountId, bankName, accountNumber } = input;
+  const { companyId, date, description, amount, isIncome, bankAccountId, counterpartAccountId } =
+    input;
+  const bankLabel = `${input.bankName} - ${input.accountNumber}`;
+  const bankLineDescription = `${bankLabel} - ${description}`;
 
-  // Obtener settings para el siguiente número de asiento
-  const settings = await tx.accountingSettings.findUnique({
-    where: { companyId },
-    select: { lastEntryNumber: true },
-  });
-
-  if (!settings) {
-    logger.warn('No se encontró configuración contable, no se generará asiento', {
-      data: { companyId },
-    });
-    return;
-  }
-
-  const nextNumber = settings.lastEntryNumber + 1;
-  const bankLabel = `${bankName} - ${accountNumber}`;
-
-  // Crear asiento:
-  // Ingreso (DEPOSIT, TRANSFER_IN, INTEREST):
-  //   Debe: Cuenta bancaria (activo aumenta)
-  //   Haber: Cuenta contrapartida
-  // Egreso (WITHDRAWAL, TRANSFER_OUT, CHECK, DEBIT, FEE):
-  //   Debe: Cuenta contrapartida
-  //   Haber: Cuenta bancaria (activo disminuye)
-  const entry = await tx.journalEntry.create({
-    data: {
-      companyId,
-      number: nextNumber,
-      date,
-      description: `Mov. bancario - ${description} (${bankLabel})`,
-      createdBy: 'system',
-      lines: {
-        create: isIncome
-          ? [
-              {
-                accountId: bankAccountId,
-                debit: new Prisma.Decimal(amount),
-                credit: new Prisma.Decimal(0),
-                description: `${bankLabel} - ${description}`,
-              },
-              {
-                accountId: counterpartAccountId,
-                debit: new Prisma.Decimal(0),
-                credit: new Prisma.Decimal(amount),
-                description: description,
-              },
-            ]
-          : [
-              {
-                accountId: counterpartAccountId,
-                debit: new Prisma.Decimal(amount),
-                credit: new Prisma.Decimal(0),
-                description: description,
-              },
-              {
-                accountId: bankAccountId,
-                debit: new Prisma.Decimal(0),
-                credit: new Prisma.Decimal(amount),
-                description: `${bankLabel} - ${description}`,
-              },
-            ],
-      },
-    },
-  });
-
-  // Actualizar el último número de asiento
-  await tx.accountingSettings.update({
-    where: { companyId },
-    data: { lastEntryNumber: nextNumber },
-  });
-
-  logger.info('Asiento contable generado para movimiento bancario', {
-    data: { entryId: entry.id, number: nextNumber },
+  await createTreasuryEntryTx(tx, {
+    companyId,
+    date,
+    description: `Mov. bancario - ${description} (${bankLabel})`,
+    lines: isIncome
+      ? buildTransferLines({
+          debitAccountId: bankAccountId,
+          creditAccountId: counterpartAccountId,
+          amount,
+          debitDescription: bankLineDescription,
+          creditDescription: description,
+        })
+      : buildTransferLines({
+          debitAccountId: counterpartAccountId,
+          creditAccountId: bankAccountId,
+          amount,
+          debitDescription: description,
+          creditDescription: bankLineDescription,
+        }),
+    source: 'bank-movement',
   });
 }
 
@@ -1021,9 +1063,14 @@ export async function getCashRegistersForTransfer() {
 }
 
 /**
- * Realiza una transferencia entre cuentas propias (banco→banco o banco→caja)
+ * Realiza una transferencia entre cuentas propias (banco→banco o banco→caja).
+ *
+ * Errores como dato (`ActionResult`, TSK-760): un mes cerrado rechaza la
+ * transferencia entera. Devuelve el id del movimiento de salida.
  */
-export async function createBankTransfer(data: BankTransferFormData) {
+export async function createBankTransfer(
+  data: BankTransferFormData
+): Promise<ActionResult<{ id: string }>> {
   await checkPermission('commercial.treasury.bank-accounts', 'create', { redirect: true });
   const userId = await getCurrentUserId();
   if (!userId) throw new Error('No autenticado');
@@ -1032,7 +1079,7 @@ export async function createBankTransfer(data: BankTransferFormData) {
   if (!companyId) throw new Error('No hay empresa activa');
 
   try {
-    const validated = bankTransferSchema.parse(data);
+    const validated = parseOrBusinessError(bankTransferSchema.safeParse(data));
     const amount = new Prisma.Decimal(validated.amount);
     const transferRef = `TRF-${moment(validated.date).format('YYYYMMDD')}-${Date.now().toString(36).toUpperCase()}`;
 
@@ -1048,7 +1095,9 @@ export async function createBankTransfer(data: BankTransferFormData) {
       },
     });
 
-    if (!sourceAccount) throw new Error('Cuenta origen no encontrada o inactiva');
+    if (!sourceAccount) throw new BusinessError('Cuenta origen no encontrada o inactiva');
+
+    let outMovementId: string;
 
     if (validated.destinationType === 'BANK') {
       // Transferencia Banco → Banco
@@ -1063,11 +1112,11 @@ export async function createBankTransfer(data: BankTransferFormData) {
         },
       });
 
-      if (!destAccount) throw new Error('Cuenta destino no encontrada o inactiva');
+      if (!destAccount) throw new BusinessError('Cuenta destino no encontrada o inactiva');
 
-      await prisma.$transaction(async (tx) => {
+      outMovementId = await prisma.$transaction(async (tx) => {
         // 1. Crear TRANSFER_OUT en cuenta origen
-        await tx.bankMovement.create({
+        const out = await tx.bankMovement.create({
           data: {
             bankAccountId: sourceAccount.id,
             companyId,
@@ -1107,45 +1156,22 @@ export async function createBankTransfer(data: BankTransferFormData) {
 
         // 4. Asiento contable si ambas cuentas tienen cuenta contable
         if (sourceAccount.accountId && destAccount.accountId) {
-          const settings = await tx.accountingSettings.findUnique({
-            where: { companyId },
-            select: { lastEntryNumber: true },
+          await createTreasuryEntryTx(tx, {
+            companyId,
+            date: validated.date,
+            description: `Transferencia bancaria - ${validated.description}`,
+            lines: buildTransferLines({
+              debitAccountId: destAccount.accountId,
+              creditAccountId: sourceAccount.accountId,
+              amount,
+              debitDescription: `Transferencia desde ${sourceAccount.bankName} ${sourceAccount.accountNumber}`,
+              creditDescription: `Transferencia a ${destAccount.bankName} ${destAccount.accountNumber}`,
+            }),
+            source: `bank-transfer:${transferRef}`,
           });
-
-          if (settings) {
-            const nextNumber = settings.lastEntryNumber + 1;
-            await tx.journalEntry.create({
-              data: {
-                companyId,
-                number: nextNumber,
-                date: validated.date,
-                description: `Transferencia bancaria - ${validated.description}`,
-                createdBy: 'system',
-                lines: {
-                  create: [
-                    {
-                      accountId: destAccount.accountId,
-                      debit: amount,
-                      credit: new Prisma.Decimal(0),
-                      description: `Transferencia desde ${sourceAccount.bankName} ${sourceAccount.accountNumber}`,
-                    },
-                    {
-                      accountId: sourceAccount.accountId,
-                      debit: new Prisma.Decimal(0),
-                      credit: amount,
-                      description: `Transferencia a ${destAccount.bankName} ${destAccount.accountNumber}`,
-                    },
-                  ],
-                },
-              },
-            });
-
-            await tx.accountingSettings.update({
-              where: { companyId },
-              data: { lastEntryNumber: nextNumber },
-            });
-          }
         }
+
+        return out.id;
       });
 
       logger.info('Transferencia banco→banco realizada', {
@@ -1173,14 +1199,14 @@ export async function createBankTransfer(data: BankTransferFormData) {
         },
       });
 
-      if (!cashRegister) throw new Error('Caja destino no encontrada o inactiva');
-      if (!cashRegister.sessions[0]) throw new Error('La caja no tiene una sesión abierta');
+      if (!cashRegister) throw new BusinessError('Caja destino no encontrada o inactiva');
+      if (!cashRegister.sessions[0]) throw new BusinessError('La caja no tiene una sesión abierta');
 
       const session = cashRegister.sessions[0];
 
-      await prisma.$transaction(async (tx) => {
+      outMovementId = await prisma.$transaction(async (tx) => {
         // 1. Crear TRANSFER_OUT en banco
-        await tx.bankMovement.create({
+        const out = await tx.bankMovement.create({
           data: {
             bankAccountId: sourceAccount.id,
             companyId,
@@ -1222,45 +1248,22 @@ export async function createBankTransfer(data: BankTransferFormData) {
 
         // 5. Asiento contable si ambos tienen cuenta contable
         if (sourceAccount.accountId && cashRegister.accountId) {
-          const settings = await tx.accountingSettings.findUnique({
-            where: { companyId },
-            select: { lastEntryNumber: true },
+          await createTreasuryEntryTx(tx, {
+            companyId,
+            date: validated.date,
+            description: `Transferencia banco→caja - ${validated.description}`,
+            lines: buildTransferLines({
+              debitAccountId: cashRegister.accountId,
+              creditAccountId: sourceAccount.accountId,
+              amount,
+              debitDescription: `Transferencia desde ${sourceAccount.bankName} ${sourceAccount.accountNumber}`,
+              creditDescription: `Transferencia a caja ${cashRegister.code}`,
+            }),
+            source: `bank-to-cash-transfer:${transferRef}`,
           });
-
-          if (settings) {
-            const nextNumber = settings.lastEntryNumber + 1;
-            await tx.journalEntry.create({
-              data: {
-                companyId,
-                number: nextNumber,
-                date: validated.date,
-                description: `Transferencia banco→caja - ${validated.description}`,
-                createdBy: 'system',
-                lines: {
-                  create: [
-                    {
-                      accountId: cashRegister.accountId,
-                      debit: amount,
-                      credit: new Prisma.Decimal(0),
-                      description: `Transferencia desde ${sourceAccount.bankName} ${sourceAccount.accountNumber}`,
-                    },
-                    {
-                      accountId: sourceAccount.accountId,
-                      debit: new Prisma.Decimal(0),
-                      credit: amount,
-                      description: `Transferencia a caja ${cashRegister.code}`,
-                    },
-                  ],
-                },
-              },
-            });
-
-            await tx.accountingSettings.update({
-              where: { companyId },
-              data: { lastEntryNumber: nextNumber },
-            });
-          }
         }
+
+        return out.id;
       });
 
       logger.info('Transferencia banco→caja realizada', {
@@ -1276,11 +1279,9 @@ export async function createBankTransfer(data: BankTransferFormData) {
     revalidatePath('/dashboard/commercial/treasury/bank-accounts');
     revalidatePath('/dashboard/commercial/treasury/cash-registers');
 
-    return { success: true };
+    return { success: true, id: outMovementId };
   } catch (error) {
-    logger.error('Error al realizar transferencia', { data: { error } });
-    if (error instanceof Error) throw error;
-    throw new Error('Error al realizar la transferencia');
+    return toActionResult(error, 'Error al realizar la transferencia');
   }
 }
 
