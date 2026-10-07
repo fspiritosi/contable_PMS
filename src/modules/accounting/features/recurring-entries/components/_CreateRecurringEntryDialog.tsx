@@ -58,7 +58,7 @@ export function _CreateRecurringEntryDialog({
       name: '',
       description: '',
       frequency: 'MONTHLY',
-      startDate: new Date(),
+      startDate: moment().hour(12).startOf('hour').toDate(), // mediodía local: mismo día en UTC
       endDate: null,
       lines: [
         { accountId: '', description: '', debit: 0, credit: 0 },
@@ -161,7 +161,7 @@ export function _CreateRecurringEntryDialog({
                 id="startDate"
                 type="date"
                 value={form.watch('startDate') ? moment(form.watch('startDate')).format('YYYY-MM-DD') : ''}
-                onChange={(e) => form.setValue('startDate', new Date(e.target.value))}
+                onChange={(e) => form.setValue('startDate', new Date(`${e.target.value}T12:00:00`))}
                 disabled={isLoading}
               />
             </div>
@@ -171,7 +171,7 @@ export function _CreateRecurringEntryDialog({
                 id="endDate"
                 type="date"
                 value={form.watch('endDate') ? moment(form.watch('endDate')).format('YYYY-MM-DD') : ''}
-                onChange={(e) => form.setValue('endDate', e.target.value ? new Date(e.target.value) : null)}
+                onChange={(e) => form.setValue('endDate', e.target.value ? new Date(`${e.target.value}T12:00:00`) : null)}
                 disabled={isLoading}
               />
             </div>

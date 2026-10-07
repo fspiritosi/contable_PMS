@@ -35,18 +35,7 @@ export function _CreateEntryModal({ onClose }: CreateEntryModalProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [accounts, setAccounts] = useState<Array<{ id: string; code: string; name: string }>>([]);
 
-  type FormValues = {
-    date: Date;
-    description: string;
-    lines: {
-      accountId: string;
-      debit: string;
-      credit: string;
-      description?: string;
-    }[];
-  };
-
-  const form = useForm<FormValues>({
+  const form = useForm<CreateJournalEntryInput>({
     resolver: zodResolver(journalEntrySchema),
     defaultValues: {
       date: new Date(),
@@ -80,7 +69,7 @@ export function _CreateEntryModal({ onClose }: CreateEntryModalProps) {
     init();
   }, []);
 
-  const handleSubmit = async (data: FormValues) => {
+  const handleSubmit = async (data: CreateJournalEntryInput) => {
     if (!companyId) {
       toast.error('Error al obtener la empresa activa');
       return;
@@ -88,16 +77,16 @@ export function _CreateEntryModal({ onClose }: CreateEntryModalProps) {
 
     setIsLoading(true);
     try {
-      await createJournalEntry(companyId, data);
-      toast.success('Asiento creado correctamente');
+      const result = await createJournalEntry(data);
+      if (!result.success) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success(`Asiento N° ${result.number} creado en borrador`);
       router.refresh();
       onClose();
-    } catch (error) {
-      if (error instanceof Error) {
-        toast.error(error.message);
-      } else {
-        toast.error('Error al crear el asiento');
-      }
+    } catch {
+      toast.error('Error al crear el asiento');
     } finally {
       setIsLoading(false);
     }
@@ -118,7 +107,7 @@ export function _CreateEntryModal({ onClose }: CreateEntryModalProps) {
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-3xl">
+      <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>Nuevo Asiento Contable</DialogTitle>
           <DialogDescription>
@@ -126,7 +115,7 @@ export function _CreateEntryModal({ onClose }: CreateEntryModalProps) {
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={form.handleSubmit(handleSubmit as any)} className="space-y-4">
+        <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="date">

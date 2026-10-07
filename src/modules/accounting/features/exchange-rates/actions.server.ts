@@ -4,10 +4,13 @@ import { prisma } from '@/shared/lib/prisma';
 import { logger } from '@/shared/lib/logger';
 import { getActiveCompanyId } from '@/shared/lib/company';
 import { checkPermission } from '@/shared/lib/permissions';
-import { JournalEntryStatus } from '@/generated/prisma/enums';
+import { BusinessError, toActionResult, type ActionResult } from '@/shared/lib/action-result';
 import { getCurrentUserId } from '@/shared/lib/current-user';
 import { revalidatePath } from 'next/cache';
-import moment from 'moment';
+import { createJournalEntryTx } from '../../shared/utils/journal-entry-tx';
+import { NOT_CLOSE_GENERATED_OPENING_SQL } from '../../shared/utils/closing-entries';
+import type { JournalEntryLineDraft } from '../../shared/utils/journal-entry-lines';
+import { formatDayUtc } from '../../shared/utils/utc-month';
 
 // ============================================
 // CRUD DE TIPOS DE CAMBIO
@@ -214,6 +217,7 @@ export async function previewExchangeDifference(
           AND je.company_id = ${companyId}::uuid
           AND je.status = 'POSTED'
           AND je.date <= ${closingDate}
+          AND ${NOT_CLOSE_GENERATED_OPENING_SQL} -- saldo acumulado sin la apertura del cierre (TSK-760 H4)
       `;
 
       const originalBalance = originalLines[0].total_original;
@@ -251,17 +255,27 @@ export async function previewExchangeDifference(
   }
 }
 
-export async function generateExchangeDifferenceEntry(closingDate: Date) {
+/**
+ * Asiento de diferencia de cambio al `closingDate` (TSK-760, #16): POSTED, a nombre del
+ * usuario, creado con el núcleo (período cerrado, ejercicio, período y número
+ * atómico; antes no cargaba ejercicio ni período). Sin UI: devuelve `ActionResult`.
+ */
+export async function generateExchangeDifferenceEntry(
+  closingDate: Date
+): Promise<ActionResult<{ id: string; number: number }>> {
   await checkPermission('accounting.entries', 'create', { redirect: true });
 
   const companyId = await getActiveCompanyId();
   if (!companyId) throw new Error('No hay empresa activa');
 
+  const userId = await getCurrentUserId();
+  if (!userId) throw new Error('No autenticado');
+
   try {
     const diffs = await previewExchangeDifference(closingDate);
 
     if (diffs.length === 0) {
-      throw new Error('No hay diferencias de cambio para registrar');
+      throw new BusinessError('No hay diferencias de cambio para registrar');
     }
 
     const settings = await prisma.accountingSettings.findUnique({
@@ -270,7 +284,9 @@ export async function generateExchangeDifferenceEntry(closingDate: Date) {
     });
 
     if (!settings?.resultAccountId) {
-      throw new Error('Configure la cuenta de Resultado del Ejercicio antes de generar diferencias de cambio');
+      throw new BusinessError(
+        'Configure la cuenta de Resultado del Ejercicio antes de generar diferencias de cambio'
+      );
     }
 
     // Buscar cuenta de diferencia de cambio (gastos o ingresos financieros)
@@ -286,95 +302,62 @@ export async function generateExchangeDifferenceEntry(closingDate: Date) {
 
     const diffAccountId = exchangeDiffAccount?.id ?? settings.resultAccountId;
 
-    const userId = await getCurrentUserId();
-    if (!userId) throw new Error('No autenticado');
+    const lines: JournalEntryLineDraft[] = [];
+    let totalGain = 0;
+    let totalLoss = 0;
 
-    const result = await prisma.$transaction(async (tx) => {
-      const [{ last_entry_number: nextNumber }] = await tx.$queryRaw<
-        [{ last_entry_number: number }]
-      >`
-        UPDATE accounting_settings
-        SET last_entry_number = last_entry_number + 1, updated_at = NOW()
-        WHERE company_id = ${companyId}::uuid
-        RETURNING last_entry_number
-      `;
-
-      const lines: { accountId: string; description: string; debit: number; credit: number }[] = [];
-
-      let totalGain = 0;
-      let totalLoss = 0;
-
-      for (const diff of diffs) {
-        if (diff.difference > 0) {
-          // Ganancia: la cuenta en ME vale más en ARS
-          lines.push({
-            accountId: diff.accountId,
-            description: `Dif. cambio ${diff.currency} — ${diff.accountName}`,
-            debit: diff.difference,
-            credit: 0,
-          });
-          totalGain += diff.difference;
-        } else {
-          // Pérdida: la cuenta en ME vale menos en ARS
-          lines.push({
-            accountId: diff.accountId,
-            description: `Dif. cambio ${diff.currency} — ${diff.accountName}`,
-            debit: 0,
-            credit: Math.abs(diff.difference),
-          });
-          totalLoss += Math.abs(diff.difference);
-        }
+    for (const diff of diffs) {
+      const description = `Dif. cambio ${diff.currency} — ${diff.accountName}`;
+      if (diff.difference > 0) {
+        // Ganancia: la cuenta en ME vale más en ARS
+        lines.push({ accountId: diff.accountId, description, debit: diff.difference, credit: 0 });
+        totalGain += diff.difference;
+      } else {
+        // Pérdida: la cuenta en ME vale menos en ARS
+        lines.push({ accountId: diff.accountId, description, debit: 0, credit: Math.abs(diff.difference) });
+        totalLoss += Math.abs(diff.difference);
       }
+    }
 
-      // Contrapartida en cuenta de diferencia de cambio
-      if (totalGain > 0) {
-        lines.push({
-          accountId: diffAccountId,
-          description: 'Diferencia de cambio — Ganancia',
-          debit: 0,
-          credit: totalGain,
-        });
-      }
-
-      if (totalLoss > 0) {
-        lines.push({
-          accountId: diffAccountId,
-          description: 'Diferencia de cambio — Pérdida',
-          debit: totalLoss,
-          credit: 0,
-        });
-      }
-
-      const entry = await tx.journalEntry.create({
-        data: {
-          companyId,
-          number: nextNumber,
-          date: closingDate,
-          description: `Diferencia de cambio al ${moment(closingDate).format('DD/MM/YYYY')}`,
-          createdBy: userId,
-          status: JournalEntryStatus.POSTED,
-          postDate: new Date(),
-          lines: {
-            create: lines,
-          },
-        },
-        select: { id: true, number: true },
+    // Contrapartida en cuenta de diferencia de cambio
+    if (totalGain > 0) {
+      lines.push({
+        accountId: diffAccountId,
+        description: 'Diferencia de cambio — Ganancia',
+        debit: 0,
+        credit: totalGain,
       });
+    }
 
-      return entry;
-    });
+    if (totalLoss > 0) {
+      lines.push({
+        accountId: diffAccountId,
+        description: 'Diferencia de cambio — Pérdida',
+        debit: totalLoss,
+        credit: 0,
+      });
+    }
+
+    const entry = await prisma.$transaction((tx) =>
+      createJournalEntryTx(tx, {
+        companyId,
+        date: closingDate,
+        description: `Diferencia de cambio al ${formatDayUtc(closingDate)}`,
+        lines,
+        status: 'POSTED',
+        createdBy: userId,
+        source: 'exchange-difference',
+      })
+    );
 
     logger.info('Asiento de diferencia de cambio generado', {
-      data: { companyId, entryId: result.id, entryNumber: result.number },
+      data: { companyId, entryId: entry.id, entryNumber: entry.number },
     });
 
     revalidatePath('/dashboard/company/accounting/entries');
 
-    return result;
+    return { success: true, id: entry.id, number: entry.number };
   } catch (error) {
-    logger.error('Error al generar asiento de diferencia de cambio', {
-      data: { error, companyId },
-    });
-    throw error;
+    return toActionResult(error, 'Error al generar asiento de diferencia de cambio');
   }
 }

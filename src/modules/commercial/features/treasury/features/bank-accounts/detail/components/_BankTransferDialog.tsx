@@ -85,7 +85,7 @@ export function _BankTransferDialog({ open, onOpenChange, bankAccountId, onSucce
       destinationBankAccountId: null,
       destinationCashRegisterId: null,
       amount: '',
-      date: new Date(),
+      date: moment().hour(12).startOf('hour').toDate(), // mediodía local, como el onChange (TSK-760)
       description: '',
       reference: '',
     },
@@ -120,7 +120,8 @@ export function _BankTransferDialog({ open, onOpenChange, bankAccountId, onSucce
   const handleSubmit = async (values: FormValues) => {
     setIsSubmitting(true);
     try {
-      await createBankTransfer(values);
+      const result = await createBankTransfer(values);
+      if (!result.success) return void toast.error(result.error);
       toast.success('Transferencia realizada correctamente');
       form.reset();
       onOpenChange(false);

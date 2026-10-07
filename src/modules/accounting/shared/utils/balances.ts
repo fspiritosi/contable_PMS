@@ -1,8 +1,13 @@
 'use server';
 
 import { prisma } from '@/shared/lib/prisma';
+import type { Prisma } from '@/generated/prisma/client';
 import moment from 'moment';
 import { logger } from '@/shared/lib/logger';
+
+// TSK-760 (B18): los saldos acumulados excluyen la apertura generada por el cierre anual,
+// que repetiría los saldos patrimoniales del ejercicio cerrado. Ver closing-entries.ts.
+import { NOT_CLOSE_GENERATED_OPENING_SQL, notCloseGeneratedOpeningWhere } from './closing-entries';
 
 /**
  * Calcula el saldo de una cuenta hasta una fecha específica
@@ -13,19 +18,15 @@ export async function calculateAccountBalance(
   upToDate?: Date
 ): Promise<{ debit: number; credit: number; balance: number }> {
   try {
-    const whereCondition: any = {
+    const whereCondition: Prisma.JournalEntryLineWhereInput = {
       accountId,
       entry: {
         companyId,
         status: 'POSTED', // Solo asientos registrados
+        ...notCloseGeneratedOpeningWhere,
+        ...(upToDate ? { date: { lte: upToDate } } : {}),
       },
     };
-
-    if (upToDate) {
-      whereCondition.entry.date = {
-        lte: upToDate,
-      };
-    }
 
     const lines = await prisma.journalEntryLine.findMany({
       where: whereCondition,
@@ -76,6 +77,7 @@ export async function calculateAllAccountBalances(
           JOIN accounts a ON a.id = jel.account_id
           WHERE je.company_id = ${companyId}::uuid
             AND je.status = 'POSTED'
+            AND ${NOT_CLOSE_GENERATED_OPENING_SQL}
             AND je.date <= ${upToDate}
             AND a.company_id = ${companyId}::uuid
             AND a.is_active = true
@@ -90,6 +92,7 @@ export async function calculateAllAccountBalances(
           JOIN accounts a ON a.id = jel.account_id
           WHERE je.company_id = ${companyId}::uuid
             AND je.status = 'POSTED'
+            AND ${NOT_CLOSE_GENERATED_OPENING_SQL}
             AND a.company_id = ${companyId}::uuid
             AND a.is_active = true
           GROUP BY jel.account_id
@@ -207,6 +210,7 @@ export async function calculateBalanceByType(
             AND a.is_active = true
             AND je.company_id = ${companyId}::uuid
             AND je.status = 'POSTED'
+            AND ${NOT_CLOSE_GENERATED_OPENING_SQL}
             AND je.date <= ${upToDate}
           GROUP BY a.type
         `
@@ -220,6 +224,7 @@ export async function calculateBalanceByType(
             AND a.is_active = true
             AND je.company_id = ${companyId}::uuid
             AND je.status = 'POSTED'
+            AND ${NOT_CLOSE_GENERATED_OPENING_SQL}
           GROUP BY a.type
         `;
 

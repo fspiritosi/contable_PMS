@@ -62,7 +62,7 @@ export function _CreateBankMovementDialog({ open, onOpenChange, bankAccountId, o
       bankAccountId,
       type: 'DEPOSIT',
       amount: '',
-      date: new Date(),
+      date: moment().hour(12).startOf('hour').toDate(), // mediodía local, como el onChange (TSK-760)
       description: '',
       reference: null,
       statementNumber: null,
@@ -72,13 +72,14 @@ export function _CreateBankMovementDialog({ open, onOpenChange, bankAccountId, o
 
   const onSubmit = async (data: BankMovementFormData) => {
     try {
-      await createBankMovement(data);
+      const result = await createBankMovement(data);
+      if (!result.success) return void toast.error(result.error);
       toast.success('Movimiento bancario registrado correctamente');
       form.reset({
         bankAccountId,
         type: 'DEPOSIT',
         amount: '',
-        date: new Date(),
+        date: moment().hour(12).startOf('hour').toDate(), // mediodía local, como el onChange (TSK-760)
         description: '',
         reference: null,
         statementNumber: null,

@@ -12,6 +12,14 @@ export {
   getAccountRollupBalances,
 } from './balances';
 
+// Núcleo de asientos (TSK-760): solo los módulos puros, usables en cliente. Los
+// helpers con transacción (`period-lock`, `journal-entry-tx`) son `server-only` y
+// se importan por su ruta (o desde `integrations/core`), nunca desde este índice.
+export * from './utc-month';
+export * from './period-closure';
+export * from './journal-entry-lines';
+export type * from './journal-entry-types';
+
 /**
  * Determina si una cuenta está vigente en el ejercicio consultado.
  *

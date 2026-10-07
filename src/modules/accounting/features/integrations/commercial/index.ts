@@ -46,6 +46,9 @@ import { BudgetStatus, AccountNature } from '@/generated/prisma/enums';
 import { prisma } from '@/shared/lib/prisma';
 import { logger } from '@/shared/lib/logger';
 import { BusinessError } from '@/shared/lib/action-result';
+import { createJournalEntryTx } from '@/modules/accounting/shared/utils/journal-entry-tx';
+import { NOT_CLOSING_ENTRY_SQL } from '@/modules/accounting/shared/utils/closing-entries';
+import { reconcileDocumentEntryAmounts } from '@/modules/accounting/shared/utils/document-entry-rounding';
 import { isCreditNote } from '@/modules/commercial/shared/voucher-utils';
 import { expandByCostCenter } from '@/modules/commercial/shared/cost-center';
 import { buildMissingTributeAccountsMessage } from '@/modules/commercial/shared/perceptions';
@@ -101,6 +104,8 @@ interface CreateJournalEntryInput {
   date: Date;
   description: string;
   lines: JournalEntryLineInput[];
+  /** Origen para el log (p. ej. 'sales-invoice:<id>'). */
+  source?: string;
 }
 
 // ============================================
@@ -182,115 +187,102 @@ function getWithholdingAccountId(
 }
 
 // ============================================
-// HELPER: Validar balance del asiento
-// ============================================
-
-function validateBalance(lines: JournalEntryLineInput[]): void {
-  const totalDebit = lines.reduce((sum, line) => sum + line.debit, 0);
-  const totalCredit = lines.reduce((sum, line) => sum + line.credit, 0);
-
-  // Permitir diferencia de centavos por redondeo
-  if (Math.abs(totalDebit - totalCredit) > 0.01) {
-    throw new Error(
-      `El asiento no está balanceado. Debe: ${totalDebit.toFixed(2)}, Haber: ${totalCredit.toFixed(2)}`
-    );
-  }
-}
-
-// ============================================
 // HELPER: Crear asiento contable
 // ============================================
 
+/**
+ * Crea el asiento del documento con el núcleo único (TSK-760, fase 5): valida
+ * líneas y balance, cuentas de la empresa e imputables, período (ejercicio
+ * cerrado, mes cerrado o `lockedUntilDate`, dentro de la tx con el lock de la
+ * empresa), numera de forma atómica y carga `fiscalYearId`/`periodId`. Nace en
+ * DRAFT con `createdBy: 'system'`, como hasta ahora. Cualquier rechazo es
+ * `BusinessError` y aborta la transacción del documento (no queda confirmado
+ * ni se consume número).
+ */
 async function createJournalEntry(
   input: CreateJournalEntryInput,
   tx: PrismaTransactionClient
 ): Promise<string> {
-  const { companyId, date, description, lines } = input;
+  const { companyId, date, description, lines, source } = input;
 
-  // Validar balance
-  validateBalance(lines);
-
-  // Verificar bloqueo de período
-  const settings = await tx.accountingSettings.findUnique({
-    where: { companyId },
-    select: { lockedUntilDate: true },
-  });
-
-  if (!settings) {
-    throw new BusinessError('No se encontró configuración contable');
-  }
-
-  if (settings.lockedUntilDate && moment(date).isSameOrBefore(moment(settings.lockedUntilDate), 'day')) {
-    throw new BusinessError(
-      `No se puede generar el asiento contable: el período está cerrado para la fecha ${moment(date).format('DD/MM/YYYY')}. Contacte al contador para reabrir el período.`
-    );
-  }
-
-  // Resolver ejercicio y período
-  const fiscalYear = await tx.fiscalYear.findFirst({
-    where: { companyId, startDate: { lte: date }, endDate: { gte: date } },
-    select: { id: true },
-  });
-  let periodId: string | undefined;
-  if (fiscalYear) {
-    const entryMoment = moment(date);
-    const period = await tx.accountingPeriod.findFirst({
-      where: {
-        fiscalYearId: fiscalYear.id,
-        year: entryMoment.year(),
-        month: entryMoment.month() + 1,
-        type: 'MONTHLY',
-      },
-      select: { id: true },
-    });
-    periodId = period?.id;
-  }
-
-  // Incremento atómico: UPDATE ... RETURNING evita race conditions
-  const [{ last_entry_number: nextNumber }] = await tx.$queryRaw<[{ last_entry_number: number }]>`
-    UPDATE accounting_settings
-    SET last_entry_number = last_entry_number + 1, updated_at = NOW()
-    WHERE company_id = ${companyId}::uuid
-    RETURNING last_entry_number
-  `;
-
-  // Crear asiento
-  const entry = await tx.journalEntry.create({
-    data: {
-      companyId,
-      number: nextNumber,
-      date,
-      description,
-      createdBy: 'system',
-      fiscalYearId: fiscalYear?.id,
-      periodId,
-      lines: {
-        create: lines.map((line) => ({
-          accountId: line.accountId,
-          debit: new Prisma.Decimal(line.debit),
-          credit: new Prisma.Decimal(line.credit),
-          description: line.description,
-          customerId: line.customerId,
-          supplierId: line.supplierId,
-          costCenterId: line.costCenterId,
-          currency: line.currency ?? 'ARS',
-          originalAmount: line.originalAmount != null ? new Prisma.Decimal(line.originalAmount) : null,
-          exchangeRate: line.exchangeRate != null ? new Prisma.Decimal(line.exchangeRate) : null,
-        })),
-      },
-    },
+  const entry = await createJournalEntryTx(tx, {
+    companyId,
+    date,
+    description,
+    status: 'DRAFT',
+    createdBy: 'system',
+    source,
+    lines: lines.map((line) => ({
+      accountId: line.accountId,
+      debit: new Prisma.Decimal(line.debit),
+      credit: new Prisma.Decimal(line.credit),
+      description: line.description,
+      customerId: line.customerId ?? null,
+      supplierId: line.supplierId ?? null,
+      costCenterId: line.costCenterId ?? null,
+      currency: line.currency ?? 'ARS',
+      originalAmount: line.originalAmount != null ? new Prisma.Decimal(line.originalAmount) : null,
+      exchangeRate: line.exchangeRate != null ? new Prisma.Decimal(line.exchangeRate) : null,
+    })),
   });
 
   logger.info('Asiento contable creado automáticamente', {
-    data: {
-      entryId: entry.id,
-      number: nextNumber,
-      totalDebit: lines.reduce((sum, line) => sum + line.debit, 0),
-      totalCredit: lines.reduce((sum, line) => sum + line.credit, 0),
-    },
+    data: { entryId: entry.id, number: entry.number, source },
   });
 
   return entry.id;
+}
+
+// ============================================
+// HELPER: IVA por alícuota y ajuste al comprobante (TSK-760, R-1)
+// ============================================
+
+interface InvoiceLineVat {
+  lineType: string;
+  vatRate: Prisma.Decimal;
+  vatAmount: Prisma.Decimal;
+}
+
+/** Suma el IVA de las líneas gravadas por alícuota, en el orden en que aparecen. */
+function groupVatByRate(invoiceLines: InvoiceLineVat[]): Map<number, number> {
+  const vatByRate = new Map<number, number>();
+  for (const line of invoiceLines) {
+    if (line.lineType !== 'TAXED') continue;
+    const rate = parseFloat(line.vatRate.toString());
+    const vat = parseFloat(line.vatAmount.toString());
+    if (vat <= 0) continue;
+    vatByRate.set(rate, (vatByRate.get(rate) ?? 0) + vat);
+  }
+  return vatByRate;
+}
+
+/**
+ * Importes de neto (por cuenta + centro) e IVA (por alícuota) del asiento,
+ * ajustados al total y al IVA guardados del comprobante (ver
+ * `document-entry-rounding.ts`). Percepciones e impuestos internos no se tocan.
+ */
+function reconcileInvoiceAmounts(
+  invoice: {
+    total: Prisma.Decimal;
+    vatAmount: Prisma.Decimal;
+    internalTaxes: Prisma.Decimal;
+    perceptions: Array<{ amount: Prisma.Decimal }>;
+    lines: unknown[];
+  },
+  expanded: Array<{ total: number }>,
+  vatByRate: Map<number, number>
+) {
+  return reconcileDocumentEntryAmounts({
+    documentTotal: Number(invoice.total),
+    documentVat: Number(invoice.vatAmount),
+    net: expanded.map((e) => e.total),
+    vat: [...vatByRate.values()],
+    other: [
+      ...invoice.perceptions.map((p) => Number(p.amount)).filter((a) => a > 0),
+      Math.max(0, Number(invoice.internalTaxes)),
+    ],
+    documentLineCount: invoice.lines.length,
+  });
 }
 
 // ============================================
@@ -394,7 +386,22 @@ export async function createJournalEntryForSalesInvoice(
       }))
     );
 
-    for (const { accountId, costCenterId, total: accountTotal } of expanded) {
+    // IVA discriminado por alícuota
+    const vatByRate = groupVatByRate(invoice.lines);
+    for (const [rate] of vatByRate) {
+      if (!getVatAccountId(settings, rate, 'DEBIT')) {
+        // Antes: warn + continue → asiento descuadrado que moría en
+        // validateBalance con un mensaje que no decía qué faltaba (TSK-721).
+        throw new BusinessError(buildMissingTributeAccountsMessage([`IVA Débito Fiscal ${rate}%`]));
+      }
+    }
+
+    // El comprobante manda (TSK-760, R-1): neto e IVA ajustados al total y al
+    // IVA guardados del comprobante, que se calculan sobre la suma.
+    const amounts = reconcileInvoiceAmounts(invoice, expanded, vatByRate);
+
+    expanded.forEach(({ accountId, costCenterId }, i) => {
+      const accountTotal = amounts.net[i];
       lines.push({
         accountId,
         debit: isNC ? accountTotal : 0,
@@ -402,32 +409,17 @@ export async function createJournalEntryForSalesInvoice(
         description: `Ventas - ${invoice.fullNumber}`,
         ...(costCenterId && { costCenterId }),
       });
-    }
+    });
 
-    // IVA discriminado por alícuota
-    const vatByRate = new Map<number, number>();
-    for (const line of invoice.lines) {
-      if (line.lineType !== 'TAXED') continue;
-      const rate = parseFloat(line.vatRate.toString());
-      const vat = parseFloat(line.vatAmount.toString());
-      if (vat <= 0) continue;
-      vatByRate.set(rate, (vatByRate.get(rate) ?? 0) + vat);
-    }
-
-    for (const [rate, vatTotal] of vatByRate) {
-      const accountId = getVatAccountId(settings, rate, 'DEBIT');
-      if (!accountId) {
-        // Antes: warn + continue → asiento descuadrado que moría en
-        // validateBalance con un mensaje que no decía qué faltaba (TSK-721).
-        throw new BusinessError(buildMissingTributeAccountsMessage([`IVA Débito Fiscal ${rate}%`]));
-      }
+    [...vatByRate.keys()].forEach((rate, i) => {
+      const vatTotal = amounts.vat[i];
       lines.push({
-        accountId,
+        accountId: getVatAccountId(settings, rate, 'DEBIT')!,
         debit: isNC ? vatTotal : 0,
         credit: isNC ? 0 : vatTotal,
         description: `IVA DF ${rate}% - ${invoice.fullNumber}`,
       });
-    }
+    });
 
     // Percepciones cobradas (pasivo)
     for (const perc of invoice.perceptions) {
@@ -475,6 +467,7 @@ export async function createJournalEntryForSalesInvoice(
         date: invoice.issueDate,
         description: `${docLabel} ${invoice.fullNumber}`,
         lines,
+        source: `sales-invoice:${invoiceId}`,
       },
       tx
     );
@@ -578,40 +571,37 @@ export async function createJournalEntryForPurchaseInvoice(
       }))
     );
 
-    const lines: JournalEntryLineInput[] = expanded.map(
-      ({ accountId, costCenterId, total: accountTotal }) => ({
-        accountId,
-        debit: isNC ? 0 : accountTotal,
-        credit: isNC ? accountTotal : 0,
-        description: `Compras - ${invoice.fullNumber}`,
-        ...(costCenterId && { costCenterId }),
-      })
-    );
-
     // IVA discriminado por alícuota
-    const vatByRate = new Map<number, number>();
-    for (const line of invoice.lines) {
-      if (line.lineType !== 'TAXED') continue;
-      const rate = parseFloat(line.vatRate.toString());
-      const vat = parseFloat(line.vatAmount.toString());
-      if (vat <= 0) continue;
-      vatByRate.set(rate, (vatByRate.get(rate) ?? 0) + vat);
-    }
-
-    for (const [rate, vatTotal] of vatByRate) {
-      const accountId = getVatAccountId(settings, rate, 'CREDIT');
-      if (!accountId) {
+    const vatByRate = groupVatByRate(invoice.lines);
+    for (const [rate] of vatByRate) {
+      if (!getVatAccountId(settings, rate, 'CREDIT')) {
         // Antes: warn + continue → asiento descuadrado que moría en
         // validateBalance con un mensaje que no decía qué faltaba (TSK-721).
         throw new BusinessError(buildMissingTributeAccountsMessage([`IVA Crédito Fiscal ${rate}%`]));
       }
+    }
+
+    // El comprobante manda (TSK-760, R-1): neto e IVA ajustados al total y al
+    // IVA guardados del comprobante, que se calculan sobre la suma.
+    const amounts = reconcileInvoiceAmounts(invoice, expanded, vatByRate);
+
+    const lines: JournalEntryLineInput[] = expanded.map(({ accountId, costCenterId }, i) => ({
+      accountId,
+      debit: isNC ? 0 : amounts.net[i],
+      credit: isNC ? amounts.net[i] : 0,
+      description: `Compras - ${invoice.fullNumber}`,
+      ...(costCenterId && { costCenterId }),
+    }));
+
+    [...vatByRate.keys()].forEach((rate, i) => {
+      const vatTotal = amounts.vat[i];
       lines.push({
-        accountId,
+        accountId: getVatAccountId(settings, rate, 'CREDIT')!,
         debit: isNC ? 0 : vatTotal,
         credit: isNC ? vatTotal : 0,
         description: `IVA CF ${rate}% - ${invoice.fullNumber}`,
       });
-    }
+    });
 
     // Percepciones sufridas (activo, crédito fiscal)
     for (const perc of invoice.perceptions) {
@@ -672,6 +662,7 @@ export async function createJournalEntryForPurchaseInvoice(
         date: invoice.issueDate,
         description: `${docLabel} ${invoice.fullNumber}`,
         lines,
+        source: `purchase-invoice:${invoiceId}`,
       },
       tx
     );
@@ -806,6 +797,7 @@ export async function createJournalEntryForReceipt(
         date: receipt.date,
         description: `Recibo de cobro ${receipt.fullNumber}`,
         lines,
+        source: `receipt:${receiptId}`,
       },
       tx
     );
@@ -948,6 +940,7 @@ export async function createJournalEntryForPaymentOrder(
         date: paymentOrder.date,
         description: `Orden de pago ${paymentOrder.fullNumber}`,
         lines,
+        source: `payment-order:${paymentOrderId}`,
       },
       tx
     );
@@ -1036,6 +1029,7 @@ export async function createJournalEntryForExpense(
         date: expense.date,
         description: `Gasto ${expense.fullNumber} - ${expense.description}`,
         lines,
+        source: `expense:${expenseId}`,
       },
       tx
     );
@@ -1087,7 +1081,7 @@ export async function checkBudgetForExpense(
     if (!settings) return null;
 
     // Determinar el año fiscal de la fecha del gasto
-    const startMonth = moment(settings.fiscalYearStart).month(); // 0-based
+    const startMonth = moment.utc(settings.fiscalYearStart).month(); // 0-based (día UTC, TSK-760)
     const expenseMoment = moment(expenseDate);
     const expenseMonth = expenseMoment.month(); // 0-based
     const expenseYear = expenseMoment.year();
@@ -1161,6 +1155,7 @@ export async function checkBudgetForExpense(
         AND je.status = 'POSTED'
         AND je.date >= ${monthStart}
         AND je.date <= ${monthEnd}
+        AND ${NOT_CLOSING_ENTRY_SQL} -- la refundición no es ejecución (TSK-760 B19)
     `;
 
     const row = results[0];
@@ -1211,85 +1206,6 @@ export async function checkBudgetForExpense(
     // No bloquear la operación por errores en la validación presupuestaria
     logger.error('Error en validación presupuestaria para gasto', {
       data: { error, accountId, amount, companyId },
-    });
-    return null;
-  }
-}
-
-// ============================================
-// INTEGRACIÓN: CMV (Costo de Mercadería Vendida)
-// ============================================
-
-export async function createJournalEntryForCOGS(
-  invoiceId: string,
-  companyId: string,
-  tx: PrismaTransactionClient
-): Promise<string | null> {
-  try {
-    const settings = await getAccountingSettings(companyId, tx);
-
-    if (!settings.cogsAccountId || !settings.inventoryAccountId) {
-      return null;
-    }
-
-    const invoice = await tx.salesInvoice.findUnique({
-      where: { id: invoiceId },
-      select: {
-        fullNumber: true,
-        voucherType: true,
-        issueDate: true,
-        lines: {
-          select: {
-            quantity: true,
-            product: {
-              select: { trackStock: true, costPrice: true, name: true },
-            },
-          },
-        },
-      },
-    });
-
-    if (!invoice) return null;
-
-    const isNC = isCreditNote(invoice.voucherType);
-
-    let totalCost = 0;
-    for (const line of invoice.lines) {
-      if (!line.product?.trackStock || !line.product.costPrice) continue;
-      totalCost += Number(line.quantity) * Number(line.product.costPrice);
-    }
-
-    if (totalCost <= 0) return null;
-
-    const docLabel = isNC ? 'NC' : 'FC';
-
-    const lines: JournalEntryLineInput[] = [
-      {
-        accountId: settings.cogsAccountId,
-        debit: isNC ? 0 : totalCost,
-        credit: isNC ? totalCost : 0,
-        description: `CMV - ${docLabel} ${invoice.fullNumber}`,
-      },
-      {
-        accountId: settings.inventoryAccountId,
-        debit: isNC ? totalCost : 0,
-        credit: isNC ? 0 : totalCost,
-        description: `Mercadería - ${docLabel} ${invoice.fullNumber}`,
-      },
-    ];
-
-    return createJournalEntry(
-      {
-        companyId,
-        date: invoice.issueDate,
-        description: `CMV - ${docLabel} ${invoice.fullNumber}`,
-        lines,
-      },
-      tx
-    );
-  } catch (error) {
-    logger.error('Error al crear asiento de CMV', {
-      data: { error, invoiceId, companyId },
     });
     return null;
   }

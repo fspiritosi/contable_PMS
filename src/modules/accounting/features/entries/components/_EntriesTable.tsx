@@ -6,16 +6,8 @@ import { Button } from '@/shared/components/ui/button';
 import { Badge } from '@/shared/components/ui/badge';
 import { JournalEntryStatus } from '@/generated/prisma/enums';
 import { type JournalEntryWithLines } from '../../../shared/types';
-import { ChevronRight, ChevronDown, MoreHorizontal, CheckCircle, XCircle, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/shared/components/ui/dropdown-menu';
-import { usePermissions } from '@/shared/hooks/usePermissions';
-import { _PostEntryDialog } from './_PostEntryDialog';
-import { _ReverseEntryDialog } from './_ReverseEntryDialog';
+import { ChevronRight, ChevronDown, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { _EntryActionsMenu } from './_EntryActionsMenu';
 import { formatAmount } from '../../../shared/utils';
 import { cn } from '@/shared/lib/utils';
 import Link from 'next/link';
@@ -154,12 +146,8 @@ function getEntrySource(entry: JournalEntryWithLines) {
 // --- Main Component ---
 
 export function _EntriesTable({ entries }: EntriesTableProps) {
-  const { hasPermission } = usePermissions();
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
-  const [postEntry, setPostEntry] = useState<JournalEntryWithLines | null>(null);
-  const [reverseEntry, setReverseEntry] = useState<JournalEntryWithLines | null>(null);
   const [sortConfig, setSortConfig] = useState<SortConfig | null>(null);
-  const canApprove = hasPermission('accounting.entries', 'approve');
 
   const handleSort = useCallback((key: string) => {
     setSortConfig((prev) => {
@@ -222,8 +210,8 @@ export function _EntriesTable({ entries }: EntriesTableProps) {
     const source = getEntrySource(entry);
 
     return (
-      <>
-        <tr key={entry.id} className={entry.status === JournalEntryStatus.REVERSED ? 'opacity-50' : undefined}>
+      <React.Fragment key={entry.id}>
+        <tr className={entry.status === JournalEntryStatus.REVERSED ? 'opacity-50' : undefined}>
           <td className="py-2">
             <div className="flex items-center">
               <Button
@@ -261,32 +249,7 @@ export function _EntriesTable({ entries }: EntriesTableProps) {
           <td className={getStatusColor(entry.status)}>{getStatusLabel(entry.status)}</td>
           <td className="text-right">{formatAmount(entry._totalDebit)}</td>
           <td className="text-right">
-            {canApprove && (entry.status === JournalEntryStatus.DRAFT || entry.status === JournalEntryStatus.POSTED) && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon">
-                    <MoreHorizontal className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  {entry.status === JournalEntryStatus.DRAFT && (
-                    <DropdownMenuItem onClick={() => setPostEntry(entry)}>
-                      <CheckCircle className="mr-2 h-4 w-4" />
-                      Registrar
-                    </DropdownMenuItem>
-                  )}
-                  {entry.status === JournalEntryStatus.POSTED && (
-                    <DropdownMenuItem
-                      onClick={() => setReverseEntry(entry)}
-                      className="text-destructive"
-                    >
-                      <XCircle className="mr-2 h-4 w-4" />
-                      Anular
-                    </DropdownMenuItem>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
+            <_EntryActionsMenu entry={entry} />
           </td>
         </tr>
         {isExpanded && (
@@ -310,7 +273,7 @@ export function _EntriesTable({ entries }: EntriesTableProps) {
             ))}
           </>
         )}
-      </>
+      </React.Fragment>
     );
   };
 
@@ -334,20 +297,6 @@ export function _EntriesTable({ entries }: EntriesTableProps) {
           </tbody>
         </table>
       </div>
-
-      {postEntry && (
-        <_PostEntryDialog
-          entry={postEntry}
-          onClose={() => setPostEntry(null)}
-        />
-      )}
-
-      {reverseEntry && (
-        <_ReverseEntryDialog
-          entry={reverseEntry}
-          onClose={() => setReverseEntry(null)}
-        />
-      )}
     </>
   );
 }

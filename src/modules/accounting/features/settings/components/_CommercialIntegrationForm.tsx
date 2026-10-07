@@ -15,7 +15,7 @@ import { usePermissions } from '@/shared/hooks/usePermissions';
 import { ACCOUNTING_SETTINGS_ACCOUNT_LABELS } from '@/shared/lib/accounts/settings-account-labels';
 import { logger } from '@/shared/lib/logger';
 
-import { getAccountingSettings, saveAccountingSettings } from '../actions.server';
+import { saveAccountingSettings } from '../actions.server';
 import {
   commercialIntegrationSchema,
   type CommercialIntegrationInput,
@@ -297,7 +297,6 @@ const SECTIONS: SectionDef[] = [
 ];
 
 interface CommercialIntegrationFormProps {
-  companyId: string;
   accounts: Array<AccountOption & { type: string; nature: string }>;
   /**
    * Tipado con la forma de salida a propósito: obliga a que quien renderice el
@@ -308,7 +307,6 @@ interface CommercialIntegrationFormProps {
 }
 
 export function _CommercialIntegrationForm({
-  companyId,
   accounts,
   defaultValues,
 }: CommercialIntegrationFormProps) {
@@ -324,28 +322,14 @@ export function _CommercialIntegrationForm({
   const handleSubmit = async (data: FormValues) => {
     setIsLoading(true);
     try {
-      // Obtener configuración actual para preservar las fechas del ejercicio
-      const currentSettings = await getAccountingSettings(companyId);
-
-      if (!currentSettings) {
-        toast.error('Debes configurar primero el ejercicio fiscal');
-        return;
-      }
-
-      await saveAccountingSettings(companyId, {
-        fiscalYearStart: currentSettings.fiscalYearStart,
-        fiscalYearEnd: currentSettings.fiscalYearEnd,
-        ...data,
-      });
-
+      // Solo cuentas: las fechas del ejercicio se guardan aparte (TSK-760, H6).
+      const result = await saveAccountingSettings(data);
+      if (!result.success) return void toast.error(result.error);
       toast.success('Configuración de integración guardada correctamente');
       router.refresh();
     } catch (error) {
-      if (error instanceof Error) {
-        toast.error(error.message);
-      } else {
-        toast.error('Error al guardar la configuración');
-      }
+      logger.error('Error al guardar la integración comercial', { data: { error } });
+      toast.error('Error al guardar la configuración');
     } finally {
       setIsLoading(false);
     }

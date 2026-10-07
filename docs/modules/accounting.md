@@ -40,6 +40,7 @@ Estructura jerarquica (arbol) donde cada cuenta puede tener cuentas hijas (`pare
 
 ```
 DRAFT ──(post)──> POSTED ──(reverse)──> REVERSED
+  └──(deleteDraftJournalEntry: solo borradores manuales, TSK-760)──> (borrado)
 ```
 
 ### Reglas de Validacion
@@ -48,8 +49,9 @@ DRAFT ──(post)──> POSTED ──(reverse)──> REVERSED
 2. Debe = Haber (tolerancia ±0.01)
 3. Cada linea tiene Debe XOR Haber (no ambos, no ninguno)
 4. Montos positivos
-5. Fecha dentro del ejercicio fiscal
-6. Cuentas deben existir, estar activas y pertenecer a la empresa
+5. Fecha en un mes abierto de un ejercicio abierto (`assertPeriodOpen`, ver [Nucleo de asientos](#nucleo-de-asientos-tsk-760))
+6. Cuentas deben existir, ser imputables (hoja) y pertenecer a la empresa (`assertAccountsUsableTx`)
+7. El balance se valida tambien en DRAFT (desde TSK-760, C5)
 
 ### Asientos Automaticos
 
@@ -74,16 +76,101 @@ guardaba para eso se eliminaron en TSK-724c.
 
 Creados como `isAutomatic = true`, `createdBy = 'system'`.
 
-### Reversion
+### Reversion (anular)
 
-Solo asientos POSTED pueden reversarse. La reversion:
-1. Crea un nuevo asiento con Debe/Haber invertidos
-2. Marca el original como REVERSED con `reversalEntryId`
-3. El nuevo asiento se crea como POSTED directamente
+`reverseJournalEntry({ entryId })` (permiso `accounting.entries` `approve`, `ActionResult`):
+
+1. Si el asiento pertenece a un documento (`getEntryDocumentLink`: factura de venta o compra, recibo,
+   OP, egreso, movimiento de fondos, depreciacion, revaluo, refundicion o apertura de ejercicio) se
+   rechaza con "Este asiento pertenece a … y no se puede anular desde Asientos: anulá el
+   comprobante." El dialogo lo consulta antes (`getReversalCheck`) y deshabilita el boton.
+2. Los asientos `createdBy = 'system'` sin vinculo persistido (bancos, transferencias, baja de
+   equipo, IVA, inflacion) se anulan con aviso: no revierte el saldo bancario ni el estado del
+   equipo.
+3. `reverseJournalEntryTx` crea la reversion con **fecha de hoy en Argentina**
+   (`todayBusinessDayUtc()`), valida el periodo del original **y** el de hoy, copia todas las
+   columnas de linea invertidas (auxiliares, centro de costo, moneda, `originalAmount`,
+   `exchangeRate`) y pasa el original a REVERSED con `reversalEntryId` en un solo `UPDATE`
+   (trigger de inmutabilidad).
+
+`deleteDraftJournalEntry(entryId)` (permiso `accounting.entries` `delete`): borra un DRAFT manual de
+la empresa activa sin documento y no `'system'`. No valida periodo: su fin es destrabar el cierre
+de un mes con un borrador imposible de registrar. El numero queda como hueco.
 
 ### Numeracion
 
-Secuencial por empresa, gestionada por `AccountingSettings.lastEntryNumber`. Se incrementa atomicamente dentro de `$transaction`.
+Secuencial por empresa, gestionada por `AccountingSettings.lastEntryNumber`. Solo la asigna
+`nextEntryNumberTx` (`UPDATE … SET last_entry_number = last_entry_number + 1 RETURNING`, que ademas
+saltea numeros ya ocupados). `@@unique([companyId, number])` es la red final.
+
+### Nucleo de asientos (TSK-760)
+
+Todo asiento, de cualquier origen (manual, comprobantes, tesoreria, equipos, recurrentes, saldos
+de apertura, IVA, diferencia de cambio, inflacion, cierre anual), se crea con
+`createJournalEntryTx`. No hay otro `journalEntry.create` en `src/modules` (convencion:
+[docs/conventions/coding-standards.md](../conventions/coding-standards.md#asientos-contables-createjournalentrytx)).
+
+Archivos en `src/modules/accounting/shared/utils/` (los `server-only` se reexportan para
+`commercial/` y `equipment/` por `features/integrations/core/index.ts`):
+
+| Archivo | Funciones | Notas |
+|---|---|---|
+| `period-lock.ts` (`server-only`) | `lockAccountingSettingsTx`, `assertPeriodOpen`, `ensureFiscalYearTx`, `createFiscalYearWithPeriodsTx`, `ensurePeriodsTx`, `listMonthlyPeriodsTx`, `syncLockedUntilDateTx` | Una sola definicion de periodo cerrado |
+| `journal-entry-tx.ts` (`server-only`) | `nextEntryNumberTx`, `createJournalEntryTx`, `postJournalEntryTx`, `reverseJournalEntryTx`, `assertAccountsUsableTx` | Sin `checkPermission` ni `$transaction` propios: reciben el `tx` del llamador |
+| `journal-entry-lines.ts` (puro) | `validateEntryLines`, `invertLines` | Decimal; sin lineas 0/0, balance ±0,01 |
+| `period-closure.ts` (puro) | `evaluatePeriodClosure`, `buildPeriodClosedMessage` | Textos de la tabla de abajo |
+| `utc-month.ts` (puro) | `monthKeyUtc`, `startOfMonthUtc`, `endOfMonthUtc`, `toUtcDay`, `formatDayUtc`, `todayBusinessDay(Utc)`, `BUSINESS_TIME_ZONE` | Convencion de dias, ver abajo |
+| `entry-document-link.ts` (`server-only`) | `getEntryDocumentLink`, `entriesWithoutDocumentWhere`, `buildDocumentLinkedMessage` | Vinculo asiento ↔ documento |
+| `closing-entries.ts` | `NOT_CLOSE_GENERATED_OPENING_SQL`, `NOT_CLOSING_ENTRY_SQL` y sus `*Where` Prisma | Exclusion en reportes, ver Cierre de Ejercicio |
+
+**`assertPeriodOpen(tx, companyId, date, { periodType?, subject? })`** → `{ fiscalYearId,
+fiscalYearNumber, periodId }`:
+
+1. Toma el lock de la fila de `accounting_settings` (`SELECT … FOR UPDATE`). Es la misma fila que
+   actualiza `nextEntryNumberTx` y que bloquean el cierre de mes y el cierre anual: crear un asiento
+   y cerrar su mes quedan serializados por empresa.
+2. Busca el ejercicio de la fecha; si no existe lo crea **hacia adelante** (`ensureFiscalYearTx`,
+   solo el inmediato siguiente al ultimo, con OPENING + un MONTHLY por mes + CLOSING). Fecha
+   anterior al primer ejercicio → "…anterior al inicio del primer ejercicio…; cargala como saldo
+   de apertura". Mas de un ejercicio adelante → rechazo.
+3. Evalua en OR: ejercicio cerrado, mes (`AccountingPeriod` MONTHLY) cerrado, o
+   `fecha <= lockedUntilDate` (por dia UTC). Con `periodType: 'OPENING' | 'CLOSING'` (solo el
+   cierre anual y los saldos de apertura) mira el ejercicio y el periodo de ese tipo.
+
+Mensajes (siempre contienen "el período está cerrado"):
+
+| Causa | Mensaje |
+|---|---|
+| Mes cerrado | `No se puede registrar con fecha 10/03/2026: el período está cerrado (mes 03/2026 cerrado). Para operar, reabrilo desde Contabilidad → Configuración → Bloqueo de Períodos.` |
+| Ejercicio cerrado | `No se puede registrar con fecha 10/03/2026: el período está cerrado (ejercicio N° 1 cerrado).` |
+| `lockedUntilDate` | `… el período está cerrado (bloqueado hasta 31/03/2026). Para operar, reabrilo desde …` |
+| Apertura / cierre | `… (apertura del ejercicio N° 2 cerrada).` / `… (cierre del ejercicio N° 1 cerrado).` |
+| Anulacion (`subject`) | `No se puede anular el asiento N° 12 (fecha 10/03/2026): el período está cerrado (…)` |
+
+**`createJournalEntryTx(tx, { companyId, date, description, lines, status, createdBy, periodType?,
+originalEntryId?, source? })`**: `assertPeriodOpen` → `validateEntryLines` (balance tambien en
+DRAFT) → `assertAccountsUsableTx` (empresa + hoja) → `nextEntryNumberTx` → crea cabecera y lineas
+con todas sus columnas, `fiscalYearId` y `periodId`. Un rechazo no consume numero (la tx se
+revierte). `postJournalEntryTx` registra un DRAFT con las mismas validaciones (incluido ejercicio
+cerrado, B4); lo usan "Registrar" y "Registrar los N borradores y cerrar".
+
+**Errores:** los rechazos son `BusinessError`; las actions los devuelven como `ActionResult`
+(`{ success: false, error }`) para que el texto llegue en produccion (Next redacta los `throw`).
+Ningun creador devuelve `null` ni calla un error. Unica excepcion conservada: bancos sin Ajustes
+contables no generan asiento.
+
+**Convencion de dias (D8) y "hoy" (D5 revisado):**
+
+- Un asiento se fecha con un **dia calendario**, guardado como ese dia a las 00:00:00.000Z, y todo
+  calculo de mes o rango se hace en UTC (`moment.utc`, `utc-month.ts`). No depende de la zona del
+  servidor: produccion (UTC) y desarrollo (UTC-3) imputan igual.
+- Los meses de cierre se piden como `{ year, month }`; el servidor deriva el fin de mes. Ningun
+  fin de mes se arma en el navegador.
+- Ejercicios: `startDate` = 00:00:00.000Z del primer dia, `endDate` = 23:59:59.999Z del ultimo.
+- **"Hoy"** del servidor (fecha de la anulacion, de la baja de equipo, vencimiento de recurrentes)
+  es el dia calendario en `America/Argentina/Buenos_Aires` (`todayBusinessDayUtc()`), no el dia UTC:
+  a las 22:40 de Argentina sigue siendo hoy. La zona esta en una sola constante,
+  `BUSINESS_TIME_ZONE`.
 
 ---
 
@@ -112,20 +199,46 @@ MONTHLY, BIMONTHLY, QUARTERLY, SEMIANNUAL, ANNUAL
 ## Cierre de Ejercicio Fiscal
 
 **Ruta:** `/company/accounting/fiscal-year-close`
-**Archivos:** `features/fiscal-year-close/`
+**Archivos:** `features/fiscal-year-close/` (`fiscal-year-close.ts` con la logica transaccional,
+`actions.server.ts` envoltorios con `ActionResult`), `shared/utils/fiscal-year-close-math.ts`
 
-### Flujo
+### Requisitos (TSK-760)
 
-1. **Preview:** Calcula las lineas de cierre sin comprometer
-2. **Cerrar:** Crea un asiento POSTED que:
-   - Para cada cuenta de REVENUE y EXPENSE con saldo no-cero, crea una linea que la lleva a cero
-   - Crea una linea en la cuenta de Resultado que captura el neto (ganancia en Haber, perdida en Debe)
+Se cierra siempre el **ejercicio abierto mas antiguo** (por id, no por fechas de Ajustes):
 
-### Requisitos
+- `AccountingSettings.resultAccountId` configurado.
+- **Todos sus meses cerrados** (B1); si no, el mensaje y la pantalla listan los abiertos con link a
+  Bloqueo de Periodos.
+- **Ningun borrador** con fecha en el ejercicio (A5/B4); se listan por mes con los primeros numeros.
+- Algun saldo de resultado registrado (B20): si no, "no hay asientos registrados con resultado en
+  el ejercicio N° X: registrá los borradores".
 
-- `AccountingSettings.resultAccountId` debe estar configurado
-- No se puede cerrar dos veces (detecta asiento de cierre existente)
-- El asiento se fecha al `fiscalYearEnd`
+### Flujo (`closeFiscalYear({ fiscalYearId })`, permiso `accounting.fiscal-year-close` `approve`)
+
+Una transaccion (`timeout: 30_000`): lock de Ajustes → validaciones → vista previa **dentro** de la
+tx (`computeClosePreviewTx`, la misma que muestra `previewFiscalYearClose`) → **refundicion** POSTED
+en el periodo CLOSING, fechada el ultimo dia (saldos de resultado acumulados al fin del ejercicio,
+incluidas cuentas inactivas; sin linea de Resultado si el neto es 0) → ejercicio siguiente con
+`ensureFiscalYearTx` (lo **reutiliza** si ya existia, B24) → **apertura** POSTED en su periodo
+OPENING, calculada **despues** de la refundicion y verificada balanceada (B21) → ejercicio y todos
+sus periodos cerrados, `closingEntryId`/`openingEntryId`, OPENING del siguiente cerrado (C7) →
+`syncLockedUntilDateTx` → Ajustes pasan al ejercicio abierto mas antiguo. No se puede deshacer.
+
+### Reportes despues del cierre (exclusion, D7)
+
+El sistema calcula saldos acumulando todo lo POSTED hasta una fecha. Para no duplicar ni anular:
+
+- La **apertura generada por el cierre** (`fiscal_years.opening_entry_id`) se excluye de todo saldo
+  acumulado y movimiento por mes (Balance, Sumas y Saldos, Mayor, plan de cuentas, IVA, diferencia
+  de cambio, inflacion, el propio cierre). Se ve solo en el Libro Diario (B18).
+- La **refundicion** (`closing_entry_id`) se excluye del Estado de Resultados, Presupuesto vs. real,
+  control de presupuesto de egresos y movimientos por centro de costo (B19).
+- Invariante: `openingEntryId` solo lo escribe el cierre. El saldo de apertura cargado a mano no lo
+  usa y cuenta como cualquier asiento.
+
+Fragmentos compartidos en `shared/utils/closing-entries.ts`. Defecto previo, fuera de alcance:
+`getBalanceSheet.isBalanced` compara activo (+) con pasivo y patrimonio (−) y muestra "no está
+equilibrado" en toda empresa con pasivo o patrimonio.
 
 ---
 
@@ -216,30 +329,45 @@ incluir borradores a pedido (switch apagado por defecto) y avisa cuantos excluye
 
 ### Ejercicio Fiscal
 
-- Fecha de inicio y fin (maximo 366 dias)
+- `saveFiscalYearSettings({ startDay, endDay })` (`'YYYY-MM-DD'`): meses completos (dia 1 a fin de
+  mes), hasta 12 meses. La primera vez crea Ajustes y el **ejercicio N° 1** con sus periodos (B23).
+- Las fechas son editables solo si la empresa no tiene asientos, meses ni ejercicios cerrados (C3);
+  en ese caso se regeneran los periodos. Si no, la pantalla las muestra **de solo lectura** ("Las
+  fechas salen del ejercicio N° X; cambian solas al cerrar el ejercicio") y salen del ejercicio
+  abierto mas antiguo (D11).
+- `saveAccountingSettings` guarda solo cuentas (ya no recibe fechas, H6).
 
-### Bloqueo de Periodos
+### Bloqueo de Periodos (cierre de meses, TSK-760)
 
-Permite bloquear periodos contables mensuales para evitar la creacion o modificacion de asientos. El bloqueo es secuencial: no se puede bloquear un mes sin bloquear los anteriores.
+Cada mes es un `AccountingPeriod` MONTHLY con estado propio (`isClosed`, `closedAt`, `closedBy`).
+Se cierra **solo el primer mes abierto** y se reabre **solo el ultimo cerrado**; nunca un mes de un
+ejercicio cerrado (piso, B5). `AccountingSettings.lockedUntilDate` es **derivado**: fin del ultimo
+mes cerrado en forma contigua, recalculado en la misma tx (`syncLockedUntilDateTx`).
 
-**Campo:** `AccountingSettings.lockedUntilDate` (DateTime nullable)
+**Actions** (`features/settings/actions.server.ts`, logica en `period-closing.ts`):
 
-- Almacena la fecha de fin del ultimo mes bloqueado
-- Cualquier asiento con fecha <= `lockedUntilDate` es rechazado
-- UI muestra grid de 12 meses del ejercicio fiscal con iconos Lock/LockOpen
-- Solo el primer mes desbloqueado (para bloquear) y el ultimo mes bloqueado (para desbloquear) son interactivos
+| Action | Permiso | Notas |
+|---|---|---|
+| `getPeriodLockStatus()` | `accounting.settings` `view` | Meses del ejercicio abierto mas antiguo y del siguiente si existe, con `isClosed`, `draftCount` y `action` (`close`/`reopen`/`null`) |
+| `closeAccountingPeriod({ year, month, postDrafts })` | `accounting.settings` `update` (+ `accounting.entries` `approve` si `postDrafts`) | Con borradores y sin `postDrafts` → rechazo con cantidad y numeros. Con `postDrafts` → `postJournalEntryTx` de cada uno; si uno falla, **no se registra ninguno** y el mes sigue abierto ("No se cerró 03/2025: el borrador N° 12 no se puede registrar. <causa>", + sugerencia de eliminarlo si es manual) |
+| `reopenAccountingPeriod({ year, month })` | `accounting.settings` `update` | "Solo se puede reabrir el último mes cerrado: MM/YYYY." / "No se puede reabrir MM/YYYY: pertenece al ejercicio N° X, que está cerrado." |
 
-**Impacto en el sistema:**
+Fuera de orden (p. ej. otra pestaña desactualizada): "Solo se puede cerrar el primer mes abierto:
+MM/YYYY.". UI: `_PeriodLockingPanel`, `_PeriodMonthCell`, `_ClosePeriodDialog`, `_ReopenPeriodDialog`,
+`hooks/usePeriodLockMutations.ts`; la card tiene `id="bloqueo-periodos"` (destino de los links).
 
-| Operacion | Comportamiento en periodo bloqueado |
-|-----------|-------------------------------------|
-| Crear asiento manual | Error: periodo bloqueado |
-| Registrar (post) asiento borrador | Error: periodo bloqueado |
-| Revertir asiento | Error: periodo bloqueado |
-| Confirmar factura de venta/compra | La confirmacion falla con mensaje legible y se revierte: la factura sigue en `DRAFT` sin asiento (TSK-721: cualquier error del asiento bloquea) |
-| Confirmar recibo/OP/gasto | La confirmacion falla con mensaje legible y se revierte: el comprobante sigue en `DRAFT` sin asiento (TSK-728, mismo esquema que facturas) |
-| Contabilizar depreciacion | Error: periodo bloqueado |
-| Cierre fiscal | Auto-bloquea todos los meses del ejercicio |
+**Impacto en el sistema** (una sola regla para todos: `assertPeriodOpen` dentro de la tx):
+
+| Operacion | Mes cerrado / ejercicio cerrado |
+|---|---|
+| Crear asiento manual, registrar borrador | Rechazo con el mensaje de periodo cerrado; no se crea ni se registra |
+| Anular asiento | Se validan el mes del original **y** el de hoy |
+| Confirmar factura de venta/compra, recibo, OP, egreso, movimiento de fondos | La confirmacion falla y se revierte: el comprobante sigue en `DRAFT` sin asiento |
+| Movimiento bancario manual, transferencias banco ↔ banco / caja | Rechazo; no se crea el movimiento ni cambia el saldo |
+| Contabilizar depreciacion, revaluo, baja de equipo | Rechazo; la masiva lista el periodo en `errors[]` y contabiliza los demas |
+| Generar asiento recurrente | Rechazo; la plantilla queda pendiente hasta reabrir |
+| Saldos de apertura | Van al periodo OPENING; el de un ejercicio creado por un cierre esta cerrado (C7) |
+| IVA, diferencia de cambio, inflacion (sin UI) | Rechazo |
 
 ### Mapeo de Cuentas
 
@@ -356,7 +484,8 @@ descuadrado que `validateBalance` rechazaba), y los tres confirm tragaban el err
   `{ success: false, error }`.
 - Seguimientos (`.planes/tsk-728-…md` 2.4): dar cuenta a cheques/tarjetas/socios
   (`checksReceivedAccountId` existe sin UI), movimientos bancarios manuales y transferencias (siguen
-  no bloqueantes), `integrations/treasury/index.ts` sin llamadores, CMV.
+  no bloqueantes; TSK-760 los hizo rechazar el período cerrado). `integrations/treasury/index.ts` y
+  `createJournalEntryForCOGS` (sin llamadores, callaban errores) se borraron en TSK-760 (fase 11).
 
 ### Cuentas de Retenciones (8 campos)
 
@@ -506,13 +635,17 @@ Wizard para migrar saldos iniciales de empresas que vienen de otro sistema conta
 
 ### Asiento de Apertura
 
-- Crea un JournalEntry con status POSTED, fecha = fiscalYearStart
+- Crea un JournalEntry POSTED con `createJournalEntryTx(…, periodType: 'OPENING')`, fecha = inicio del
+  ejercicio abierto mas antiguo (TSK-760)
 - El usuario ingresa el saldo (Debe o Haber) para cada cuenta con saldo inicial
 - La diferencia se balancea automaticamente con una cuenta "Apertura" de tipo EQUITY
 - La cuenta Apertura se auto-crea (codigo 3.0.1) si no existe
-- El asiento se puede editar/actualizar (reemplaza lineas, no genera reversal)
-- Bypass de validacion de periodo bloqueado (la fecha puede estar en un periodo ya bloqueado)
-- Deteccion de asiento existente: `description='Asiento de Apertura' AND date=fiscalYearStart AND status=POSTED`
+- **Editar** = anular el asiento vigente (`reverseJournalEntryTx` con su misma fecha, en OPENING) y
+  crear uno nuevo (B25: la edicion anterior borraba lineas de un POSTED y el trigger la rechazaba)
+- Respeta el periodo OPENING: el de un ejercicio creado por un cierre anual esta cerrado, asi que
+  en ejercicios N° 2 en adelante no se cargan saldos manuales (C7)
+- Deteccion de asiento existente: `fiscalYearId` del ejercicio + `description='Asiento de Apertura'` +
+  POSTED (H3)
 
 ### Facturas de Venta Pendientes
 

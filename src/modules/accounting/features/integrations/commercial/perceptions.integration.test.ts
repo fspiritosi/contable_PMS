@@ -22,7 +22,10 @@
  * Los importes son los de la factura de La Anónima que adjunta el ticket.
  */
 import 'dotenv/config';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+
+// El núcleo contable (TSK-760) abre con `import 'server-only'` (marcador de Next).
+vi.mock('server-only', () => ({}));
 
 import { prisma } from '@/shared/lib/prisma';
 

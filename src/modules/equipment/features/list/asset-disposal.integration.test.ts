@@ -34,6 +34,12 @@ vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 
 import { getActiveCompanyId } from '@/shared/lib/company';
 import { getCurrentUserId } from '@/shared/lib/current-user';
+import {
+  closeMonthForTest,
+  readEntryPeriod,
+  readLastEntryNumber,
+} from '@/modules/accounting/shared/test-utils/period-test-helpers';
+import { todayBusinessDayUtc } from '@/modules/accounting/shared/utils/utc-month';
 // Código real de producción: nada de esto se reimplementa acá.
 import { createValueAdjustment } from '../depreciation/actions.server';
 import { softDeleteVehicle } from './actions.server';
@@ -97,6 +103,9 @@ describe.skipIf(!dbAvailable)(
     let sinNada: TestVehicle;
     let sinDepreciacion: TestVehicle;
     let ajuste: TestVehicle;
+
+    /** Asiento de la baja por venta del caso 1 (lo revisa el caso 1b, TSK-760). */
+    let saleEntryId: string | null = null;
 
     async function expectActive(vehicleId: string) {
       const vehicle = await prisma.vehicle.findUniqueOrThrow({
@@ -280,6 +289,7 @@ describe.skipIf(!dbAvailable)(
         expect(result.success).toBe(true);
         if (!result.success) throw new Error(result.error);
         expect(result.journalEntryId).toBeTruthy();
+        saleEntryId = result.journalEntryId;
 
         const lines = await fetchLines(result.journalEntryId!);
         expect(lines).toHaveLength(3);
@@ -311,6 +321,27 @@ describe.skipIf(!dbAvailable)(
           select: { status: true },
         });
         expect(depreciation.status).toBe('COMPLETED');
+      });
+
+      it('caso 1b (TSK-760): el asiento de la baja nace DRAFT con ejercicio y período del mes de hoy', async () => {
+        expect(saleEntryId).toBeTruthy();
+        const entry = await readEntryPeriod(saleEntryId!);
+        // "Hoy" es el día calendario de Argentina (D5 revisado), a las 00:00Z.
+        const today = todayBusinessDayUtc();
+        const { date } = await prisma.journalEntry.findUniqueOrThrow({
+          where: { id: saleEntryId! },
+          select: { date: true },
+        });
+        expect(date.toISOString()).toBe(today.toISOString());
+        expect(entry.status).toBe('DRAFT');
+        expect(entry.createdBy).toBe('system');
+        expect(entry.fiscalYearId).not.toBeNull();
+        expect(entry.period).toMatchObject({
+          year: today.getUTCFullYear(),
+          month: today.getUTCMonth() + 1,
+          type: 'MONTHLY',
+        });
+        expect(entry.period?.fiscalYearId).toBe(entry.fiscalYearId);
       });
     });
 
@@ -381,6 +412,25 @@ describe.skipIf(!dbAvailable)(
             where: { companyId },
             data: { lockedUntilDate: null },
           });
+        }
+      });
+    });
+
+    describe('caso 4b (TSK-760, B3): mes cerrado por período sin lockedUntilDate', () => {
+      it('la baja se rechaza con el mes cerrado, sin consumir número, y el equipo sigue activo', async () => {
+        const today = todayBusinessDayUtc();
+        const reopen = await closeMonthForTest(companyId, today);
+        const counterBefore = await readLastEntryNumber(companyId);
+        try {
+          const result = await softDeleteVehicle(conOverride.vehicleId, 'SALE');
+          expect(result.success).toBe(false);
+          if (result.success) return;
+          const month = `${String(today.getUTCMonth() + 1).padStart(2, '0')}/${today.getUTCFullYear()}`;
+          expect(result.error).toContain(`el período está cerrado (mes ${month} cerrado)`);
+          await expectActive(conOverride.vehicleId);
+          expect(await readLastEntryNumber(companyId)).toBe(counterBefore);
+        } finally {
+          await reopen();
         }
       });
     });

@@ -9,11 +9,13 @@ import {
 import {
   getAccountingSettings,
   getActiveAccounts,
+  getFiscalYearSettings,
   getItemsWithoutAccountCounts,
+  getPeriodLockStatus,
 } from './actions.server';
 import { _AccountingSettingsForm } from './components/_AccountingSettingsForm';
 import { _CommercialIntegrationForm } from './components/_CommercialIntegrationForm';
-import { _PeriodLockingForm } from './components/_PeriodLockingForm';
+import { _PeriodLockingPanel } from './components/_PeriodLockingPanel';
 import { ItemsWithoutAccountNotice } from './components/ItemsWithoutAccountNotice';
 
 import { getActiveCompanyId } from '@/shared/lib/company';
@@ -27,9 +29,11 @@ async function AccountingSettingsContent({ companyId }: { companyId: string }) {
         .filter(([key, value]) => key.endsWith('AccountId') && typeof value === 'string')
         .map(([, value]) => value as string)
     : [];
-  const [accounts, itemCounts] = await Promise.all([
+  const [accounts, itemCounts, periodLockStatus, fiscalYear] = await Promise.all([
     getActiveAccounts(companyId, configuredAccountIds),
     getItemsWithoutAccountCounts(companyId), // TSK-721
+    getPeriodLockStatus(), // TSK-760
+    getFiscalYearSettings(), // TSK-760: ejercicio abierto más antiguo (D11)
   ]);
 
   return (
@@ -47,30 +51,20 @@ async function AccountingSettingsContent({ companyId }: { companyId: string }) {
           <CardDescription>Define el período del ejercicio fiscal</CardDescription>
         </CardHeader>
         <CardContent>
-          <_AccountingSettingsForm
-            companyId={companyId}
-            defaultValues={{
-              fiscalYearStart: settings?.fiscalYearStart ?? new Date(),
-              fiscalYearEnd: settings?.fiscalYearEnd ?? new Date(),
-            }}
-          />
+          <_AccountingSettingsForm fiscalYear={fiscalYear} />
         </CardContent>
       </Card>
 
-      <Card>
+      <Card id="bloqueo-periodos" className="scroll-mt-20">
         <CardHeader>
           <CardTitle>Bloqueo de Períodos</CardTitle>
           <CardDescription>
-            Bloquea períodos mensuales para evitar modificaciones en asientos contables
+            Cerrá los meses en orden para que no se puedan crear, registrar ni anular asientos con
+            fecha de esos meses
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <_PeriodLockingForm
-            companyId={companyId}
-            fiscalYearStart={settings?.fiscalYearStart ?? new Date()}
-            fiscalYearEnd={settings?.fiscalYearEnd ?? new Date()}
-            lockedUntilDate={settings?.lockedUntilDate ?? null}
-          />
+          <_PeriodLockingPanel initialStatus={periodLockStatus} />
         </CardContent>
       </Card>
 
@@ -85,7 +79,6 @@ async function AccountingSettingsContent({ companyId }: { companyId: string }) {
         <CardContent>
           <ItemsWithoutAccountNotice counts={itemCounts} className="mb-6" />
           <_CommercialIntegrationForm
-            companyId={companyId}
             accounts={accounts}
             defaultValues={{
               salesAccountId: settings?.salesAccountId ?? null,

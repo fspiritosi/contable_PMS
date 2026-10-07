@@ -22,6 +22,9 @@
 import 'dotenv/config';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
+// El núcleo contable (TSK-760) abre con `import 'server-only'` (marcador de Next).
+vi.mock('server-only', () => ({}));
+
 import { prisma } from '@/shared/lib/prisma';
 
 // Frontera aislada: sesión, permisos, empresa activa y caché de Next.
@@ -35,6 +38,11 @@ vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 
 import { getActiveCompanyId } from '@/shared/lib/company';
 import { getCurrentUserId } from '@/shared/lib/current-user';
+import {
+  closeMonthForTest,
+  readEntryPeriod,
+  readLastEntryNumber,
+} from '@/modules/accounting/shared/test-utils/period-test-helpers';
 
 // Código real de producción.
 import {
@@ -324,6 +332,43 @@ describe.skipIf(!dbAvailable)('integración e2e: asiento al confirmar un gasto (
     } finally {
       await setSettings({ lockedUntilDate: null });
     }
+  });
+
+  it('caso 8 (TSK-760, B3): mes cerrado por período sin lockedUntilDate → error legible, sin número, sigue en borrador', async () => {
+    const id = await createDraft('Mes cerrado');
+    const reopen = await closeMonthForTest(companyId, EXPENSE_DATE);
+    const counterBefore = await readLastEntryNumber(companyId);
+    try {
+      const result = await confirmExpense(id);
+      expect(result.success).toBe(false);
+      if (result.success) return;
+      expect(result.error).toBe(
+        'No se puede registrar con fecha 10/03/2026: el período está cerrado (mes 03/2026 cerrado). ' +
+          'Para operar, reabrilo desde Contabilidad → Configuración → Bloqueo de Períodos.'
+      );
+
+      const expense = await readExpense(id);
+      expect(expense.status).toBe('DRAFT');
+      expect(expense.journalEntryId).toBeNull();
+      expect(await readLastEntryNumber(companyId)).toBe(counterBefore);
+    } finally {
+      await reopen();
+    }
+  });
+
+  it('caso 9 (TSK-760): el asiento del gasto nace DRAFT con ejercicio y período del mes', async () => {
+    const id = await createDraft('Con ejercicio');
+    const result = await confirmExpense(id);
+    expect(result.success).toBe(true);
+
+    const expense = await readExpense(id);
+    const entry = await readEntryPeriod(expense.journalEntryId!);
+    expect(entry.status).toBe('DRAFT');
+    expect(entry.createdBy).toBe('system');
+    expect(entry.fiscalYearId).not.toBeNull();
+    expect(entry.periodId).not.toBeNull();
+    expect(entry.period).toMatchObject({ year: 2026, month: 3, type: 'MONTHLY' });
+    expect(entry.period?.fiscalYearId).toBe(entry.fiscalYearId);
   });
 
   it('caso 7: confirmar dos veces → "Gasto no encontrado o ya confirmado"', async () => {

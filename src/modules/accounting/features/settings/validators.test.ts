@@ -5,7 +5,12 @@ import {
   ACCOUNTING_SETTINGS_ACCOUNT_LABELS,
 } from '@/shared/lib/accounts/settings-account-labels';
 
-import { accountField, commercialIntegrationSchema } from './validators';
+import {
+  accountField,
+  commercialIntegrationSchema,
+  fiscalYearSettingsSchema,
+  validateFiscalYearRange,
+} from './validators';
 
 const CUENTA = '3f2504e0-4f89-11d3-9a0c-0305e82c3301';
 
@@ -125,5 +130,50 @@ describe('exigir centro de costo', () => {
   it('conserva el valor cuando se activa', () => {
     const parsed = commercialIntegrationSchema.parse({ requireCostCenter: true });
     expect(parsed.requireCostCenter).toBe(true);
+  });
+});
+
+describe('ejercicio fiscal de meses completos (TSK-760, C3)', () => {
+  it('acepta de día 1 a fin de mes, 12 meses o menos (también irregulares y bisiestos)', () => {
+    expect(validateFiscalYearRange('2026-01-01', '2026-12-31')).toBeNull();
+    expect(validateFiscalYearRange('2026-07-01', '2027-06-30')).toBeNull();
+    expect(validateFiscalYearRange('2028-01-01', '2028-02-29')).toBeNull();
+    expect(validateFiscalYearRange('2026-03-01', '2026-03-31')).toBeNull();
+  });
+
+  it('rechaza un inicio que no es día 1 o un fin que no es fin de mes', () => {
+    const msg =
+      'El ejercicio tiene que empezar el primer día de un mes y terminar el último día de un mes.';
+    expect(validateFiscalYearRange('2026-01-15', '2026-12-31')).toBe(msg);
+    expect(validateFiscalYearRange('2026-01-01', '2026-12-30')).toBe(msg);
+    expect(validateFiscalYearRange('2027-01-01', '2027-02-29')).toBe(
+      'Fecha inválida: 2027-02-29. Usá el formato AAAA-MM-DD.'
+    );
+  });
+
+  it('rechaza fin anterior al inicio y más de 12 meses', () => {
+    expect(validateFiscalYearRange('2026-12-01', '2026-01-31')).toBe(
+      'La fecha de fin debe ser posterior a la fecha de inicio'
+    );
+    expect(validateFiscalYearRange('2026-01-01', '2027-01-31')).toBe(
+      'El ejercicio fiscal no puede ser mayor a un año'
+    );
+  });
+
+  it('el esquema del formulario devuelve el mismo mensaje', () => {
+    const result = fiscalYearSettingsSchema.safeParse({
+      startDay: '2026-01-02',
+      endDay: '2026-12-31',
+    });
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]?.message).toBe(
+      'El ejercicio tiene que empezar el primer día de un mes y terminar el último día de un mes.'
+    );
+    expect(fiscalYearSettingsSchema.safeParse({ startDay: '', endDay: '2026-12-31' }).success).toBe(
+      false
+    );
+    expect(
+      fiscalYearSettingsSchema.parse({ startDay: '2026-01-01', endDay: '2026-12-31' })
+    ).toEqual({ startDay: '2026-01-01', endDay: '2026-12-31' });
   });
 });

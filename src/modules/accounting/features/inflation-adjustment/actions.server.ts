@@ -1,12 +1,15 @@
 'use server';
 
-import { Prisma } from '@/generated/prisma/client';
+import { BusinessError, toActionResult, type ActionResult } from '@/shared/lib/action-result';
 import { prisma } from '@/shared/lib/prisma';
 import { logger } from '@/shared/lib/logger';
 import { getActiveCompanyId } from '@/shared/lib/company';
 import { checkPermission } from '@/shared/lib/permissions';
 import { revalidatePath } from 'next/cache';
-import moment from 'moment';
+import { createJournalEntryTx } from '../../shared/utils/journal-entry-tx';
+import { NOT_CLOSE_GENERATED_OPENING_SQL } from '../../shared/utils/closing-entries';
+import type { JournalEntryLineDraft } from '../../shared/utils/journal-entry-lines';
+import { endOfMonthUtc, startOfMonthUtc } from '../../shared/utils/utc-month';
 
 // ============================================
 // CRUD DE ÍNDICES DE INFLACIÓN
@@ -144,7 +147,7 @@ export async function calculateRECPAM(
     });
 
     if (!closingIndex) {
-      throw new Error(`No hay índice de inflación cargado para ${month}/${year}`);
+      throw new BusinessError(`No hay índice de inflación cargado para ${month}/${year}`);
     }
 
     // Obtener cuentas ajustables
@@ -161,8 +164,9 @@ export async function calculateRECPAM(
 
     if (accounts.length === 0) return [];
 
-    const endDate = moment(`${year}-${month}-01`, 'YYYY-M-DD').endOf('month').toDate();
-    const startDate = moment(`${year}-${month}-01`, 'YYYY-M-DD').startOf('month').toDate();
+    // Mes en UTC (TSK-760, D8): el mismo rango que el período contable del asiento.
+    const endDate = endOfMonthUtc({ year, month });
+    const startDate = startOfMonthUtc({ year, month });
 
     // Para cada cuenta, obtener saldo de cierre y calcular ajuste
     const accountIds = accounts.map((a) => a.id);
@@ -179,6 +183,7 @@ export async function calculateRECPAM(
       WHERE je.company_id = ${companyId}::uuid
         AND je.status = 'POSTED'
         AND je.date <= ${endDate}
+        AND ${NOT_CLOSE_GENERATED_OPENING_SQL} -- saldo acumulado sin la apertura del cierre (TSK-760 H4)
         AND jel.account_id = ANY(${accountIds}::uuid[])
       GROUP BY jel.account_id
     `;
@@ -195,6 +200,7 @@ export async function calculateRECPAM(
       WHERE je.company_id = ${companyId}::uuid
         AND je.status = 'POSTED'
         AND je.date < ${startDate}
+        AND ${NOT_CLOSE_GENERATED_OPENING_SQL}
         AND jel.account_id = ANY(${accountIds}::uuid[])
       GROUP BY jel.account_id
     `;
@@ -211,7 +217,7 @@ export async function calculateRECPAM(
     });
 
     if (!originIndex) {
-      throw new Error(`No hay índice de inflación cargado para ${prevMonth}/${prevYear}`);
+      throw new BusinessError(`No hay índice de inflación cargado para ${prevMonth}/${prevYear}`);
     }
 
     const coefficient = Number(closingIndex.index) / Number(originIndex.index);
@@ -255,7 +261,15 @@ export async function calculateRECPAM(
 // GENERAR ASIENTO DE AJUSTE
 // ============================================
 
-export async function generateInflationAdjustmentEntry(year: number, month: number) {
+/**
+ * Asiento de ajuste por inflación (RECPAM) del mes (TSK-760, #17): POSTED, `'system'`,
+ * fechado el último día del mes (UTC) y creado con el núcleo (período cerrado,
+ * ejercicio, período y número atómico). Sin UI: devuelve `ActionResult`.
+ */
+export async function generateInflationAdjustmentEntry(
+  year: number,
+  month: number
+): Promise<ActionResult<{ id: string; number: number }>> {
   await checkPermission('accounting.entries', 'create', { redirect: true });
 
   const companyId = await getActiveCompanyId();
@@ -265,7 +279,7 @@ export async function generateInflationAdjustmentEntry(year: number, month: numb
     const recpamLines = await calculateRECPAM(year, month);
 
     if (recpamLines.length === 0) {
-      throw new Error('No hay ajustes por inflación para generar');
+      throw new BusinessError('No hay ajustes por inflación para generar');
     }
 
     const settings = await prisma.accountingSettings.findUnique({
@@ -273,107 +287,54 @@ export async function generateInflationAdjustmentEntry(year: number, month: numb
       select: { recpamAccountId: true },
     });
 
-    if (!settings?.recpamAccountId) {
-      throw new Error('Configure la cuenta RECPAM antes de generar el ajuste');
+    const recpamAccountId = settings?.recpamAccountId;
+    if (!recpamAccountId) {
+      throw new BusinessError('Configure la cuenta RECPAM antes de generar el ajuste');
     }
 
-    const endDate = moment(`${year}-${month}-01`, 'YYYY-M-DD').endOf('month').toDate();
+    const lines: JournalEntryLineDraft[] = [];
+    let totalRecpam = 0;
 
-    const result = await prisma.$transaction(async (tx) => {
-      const [{ last_entry_number: nextNumber }] = await tx.$queryRaw<
-        [{ last_entry_number: number }]
-      >`
-        UPDATE accounting_settings
-        SET last_entry_number = last_entry_number + 1, updated_at = NOW()
-        WHERE company_id = ${companyId}::uuid
-        RETURNING last_entry_number
-      `;
-
-      const fiscalYear = await tx.fiscalYear.findFirst({
-        where: { companyId, startDate: { lte: endDate }, endDate: { gte: endDate } },
-        select: { id: true },
+    for (const recpamLine of recpamLines) {
+      const description = `RECPAM ${recpamLine.accountCode} — coef. ${recpamLine.coefficient}`;
+      // Ajuste positivo: el saldo ajustado es mayor
+      lines.push({
+        accountId: recpamLine.accountId,
+        debit: recpamLine.recpam > 0 ? recpamLine.recpam : 0,
+        credit: recpamLine.recpam > 0 ? 0 : Math.abs(recpamLine.recpam),
+        description,
       });
+      totalRecpam += recpamLine.recpam;
+    }
+    totalRecpam = Math.round(totalRecpam * 100) / 100;
 
-      let periodId: string | undefined;
-      if (fiscalYear) {
-        const period = await tx.accountingPeriod.findFirst({
-          where: { fiscalYearId: fiscalYear.id, year, month, type: 'MONTHLY' },
-          select: { id: true },
-        });
-        periodId = period?.id;
-      }
-
-      interface EntryLine {
-        accountId: string;
-        debit: Prisma.Decimal;
-        credit: Prisma.Decimal;
-        description: string;
-      }
-
-      const lines: EntryLine[] = [];
-      let totalRecpam = 0;
-
-      for (const recpamLine of recpamLines) {
-        if (recpamLine.recpam > 0) {
-          // Ajuste positivo: el saldo ajustado es mayor
-          lines.push({
-            accountId: recpamLine.accountId,
-            debit: new Prisma.Decimal(recpamLine.recpam),
-            credit: new Prisma.Decimal(0),
-            description: `RECPAM ${recpamLine.accountCode} — coef. ${recpamLine.coefficient}`,
-          });
-        } else {
-          lines.push({
-            accountId: recpamLine.accountId,
-            debit: new Prisma.Decimal(0),
-            credit: new Prisma.Decimal(Math.abs(recpamLine.recpam)),
-            description: `RECPAM ${recpamLine.accountCode} — coef. ${recpamLine.coefficient}`,
-          });
-        }
-        totalRecpam += recpamLine.recpam;
-      }
-
-      // Contrapartida RECPAM
-      if (totalRecpam > 0) {
-        lines.push({
-          accountId: settings.recpamAccountId!,
-          debit: new Prisma.Decimal(0),
-          credit: new Prisma.Decimal(totalRecpam),
-          description: `RECPAM — Resultado por exposición a la inflación ${month}/${year}`,
-        });
-      } else {
-        lines.push({
-          accountId: settings.recpamAccountId!,
-          debit: new Prisma.Decimal(Math.abs(totalRecpam)),
-          credit: new Prisma.Decimal(0),
-          description: `RECPAM — Resultado por exposición a la inflación ${month}/${year}`,
-        });
-      }
-
-      const entry = await tx.journalEntry.create({
-        data: {
-          companyId,
-          number: nextNumber,
-          date: endDate,
-          description: `Ajuste por inflación — RECPAM ${month}/${year}`,
-          createdBy: 'system',
-          status: 'POSTED',
-          postDate: new Date(),
-          fiscalYearId: fiscalYear?.id,
-          periodId,
-          lines: { create: lines },
-        },
-        select: { id: true, number: true },
+    // Contrapartida RECPAM (sin línea si los ajustes se compensan: 0/0 lo rechaza la DB)
+    if (totalRecpam !== 0) {
+      lines.push({
+        accountId: recpamAccountId,
+        debit: totalRecpam > 0 ? 0 : Math.abs(totalRecpam),
+        credit: totalRecpam > 0 ? totalRecpam : 0,
+        description: `RECPAM — Resultado por exposición a la inflación ${month}/${year}`,
       });
+    }
 
-      return entry;
-    });
+    const entry = await prisma.$transaction((tx) =>
+      createJournalEntryTx(tx, {
+        companyId,
+        date: endOfMonthUtc({ year, month }),
+        description: `Ajuste por inflación — RECPAM ${month}/${year}`,
+        lines,
+        status: 'POSTED',
+        createdBy: 'system',
+        source: `inflation-adjustment:${year}-${month}`,
+      })
+    );
 
     logger.info('Asiento de ajuste por inflación generado', {
       data: {
         companyId,
-        entryId: result.id,
-        entryNumber: result.number,
+        entryId: entry.id,
+        entryNumber: entry.number,
         year,
         month,
         cuentasAjustadas: recpamLines.length,
@@ -382,11 +343,8 @@ export async function generateInflationAdjustmentEntry(year: number, month: numb
 
     revalidatePath('/dashboard/company/accounting/entries');
 
-    return result;
+    return { success: true, id: entry.id, number: entry.number };
   } catch (error) {
-    logger.error('Error al generar asiento de ajuste por inflación', {
-      data: { error, companyId, year, month },
-    });
-    throw error;
+    return toActionResult(error, 'Error al generar asiento de ajuste por inflación');
   }
 }

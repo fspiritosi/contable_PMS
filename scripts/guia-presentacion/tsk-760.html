@@ -1,0 +1,686 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>TSK-760 — El cierre contable ahora funciona de punta a punta</title>
+<style>
+  @page {
+    size: A4;
+    margin: 0;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #1f2430;
+    font-size: 13px;
+    line-height: 1.55;
+    background: #ffffff;
+  }
+
+  .page {
+    padding: 4mm 2mm;
+  }
+
+  header.cover {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    text-align: left;
+    padding: 10mm 2mm 8mm 2mm;
+    border-bottom: 3px solid #2f6f4f;
+    margin-bottom: 10mm;
+  }
+
+  .eyebrow {
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 11px;
+    font-weight: 700;
+    color: #2f6f4f;
+    margin-bottom: 6px;
+  }
+
+  h1 {
+    font-size: 26px;
+    margin: 0 0 8px 0;
+    color: #14251c;
+  }
+
+  .subtitle {
+    font-size: 14px;
+    color: #4b5563;
+    margin: 0;
+  }
+
+  section {
+    margin-bottom: 9mm;
+    page-break-inside: avoid;
+  }
+
+  section.allow-break {
+    page-break-inside: auto;
+  }
+
+  section:last-of-type { margin-bottom: 2mm; }
+
+  h2 {
+    font-size: 16px;
+    color: #14251c;
+    border-left: 4px solid #2f6f4f;
+    padding-left: 8px;
+    margin: 0 0 6mm 0;
+    page-break-after: avoid;
+  }
+
+  h3.sub {
+    font-size: 13.5px;
+    color: #14251c;
+    margin: 6mm 0 3mm 0;
+    page-break-after: avoid;
+  }
+
+  .quote {
+    background: #f4f7f5;
+    border-left: 4px solid #2f6f4f;
+    padding: 10px 14px;
+    font-style: italic;
+    color: #2b3a33;
+    margin: 0 0 6px 0;
+  }
+
+  .quote cite {
+    display: block;
+    font-style: normal;
+    font-size: 11.5px;
+    color: #6b7280;
+    margin-top: 6px;
+  }
+
+  .before-after {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    page-break-inside: avoid;
+  }
+
+  .card {
+    border: 1px solid #e2e5e0;
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+
+  .card.before { background: #fbf7f2; border-color: #ecd9bd; }
+  .card.after { background: #f2f8f4; border-color: #bfe0cb; }
+
+  .card h3 {
+    margin: 0 0 6px 0;
+    font-size: 12.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .card.before h3 { color: #9a6a1f; }
+  .card.after h3 { color: #226240; }
+
+  .card p { margin: 0; }
+
+  ol.steps {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    counter-reset: step;
+  }
+
+  ol.steps > li {
+    counter-increment: step;
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+    page-break-inside: avoid;
+  }
+
+  ol.steps > li::before {
+    content: counter(step);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    border-radius: 50%;
+    background: #2f6f4f;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  ol.steps.letters > li::before {
+    content: counter(step, lower-alpha);
+  }
+
+  .step-body { flex: 1; }
+
+  .step-body strong { color: #14251c; }
+
+  figure {
+    margin: 8px 0 0 0;
+    page-break-inside: avoid;
+  }
+
+  figure img {
+    max-width: 100%;
+    border: 1px solid #d9dce0;
+    border-radius: 6px;
+    display: block;
+  }
+
+  figure.small img { max-width: 320px; }
+
+  figure.sidebar img { max-width: 150px; }
+
+  figure.modal img { max-width: 400px; }
+
+  figure.modal-sm img { max-width: 340px; }
+
+  ol.steps.long > li { page-break-inside: auto; }
+
+  figcaption {
+    font-size: 11px;
+    color: #6b7280;
+    margin-top: 4px;
+  }
+
+  .callout {
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin: 0 0 8px 0;
+    page-break-inside: avoid;
+  }
+
+  .callout.config {
+    background: #f2f6fb;
+    border: 1px solid #cddaeb;
+  }
+
+  .callout.warning {
+    background: #fdf5ec;
+    border: 1px solid #efd6a8;
+  }
+
+  .callout h3 {
+    margin: 0 0 4px 0;
+    font-size: 13px;
+  }
+
+  .callout p { margin: 0 0 6px 0; }
+  .callout p:last-child { margin-bottom: 0; }
+
+  ul.plain {
+    margin: 4px 0 0 0;
+    padding-left: 18px;
+  }
+
+  ul.plain li { margin-bottom: 4px; }
+
+  .no-change-list {
+    display: grid;
+    gap: 6px;
+  }
+
+  .no-change-item {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+  }
+
+  .check {
+    color: #2f6f4f;
+    font-weight: 700;
+  }
+
+  .side-by-side {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8mm;
+    align-items: start;
+    page-break-inside: avoid;
+  }
+
+  .side-by-side figure { margin-top: 0; }
+
+  .side-by-side.narrow-left {
+    grid-template-columns: 160px 1fr;
+  }
+
+  .ui-text {
+    font-style: italic;
+    color: #374151;
+  }
+
+  table.chain {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 6px 0 8px 0;
+    font-size: 12px;
+    page-break-inside: avoid;
+  }
+
+  table.chain th, table.chain td {
+    border: 1px solid #dfe3e0;
+    padding: 6px 8px;
+    text-align: left;
+    vertical-align: top;
+  }
+
+  table.chain th {
+    background: #f4f7f5;
+    color: #14251c;
+    font-weight: 700;
+  }
+
+  .entry {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 11.5px;
+    background: #f7f8f7;
+    border: 1px solid #e2e5e0;
+    border-radius: 6px;
+    padding: 8px 10px;
+    margin: 6px 0;
+    white-space: pre;
+  }
+
+  figure.toast img { max-width: 360px; }
+  figure.mobile img { max-width: 200px; }
+  figure.wide img { max-width: 100%; }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 8mm; align-items: start; page-break-inside: avoid; }
+  .two-col figure { margin-top: 0; }
+  .page-break { page-break-before: always; }
+
+  footer.doc-footer {
+    text-align: center;
+    color: #9ca3af;
+    font-size: 10.5px;
+    margin-top: 2mm;
+  }
+</style>
+
+</head>
+<body>
+
+<div class="page">
+
+  <header class="cover">
+    <div class="eyebrow">Ticket 760 · Contabilidad · Cierre de meses y cierre del ejercicio</div>
+    <h1>El cierre contable ahora funciona de punta a punta</h1>
+    <p class="subtitle">Guía de presentación — qué estaba mal, qué cambia en el uso diario, cómo se cierra un mes y un ejercicio paso a paso, y qué pasa el día que instalamos la versión</p>
+  </header>
+
+  <section>
+    <h2>1. Qué estaba mal</h2>
+    <p>Revisando el cierre contable antes de encarar las modificaciones de comprobantes confirmados
+    (ticket 758), encontramos que la base sobre la que se apoya ese trabajo no se cumplía. Antes de
+    decir "todo se puede modificar mientras el mes esté abierto" necesitábamos que <strong>"mes
+    cerrado" significara lo mismo en todas las pantallas</strong>. No era así:</p>
+    <ul class="plain">
+      <li><strong>El cierre del ejercicio no se podía hacer.</strong> Pedía tener los meses cerrados
+      pero el bloqueo de períodos no los marcaba como cerrados, y a las empresas creadas en los
+      últimos meses les faltaba el ejercicio. Al destrabarlo vimos además que el asiento de apertura
+      iba a salir desbalanceado, que el Balance del año nuevo iba a mostrar los saldos al doble y que
+      el Estado de Resultados del año cerrado iba a dar cero. Lo corregimos todo antes de que te
+      pasara.</li>
+      <li><strong>El bloqueo de períodos no frenaba todo.</strong> Los asientos manuales miraban una
+      cosa, las facturas y recibos otra, y los movimientos bancarios, los de fondos, las
+      transferencias y los asientos recurrentes no miraban nada: se podían cargar en un mes
+      bloqueado. Y desbloquear el primer mes del año nuevo reabría el año ya cerrado.</li>
+      <li><strong>Fechas que podían correrse un día.</strong> Según la hora y el servidor, un asiento
+      del día 1 podía caer en el mes anterior, y una anulación hecha a la noche quedaba fechada al día
+      siguiente.</li>
+      <li><strong>Anular desde Asientos el asiento de una factura</strong> dejaba la factura vigente
+      sin su asiento, y la anulación no copiaba clientes, proveedores ni centros de costo.</li>
+    </ul>
+    <div class="before-after" style="margin-top:8px">
+      <div class="card before">
+        <h3>Antes</h3>
+        <p>Cada pantalla decidía a su manera si un mes estaba cerrado; el cierre anual no corría; un
+        mismo asiento podía caer en meses distintos según la hora.</p>
+      </div>
+      <div class="card after">
+        <h3>Ahora</h3>
+        <p>Una sola regla para todo lo que genera asientos: si el mes o el ejercicio están cerrados,
+        no entra nada con esa fecha, y el mensaje dice qué mes es y dónde reabrirlo. El cierre anual
+        se ejecuta y deja los reportes correctos.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>2. Qué cambia en el uso diario</h2>
+    <div class="no-change-list">
+      <div class="no-change-item"><span class="check">1</span><span><strong>Los meses se cierran de a
+      uno y en orden</strong>, desde Contabilidad → Configuración → Bloqueo de Períodos. Solo se puede
+      cerrar el primer mes abierto.</span></div>
+      <div class="no-change-item"><span class="check">2</span><span><strong>Antes de cerrar un mes hay
+      que registrar o eliminar sus borradores.</strong> El sistema te muestra cuántos hay y te ofrece
+      registrarlos todos y cerrar en un solo paso.</span></div>
+      <div class="no-change-item"><span class="check">3</span><span><strong>Un mes cerrado no acepta
+      nada con esa fecha</strong>: ni asientos manuales, ni facturas, recibos, órdenes de pago,
+      egresos, movimientos de fondos o bancarios, transferencias, depreciaciones o asientos
+      recurrentes.</span></div>
+      <div class="no-change-item"><span class="check">4</span><span><strong>Para corregir algo de un
+      mes cerrado, hay que reabrir el último mes cerrado</strong> (y, si el error es más atrás,
+      seguir reabriendo de a uno). Los meses de un ejercicio ya cerrado no se reabren nunca.</span></div>
+      <div class="no-change-item"><span class="check">5</span><span><strong>El asiento de un
+      comprobante se anula desde el comprobante</strong>, no desde Asientos. Desde Asientos se anulan
+      los asientos manuales, con fecha de hoy.</span></div>
+    </div>
+  </section>
+
+  <section class="allow-break page-break">
+    <h2>3. Paso a paso: cerrar un mes</h2>
+    <p>En el ejemplo, la empresa trabaja el ejercicio 2025: enero y febrero ya están cerrados y marzo
+    tiene tres asientos en borrador. Los datos de todas las capturas son de ejemplo.</p>
+    <ol class="steps long">
+      <li>
+        <div class="step-body">
+          <strong>Entrá a Contabilidad → Configuración, sección Bloqueo de Períodos.</strong> Cada mes
+          tiene su candado. Arriba dice hasta qué fecha está cerrado. El primer mes abierto dice
+          <span class="ui-text">Cerrar</span> y, si tiene borradores, cuántos; el último cerrado dice
+          <span class="ui-text">Reabrir</span>. Los demás no se pueden tocar.
+          <figure class="wide">
+            <img src="assets/tsk760-01-bloqueo-meses.png" alt="Bloqueo de Períodos: Cerrado hasta el 28/02/2025; Ejercicio N° 1 del 01/01/2025 al 31/12/2025; enero y febrero con candado cerrado, febrero con Reabrir; marzo con 3 borradores y Cerrar; abril a diciembre abiertos" />
+            <figcaption>Enero y febrero cerrados; marzo es el próximo a cerrar y tiene 3 borradores.</figcaption>
+          </figure>
+        </div>
+      </li>
+      <li>
+        <div class="step-body">
+          <strong>Hacé clic en marzo.</strong> Como tiene borradores, el diálogo te lo dice y el
+          botón es <span class="ui-text">Registrar los 3 borradores y cerrar</span>: se registran todos
+          juntos y se cierra el mes en un solo paso.
+          <figure class="modal">
+            <img src="assets/tsk760-02-dialogo-borradores.png" alt="Diálogo: Marzo 2025 tiene 3 borradores sin registrar. Con el mes cerrado no se pueden crear, registrar ni anular asientos con fecha de marzo 2025, ni confirmar comprobantes de ese mes. Botones Cancelar y Registrar los 3 borradores y cerrar" />
+          </figure>
+        </div>
+      </li>
+      <li>
+        <div class="step-body">
+          <strong>Si un borrador no se puede registrar, no se registra ninguno.</strong> El mes sigue
+          abierto y el mensaje te dice cuál es y por qué. En el ejemplo, el borrador N° 12 usa una
+          cuenta que no es imputable (tiene subcuentas).
+          <figure class="toast">
+            <img src="assets/tsk760-03-todo-o-nada-toast.png" alt="Mensaje: No se cerró 03/2025: el borrador N° 12 no se puede registrar. La cuenta 1.1.1/00/00 no es imputable (tiene subcuentas). Si es un asiento manual que ya no sirve, podés eliminarlo desde Asientos." />
+          </figure>
+        </div>
+      </li>
+      <li>
+        <div class="step-body">
+          <strong>Corregí el borrador.</strong> Si es un asiento manual que ya no sirve, eliminalo desde
+          Contabilidad → Asientos, menú de la fila, <span class="ui-text">Eliminar borrador</span>. Si es
+          el borrador de un comprobante, se corrige desde el comprobante o desde Configuración.
+          <div class="two-col" style="margin-top:6px">
+            <figure class="modal-sm">
+              <img src="assets/tsk760-04-eliminar-borrador.png" alt="Diálogo: ¿Eliminar el borrador N° 12? El asiento Reposición de fondo fijo se borra junto con sus líneas y no se puede recuperar. Su número queda sin usar. Solo se eliminan borradores manuales" />
+            </figure>
+            <figure class="toast">
+              <img src="assets/tsk760-05-eliminar-borrador-toast.png" alt="Mensaje: Borrador N° 12 eliminado" />
+              <figcaption>Su número queda sin usar.</figcaption>
+            </figure>
+          </div>
+        </div>
+      </li>
+      <li>
+        <div class="step-body">
+          <strong>Volvé a cerrar.</strong> Ahora quedan 2 borradores: se registran y marzo queda
+          cerrado. Abril pasa a ser el próximo y marzo ofrece <span class="ui-text">Reabrir</span>.
+          <figure class="toast">
+            <img src="assets/tsk760-06-registrar-y-cerrar-toast.png" alt="Mensaje: Se registraron 2 borradores y se cerró marzo 2025" />
+          </figure>
+          <figure class="wide">
+            <img src="assets/tsk760-06-registrar-y-cerrar.png" alt="Pantalla Configuración Contable: Bloqueo de Períodos cerrado hasta el 31/03/2025, marzo con Reabrir y abril con Cerrar, y el mensaje de éxito abajo a la derecha" />
+          </figure>
+        </div>
+      </li>
+    </ol>
+
+    <h3 class="sub">Reabrir para corregir</h3>
+    <p>Para corregir algo de un mes cerrado hacé clic en el último mes cerrado y confirmá. Se reabre
+    de a un mes, empezando por el último. Si dos personas trabajan a la vez y una tiene la pantalla
+    desactualizada, el sistema igual respeta el orden y se lo avisa.</p>
+    <div class="two-col">
+      <figure class="modal-sm">
+        <img src="assets/tsk760-08-reabrir-dialogo.png" alt="Diálogo: ¿Reabrir marzo 2025? Se van a poder volver a crear, registrar y anular asientos con fecha de marzo 2025. Los meses se reabren de a uno, empezando por el último cerrado" />
+      </figure>
+      <figure class="toast">
+        <img src="assets/tsk760-07-fuera-de-orden-toast.png" alt="Mensaje: Solo se puede cerrar el primer mes abierto: 04/2025." />
+        <figcaption>Una segunda pantalla, abierta antes del cierre de marzo, intenta cerrarlo de
+        nuevo: el sistema responde cuál es el mes que corresponde.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="allow-break page-break">
+    <h2>4. Un mes cerrado no acepta nada con esa fecha</h2>
+    <p>Da igual desde qué pantalla: un asiento manual, una factura, un recibo, una orden de pago, un
+    egreso, un movimiento de fondos o bancario, una transferencia, una depreciación o un asiento
+    recurrente con fecha de un mes cerrado <strong>no se graba</strong>, y el comprobante queda como
+    estaba (en borrador). El mensaje es siempre el mismo: la fecha, el mes cerrado y dónde
+    reabrirlo.</p>
+    <figure class="wide">
+      <img src="assets/tsk760-09-asiento-manual-mes-cerrado.png" alt="Nuevo Asiento Contable con fecha 15/02/2025, Pago de servicios de febrero, Gastos de oficina contra Banco Nación por 64.000; mensaje: No se puede registrar con fecha 15/02/2025: el período está cerrado (mes 02/2025 cerrado). Para operar, reabrilo desde Contabilidad → Configuración → Bloqueo de Períodos" />
+      <figcaption>Un asiento manual con fecha 15/02/2025, con febrero cerrado: no se crea.</figcaption>
+    </figure>
+    <figure class="wide">
+      <img src="assets/tsk760-10-egreso-mes-cerrado.png" alt="Pantalla Egresos con el egreso GTO-00001 del 20/02/2025 en Borrador y el mensaje: No se puede registrar con fecha 20/02/2025: el período está cerrado (mes 02/2025 cerrado)" />
+      <figcaption>Confirmar el egreso GTO-00001 del 20/02/2025: no se confirma y sigue en
+      Borrador, sin asiento. Lo mismo con facturas, recibos y órdenes de pago.</figcaption>
+    </figure>
+  </section>
+
+  <section class="allow-break page-break">
+    <h2>5. Paso a paso: cerrar el ejercicio</h2>
+    <ol class="steps long">
+      <li>
+        <div class="step-body">
+          <strong>Entrá a Contabilidad → Cierre de Ejercicio.</strong> Ves el ejercicio abierto más
+          antiguo y lo que falta para cerrarlo, con un link para resolver cada punto: la cuenta de
+          Resultado del Ejercicio configurada, todos los meses cerrados y ningún borrador.
+          <figure class="wide">
+            <img src="assets/tsk760-12-cierre-anual-pendiente.png" alt="Cierre de Ejercicio Fiscal, Ejercicio N° 1 del 01/01/2025 al 31/12/2025, Abierto. Cuenta de Resultado del Ejercicio en verde; Faltan cerrar 10 meses: 03/2025 a 12/2025, con link Cerrarlos en orden en Bloqueo de Períodos; Hay 3 borradores sin registrar: 03/2025: N° 11, 12, 14, con link Ver asientos. Botón Cerrar ejercicio N° 1 deshabilitado" />
+          </figure>
+        </div>
+      </li>
+      <li>
+        <div class="step-body">
+          <strong>Con todo en verde se habilita el botón.</strong> En el ejemplo se cerraron los meses
+          de abril a diciembre.
+          <figure class="wide">
+            <img src="assets/tsk760-13-cierre-anual-listo.png" alt="Los tres requisitos en verde: cuenta de Resultado, todos los meses cerrados, no hay borradores. Botón Cerrar ejercicio N° 1 habilitado" />
+          </figure>
+        </div>
+      </li>
+      <li style="page-break-inside: avoid">
+        <div class="step-body">
+          <strong>Revisá la vista previa.</strong> Muestra ingresos, gastos y el resultado, el asiento
+          de refundición (lleva ingresos y gastos a Resultado del Ejercicio al 31/12) y, desplegable, la
+          apertura del ejercicio siguiente al 01/01.
+          <figure class="modal">
+            <img src="assets/tsk760-14-cierre-anual-vista-previa.png" alt="Diálogo Cerrar el ejercicio N° 1: Ingresos 44.830.000, Gastos 39.999.000, Ganancia 4.831.000; Refundición de resultados (31/12/2025) con Ventas al debe y Costo de mercadería vendida, Sueldos y cargas sociales y Resultado del ejercicio al haber; Apertura del ejercicio N° 2 (01/01/2026, 4 líneas); botón Confirmar cierre" />
+          </figure>
+        </div>
+      </li>
+      <li>
+        <div class="step-body">
+          <strong>Confirmá.</strong> Se registran la refundición y la apertura y el ejercicio queda
+          cerrado. <strong>No se puede deshacer.</strong> La pantalla pasa al ejercicio siguiente y
+          deja a la vista los números de los dos asientos.
+          <figure class="toast">
+            <img src="assets/tsk760-15-cierre-anual-toast.png" alt="Mensaje: Ejercicio N° 1 cerrado: refundición N° 51 y apertura N° 52. Queda abierto el ejercicio N° 2." />
+          </figure>
+          <figure class="wide">
+            <img src="assets/tsk760-16-cierre-anual-despues.png" alt="Cierre de Ejercicio Fiscal después del cierre: Ejercicio N° 2 2026 abierto con 12 meses por cerrar; tarjeta Ejercicio N° 1 cerrado el 06/10/2026, asiento de refundición N° 51 y de apertura N° 52" />
+          </figure>
+        </div>
+      </li>
+    </ol>
+
+    <h3 class="sub">Los reportes después del cierre</h3>
+    <p>El Balance del ejercicio nuevo arranca con los mismos saldos con los que terminó el anterior,
+    sin duplicarse, y el Estado de Resultados del ejercicio cerrado sigue mostrando sus ingresos y
+    gastos (no da cero por la refundición).</p>
+    <div class="two-col">
+      <figure>
+        <img src="assets/tsk760-17-balance-despues-del-cierre.png" alt="Balance General al 31/01/2026: Activo Banco Nación 9.244.000 y Deudores por ventas 3.587.000, Total Activo 12.831.000; Pasivo 0; Patrimonio Neto: Capital social 8.000.000 y Resultado del ejercicio 4.831.000, Total 12.831.000" />
+        <figcaption>Balance al 31/01/2026: activo de $ 12.831.000, el mismo que al 31/12/2025, y
+        el resultado ya dentro del patrimonio.</figcaption>
+      </figure>
+      <figure>
+        <img src="assets/tsk760-18-estado-de-resultados.png" alt="Estado de Resultados del 01/01/2025 al 31/12/2025: Ingresos 44.830.000, Gastos 39.999.000, Resultado del Período 4.831.000" />
+        <figcaption>Estado de Resultados 2025 después del cierre: ganancia de $ 4.831.000.</figcaption>
+      </figure>
+    </div>
+    <div class="callout config" style="margin-top:8px">
+      <h3>El aviso "El balance no está equilibrado"</h3>
+      <p>Si al generar el Balance General ves arriba ese aviso en rojo, no tiene que ver con esta
+      entrega ni con tus saldos: es un detalle anterior de cómo ese informe compara el activo con el
+      patrimonio (con signos opuestos). Lo dejamos anotado para corregirlo aparte.</p>
+    </div>
+
+    <h3 class="sub">Antes y después de cerrar</h3>
+    <ul class="plain">
+      <li><strong>Podés operar en el ejercicio nuevo antes de cerrar el anterior</strong> (por
+      ejemplo, cargar las facturas de enero mientras terminás diciembre): el sistema crea el ejercicio
+      solo con la primera operación.</li>
+      <li>Después del cierre, Bloqueo de Períodos muestra el ejercicio nuevo y avisa que los meses del
+      cerrado ya no se pueden reabrir.</li>
+      <li>Las fechas del ejercicio en Contabilidad → Configuración ya no se editan una vez que hay
+      movimientos: salen del ejercicio abierto y cambian solas al cerrarlo.</li>
+    </ul>
+    <div class="two-col" style="margin-top:6px">
+      <figure>
+        <img src="assets/tsk760-19-bloqueo-despues-del-cierre.png" alt="Bloqueo de Períodos después del cierre: Cerrado hasta el 31/12/2025, nota El ejercicio N° 1 está cerrado (hasta el 31/12/2025): sus meses no se pueden reabrir, y la grilla del Ejercicio N° 2 2026 con enero para cerrar" />
+      </figure>
+      <figure>
+        <img src="assets/tsk760-11-ajustes-fechas-solo-lectura.png" alt="Ejercicio Fiscal: Inicio del Ejercicio 01/01/2025, Fin del Ejercicio 31/12/2025, en texto; Las fechas salen del ejercicio N° 1; cambian solas al cerrar el ejercicio" />
+        <figcaption>Fechas del ejercicio, de solo lectura.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="allow-break page-break">
+    <h2>6. Anular y eliminar asientos</h2>
+    <p>En Contabilidad → Asientos, el menú de cada fila tiene <span class="ui-text">Anular</span> para
+    los asientos registrados y <span class="ui-text">Eliminar borrador</span> para los borradores
+    manuales.</p>
+    <ul class="plain">
+      <li><strong>Anular</strong> crea un asiento con los importes invertidos, copiando clientes,
+      proveedores y centros de costo. Se registra con <strong>fecha de hoy</strong> (la de Argentina,
+      aunque sea de noche): el diálogo te la muestra antes de confirmar. El mes del asiento original y
+      el de hoy tienen que estar abiertos.</li>
+      <li>El asiento de un <strong>comprobante</strong> (factura, recibo, orden de pago, egreso,
+      movimiento de fondos, depreciación, revalúo o cierre de ejercicio) no se anula desde Asientos:
+      el diálogo dice a qué comprobante pertenece y el botón queda deshabilitado.</li>
+      <li>Los asientos automáticos sin comprobante (movimientos bancarios, transferencias, baja de un
+      equipo) se pueden anular, con un aviso: la anulación no revierte el saldo del banco ni el estado
+      del equipo.</li>
+    </ul>
+    <div class="side-by-side" style="margin-top:8px">
+      <figure class="modal-sm">
+        <img src="assets/tsk760-20-anular-manual.png" alt="Diálogo ¿Anular asiento contable? Estás por anular el asiento N° 53. La anulación se registra con fecha de hoy (06/10/2026). Botones Cancelar y Anular" />
+        <figcaption>Asiento manual: se anula con fecha de hoy.</figcaption>
+      </figure>
+      <figure class="modal-sm">
+        <img src="assets/tsk760-22-anular-comprobante-bloqueado.png" alt="Diálogo ¿Anular asiento contable? del asiento N° 54 con el recuadro rojo: Este asiento pertenece al egreso GTO-00002 y no se puede anular desde Asientos: anulá el comprobante. Botón Anular deshabilitado" />
+        <figcaption>Asiento del egreso GTO-00002: se anula desde el comprobante.</figcaption>
+      </figure>
+    </div>
+    <figure class="toast">
+      <img src="assets/tsk760-21-anular-manual-toast.png" alt="Mensaje: Asiento N° 53 anulado con el asiento N° 55" />
+    </figure>
+    <div class="callout warning" style="margin-top:8px">
+      <h3>Varios comprobantes todavía no tienen anulación propia</h3>
+      <p>Hoy no hay forma de anular un recibo, una orden de pago, un movimiento de fondos o una
+      depreciación ya confirmados, y anular una factura o un egreso no revierte su asiento. Eso es lo
+      que resuelve el próximo ticket (758, modificar y anular comprobantes confirmados mientras el mes
+      esté abierto). Mientras tanto, esos asientos se corrigen como hasta hoy.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>7. En el celular</h2>
+    <p>Las dos pantallas nuevas se adaptan al ancho del teléfono: la grilla de meses pasa a tres
+    columnas y la lista de requisitos del cierre se acomoda debajo.</p>
+    <div class="two-col">
+      <figure class="mobile"><img src="assets/tsk760-23-movil-bloqueo.png" alt="Bloqueo de Períodos en un teléfono: grilla de tres columnas con los meses de 2026" /></figure>
+      <figure class="mobile"><img src="assets/tsk760-24-movil-cierre-anual.png" alt="Cierre de Ejercicio Fiscal en un teléfono" /></figure>
+    </div>
+  </section>
+
+  <section class="allow-break page-break">
+    <h2>8. Qué pasa el día que instalamos la versión</h2>
+    <p>Al instalar, el sistema completa por única vez los datos que faltaban, sin cambiar importes,
+    fechas ni números de ningún asiento:</p>
+    <ul class="plain">
+      <li><strong>Se completan los ejercicios y los meses</strong> de cada empresa a partir de las
+      fechas del ejercicio de Contabilidad → Configuración, y cada asiento queda asociado a su
+      ejercicio y su mes.</li>
+      <li><strong>Si tu empresa tenía bloqueados meses</strong> con el bloqueo anterior, esos meses
+      quedan <strong>cerrados</strong> con la regla nueva (y también los anteriores a ellos, para que
+      se cumpla el orden). Bloqueado hasta una fecha sigue siendo cerrado hasta esa fecha.</li>
+      <li><strong>Borradores en meses que quedan cerrados:</strong> si hay asientos en borrador (por
+      ejemplo, de facturas o recibos confirmados) con fecha en un mes bloqueado, ya no se van a poder
+      registrar sin reabrir ese mes. Antes de instalar revisamos tu base y, si aparece alguno, te
+      pasamos el listado para decidir juntos si se reabren los meses o se dejan como están.</li>
+      <li><strong>Movimientos de meses bloqueados:</strong> lo que antes "pasaba" en un mes bloqueado
+      (un movimiento bancario, de fondos o una transferencia) ahora pide reabrir el mes. Es lo
+      esperado.</li>
+    </ul>
+    <div class="callout config" style="margin-top:8px">
+      <h3>Qué conviene que hagas después</h3>
+      <ul class="plain">
+        <li>Mirá Contabilidad → Configuración → Bloqueo de Períodos y Contabilidad → Cierre de
+        Ejercicio: te dicen qué meses están abiertos y qué borradores faltan registrar.</li>
+        <li>Verificá que esté cargada la cuenta de <strong>Resultado del Ejercicio</strong> en
+        Configuración: sin ella no se puede cerrar el ejercicio.</li>
+        <li>Para el primer cierre anual real, el del ejercicio 2026: a medida que avance el año,
+        registrá los borradores de cada mes y cerrá los meses en orden. Así, en 2027, el cierre del
+        ejercicio es un solo clic.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <h2>9. Qué queda para el próximo ticket (758)</h2>
+    <p>Con esta base, el ticket 758 resuelve <strong>modificar y anular comprobantes ya
+    confirmados</strong> (facturas, recibos, órdenes de pago, egresos, movimientos de fondos)
+    mientras su mes esté abierto, con el asiento que se corrige solo. Esta entrega no cambia cómo se
+    modifica un comprobante confirmado.</p>
+  </section>
+
+  <section>
+    <h2>10. Qué no cambió</h2>
+    <div class="no-change-list">
+      <div class="no-change-item"><span class="check">✓</span><span>Los asientos automáticos siguen
+      naciendo en <span class="ui-text">Borrador</span> y hay que registrarlos para que sumen en el
+      Mayor y el Balance. Ahora, además, el cierre del mes te ofrece registrarlos todos juntos.</span></div>
+      <div class="no-change-item"><span class="check">✓</span><span>La pantalla de Bloqueo de Períodos
+      se usa igual: clic en el primer mes abierto para cerrar, en el último cerrado para
+      reabrir.</span></div>
+      <div class="no-change-item"><span class="check">✓</span><span>Los asientos ya registrados no
+      cambian: ni sus importes, ni sus fechas, ni sus números.</span></div>
+      <div class="no-change-item"><span class="check">✓</span><span>Quién puede hacer cada cosa es lo
+      mismo que antes: cerrar y reabrir meses, quien puede editar la Configuración contable; registrar
+      borradores, quien puede registrar asientos; cerrar el ejercicio, quien tiene ese permiso.</span></div>
+    </div>
+  </section>
+
+  <footer class="doc-footer">
+    TSK-760 — El cierre contable ahora funciona de punta a punta · Contabilidad → Configuración → Bloqueo de Períodos · Contabilidad → Cierre de Ejercicio · Contabilidad → Asientos
+  </footer>
+
+</div>
+
+</body>
+</html>

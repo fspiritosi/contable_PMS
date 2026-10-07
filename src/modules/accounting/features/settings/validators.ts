@@ -1,4 +1,8 @@
+import moment from 'moment';
 import { z } from 'zod';
+
+import type { IsoDay } from '../../shared/utils/journal-entry-types';
+import { parseIsoDay } from '../../shared/utils/utc-month';
 
 /**
  * Campo de cuenta contable. Acepta el id de la cuenta, "__clear__" (Sin asignar),
@@ -68,3 +72,56 @@ export type CommercialIntegrationInput = z.input<typeof commercialIntegrationSch
  * null`).
  */
 export type CommercialIntegrationValues = z.output<typeof commercialIntegrationSchema>;
+
+// ---------------------------------------------------------------------------
+// Ejercicio fiscal (TSK-760, B23/D11/C3). Puro: lo usan el formulario y la action.
+// ---------------------------------------------------------------------------
+
+/** Lo que ve el formulario de Ajustes: el ejercicio abierto más antiguo. */
+export interface FiscalYearSettingsView {
+  fiscalYearNumber: number;
+  startDay: IsoDay;
+  endDay: IsoDay;
+  /** Sin asientos en la empresa, sin meses ni ejercicios cerrados (C3/D11). */
+  datesEditable: boolean;
+}
+
+export const FISCAL_YEAR_WHOLE_MONTHS_MESSAGE =
+  'El ejercicio tiene que empezar el primer día de un mes y terminar el último día de un mes.';
+
+/**
+ * Valida un rango de ejercicio en días 'YYYY-MM-DD': fechas válidas, fin posterior al
+ * inicio, meses completos (día 1 a fin de mes) y 12 meses como máximo. Devuelve el
+ * mensaje del primer problema o `null`.
+ */
+export function validateFiscalYearRange(startDay: IsoDay, endDay: IsoDay): string | null {
+  let start: Date;
+  let end: Date;
+  try {
+    start = parseIsoDay(startDay);
+    end = parseIsoDay(endDay);
+  } catch (error) {
+    return error instanceof Error ? error.message : 'Fecha inválida.';
+  }
+  if (end <= start) return 'La fecha de fin debe ser posterior a la fecha de inicio';
+  const startM = moment.utc(start);
+  const endM = moment.utc(end);
+  if (startM.date() !== 1 || endM.date() !== endM.daysInMonth()) {
+    return FISCAL_YEAR_WHOLE_MONTHS_MESSAGE;
+  }
+  if (endM.diff(startM, 'months') + 1 > 12)
+    return 'El ejercicio fiscal no puede ser mayor a un año';
+  return null;
+}
+
+export const fiscalYearSettingsSchema = z
+  .object({
+    startDay: z.string().min(1, 'Ingresá la fecha de inicio'),
+    endDay: z.string().min(1, 'Ingresá la fecha de fin'),
+  })
+  .superRefine((value, ctx) => {
+    const error = validateFiscalYearRange(value.startDay, value.endDay);
+    if (error) ctx.addIssue({ code: 'custom', message: error, path: ['endDay'] });
+  });
+
+export type FiscalYearSettingsInput = z.infer<typeof fiscalYearSettingsSchema>;

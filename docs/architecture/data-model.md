@@ -462,7 +462,9 @@ Reglas:
 | Modelo | Descripcion | Campos clave |
 |--------|-------------|--------------|
 | `Account` | Cuenta contable (arbol) | code (formato x.x.x/xx/xx), name, type, nature, parentId, isLeaf, isActive, disabledFrom, disabledFromFiscalYearId |
-| `JournalEntry` | Asiento contable | number, date, description, status, isAutomatic, reversedById |
+| `JournalEntry` | Asiento contable | number, date (dia calendario a 00:00Z), description, status, createdBy (userId o `'system'`), fiscalYearId?, periodId? (los carga siempre `createJournalEntryTx`, TSK-760), originalEntryId?, reversalEntryId?, reversedAt?, reversedBy? |
+| `FiscalYear` | Ejercicio contable | number (unico por empresa), startDate (00:00:00.000Z del primer dia), endDate (23:59:59.999Z del ultimo), isClosed, closedAt, closedBy, closingEntryId? (refundicion), openingEntryId? (apertura del ejercicio siguiente generada por el cierre) |
+| `AccountingPeriod` | Periodo de un ejercicio | fiscalYearId, year, month, type (`MONTHLY` \| `OPENING` \| `CLOSING` \| `ADJUSTMENT`), isClosed, closedAt, closedBy; unique(fiscalYearId, year, month, type) |
 | `JournalEntryLine` | Linea de asiento | accountId, debit, credit, description, y los auxiliares opcionales customerId?, supplierId?, costCenterId?. Indices: `@@index([costCenterId])` y `@@index([entryId])` (TSK-719) |
 | `AccountingSettings` | Config contable | salesAccountId, purchasesAccountId (cuentas de ventas/compras **por defecto**: solo para lineas cuyo item no tiene cuenta propia, TSK-721), bankChargesAccountId? (gastos bancarios por defecto, FK SetNull, TSK-718), vatAccountId, fixedAssetAccountId, accumulatedDepreciationAccountId, depreciationExpenseAccountId (cuentas de Bienes de Uso **por defecto**: respaldo de `VehicleDepreciation` → `VehicleType`, TSK-724c), assetDisposalGainLossAccountId (resultado por venta/baja, unica), lockedUntilDate, productCodePrefix (default "PROD"), lastProductNumber (default 0), requireCostCenter (Boolean, default false, TSK-583), etc. |
 | `RecurringEntry` | Asiento recurrente | frequency, nextExecution, templateLines |
@@ -479,6 +481,24 @@ Reglas:
 - `@@index([entryId])` — la FK a `JournalEntry` es `onDelete: Cascade` y **no tenia indice**: cada borrado de asiento (reversiones, borrado de borradores) obligaba a escanear la tabla hija entera. Ademas es el join de `include: { lines: true }` que usan Libro Diario, Libro Mayor, Estado de Resultados y Variacion Presupuestaria.
 - `@@index([accountId])` se dejo **afuera** a proposito: ninguna consulta filtra lineas por cuenta en SQL (el Mayor filtra en memoria) y las cuentas se dan de baja de forma logica. Cada indice se paga en cada escritura de asiento.
 
+**Ejercicios, periodos y bloqueo (TSK-760):**
+- Cada ejercicio tiene un `OPENING` (mes real de inicio), un `MONTHLY` por mes del rango y un
+  `CLOSING` (mes real de fin). La migracion `20261007020224_tsk_760_fiscal_years_backfill` normalizo
+  los de 20260625 (`month = 0/13`) y creo ejercicios para las empresas que no tenian.
+- `AccountingPeriod.isClosed` (MONTHLY) es la verdad del cierre mensual: los meses se cierran en orden
+  y se reabre solo el ultimo cerrado; un ejercicio cerrado tiene todos sus periodos cerrados.
+- `AccountingSettings.lockedUntilDate` es **derivado**: fin del ultimo mes cerrado en forma contigua
+  (`syncLockedUntilDateTx`), nunca se escribe a mano. `fiscalYearStart/End` de Ajustes reflejan el
+  ejercicio abierto mas antiguo.
+- Periodo cerrado = ejercicio cerrado **o** mes cerrado **o** fecha <= `lockedUntilDate` (por dia UTC),
+  evaluado por `assertPeriodOpen` dentro de la transaccion, tras el lock `FOR UPDATE` de la fila de
+  `accounting_settings` de la empresa.
+- `openingEntryId` solo lo escribe el cierre anual: los reportes excluyen ese asiento de los saldos
+  acumulados y la refundicion (`closingEntryId`) del Estado de Resultados.
+- Sin cambios de schema en TSK-760; los triggers `trg_journal_entry_immutable` y
+  `trg_journal_entry_line_immutable` siguen vigentes (la migracion los deshabilita solo durante su
+  `UPDATE` de backfill, dentro de la misma transaccion).
+
 **Cuentas imputables vs. de sumatoria (TSK-376):**
 - `isLeaf = true` → cuenta **imputable** (hoja): recibe movimientos de asientos y tiene saldo propio. Se mantiene automáticamente: una cuenta pasa a `isLeaf = false` al adquirir hijas.
 - `isLeaf = false` → cuenta **de sumatoria**: agrupa a sus hijas; su saldo se calcula por roll-up (suma de las imputables descendientes). No es imputable.
@@ -494,7 +514,8 @@ Reglas:
 - Account es self-referential (parentId → arbol jerarquico)
 - Account.disabledFromFiscalYear → FiscalYear (ejercicio desde el que rige la baja)
 - JournalEntry puede ser automatico (generado por comercial) o manual
-- JournalEntry puede ser reversado (reversedById → otro entry)
+- JournalEntry puede ser anulado: la reversion apunta al original con `originalEntryId` y el original guarda `reversalEntryId`
+- FiscalYear 1←N AccountingPeriod 1←N JournalEntry (via `periodId`); FiscalYear 1←N JournalEntry (via `fiscalYearId`)
 - AccountingSettings mapea cuentas contables a funciones (ventas, compras, IVA, bancos, etc.)
 - `productCodePrefix` + `lastProductNumber`: generacion automatica de codigos de producto. Al crear un producto se ejecuta un `UPDATE...SET last_product_number = last_product_number + 1 RETURNING` atomico y se genera el codigo `{prefix}-{number:04d}`.
 - Saldos de Apertura: implementado como JournalEntry (description='Asiento de Apertura', status=POSTED) sin modelo nuevo. Facturas de apertura se identifican por internalNotes='opening-balance' y journalEntryId=null.

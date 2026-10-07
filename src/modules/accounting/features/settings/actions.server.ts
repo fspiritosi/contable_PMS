@@ -1,12 +1,23 @@
 ﻿'use server';
 
 import { buildImputableAccountsWhere } from '@/shared/lib/accounts/imputable-accounts';
+import { BusinessError, toActionResult, type ActionResult } from '@/shared/lib/action-result';
+import { getActiveCompanyId } from '@/shared/lib/company';
 import { getCurrentUserId } from '@/shared/lib/current-user';
 import { logger } from '@/shared/lib/logger';
 import { checkPermission } from '@/shared/lib/permissions';
 import { prisma } from '@/shared/lib/prisma';
-import moment from 'moment';
 import { revalidateAccountingRoutes } from '../../shared/utils';
+import type { IsoDay, YearMonth } from '../../shared/utils/journal-entry-types';
+import { buildFiscalYearSettingsTx, saveFiscalYearSettingsTx } from './fiscal-year-settings';
+import { buildPeriodLockStatusTx, closeMonthTx, reopenMonthTx } from './period-closing';
+import type { PeriodLockStatus } from './period-lock-common';
+import {
+  commercialIntegrationSchema,
+  type CommercialIntegrationInput,
+  type FiscalYearSettingsInput,
+  type FiscalYearSettingsView,
+} from './validators';
 
 /**
  * Obtiene la configuración contable de una empresa
@@ -29,168 +40,138 @@ export async function getAccountingSettings(companyId: string) {
 }
 
 /**
- * Crea o actualiza la configuración contable de una empresa
+ * Ejercicio que muestra el formulario de Ajustes (TSK-760, D11): el abierto más antiguo y
+ * si sus fechas todavía se pueden cambiar. `null` = la empresa no tiene Ajustes.
  */
-export async function saveAccountingSettings(
-  companyId: string,
-  input: {
-    fiscalYearStart: Date;
-    fiscalYearEnd: Date;
-    salesAccountId?: string | null;
-    purchasesAccountId?: string | null;
-    receivablesAccountId?: string | null;
-    payablesAccountId?: string | null;
-    vatDebitAccountId?: string | null;
-    vatCreditAccountId?: string | null;
-    defaultCashAccountId?: string | null;
-    defaultBankAccountId?: string | null;
-    bankChargesAccountId?: string | null; // TSK-718
-    expensesAccountId?: string | null;
-    resultAccountId?: string | null;
-    partnerContributionsAccountId?: string | null;
-    withholdingIvaEmittedAccountId?: string | null;
-    withholdingGananciasEmittedAccountId?: string | null;
-    withholdingIibbEmittedAccountId?: string | null;
-    withholdingSussEmittedAccountId?: string | null;
-    withholdingIvaSufferedAccountId?: string | null;
-    withholdingGananciasSufferedAccountId?: string | null;
-    withholdingIibbSufferedAccountId?: string | null;
-    withholdingSussSufferedAccountId?: string | null;
-    // Cuentas de Percepciones e Impuestos Internos (TSK-644)
-    perceptionIvaCollectedAccountId?: string | null;
-    perceptionIibbCollectedAccountId?: string | null;
-    perceptionMunicipalCollectedAccountId?: string | null;
-    perceptionIvaSufferedAccountId?: string | null;
-    perceptionIibbSufferedAccountId?: string | null;
-    perceptionMunicipalSufferedAccountId?: string | null;
-    internalTaxesAccountId?: string | null;
-    // Cuentas de Activos Fijos
-    fixedAssetAccountId?: string | null;
-    accumulatedDepreciationAccountId?: string | null;
-    depreciationExpenseAccountId?: string | null;
-    assetDisposalGainLossAccountId?: string | null;
-    requireCostCenter?: boolean;
-  }
-) {
-  const userId = await getCurrentUserId();
-  if (!userId) throw new Error('No autenticado');
-  await checkPermission('accounting.settings', 'update', { redirect: true });
-
-  try {
-    // Validar que el ejercicio no sea mayor a un año
-    const yearInMs = 366 * 24 * 60 * 60 * 1000; // 366 días para contemplar años bisiestos
-    if (input.fiscalYearEnd.getTime() - input.fiscalYearStart.getTime() > yearInMs) {
-      throw new Error('El ejercicio fiscal no puede ser mayor a un año');
-    }
-
-    // Validar que la fecha de fin sea posterior a la de inicio
-    if (input.fiscalYearEnd <= input.fiscalYearStart) {
-      throw new Error('La fecha de fin debe ser posterior a la fecha de inicio');
-    }
-
-    const settings = await prisma.accountingSettings.upsert({
-      where: { companyId },
-      create: {
-        ...input,
-        companyId,
-      },
-      update: input,
-    });
-
-    logger.info('Configuración contable guardada', { data: { companyId, userId } });
-    revalidateAccountingRoutes(companyId);
-
-    return settings;
-  } catch (error) {
-    logger.error('Error al guardar configuración contable', { data: { error, companyId, userId } });
-    throw error;
-  }
-}
-
-/**
- * Obtiene la información de bloqueo de períodos contables
- */
-export async function getLockedPeriod(companyId: string) {
+export async function getFiscalYearSettings(): Promise<FiscalYearSettingsView | null> {
   const userId = await getCurrentUserId();
   if (!userId) throw new Error('No autenticado');
   await checkPermission('accounting.settings', 'view', { redirect: true });
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  return buildFiscalYearSettingsTx(prisma, companyId);
+}
+
+/**
+ * Guarda las fechas del ejercicio (TSK-760, B23/D11/C3): la primera vez crea Ajustes y el
+ * ejercicio N° 1 con sus períodos; después, solo si la empresa no tiene asientos ni cierres.
+ */
+export async function saveFiscalYearSettings(
+  input: FiscalYearSettingsInput
+): Promise<ActionResult<{ fiscalYearNumber: number }>> {
+  const userId = await getCurrentUserId();
+  if (!userId) throw new Error('No autenticado');
+  await checkPermission('accounting.settings', 'update', { redirect: true });
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
 
   try {
-    const settings = await prisma.accountingSettings.findUnique({
-      where: { companyId },
-      select: {
-        lockedUntilDate: true,
-        fiscalYearStart: true,
-        fiscalYearEnd: true,
-      },
-    });
-
-    if (!settings) return null;
-
-    return {
-      lockedUntilDate: settings.lockedUntilDate,
-      fiscalYearStart: settings.fiscalYearStart,
-      fiscalYearEnd: settings.fiscalYearEnd,
-    };
+    const result = await prisma.$transaction((tx) =>
+      saveFiscalYearSettingsTx(tx, { companyId, startDay: input.startDay, endDay: input.endDay })
+    );
+    logger.info('Ejercicio fiscal guardado', { data: { companyId, userId, ...input, ...result } });
+    revalidateAccountingRoutes(companyId);
+    return { success: true, ...result };
   } catch (error) {
-    logger.error('Error al obtener período bloqueado', { data: { error, companyId, userId } });
-    throw error;
+    return toActionResult(error, 'Error al guardar el ejercicio fiscal');
   }
 }
 
 /**
- * Bloquea o desbloquea períodos contables hasta una fecha determinada.
- * La fecha debe ser el último día de un mes dentro del ejercicio fiscal.
- * Pasar null para desbloquear todos los períodos.
+ * Guarda las cuentas por defecto de la integración comercial (solo cuentas: las fechas
+ * del ejercicio van por `saveFiscalYearSettings`, H6). Requiere Ajustes existentes.
  */
-export async function setLockedPeriod(companyId: string, lockedUntilDate: Date | null) {
+export async function saveAccountingSettings(
+  input: CommercialIntegrationInput
+): Promise<ActionResult> {
   const userId = await getCurrentUserId();
   if (!userId) throw new Error('No autenticado');
   await checkPermission('accounting.settings', 'update', { redirect: true });
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
 
   try {
-    if (lockedUntilDate) {
-      const settings = await prisma.accountingSettings.findUnique({
-        where: { companyId },
-        select: { fiscalYearStart: true, fiscalYearEnd: true },
-      });
-
-      if (!settings) {
-        throw new Error('No se encontró configuración contable');
-      }
-
-      const lockDate = moment(lockedUntilDate);
-      const fiscalStart = moment(settings.fiscalYearStart);
-      const fiscalEnd = moment(settings.fiscalYearEnd);
-
-      // Validar que la fecha esté dentro del ejercicio fiscal
-      if (!lockDate.isBetween(fiscalStart, fiscalEnd, 'day', '[]')) {
-        throw new Error('La fecha de bloqueo debe estar dentro del ejercicio fiscal');
-      }
-
-      // Validar que sea fin de mes
-      if (!lockDate.isSame(lockDate.clone().endOf('month'), 'day')) {
-        throw new Error('La fecha de bloqueo debe ser el último día de un mes');
-      }
+    const parsed = commercialIntegrationSchema.safeParse(input);
+    if (!parsed.success) {
+      throw new BusinessError(parsed.error.issues[0]?.message ?? 'Datos inválidos');
     }
-
-    await prisma.accountingSettings.update({
+    const updated = await prisma.accountingSettings.updateMany({
       where: { companyId },
-      data: { lockedUntilDate },
+      data: parsed.data,
     });
+    if (updated.count === 0) throw new BusinessError('Configurá primero el ejercicio fiscal.');
 
-    logger.info('Período contable actualizado', {
-      data: {
-        companyId,
-        userId,
-        lockedUntilDate: lockedUntilDate ? moment(lockedUntilDate).format('DD/MM/YYYY') : null,
-      },
-    });
-
+    logger.info('Configuración contable guardada', { data: { companyId, userId } });
     revalidateAccountingRoutes(companyId);
+    return { success: true };
   } catch (error) {
-    logger.error('Error al actualizar período bloqueado', { data: { error, companyId, userId } });
-    throw error;
+    return toActionResult(error, 'Error al guardar la configuración contable');
+  }
+}
+
+/**
+ * Estado del panel "Bloqueo de Períodos" (TSK-760, Fase 8): meses del ejercicio abierto
+ * más antiguo y del siguiente, con borradores y la acción disponible. `null` = sin Ajustes.
+ */
+export async function getPeriodLockStatus(): Promise<PeriodLockStatus | null> {
+  const userId = await getCurrentUserId();
+  if (!userId) throw new Error('No autenticado');
+  await checkPermission('accounting.settings', 'view', { redirect: true });
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  return buildPeriodLockStatusTx(prisma, companyId);
+}
+
+/**
+ * Cierra un mes (A1, D2): solo el primer mes abierto; con borradores, `postDrafts`
+ * los registra todos en la misma transacción o no cierra nada. Recalcula
+ * `lockedUntilDate`. Recibe `{ year, month }` (B22).
+ */
+export async function closeAccountingPeriod(
+  input: YearMonth & { postDrafts: boolean }
+): Promise<ActionResult<{ lockedUntil: IsoDay; postedDrafts: number }>> {
+  const userId = await getCurrentUserId();
+  if (!userId) throw new Error('No autenticado');
+  await checkPermission('accounting.settings', 'update', { redirect: true });
+  if (input.postDrafts) await checkPermission('accounting.entries', 'approve', { redirect: true });
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  try {
+    const result = await prisma.$transaction(
+      (tx) => closeMonthTx(tx, { ...input, companyId, userId }),
+      { timeout: 30_000, maxWait: 10_000 } // H10: registrar N borradores puede pasar los 5 s
+    );
+    logger.info('Mes contable cerrado', { data: { companyId, userId, ...input, ...result } });
+    revalidateAccountingRoutes(companyId);
+    return { success: true, ...result };
+  } catch (error) {
+    return toActionResult(error, 'Error al cerrar el mes contable');
+  }
+}
+
+/**
+ * Reabre un mes (A1, B5): solo el último cerrado y nunca uno de un ejercicio cerrado.
+ * Recalcula `lockedUntilDate` (piso: fin del último ejercicio cerrado).
+ */
+export async function reopenAccountingPeriod(
+  input: YearMonth
+): Promise<ActionResult<{ lockedUntil: IsoDay | null }>> {
+  const userId = await getCurrentUserId();
+  if (!userId) throw new Error('No autenticado');
+  await checkPermission('accounting.settings', 'update', { redirect: true });
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  try {
+    const result = await prisma.$transaction((tx) => reopenMonthTx(tx, { ...input, companyId }));
+    logger.info('Mes contable reabierto', { data: { companyId, userId, ...input, ...result } });
+    revalidateAccountingRoutes(companyId);
+    return { success: true, ...result };
+  } catch (error) {
+    return toActionResult(error, 'Error al reabrir el mes contable');
   }
 }
 

@@ -123,23 +123,6 @@ export function validateJournalEntryBalance(debitTotal: number, creditTotal: num
 }
 
 /**
- * Valida que la fecha del asiento esté dentro del ejercicio fiscal
- */
-export async function validateJournalEntryDate(companyId: string, date: Date) {
-  const settings = await prisma.accountingSettings.findUnique({
-    where: { companyId },
-  });
-
-  if (!settings) {
-    throw new Error('La empresa no tiene configuración contable');
-  }
-
-  if (date < settings.fiscalYearStart || date > settings.fiscalYearEnd) {
-    throw new Error('La fecha del asiento debe estar dentro del ejercicio fiscal');
-  }
-}
-
-/**
  * Valida que el ejercicio fiscal sea válido
  */
 export function validateFiscalYear(startDate: Date, endDate: Date) {

@@ -72,7 +72,9 @@ import { sumLines } from '../shared/lines-calc';
 import type { FundMovementFormInput } from '../shared/validators';
 
 // Frontera aislada: sesión/permisos/empresa activa/caché de Next. Ver el
-// comentario de arriba para el porqué de cada uno.
+// comentario de arriba para el porqué de cada uno. `server-only` lo importa el
+// núcleo contable que crea el asiento (TSK-760).
+vi.mock('server-only', () => ({}));
 vi.mock('@/shared/lib/current-user', () => ({ getCurrentUserId: vi.fn() }));
 vi.mock('@/shared/lib/company', () => ({ getActiveCompanyId: vi.fn() }));
 vi.mock('@/shared/lib/permissions', () => ({
@@ -82,8 +84,14 @@ vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 
 import { getActiveCompanyId } from '@/shared/lib/company';
 import { getCurrentUserId } from '@/shared/lib/current-user';
+import {
+  closeMonthForTest,
+  readEntryPeriod,
+  readLastEntryNumber,
+} from '@/modules/accounting/shared/test-utils/period-test-helpers';
 // Código real de producción: nada de esto se reimplementa acá.
 import {
+  confirmFundMovement,
   createFundMovement,
   getFundMovementById,
   getFundMovementCatalogs,
@@ -694,6 +702,130 @@ describe.skipIf(!dbAvailable)('integración: conceptos del movimiento de fondos 
       const catalogs = await getFundMovementCatalogs();
 
       expect(catalogs.defaultBankChargesAccount).toBeNull();
+    });
+  });
+
+  describe('caso 7: período cerrado y numeración atómica (TSK-760, fase 6)', () => {
+    // Antes de TSK-760 el asiento de fondos no miraba el período y numeraba con
+    // `lastEntryNumber + 1`. Ahora pasa por `createJournalEntryTx` (núcleo).
+    const closedText =
+      'No se puede registrar con fecha 12/05/2026: el período está cerrado (mes 05/2026 cerrado).';
+
+    async function bankBalance(id: string): Promise<number> {
+      const bank = await prisma.bankAccount.findUniqueOrThrow({
+        where: { id },
+        select: { balance: true },
+      });
+      return Number(bank.balance);
+    }
+
+    it('mes abierto: el asiento nace DRAFT con ejercicio, período del mes y el número siguiente', async () => {
+      const before = await readLastEntryNumber(companyId);
+      const result = await createFundMovement(
+        {
+          type: 'PARTNER_CONTRIBUTION',
+          date: '2026-04-10',
+          amount: '1000',
+          description: `${PREFIX}Aporte abril`,
+          sourceFund: '',
+          destinationFund: `BANK:${bankDestId}`,
+          partnerId,
+        },
+        true
+      );
+      expect(result.success).toBe(true);
+      if (!result.success) return;
+
+      const movement = await prisma.fundMovement.findUniqueOrThrow({
+        where: { id: result.id! },
+        select: { status: true, journalEntryId: true, journalEntryNumber: true },
+      });
+      expect(movement.status).toBe('CONFIRMED');
+      const entry = await readEntryPeriod(movement.journalEntryId!);
+      expect(entry).toMatchObject({
+        number: before + 1,
+        status: 'DRAFT',
+        createdBy: 'system',
+        period: { year: 2026, month: 4, type: 'MONTHLY' },
+      });
+      expect(entry.fiscalYearId).toBeTruthy();
+      expect(movement.journalEntryNumber).toBe(before + 1);
+      expect(await readLastEntryNumber(companyId)).toBe(before + 1);
+    });
+
+    it('mes cerrado: rechaza con el texto estándar, sin número, sin saldo ni movimiento bancario, y el borrador queda', async () => {
+      const reopen = await closeMonthForTest(companyId, new Date('2026-05-12T12:00:00.000Z'));
+      let draftId: string | undefined;
+      try {
+        const before = await readLastEntryNumber(companyId);
+        const balanceBefore = await bankBalance(bankDestId);
+        const bankMovementsBefore = await prisma.bankMovement.count({
+          where: { bankAccountId: bankDestId },
+        });
+
+        const draft = await createFundMovement({
+          type: 'PARTNER_CONTRIBUTION',
+          date: '2026-05-12',
+          amount: '2000',
+          description: `${PREFIX}Aporte mayo cerrado`,
+          sourceFund: '',
+          destinationFund: `BANK:${bankDestId}`,
+          partnerId,
+        });
+        expect(draft.success).toBe(true);
+        if (!draft.success) return;
+        draftId = draft.id!;
+
+        const result = await confirmFundMovement(draftId);
+
+        expect(result.success).toBe(false);
+        if (result.success) return;
+        expect(result.error).toContain(closedText);
+        expect(await readLastEntryNumber(companyId)).toBe(before);
+        expect(await bankBalance(bankDestId)).toBe(balanceBefore);
+        expect(await prisma.bankMovement.count({ where: { bankAccountId: bankDestId } })).toBe(
+          bankMovementsBefore
+        );
+        const movement = await prisma.fundMovement.findUniqueOrThrow({
+          where: { id: draftId },
+          select: { status: true, journalEntryId: true },
+        });
+        expect(movement).toEqual({ status: 'DRAFT', journalEntryId: null });
+      } finally {
+        await reopen();
+      }
+
+      // Reabierto el mes, el mismo borrador se confirma.
+      const retry = await confirmFundMovement(draftId!);
+      expect(retry.success).toBe(true);
+    });
+
+    it('dos confirmaciones en paralelo no chocan en la numeración', async () => {
+      const before = await readLastEntryNumber(companyId);
+      const drafts = await Promise.all(
+        [bankDestId, bankSourceId].map((bankId, i) =>
+          createFundMovement({
+            type: 'PARTNER_CONTRIBUTION',
+            date: '2026-04-20',
+            amount: '10',
+            description: `${PREFIX}Aporte paralelo ${i}`,
+            sourceFund: '',
+            destinationFund: `BANK:${bankId}`,
+            partnerId,
+          })
+        )
+      );
+      const ids = drafts.map((d) => (d.success ? d.id! : ''));
+
+      const results = await Promise.all(ids.map((id) => confirmFundMovement(id)));
+
+      expect(results.map((r) => r.success)).toEqual([true, true]);
+      const numbers = await prisma.fundMovement.findMany({
+        where: { id: { in: ids } },
+        select: { journalEntryNumber: true },
+      });
+      expect(numbers.map((n) => n.journalEntryNumber ?? 0).sort((a, b) => a - b)).toEqual([before + 1, before + 2]);
+      expect(await readLastEntryNumber(companyId)).toBe(before + 2);
     });
   });
 });

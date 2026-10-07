@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 
 import { Prisma } from '@/generated/prisma/client';
+import { createJournalEntryTx } from '@/modules/accounting/features/integrations/core';
 import { filterExpenseAccounts } from '@/modules/commercial/features/products/shared/account-filters';
 import type { DataTableSearchParams } from '@/shared/components/common/DataTable';
 import {
@@ -451,6 +452,8 @@ async function createJournalEntryForFundMovement(
     description: string;
     /** Líneas del asiento. Se verifica acá que sumen lo mismo al debe y al haber. */
     lines: JournalLineInput[];
+    /** Origen para el log del núcleo (`fund-movement:<id>`). */
+    source: string;
   },
   tx: PrismaTransactionClient
 ) {
@@ -481,41 +484,23 @@ async function createJournalEntryForFundMovement(
     );
   }
 
-  const settings = await tx.accountingSettings.findUnique({
-    where: { companyId },
-    select: { lastEntryNumber: true },
+  // Período, numeración atómica, ejercicio/período y validación de cuentas: el
+  // núcleo contable (TSK-760). Un mes cerrado lanza `BusinessError` y la
+  // transacción entera (saldos, movimientos de banco/caja) se deshace.
+  return createJournalEntryTx(tx, {
+    companyId,
+    date,
+    description,
+    status: 'DRAFT',
+    createdBy: 'system',
+    source: input.source,
+    lines: lines.map((line) => ({
+      accountId: line.accountId,
+      debit: new Prisma.Decimal(line.debit),
+      credit: new Prisma.Decimal(line.credit),
+      description: line.description,
+    })),
   });
-  if (!settings) {
-    throw new BusinessError(
-      'No hay configuración contable. Configurá las cuentas por defecto en Ajustes contables antes de confirmar movimientos de fondos.'
-    );
-  }
-
-  const nextNumber = settings.lastEntryNumber + 1;
-  const entry = await tx.journalEntry.create({
-    data: {
-      companyId,
-      number: nextNumber,
-      date,
-      description,
-      createdBy: 'system',
-      lines: {
-        create: lines.map((line) => ({
-          accountId: line.accountId,
-          debit: new Prisma.Decimal(line.debit),
-          credit: new Prisma.Decimal(line.credit),
-          description: line.description,
-        })),
-      },
-    },
-    select: { id: true, number: true },
-  });
-
-  await tx.accountingSettings.update({
-    where: { companyId },
-    data: { lastEntryNumber: nextNumber },
-  });
-  return entry;
 }
 
 /** Un concepto listo para persistir. */
@@ -777,17 +762,23 @@ export async function confirmFundMovement(id: string): Promise<FundMovementActio
         defaultCashAccountId: true,
       },
     });
+    // Sin Ajustes no hay asiento posible: se avisa antes de mover saldos.
+    if (!settings) {
+      throw new BusinessError(
+        'No hay configuración contable. Configurá las cuentas por defecto en Ajustes contables antes de confirmar movimientos de fondos.'
+      );
+    }
 
     const isTransfer = movement.type === 'ACCOUNT_TRANSFER';
     // TSK-717: la cuenta del asiento la decide el socio (propia o por defecto)
     // dentro de la transacción, en `resolvePartnerCapitalAccount`. La global ya
     // no es condición necesaria para confirmar.
-    const defaultContributionsAccountId = settings?.partnerContributionsAccountId ?? null;
+    const defaultContributionsAccountId = settings.partnerContributionsAccountId ?? null;
     let capitalSource: CapitalAccountSource | null = null; // para el log final
 
     const fundSettings: FundSettings = {
-      defaultBankAccountId: settings?.defaultBankAccountId ?? null,
-      defaultCashAccountId: settings?.defaultCashAccountId ?? null,
+      defaultBankAccountId: settings.defaultBankAccountId ?? null,
+      defaultCashAccountId: settings.defaultCashAccountId ?? null,
     };
     const amount = new Prisma.Decimal(Number(movement.amount));
 
@@ -921,6 +912,7 @@ export async function confirmFundMovement(id: string): Promise<FundMovementActio
           date: movement.date,
           description: movement.description,
           lines: entryLines,
+          source: `fund-movement:${id}`,
         },
         tx
       );
