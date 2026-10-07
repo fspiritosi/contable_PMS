@@ -1,7 +1,7 @@
 'use client';
 
 import { ColumnDef } from '@tanstack/react-table';
-import { MoreHorizontal, Pencil, CheckCircle2, Trash2 } from 'lucide-react';
+import { CheckCircle2, Eye, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 
 import { Badge } from '@/shared/components/ui/badge';
 import { Button } from '@/shared/components/ui/button';
@@ -21,6 +21,13 @@ import {
   formatFundMovementDate,
   type FundMovementTypeValue,
 } from '../shared/validators';
+import {
+  FUND_MOVEMENT_STATUS_LABELS,
+  fundMovementStatusVariant,
+  getRowActions,
+  hasAnyRowAction,
+  hasDraftActions,
+} from '../shared/view-mode';
 import type { FundMovementListItem } from './actions.server';
 
 const TYPE_BADGE_VARIANT: Record<FundMovementTypeValue, 'default' | 'secondary' | 'outline'> = {
@@ -30,20 +37,16 @@ const TYPE_BADGE_VARIANT: Record<FundMovementTypeValue, 'default' | 'secondary' 
   BANK_CHARGES: 'secondary',
 };
 
-const STATUS_LABELS: Record<string, string> = {
-  DRAFT: 'Borrador',
-  CONFIRMED: 'Confirmado',
-  CANCELLED: 'Anulado',
-};
-
 interface ColumnsProps {
+  /** Abre el modal en solo lectura (cualquier estado, TSK-720a). */
+  onView: (m: FundMovementListItem) => void;
   onEdit: (m: FundMovementListItem) => void;
   onConfirm: (m: FundMovementListItem) => void;
   onDelete: (m: FundMovementListItem) => void;
   permissions: ModulePermissions;
 }
 
-export function getColumns({ onEdit, onConfirm, onDelete, permissions }: ColumnsProps): ColumnDef<FundMovementListItem>[] {
+export function getColumns({ onView, onEdit, onConfirm, onDelete, permissions }: ColumnsProps): ColumnDef<FundMovementListItem>[] {
   const columns: ColumnDef<FundMovementListItem>[] = [
     {
       accessorKey: 'date',
@@ -104,30 +107,25 @@ export function getColumns({ onEdit, onConfirm, onDelete, permissions }: Columns
       header: ({ column }) => <DataTableColumnHeader column={column} title="Estado" />,
       cell: ({ row }) => {
         const status = row.original.status;
-        const variant = status === 'CONFIRMED' ? 'default' : status === 'DRAFT' ? 'outline' : 'secondary';
-        return <Badge variant={variant}>{STATUS_LABELS[status] ?? status}</Badge>;
+        return (
+          <Badge variant={fundMovementStatusVariant(status)}>
+            {FUND_MOVEMENT_STATUS_LABELS[status]}
+          </Badge>
+        );
       },
-    },
-    {
-      id: 'asiento',
-      meta: { title: 'Asiento' },
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Asiento" />,
-      cell: ({ row }) =>
-        row.original.journalEntryNumber ? (
-          <span className="font-mono text-xs">N° {row.original.journalEntryNumber}</span>
-        ) : (
-          <span className="text-muted-foreground">—</span>
-        ),
     },
   ];
 
-  if (permissions.canUpdate || permissions.canDelete) {
+  // "Ver" va en cualquier estado, así que la columna depende también de `canView`
+  // (TSK-720a). El N° de asiento ya no tiene columna: se consulta en Ver.
+  if (hasAnyRowAction(permissions)) {
     columns.push({
       id: 'actions',
       cell: ({ row }) => {
         const m = row.original;
-        const isDraft = m.status === 'DRAFT';
-        if (!isDraft) return null;
+        const actions = getRowActions(m.status, permissions);
+        const draft = hasDraftActions(actions);
+        if (!actions.view && !draft) return null;
         return (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -138,21 +136,28 @@ export function getColumns({ onEdit, onConfirm, onDelete, permissions }: Columns
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuLabel>Acciones</DropdownMenuLabel>
-              {permissions.canUpdate && (
+              {actions.view && (
+                <DropdownMenuItem onClick={() => onView(m)}>
+                  <Eye className="mr-2 h-4 w-4" />
+                  Ver
+                </DropdownMenuItem>
+              )}
+              {actions.view && draft && <DropdownMenuSeparator />}
+              {actions.confirm && (
                 <DropdownMenuItem onClick={() => onConfirm(m)}>
                   <CheckCircle2 className="mr-2 h-4 w-4" />
                   Confirmar
                 </DropdownMenuItem>
               )}
-              {permissions.canUpdate && (
+              {actions.edit && (
                 <DropdownMenuItem onClick={() => onEdit(m)}>
                   <Pencil className="mr-2 h-4 w-4" />
                   Editar
                 </DropdownMenuItem>
               )}
-              {permissions.canDelete && (
+              {actions.delete && (
                 <>
-                  <DropdownMenuSeparator />
+                  {(actions.confirm || actions.edit) && <DropdownMenuSeparator />}
                   <DropdownMenuItem onClick={() => onDelete(m)} className="text-destructive">
                     <Trash2 className="mr-2 h-4 w-4" />
                     Eliminar

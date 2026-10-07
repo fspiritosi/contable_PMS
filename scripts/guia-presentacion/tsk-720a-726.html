@@ -1,0 +1,568 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>TSK-720 y TSK-726 — Ver un movimiento de fondos y el formulario en el celular</title>
+<style>
+  @page {
+    size: A4;
+    margin: 0;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #1f2430;
+    font-size: 13px;
+    line-height: 1.55;
+    background: #ffffff;
+  }
+
+  .page {
+    padding: 4mm 2mm;
+  }
+
+  header.cover {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    text-align: left;
+    padding: 10mm 2mm 8mm 2mm;
+    border-bottom: 3px solid #2f6f4f;
+    margin-bottom: 10mm;
+  }
+
+  .eyebrow {
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 11px;
+    font-weight: 700;
+    color: #2f6f4f;
+    margin-bottom: 6px;
+  }
+
+  h1 {
+    font-size: 26px;
+    margin: 0 0 8px 0;
+    color: #14251c;
+  }
+
+  .subtitle {
+    font-size: 14px;
+    color: #4b5563;
+    margin: 0;
+  }
+
+  section {
+    margin-bottom: 9mm;
+    page-break-inside: avoid;
+  }
+
+  section.allow-break {
+    page-break-inside: auto;
+  }
+
+  section:last-of-type { margin-bottom: 2mm; }
+
+  h2 {
+    font-size: 16px;
+    color: #14251c;
+    border-left: 4px solid #2f6f4f;
+    padding-left: 8px;
+    margin: 0 0 6mm 0;
+    page-break-after: avoid;
+  }
+
+  h3.sub {
+    font-size: 13.5px;
+    color: #14251c;
+    margin: 6mm 0 3mm 0;
+    page-break-after: avoid;
+  }
+
+  .quote {
+    background: #f4f7f5;
+    border-left: 4px solid #2f6f4f;
+    padding: 10px 14px;
+    font-style: italic;
+    color: #2b3a33;
+    margin: 0 0 6px 0;
+  }
+
+  .quote cite {
+    display: block;
+    font-style: normal;
+    font-size: 11.5px;
+    color: #6b7280;
+    margin-top: 6px;
+  }
+
+  .before-after {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    page-break-inside: avoid;
+  }
+
+  .card {
+    border: 1px solid #e2e5e0;
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+
+  .card.before { background: #fbf7f2; border-color: #ecd9bd; }
+  .card.after { background: #f2f8f4; border-color: #bfe0cb; }
+
+  .card h3 {
+    margin: 0 0 6px 0;
+    font-size: 12.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .card.before h3 { color: #9a6a1f; }
+  .card.after h3 { color: #226240; }
+
+  .card p { margin: 0; }
+
+  ol.steps {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    counter-reset: step;
+  }
+
+  ol.steps > li {
+    counter-increment: step;
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+    page-break-inside: avoid;
+  }
+
+  ol.steps > li::before {
+    content: counter(step);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    border-radius: 50%;
+    background: #2f6f4f;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  ol.steps.letters > li::before {
+    content: counter(step, lower-alpha);
+  }
+
+  .step-body { flex: 1; }
+
+  .step-body strong { color: #14251c; }
+
+  figure {
+    margin: 8px 0 0 0;
+    page-break-inside: avoid;
+  }
+
+  figure img {
+    max-width: 100%;
+    border: 1px solid #d9dce0;
+    border-radius: 6px;
+    display: block;
+  }
+
+  figure.small img { max-width: 320px; }
+
+  figure.sidebar img { max-width: 150px; }
+
+  figure.modal img { max-width: 400px; }
+
+  figure.modal-sm img { max-width: 340px; }
+
+  ol.steps.long > li { page-break-inside: auto; }
+
+  figcaption {
+    font-size: 11px;
+    color: #6b7280;
+    margin-top: 4px;
+  }
+
+  .callout {
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin: 0 0 8px 0;
+    page-break-inside: avoid;
+  }
+
+  .callout.config {
+    background: #f2f6fb;
+    border: 1px solid #cddaeb;
+  }
+
+  .callout.warning {
+    background: #fdf5ec;
+    border: 1px solid #efd6a8;
+  }
+
+  .callout h3 {
+    margin: 0 0 4px 0;
+    font-size: 13px;
+  }
+
+  .callout p { margin: 0 0 6px 0; }
+  .callout p:last-child { margin-bottom: 0; }
+
+  ul.plain {
+    margin: 4px 0 0 0;
+    padding-left: 18px;
+  }
+
+  ul.plain li { margin-bottom: 4px; }
+
+  .no-change-list {
+    display: grid;
+    gap: 6px;
+  }
+
+  .no-change-item {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+  }
+
+  .check {
+    color: #2f6f4f;
+    font-weight: 700;
+  }
+
+  .side-by-side {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8mm;
+    align-items: start;
+    page-break-inside: avoid;
+  }
+
+  .side-by-side figure { margin-top: 0; }
+
+  .side-by-side.narrow-left {
+    grid-template-columns: 160px 1fr;
+  }
+
+  .ui-text {
+    font-style: italic;
+    color: #374151;
+  }
+
+  table.chain {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 6px 0 8px 0;
+    font-size: 12px;
+    page-break-inside: avoid;
+  }
+
+  table.chain th, table.chain td {
+    border: 1px solid #dfe3e0;
+    padding: 6px 8px;
+    text-align: left;
+    vertical-align: top;
+  }
+
+  table.chain th {
+    background: #f4f7f5;
+    color: #14251c;
+    font-weight: 700;
+  }
+
+  .entry {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 11.5px;
+    background: #f7f8f7;
+    border: 1px solid #e2e5e0;
+    border-radius: 6px;
+    padding: 8px 10px;
+    margin: 6px 0;
+    white-space: pre;
+  }
+
+  footer.doc-footer {
+    text-align: center;
+    color: #9ca3af;
+    font-size: 10.5px;
+    margin-top: 2mm;
+  }
+
+  figure.phone img { max-width: 230px; }
+
+  .phones {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8mm;
+    align-items: start;
+    page-break-inside: avoid;
+  }
+
+  .phones figure { margin-top: 0; }
+
+  .tag {
+    display: inline-block;
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 1px 7px;
+    border-radius: 10px;
+    margin-bottom: 4px;
+  }
+
+  .tag.before { background: #fbe9d0; color: #9a6a1f; }
+  .tag.after { background: #d6efdf; color: #226240; }
+
+  .page-break { page-break-before: always; }
+</style>
+
+</head>
+<body>
+
+<div class="page">
+
+  <header class="cover">
+    <div class="eyebrow">Tickets 720 (primera parte) y 726 · Tesorería · Movimientos de Fondos</div>
+    <h1>Ver un movimiento de fondos, sin la columna de asiento, y el formulario en el celular</h1>
+    <p class="subtitle">Guía de presentación — qué se pidió, qué cambió, cómo se usa paso a paso y qué queda para la segunda parte</p>
+  </header>
+
+  <section>
+    <h2>1. Qué se pidió</h2>
+    <p>En el ticket 720, sobre la tabla de <strong>Tesorería → Movimientos de Fondos</strong>, pediste:</p>
+    <p class="quote">"Eliminar la columna de número de asiento contable. Mostrar un detalle de los movimientos,
+    con un botón de ver y el mismo form con los campos en disable."
+    <cite>Ticket 720 — Tabla Movimientos de Fondos</cite></p>
+    <p>En el mismo ticket pediste además dos cosas más grandes: <strong>crear tipos de movimientos de
+    fondos</strong> y que la tabla <strong>se alimente desde los movimientos del banco</strong>. Esas
+    dos quedan para una segunda parte (ver el punto 6).</p>
+    <p>El ticket 726 no lo pediste vos: lo detectamos nosotros probando el sistema en el celular.
+    Al abrir el formulario de un movimiento de fondos en un teléfono, <strong>el formulario se salía
+    de la pantalla</strong>: quedaba cortado a la derecha, la <strong>X</strong> para cerrarlo no se
+    veía y la pantalla se desplazaba hacia los costados.</p>
+  </section>
+
+  <section class="allow-break">
+    <h2>2. Qué cambió en la tabla</h2>
+    <div class="before-after">
+      <div class="card before">
+        <h3>Antes</h3>
+        <p>La tabla tenía una columna <strong>Asiento</strong> con el número (o "—"). Un movimiento
+        confirmado no tenía ningún botón: no había forma de volver a ver, por ejemplo, los conceptos de
+        un gasto bancario ya confirmado.</p>
+      </div>
+      <div class="card after">
+        <h3>Ahora</h3>
+        <p>La columna <strong>Asiento</strong> ya no está. Cada fila tiene el menú <strong>⋯</strong> con
+        la opción <strong>Ver</strong>, en <strong>cualquier estado</strong>: Borrador, Confirmado o
+        Anulado. El número de asiento se consulta desde Ver.</p>
+      </div>
+    </div>
+    <figure>
+      <img src="assets/tsk720a-726-01-listado-sin-asiento.png" alt="Listado de Movimientos de Fondos con las columnas Fecha, Tipo, Descripción, Origen, Destino, Socio, Monto y Estado, sin columna Asiento, y el botón de menú de tres puntos en cada fila" />
+      <figcaption>El listado: Fecha, Tipo, Descripción, Origen, Destino, Socio, Monto y Estado. Sin la columna Asiento.</figcaption>
+    </figure>
+    <h3 class="sub">Qué ofrece el menú ⋯ de cada fila</h3>
+    <div>
+      <figure style="max-width:520px">
+        <img src="assets/tsk720a-726-02-menu-confirmado.png" alt="Menú Acciones de un movimiento Confirmado con una sola opción: Ver" />
+        <figcaption>Un movimiento <strong>confirmado</strong> (o anulado): solo <strong>Ver</strong>. Ya no se puede editar.</figcaption>
+      </figure>
+      <figure style="max-width:520px">
+        <img src="assets/tsk720a-726-03-menu-borrador.png" alt="Menú Acciones de un Borrador con Ver, Confirmar, Editar y Eliminar" />
+        <figcaption>Un <strong>borrador</strong>: Ver, y además Confirmar, Editar y Eliminar, como siempre.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="allow-break">
+    <h2>3. Cómo se usa "Ver", paso a paso</h2>
+    <p>Ejemplo: querés revisar qué conceptos tenía el débito del banco que confirmaste y con qué número
+    de asiento quedó.</p>
+    <ol class="steps long">
+      <li><div class="step-body">Entrá a <strong>Tesorería → Movimientos de Fondos</strong>.</div></li>
+      <li><div class="step-body">En la fila del movimiento (en el ejemplo, "Comisiones e impuestos del
+      banco"), hacé clic en <strong>⋯</strong> y elegí <strong>Ver</strong>.</div></li>
+      <li><div class="step-body">Se abre <strong>el mismo formulario</strong> que usás para cargarlo, con
+      todos los campos <strong>bloqueados</strong>: se leen igual de bien, pero no se pueden cambiar. No
+      hay botones de guardar ni de agregar conceptos.</div></li>
+      <li><div class="step-body">Arriba, un recuadro te muestra el <strong>Estado</strong> y, si está
+      confirmado, <strong>cuándo se confirmó</strong> (fecha y hora) y el <strong>Asiento N°</strong>. Con
+      ese número lo buscás en <strong>Contabilidad → Asientos</strong>. Para salir, <strong>Cerrar</strong>
+      o la <strong>X</strong>.</div></li>
+    </ol>
+    <div class="side-by-side">
+      <figure>
+        <img src="assets/tsk720a-726-07-ver-gastos-bancarios.png" alt="Ventana Movimiento de Fondos de un gasto bancario confirmado: recuadro con Estado Confirmado, Confirmado el 06/10/2026 16:54 y Asiento N° 37; abajo los campos bloqueados con tres conceptos (Comisión mantenimiento 1.600, IVA comisión 315, Sellado 50), Total $ 1.965,00 y el botón Cerrar" />
+        <figcaption>Gastos e impuestos bancarios confirmado: cada concepto con su cuenta e importe, el total, y el asiento N° 37.</figcaption>
+      </figure>
+      <figure>
+        <img src="assets/tsk720a-726-04-ver-aporte-confirmado.png" alt="Ventana Movimiento de Fondos de un aporte de socio confirmado: Estado Confirmado, Confirmado el 06/10/2026 16:54, Asiento N° 36; Aporte de socio, monto 1.234,56, Banco Santander, socio María López" />
+        <figcaption>Aporte de socio confirmado: banco, socio, monto y el asiento N° 36.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="allow-break">
+    <h3 class="sub">Borradores y anulados también se pueden ver</h3>
+    <p>Debajo del título, una frase te dice en qué situación está el movimiento:
+    <span class="ui-text">"Borrador: todavía no movió saldos ni generó asiento."</span>,
+    <span class="ui-text">"Confirmado: ya actualizó el saldo del banco/caja y generó su asiento."</span> o
+    <span class="ui-text">"Anulado: el movimiento quedó sin efecto."</span></p>
+    <div class="side-by-side">
+      <figure>
+        <img src="assets/tsk720a-726-05-ver-retiro-borrador.png" alt="Ventana Movimiento de Fondos de un retiro de socio en Borrador: Estado Borrador, Retiro de socio, monto 85.000, Banco Santander, socio Juan Perez" />
+        <figcaption>Un retiro en borrador: sin fecha de confirmación ni asiento, porque todavía no se confirmó.</figcaption>
+      </figure>
+      <figure>
+        <img src="assets/tsk720a-726-06-ver-transferencia-anulada.png" alt="Ventana Movimiento de Fondos de una transferencia entre cuentas Anulada, del Banco Santander a la Caja Principal" />
+        <figcaption>Una transferencia anulada, del banco a la caja.</figcaption>
+      </figure>
+    </div>
+    <div class="callout config">
+      <h3>Si la caja o el socio ya no están</h3>
+      <p>Si después de cargar el movimiento la caja cerró su sesión o el socio se dio de baja, al verlo
+      se sigue mostrando el nombre que quedó guardado (en la captura, "Caja Chica" y "Carlos Gómez"),
+      en lugar de un campo vacío.</p>
+    </div>
+    <figure class="modal">
+      <img src="assets/tsk720a-726-08-ver-snapshot-caja-socio.png" alt="Ventana Movimiento de Fondos de un retiro anulado con la caja Caja Chica y el socio Carlos Gómez, que ya no están disponibles para elegir" />
+    </figure>
+  </section>
+
+  <section class="allow-break page-break">
+    <h2>4. El formulario en el celular</h2>
+    <p>Ahora el formulario entra completo en la pantalla del teléfono: la <strong>X</strong> de cerrar se
+    ve, y la pantalla ya no se desplaza hacia los costados. Vale para cargar, editar y ver, con los
+    cuatro tipos de movimiento.</p>
+    <div class="phones">
+      <figure class="phone">
+        <span class="tag before">Antes</span>
+        <img src="assets/tsk720a-726-10-movil-alta-aporte-antes.png" alt="Celular, antes: el formulario Nuevo Movimiento de Fondos cortado a la derecha; los campos y el texto se salen de la pantalla y la X de cerrar no se ve" />
+        <figcaption>Cortado a la derecha y sin la X.</figcaption>
+      </figure>
+      <figure class="phone">
+        <span class="tag after">Ahora</span>
+        <img src="assets/tsk720a-726-10-movil-alta-aporte.png" alt="Celular, ahora: el formulario Nuevo Movimiento de Fondos entra completo, con márgenes a los dos lados y la X arriba a la derecha" />
+        <figcaption>Entra completo, con la X arriba a la derecha.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section>
+    <h3 class="sub">Los conceptos de gastos bancarios ahora se apilan</h3>
+    <p>Antes, en el celular, la fila de cada concepto ponía todo en una línea y la cuenta contable quedaba
+    tan angosta que no se leía. Ahora la cuenta ocupa toda la fila y debajo van la descripción, el
+    importe y el tacho.</p>
+    <div class="phones">
+      <figure class="phone">
+        <span class="tag before">Antes</span>
+        <img src="assets/tsk720a-726-13-movil-alta-gastos-antes.png" alt="Celular, antes: la fila del concepto muestra la cuenta como 4.... y la descripción como Descrip, todo apretado en una línea" />
+        <figcaption>La cuenta se veía como "4.…".</figcaption>
+      </figure>
+      <figure class="phone">
+        <span class="tag after">Ahora</span>
+        <img src="assets/tsk720a-726-13-movil-alta-gastos.png" alt="Celular, ahora: la cuenta 4.2.1/03/09 Gastos Bancarios ocupa toda la fila y debajo la descripción Comisión y el importe 1.600" />
+        <figcaption>La cuenta a lo ancho; debajo, descripción e importe.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="allow-break">
+    <h3 class="sub">"Ver" también funciona en el celular</h3>
+    <div class="phones">
+      <figure class="phone">
+        <img src="assets/tsk720a-726-14-movil-ver-aporte.png" alt="Celular: Ver de un aporte confirmado con Estado, Confirmado el y Asiento N° 36 apilados, y los campos bloqueados" />
+        <figcaption>Ver un aporte confirmado.</figcaption>
+      </figure>
+      <figure class="phone">
+        <img src="assets/tsk720a-726-17-movil-ver-gastos.png" alt="Celular: Ver de un gasto bancario con los tres conceptos apilados, el total $ 1.965,00 y el botón Cerrar" />
+        <figcaption>Ver un gasto bancario: conceptos, total y Cerrar.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section>
+    <h3 class="sub">La tabla en el celular</h3>
+    <p>El problema venía de la parte de abajo de la tabla (la que dice "Filas por página" y "Página 1 de
+    1"): no se acomodaba al ancho del teléfono y ensanchaba toda la pantalla. Ahora se reparte en varias
+    líneas. La tabla se desliza con el dedo para ver todas las columnas. Este arreglo vale para
+    <strong>todas las tablas del sistema</strong>, no solo esta; en la computadora se ven igual que
+    antes.</p>
+    <div class="phones">
+      <figure class="phone">
+        <span class="tag before">Antes</span>
+        <img src="assets/tsk720a-726-18-movil-listado-antes.png" alt="Celular, antes: la parte de abajo de la tabla, con Filas por página, Página 1 de 1 y las flechas en una sola línea, se sale por la derecha de la pantalla" />
+        <figcaption>Los controles de página se salían por la derecha.</figcaption>
+      </figure>
+      <figure class="phone">
+        <span class="tag after">Ahora</span>
+        <img src="assets/tsk720a-726-18-movil-listado.png" alt="Celular, ahora: Mostrando 1 a 10 de 10 registros, debajo Filas por página y Página 1 de 1, y debajo las flechas, todo dentro de la pantalla" />
+        <figcaption>Se acomodan en tres líneas, dentro de la pantalla.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section>
+    <h2>5. Qué no cambió</h2>
+    <div class="no-change-list">
+      <div class="no-change-item">
+        <span class="check">✓</span>
+        <span>La forma de cargar, editar, confirmar y eliminar un movimiento de fondos es la misma.
+        Editar, Confirmar y Eliminar siguen siendo solo para borradores.</span>
+      </div>
+      <div class="no-change-item">
+        <span class="check">✓</span>
+        <span>Lo que hace confirmar —mover el saldo del banco o la caja y generar el asiento— es igual que
+        antes. "Ver" solo muestra: no cambia nada.</span>
+      </div>
+      <div class="no-change-item">
+        <span class="check">✓</span>
+        <span>El número de asiento sigue existiendo y es el mismo; solo cambió dónde se consulta (en Ver,
+        no en una columna).</span>
+      </div>
+      <div class="no-change-item">
+        <span class="check">✓</span>
+        <span>Quien puede ver la tabla puede usar "Ver". Los permisos para confirmar, editar o eliminar
+        siguen como estaban.</span>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>6. Qué queda para la segunda parte del ticket 720</h2>
+    <div class="callout warning">
+      <h3>Pendiente de tu respuesta</h3>
+      <p>Las otras dos cosas del ticket 720 quedan para una segunda entrega, porque necesitamos que nos
+      respondas las preguntas que dejamos en el ticket antes de diseñarlas:</p>
+      <ul class="plain">
+        <li><strong>Tipos de movimiento configurables</strong>: poder crear tipos propios además de los
+        cuatro de hoy (aporte, retiro, transferencia y gastos e impuestos bancarios).</li>
+        <li><strong>Vínculo con los movimientos del banco</strong>: que la tabla se alimente (o se
+        relacione) con los movimientos de las cuentas bancarias.</li>
+      </ul>
+      <p>Lo que entregamos ahora no condiciona esas decisiones: el formulario y "Ver" van a funcionar igual
+      con los tipos nuevos que se definan.</p>
+    </div>
+  </section>
+
+  <footer class="doc-footer">
+    TSK-720 (primera parte) y TSK-726 — Ver un movimiento de fondos y el formulario en el celular · Tesorería → Movimientos de Fondos
+  </footer>
+
+</div>
+
+</body>
+</html>

@@ -1,64 +1,42 @@
 'use client';
 
-import { zodResolver } from '@hookform/resolvers/zod';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, Loader2 } from 'lucide-react';
-import moment from 'moment';
-import { useEffect, useRef, useState } from 'react';
-import { useForm } from 'react-hook-form';
-import { toast } from 'sonner';
+import { AlertTriangle } from 'lucide-react';
 
-import { Button } from '@/shared/components/ui/button';
 import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/shared/components/ui/dialog';
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from '@/shared/components/ui/form';
-import { Input } from '@/shared/components/ui/input';
-import { MoneyInput } from '@/shared/components/ui/money-input';
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from '@/shared/components/ui/select';
-import { Textarea } from '@/shared/components/ui/textarea';
-import {
-  formatFundMovementDate,
-  FUND_MOVEMENT_TYPE_LABELS,
-  FUND_MOVEMENT_TYPES,
-  fundMovementSchema,
-  type FundMovementFormInput,
-  type FundMovementTypeValue,
-} from '../../shared/validators';
-import {
-  confirmFundMovement,
-  createFundMovement,
-  getFundMovementById,
-  getFundMovementLineAccounts,
-  updateFundMovement,
-  type FundMovementAccountRef,
-  type FundMovementActionResult,
-  type FundMovementListItem,
-  type FundMovementPartnerOption,
-  type FundOption,
+import { Form } from '@/shared/components/ui/form';
+import { cn } from '@/shared/lib/utils';
+
+import { getModalCopy, type FundMovementModalMode } from '../../shared/view-mode';
+import type {
+  FundMovementAccountRef,
+  FundMovementListItem,
+  FundMovementPartnerOption,
+  FundOption,
 } from '../actions.server';
+import { useFundMovementForm } from '../hooks/useFundMovementForm';
+import { _FundMovementAmountDateFields } from './_FundMovementAmountDateFields';
+import { _FundMovementDescriptionField } from './_FundMovementDescriptionField';
+import { _FundMovementFormFooter } from './_FundMovementFormFooter';
 import { _FundMovementLinesField } from './_FundMovementLinesField';
+import { _FundMovementTypeField } from './_FundMovementTypeField';
+import { _FundMovementViewSummary } from './_FundMovementViewSummary';
+import { _FundSelectField } from './_FundSelectField';
 import { _PartnerAccountNotice } from './_PartnerAccountNotice';
+import { _PartnerSelectField } from './_PartnerSelectField';
+
+/**
+ * Vista (TSK-720a, D2): los controles van `disabled` pero el texto se lee al
+ * 100 %. Con `!` (Tailwind v4) porque `.x :disabled` y
+ * `.disabled\:opacity-50:disabled` empatan en especificidad y ganaría el orden
+ * del CSS generado.
+ */
+const READ_ONLY_FIELDSET = '[&_:disabled]:opacity-100! [&_:disabled]:cursor-default!';
 
 interface Props {
   open: boolean;
@@ -70,12 +48,11 @@ interface Props {
   defaultContributionsAccount: FundMovementAccountRef | null;
   /** Cuenta de gastos bancarios por defecto (Ajustes contables); `null` si no está configurada (TSK-718). */
   defaultBankChargesAccount: FundMovementAccountRef | null;
-  movement?: FundMovementListItem | null; // presente = modo edición
+  /** Fuente de verdad del modo (antes se derivaba de `Boolean(movement)`). */
+  mode: FundMovementModalMode;
+  /** Requerido en 'edit' y 'view'. */
+  movement?: FundMovementListItem | null;
   onSuccess: () => void;
-}
-
-function fundRefFrom(kind: string | null, id: string | null): string {
-  return kind && id ? `${kind}:${id}` : '';
 }
 
 export function _CreateFundMovementModal({
@@ -86,453 +63,126 @@ export function _CreateFundMovementModal({
   partners,
   defaultContributionsAccount,
   defaultBankChargesAccount,
+  mode,
   movement,
   onSuccess,
 }: Props) {
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const isEdit = Boolean(movement);
-  const queryClient = useQueryClient();
+  const isView = mode === 'view';
+  const copy = getModalCopy(mode, movement?.status);
+  const {
+    form,
+    lineAccounts,
+    isContribution,
+    isWithdrawal,
+    isTransfer,
+    isBankCharges,
+    isPartnerMovement,
+    isSubmitting,
+    submit,
+  } = useFundMovementForm({ open, mode, movement, onOpenChange, onSuccess });
 
-  const form = useForm<FundMovementFormInput>({
-    resolver: zodResolver(fundMovementSchema),
-    defaultValues: {
-      type: 'PARTNER_CONTRIBUTION',
-      date: moment().format('YYYY-MM-DD'),
-      amount: '',
-      description: '',
-      sourceFund: '',
-      destinationFund: '',
-      partnerId: '',
-      lines: [],
-    },
-  });
-
-  // Conceptos del movimiento en edición: solo BANK_CHARGES los tiene, y el
-  // listado (`movement`) no los trae. Se buscan aparte para no cargar la
-  // relación en el listado de los otros tres tipos, que no la usan.
-  const { data: movementDetail } = useQuery({
-    queryKey: ['fund-movement-detail', movement?.id],
-    queryFn: () => getFundMovementById(movement!.id),
-    enabled: open && Boolean(movement) && movement?.type === 'BANK_CHARGES',
-  });
-
-  // Cuentas imputables para los conceptos (egreso o activo, TSK-579): siempre
-  // se piden con el modal abierto, para tenerlas listas apenas se elige el
-  // tipo "Gastos e impuestos bancarios". `includeIds` preserva las cuentas ya
-  // guardadas en el detalle aunque hoy no cumplan el filtro (mismo patrón que
-  // `getAccountsForBankMovement`), para que reabrir un borrador con una cuenta
-  // dada de baja no muestre el combo vacío (hallazgo de revisión final, TSK-585).
-  const detailAccountIds = movementDetail?.lines.map((line) => line.accountId) ?? [];
-  const { data: lineAccounts = [] } = useQuery({
-    queryKey: ['fund-movement-line-accounts', detailAccountIds],
-    queryFn: () => getFundMovementLineAccounts(detailAccountIds),
-    enabled: open,
-  });
-
-  // Evita que el `useQuery` de `movementDetail` pise lo que el usuario ya
-  // escribió: la cache de React Query no se invalida en ningún otro lado
-  // (`router.refresh()` en `_FundMovementsTable` solo refresca el Server
-  // Component), así que al reabrir un movimiento recién editado esta query
-  // sirve los conceptos viejos al instante y, si después llega un refetch en
-  // segundo plano con los datos frescos, `movementDetail` cambia de
-  // identidad otra vez. Sin esta guarda el efecto de abajo se disparaba una
-  // segunda vez con ese refetch y pisaba lo que el usuario hubiera tecleado
-  // en el medio (hallazgo de revisión final, TSK-585). Por eso el reset de
-  // los datos del movimiento se aplica una sola vez por apertura del modal
-  // para un movimiento dado, en vez de cada vez que cambia la identidad de
-  // `movementDetail`.
-  const appliedDetailRef = useRef<string | null>(null);
-
-  // Al abrir en modo edición, precargar los datos del movimiento
-  useEffect(() => {
-    if (!open) {
-      appliedDetailRef.current = null;
-      return;
-    }
-    if (movement) {
-      const needsDetail = movement.type === 'BANK_CHARGES';
-      // Para BANK_CHARGES hace falta esperar a que llegue `movementDetail`
-      // (aunque sea de cache) antes de resetear con sus conceptos.
-      if (needsDetail && !movementDetail) return;
-      if (appliedDetailRef.current === movement.id) return;
-      appliedDetailRef.current = movement.id;
-
-      form.reset({
-        type: movement.type as FundMovementTypeValue,
-        // UTC: la fecha se guarda anclada a mediodía UTC, leerla en local la corría un día (TSK-483)
-        date: formatFundMovementDate(movement.date, 'YYYY-MM-DD'),
-        amount: String(movement.amount),
-        description: movement.description,
-        sourceFund: fundRefFrom(movement.fundOutKind, movement.fundOutId),
-        destinationFund: fundRefFrom(movement.fundInKind, movement.fundInId),
-        partnerId: movement.partnerId ?? '',
-        lines:
-          needsDetail && movementDetail
-            ? movementDetail.lines.map((line) => ({
-                accountId: line.accountId,
-                description: line.description,
-                amount: String(line.amount),
-              }))
-            : [],
-      });
-    } else if (appliedDetailRef.current !== 'new') {
-      appliedDetailRef.current = 'new';
-      form.reset({
-        type: 'PARTNER_CONTRIBUTION',
-        date: moment().format('YYYY-MM-DD'),
-        amount: '',
-        description: '',
-        sourceFund: '',
-        destinationFund: '',
-        partnerId: '',
-        lines: [],
-      });
-    }
-  }, [open, movement, movementDetail, form]);
-
-  const type = form.watch('type') as FundMovementTypeValue;
-  const isContribution = type === 'PARTNER_CONTRIBUTION';
-  const isWithdrawal = type === 'PARTNER_WITHDRAWAL';
-  const isTransfer = type === 'ACCOUNT_TRANSFER';
-  const isBankCharges = type === 'BANK_CHARGES';
-  const isPartnerMovement = isContribution || isWithdrawal;
   const noFundAccounts = banks.length === 0 && cashRegisters.length === 0;
   const partnerId = form.watch('partnerId');
   const selectedPartner = partners.find((p) => p.id === partnerId);
-
-  // Al cambiar el tipo de movimiento, los campos que dejan de aplicar no
-  // pueden quedar colgados en el formulario: los conceptos se mandarían con
-  // un tipo que no los usa, y un destino suelto de un tipo anterior se
-  // resolvería igual en el servidor porque no depende de qué campos se
-  // muestran en pantalla (TSK-585).
-  //
-  // "amount" no se toca acá: el schema lo dejó sin ninguna validación para
-  // BANK_CHARGES (ni requerido, ni formato, ni "> 0"), así que un valor
-  // viejo en ese campo oculto no rompe nada y no hace falta pisarlo con un
-  // sentinela. El servidor igual lo ignora y calcula el importe sumando los
-  // conceptos (`resolveMovementAmount`). Esto también evita que este efecto
-  // le gane al `reset` de más arriba cuando se reabre un borrador
-  // BANK_CHARGES para editar: antes, los dos escribían "amount" sin saber
-  // uno del otro y el importe que acababa de cargar el reset (el real,
-  // útil para mostrarlo si se vuelve a otro tipo) se perdía.
-  //
-  // El servidor persiste `partnerId` y `sourceFund` sin mirar el tipo, así
-  // que faltaba limpiarlos también: antes solo se limpiaban `lines` y
-  // `destinationFund`, y un gasto bancario podía guardarse con un socio
-  // colgado de un tipo anterior, o un aporte de socio con un origen suelto de
-  // una transferencia previa (hallazgo de revisión final, TSK-585).
-  useEffect(() => {
-    if (!isBankCharges) {
-      if (form.getValues('lines')?.length) form.setValue('lines', []);
-    } else {
-      if (form.getValues('destinationFund')) form.setValue('destinationFund', '');
-    }
-    // TSK-717: solo aporte y retiro usan `partnerId` (y ahora define la cuenta
-    // del asiento); una transferencia tampoco debe arrastrar un socio elegido
-    // en un tipo anterior.
-    if (!isPartnerMovement && form.getValues('partnerId')) form.setValue('partnerId', '');
-    if (isContribution && form.getValues('sourceFund')) {
-      form.setValue('sourceFund', '');
-    }
-  }, [isBankCharges, isContribution, isPartnerMovement, form]);
-
-  const persist = async (data: FundMovementFormInput, confirm: boolean) => {
-    setIsSubmitting(true);
-    try {
-      let result: FundMovementActionResult;
-
-      if (isEdit && movement) {
-        result = await updateFundMovement(movement.id, data);
-        if (result.success && confirm) {
-          result = await confirmFundMovement(movement.id);
-        }
-      } else {
-        result = await createFundMovement(data, confirm);
-      }
-
-      // Los errores esperables llegan como dato con su mensaje real: en producción
-      // una excepción del server action se ve como un digest ilegible (TSK-481).
-      if (!result.success) {
-        toast.error(result.error);
-        return;
-      }
-
-      // La cache de `movementDetail` no se invalida sola: `onSuccess` hace
-      // `router.refresh()` (ver `_FundMovementsTable`), que refresca el Server
-      // Component pero no toca React Query. Sin esto, reabrir este mismo
-      // movimiento poco después podía servir los conceptos previos a esta
-      // edición (hallazgo de revisión final, TSK-585).
-      if (isEdit && movement) {
-        await queryClient.invalidateQueries({ queryKey: ['fund-movement-detail', movement.id] });
-      }
-
-      toast.success(
-        confirm ? 'Movimiento confirmado' : isEdit ? 'Borrador actualizado' : 'Borrador guardado'
-      );
-      onOpenChange(false);
-      onSuccess();
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const submit = (confirm: boolean) => form.handleSubmit((data) => persist(data, confirm))();
-
-  const renderFundOptions = () => (
-    <>
-      {banks.length > 0 && (
-        <SelectGroup>
-          <SelectLabel>Bancos</SelectLabel>
-          {banks.map((b) => (
-            <SelectItem key={`BANK:${b.id}`} value={`BANK:${b.id}`}>
-              {b.label}
-            </SelectItem>
-          ))}
-        </SelectGroup>
-      )}
-      {cashRegisters.length > 0 && (
-        <SelectGroup>
-          <SelectLabel>Cajas</SelectLabel>
-          {cashRegisters.map((c) => (
-            <SelectItem key={`CASH:${c.id}`} value={`CASH:${c.id}`}>
-              {c.label}
-            </SelectItem>
-          ))}
-        </SelectGroup>
-      )}
-    </>
-  );
+  // D4: el snapshot guardado solo se ofrece en vista (en edición un fondo fuera
+  // de catálogo terminaría en un error del servidor al guardar).
+  const snapshot = (label: string | null | undefined) => (isView ? label : null);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[560px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>
-            {isEdit ? 'Editar Movimiento de Fondos' : 'Nuevo Movimiento de Fondos'}
-          </DialogTitle>
-          <DialogDescription>
-            Se guarda como borrador editable. Al confirmarlo, actualiza el saldo del banco/caja y
-            genera el asiento contable.
-          </DialogDescription>
+          <DialogTitle>{copy.title}</DialogTitle>
+          <DialogDescription>{copy.description}</DialogDescription>
         </DialogHeader>
 
         <Form {...form}>
           <form className="min-w-0 space-y-4">
-            <FormField
-              control={form.control}
-              name="type"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Tipo de movimiento *</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {FUND_MOVEMENT_TYPES.map((t) => (
-                        <SelectItem key={t} value={t}>
-                          {FUND_MOVEMENT_TYPE_LABELS[t]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
+            {isView && movement && <_FundMovementViewSummary movement={movement} />}
+
+            {/* `min-w-0`: el `min-inline-size: min-content` por defecto del fieldset
+                podría volver a desbordar en mobile (TSK-726). Radix Select y el
+                combobox reciben además `disabled` explícito: el fieldset no los frena. */}
+            <fieldset
+              disabled={isView}
+              className={cn('min-w-0 space-y-4', isView && READ_ONLY_FIELDSET)}
+            >
+              <_FundMovementTypeField disabled={isView} />
+
+              {!isView && noFundAccounts && (
+                <div className="flex items-start gap-2 rounded-md border border-orange-500/50 bg-orange-500/10 p-3 text-sm text-orange-600">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>
+                    No hay cuentas bancarias ni cajas con sesión abierta disponibles. Creá una
+                    cuenta bancaria o abrí una caja antes de registrar movimientos de fondos.
+                  </span>
+                </div>
               )}
-            />
 
-            {noFundAccounts && (
-              <div className="flex items-start gap-2 rounded-md border border-orange-500/50 bg-orange-500/10 p-3 text-sm text-orange-600">
-                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                <span>
-                  No hay cuentas bancarias ni cajas con sesión abierta disponibles. Creá una cuenta
-                  bancaria o abrí una caja antes de registrar movimientos de fondos.
-                </span>
-              </div>
-            )}
+              <_FundMovementAmountDateFields showAmount={!isBankCharges} />
 
-            {isBankCharges ? (
-              <FormField
-                control={form.control}
-                name="date"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Fecha *</FormLabel>
-                    <FormControl>
-                      <Input type="date" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            ) : (
-              <div className="grid gap-4 md:grid-cols-2">
-                <FormField
-                  control={form.control}
-                  name="amount"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Monto *</FormLabel>
-                      <FormControl>
-                        <MoneyInput
-                          placeholder="0,00"
-                          value={field.value}
-                          onChange={field.onChange}
-                          onBlur={field.onBlur}
-                          name={field.name}
-                          ref={field.ref}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
+              {(isContribution || isTransfer) && (
+                <_FundSelectField
+                  name="destinationFund"
+                  label={
+                    isContribution
+                      ? 'Banco/caja donde ingresan los fondos *'
+                      : 'Banco/caja destino *'
+                  }
+                  banks={banks}
+                  cashRegisters={cashRegisters}
+                  disabled={isView}
+                  snapshotLabel={snapshot(movement?.fundInLabel)}
                 />
-                <FormField
-                  control={form.control}
-                  name="date"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Fecha *</FormLabel>
-                      <FormControl>
-                        <Input type="date" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-            )}
-
-            {(isContribution || isTransfer) && (
-              <FormField
-                control={form.control}
-                name="destinationFund"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>
-                      {isContribution
-                        ? 'Banco/caja donde ingresan los fondos *'
-                        : 'Banco/caja destino *'}
-                    </FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value || undefined}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Seleccionar banco o caja" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>{renderFundOptions()}</SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            )}
-
-            {(isWithdrawal || isTransfer || isBankCharges) && (
-              <FormField
-                control={form.control}
-                name="sourceFund"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>
-                      {isWithdrawal || isBankCharges
-                        ? 'Banco/caja de donde salen los fondos *'
-                        : 'Banco/caja origen *'}
-                    </FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value || undefined}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Seleccionar banco o caja" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>{renderFundOptions()}</SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            )}
-
-            {isBankCharges && (
-              <_FundMovementLinesField
-                accounts={lineAccounts}
-                defaultAccount={defaultBankChargesAccount}
-              />
-            )}
-
-            {isPartnerMovement && (
-              <FormField
-                control={form.control}
-                name="partnerId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Socio *</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value || undefined}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Seleccionar socio" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {partners.map((p) => (
-                          <SelectItem key={p.id} value={p.id}>
-                            {p.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            )}
-
-            {isPartnerMovement && (
-              <_PartnerAccountNotice
-                partner={selectedPartner}
-                defaultAccount={defaultContributionsAccount}
-              />
-            )}
-
-            <FormField
-              control={form.control}
-              name="description"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Descripción *</FormLabel>
-                  <FormControl>
-                    <Textarea placeholder="Concepto del movimiento" rows={2} {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
               )}
-            />
 
-            <DialogFooter className="gap-2 sm:gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => onOpenChange(false)}
-                disabled={isSubmitting}
-              >
-                Cancelar
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => submit(false)}
-                disabled={isSubmitting}
-              >
-                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Guardar
-              </Button>
-              <Button type="button" onClick={() => submit(true)} disabled={isSubmitting}>
-                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Guardar y Confirmar
-              </Button>
-            </DialogFooter>
+              {(isWithdrawal || isTransfer || isBankCharges) && (
+                <_FundSelectField
+                  name="sourceFund"
+                  label={
+                    isWithdrawal || isBankCharges
+                      ? 'Banco/caja de donde salen los fondos *'
+                      : 'Banco/caja origen *'
+                  }
+                  banks={banks}
+                  cashRegisters={cashRegisters}
+                  disabled={isView}
+                  snapshotLabel={snapshot(movement?.fundOutLabel)}
+                />
+              )}
+
+              {isBankCharges && (
+                <_FundMovementLinesField
+                  accounts={lineAccounts}
+                  defaultAccount={defaultBankChargesAccount}
+                  readOnly={isView}
+                />
+              )}
+
+              {isPartnerMovement && (
+                <_PartnerSelectField
+                  partners={partners}
+                  disabled={isView}
+                  snapshotLabel={snapshot(movement?.partnerName)}
+                />
+              )}
+
+              {isPartnerMovement && !isView && (
+                <_PartnerAccountNotice
+                  partner={selectedPartner}
+                  defaultAccount={defaultContributionsAccount}
+                />
+              )}
+
+              <_FundMovementDescriptionField />
+            </fieldset>
+
+            <_FundMovementFormFooter
+              mode={mode}
+              isSubmitting={isSubmitting}
+              onCancel={() => onOpenChange(false)}
+              onSubmit={(confirm) => void submit(confirm)}
+            />
           </form>
         </Form>
       </DialogContent>
