@@ -7,6 +7,7 @@ import { getActiveCompanyId } from '@/shared/lib/company';
 import { checkPermission } from '@/shared/lib/permissions';
 import { revalidatePath } from 'next/cache';
 import { createJournalEntryTx } from '../../shared/utils/journal-entry-tx';
+import { NOT_CLOSE_GENERATED_OPENING_SQL } from '../../shared/utils/closing-entries';
 import type { JournalEntryLineDraft } from '../../shared/utils/journal-entry-lines';
 import { endOfMonthUtc, formatMonth, startOfMonthUtc } from '../../shared/utils/utc-month';
 
@@ -68,6 +69,7 @@ export async function previewVatSettlement(
         AND je.status = 'POSTED'
         AND je.date >= ${startDate}
         AND je.date <= ${endDate}
+        AND ${NOT_CLOSE_GENERATED_OPENING_SQL} -- la apertura del cierre no es IVA del mes (TSK-760 H4)
         AND jel.account_id = ANY(${debitAccountIds}::uuid[])
     `;
 
@@ -80,6 +82,7 @@ export async function previewVatSettlement(
         AND je.status = 'POSTED'
         AND je.date >= ${startDate}
         AND je.date <= ${endDate}
+        AND ${NOT_CLOSE_GENERATED_OPENING_SQL} -- la apertura del cierre no es IVA del mes (TSK-760 H4)
         AND jel.account_id = ANY(${creditAccountIds}::uuid[])
     `;
 

@@ -7,6 +7,7 @@ import { logger } from '@/shared/lib/logger';
 import { getActiveCompanyId } from '@/shared/lib/company';
 import { checkPermission } from '@/shared/lib/permissions';
 import { revalidateAccountingRoutes } from '../../shared/utils';
+import { NOT_CLOSING_ENTRY_SQL } from '../../shared/utils/closing-entries';
 import {
   AccountType,
   AccountNature,
@@ -31,7 +32,7 @@ import moment from 'moment';
  * Si estamos antes del mes de inicio fiscal, el año fiscal es el año anterior.
  */
 function getCurrentFiscalYear(fiscalYearStart: Date): number {
-  const startMonth = moment(fiscalYearStart).month(); // 0-based
+  const startMonth = moment.utc(fiscalYearStart).month(); // 0-based (día UTC, TSK-760)
   const now = moment();
   const currentMonth = now.month();
   const currentYear = now.year();
@@ -49,7 +50,7 @@ function getCurrentFiscalYear(fiscalYearStart: Date): number {
  * Ej: si fiscalYearStart es julio, retorna ['Jul', 'Ago', 'Sep', ..., 'Jun'].
  */
 function getFiscalMonthLabels(fiscalYearStart: Date): string[] {
-  const startMonth = moment(fiscalYearStart).month(); // 0-based
+  const startMonth = moment.utc(fiscalYearStart).month(); // 0-based (día UTC, TSK-760)
   return Array.from({ length: 12 }, (_, i) =>
     moment()
       .month((startMonth + i) % 12)
@@ -92,6 +93,7 @@ async function calculateBudgetExecution(
       AND je.status = 'POSTED'
       AND je.date >= ${fiscalYearStart}
       AND je.date <= ${fiscalYearEnd}
+      AND ${NOT_CLOSING_ENTRY_SQL} -- la refundición no es ejecución (TSK-760 B19)
     GROUP BY EXTRACT(MONTH FROM je.date), EXTRACT(YEAR FROM je.date)
   `;
 
@@ -321,8 +323,9 @@ export async function getBudgetDetail(budgetId: string) {
     }
 
     // Calcular las fechas de inicio y fin del año fiscal correspondiente
-    const fiscalStartMonth = moment(settings.fiscalYearStart).month(); // 0-based
-    const fiscalStartDay = moment(settings.fiscalYearStart).date();
+    // Mes y día de inicio por día UTC (TSK-760): Ajustes se guarda a 00:00Z o 03:00Z.
+    const fiscalStartMonth = moment.utc(settings.fiscalYearStart).month(); // 0-based
+    const fiscalStartDay = moment.utc(settings.fiscalYearStart).date();
     const fiscalYearStartDate = moment()
       .year(budget.fiscalYear)
       .month(fiscalStartMonth)

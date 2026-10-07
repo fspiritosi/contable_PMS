@@ -11,6 +11,12 @@ import {
   calculateAllAccountBalances,
   verifyAccountingEquation,
 } from '../../shared/utils/balances';
+import {
+  NOT_CLOSE_GENERATED_OPENING_SQL,
+  NOT_CLOSING_ENTRY_SQL,
+  notCloseGeneratedOpeningWhere,
+  notClosingEntryWhere,
+} from '../../shared/utils/closing-entries';
 import { isCreditNote } from '@/modules/commercial/shared/voucher-utils';
 import { getActiveCompanyId } from '@/shared/lib/company';
 import {
@@ -260,6 +266,7 @@ export async function getGeneralLedger(companyId: string, fromDate: Date, toDate
       WHERE je.company_id = ${companyId}::uuid
         AND je.status = 'POSTED'
         AND je.date <= ${beforePeriod}
+        AND ${NOT_CLOSE_GENERATED_OPENING_SQL}
       GROUP BY jel.account_id
     `;
 
@@ -268,12 +275,14 @@ export async function getGeneralLedger(companyId: string, fromDate: Date, toDate
       priorMap.set(row.account_id, row.total_debit - row.total_credit);
     }
 
-    // Movimientos del período
+    // Movimientos del período (sin la apertura generada por el cierre: su saldo ya está
+    // en el saldo anterior, TSK-760 B18)
     const entries = await prisma.journalEntry.findMany({
       where: {
         companyId,
         status: JournalEntryStatus.POSTED,
         date: { gte: from, lte: to },
+        ...notCloseGeneratedOpeningWhere,
       },
       orderBy: [{ date: 'asc' }, { number: 'asc' }],
       include: { lines: true },
@@ -528,7 +537,8 @@ export async function getIncomeStatement(companyId: string, fromDate: Date, toDa
       orderBy: { code: 'asc' },
     });
 
-    // Calcular movimientos en el período
+    // Calcular movimientos en el período (sin la refundición: si no, el ejercicio cerrado
+    // daría resultado cero, TSK-760 B19)
     const entries = await prisma.journalEntry.findMany({
       where: {
         companyId,
@@ -537,6 +547,7 @@ export async function getIncomeStatement(companyId: string, fromDate: Date, toDa
           gte: from,
           lte: to,
         },
+        ...notClosingEntryWhere,
       },
       include: {
         lines: true,
@@ -1136,8 +1147,9 @@ export async function getBudgetVarianceReport(
     }
 
     // Calcular las fechas de inicio y fin del año fiscal
-    const fiscalStartMonth = moment(settings.fiscalYearStart).month();
-    const fiscalStartDay = moment(settings.fiscalYearStart).date();
+    // Mes y día de inicio por día UTC (TSK-760): Ajustes se guarda a 00:00Z o 03:00Z.
+    const fiscalStartMonth = moment.utc(settings.fiscalYearStart).month();
+    const fiscalStartDay = moment.utc(settings.fiscalYearStart).date();
     const fiscalYearStartDate = moment()
       .year(fiscalYear)
       .month(fiscalStartMonth)
@@ -1208,6 +1220,7 @@ export async function getBudgetVarianceReport(
         AND je.status = 'POSTED'
         AND je.date >= ${fiscalYearStartDate}
         AND je.date <= ${fiscalYearEndDate}
+        AND ${NOT_CLOSING_ENTRY_SQL}
       GROUP BY jel.account_id
     `;
 
@@ -1588,6 +1601,7 @@ export async function getCostCenterMovements(
           companyId,
           status: { in: [JournalEntryStatus.DRAFT, JournalEntryStatus.POSTED] },
           date: { gte: from, lte: to },
+          ...notClosingEntryWhere, // la refundición no es un movimiento (TSK-760 B19)
         },
         ...costCenterWhere,
       },

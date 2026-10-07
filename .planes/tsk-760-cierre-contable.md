@@ -1,7 +1,7 @@
 # TSK-760 — Cierre contable: el cierre anual no funciona y el bloqueo de períodos se saltea
 
 **Fecha de inicio:** 2026-10-06
-**Estado:** Implementación en progreso (Fases 1, 2 y 4 a 8 de 14 completadas; Fase 3 pendiente del diagnóstico de producción)
+**Estado:** Implementación en progreso (Fases 1, 2 y 4 a 9 de 14 completadas; Fase 3 pendiente del diagnóstico de producción)
 
 ---
 
@@ -1061,7 +1061,7 @@ Otras decisiones de esta planificación:
 - **Objetivo:** el cierre anual se puede ejecutar después de cerrar los meses, genera asientos
   correctos y los reportes no se rompen después.
 - **Tareas:**
-  - [ ] `ACC/features/fiscal-year-close/actions.server.ts` `closeFiscalYear` → `ActionResult`:
+  - [x] `ACC/features/fiscal-year-close/actions.server.ts` `closeFiscalYear` → `ActionResult`:
         FY por id del FY abierto más antiguo (no por solapamiento con Ajustes); exige todos los
         MONTHLY cerrados (B1, mensaje con los meses abiertos) y **ningún DRAFT** en el rango
         (A5/B4, cantidad por mes y primeros números); preview **dentro** de la tx; refundición con
@@ -1070,18 +1070,18 @@ Otras decisiones de esta planificación:
         `periodType: 'OPENING'` y balance verificado (B21); FY siguiente con `ensureFiscalYearTx`
         (reutiliza si existe, B24; meses en UTC, sin los 13 meses); `isClosed`, `closedAt`,
         `closingEntryId`, `openingEntryId`; `lockedUntilDate` y Ajustes al FY nuevo.
-  - [ ] `previewFiscalYearClose` / `getFiscalYearStatus`: mismos cálculos compartidos (función
+  - [x] `previewFiscalYearClose` / `getFiscalYearStatus`: mismos cálculos compartidos (función
         `computeClosePreviewTx`); el status informa meses abiertos y DRAFT pendientes.
-  - [ ] B18: `UT/balances.ts` (`calculateAllAccountBalances`, `calculateOpeningBalance` y
+  - [x] B18: `UT/balances.ts` (`calculateAllAccountBalances`, `calculateOpeningBalance` y
         afines) y el saldo anterior del Mayor (`ACC/features/reports/actions.server.ts:233`)
         excluyen las aperturas generadas por cierre (helper `getClosingGeneratedEntryIds(companyId)`
         en `UT/`). B19: Estado de Resultados (`:508-541`), Presupuesto vs. real y movimientos por
         centro de costo excluyen los `closingEntryId`.
-  - [ ] UI: `_ClosePreviewDialog.tsx` (215) pasa a `useQuery(['fiscalYearClosePreview'])` (fuera
+  - [x] UI: `_ClosePreviewDialog.tsx` (215) pasa a `useQuery(['fiscalYearClosePreview'])` (fuera
         el `useEffect`) y se parte en `_ClosePreviewDialog.tsx` + `_ClosePreviewTables.tsx` < 200;
         `_FiscalYearStatus.tsx` muestra meses abiertos y DRAFT pendientes con link a Bloqueo de
         períodos y Asientos.
-  - [ ] `ACC/features/fiscal-year-close/fiscal-year-close.integration.test.ts`: con meses
+  - [x] `ACC/features/fiscal-year-close/fiscal-year-close.integration.test.ts`: con meses
         abiertos → rechaza nombrándolos; con DRAFT → rechaza listándolos; sin resultados → B20;
         cierre feliz: refundición y apertura balanceadas, FY siguiente con 12 meses, FY siguiente
         **ya existente** reutilizado (B24); después del cierre, Balance/Sumas y Saldos del FY nuevo
@@ -3263,7 +3263,100 @@ ACTIVO, no imputable).
 - `docs/` y la guía in-app (textos nuevos de "Bloqueo de Períodos") quedan para la Fase 13.
 
 ### Fase 9: Cierre anual
-**Estado:** Pendiente
+**Estado:** Completada (2026-10-06)
+
+**Archivos creados** (`ACC/` = `src/modules/accounting/`, `UT/` = `ACC/shared/utils/`, `FYC/` = `ACC/features/fiscal-year-close/`):
+- `UT/fiscal-year-close-math.ts` (puro, `Decimal`): `buildClosingLines` (refundición; contrapartida en
+  Resultado solo si el neto ≠ 0, H5/B20), `buildOpeningLines` (patrimoniales + efecto de la refundición
+  sobre Resultado fusionado en una línea, B21) y `summarizeResults`.
+- `UT/closing-entries.ts`: `NOT_CLOSE_GENERATED_OPENING_SQL`, `NOT_CLOSING_ENTRY_SQL` y sus `*Where`
+  Prisma (§3.3.8), con el invariante "`openingEntryId` solo lo escribe el cierre".
+- `FYC/fiscal-year-close.ts` (`server-only`, sin `'use server'`, H7): `computeClosePreviewTx` (saldos
+  POSTED acumulados al fin del FY, sin filtro de cuenta activa, sin aperturas generadas; C4/H5/B18),
+  `buildFiscalYearStatusTx`, `findOpenFiscalYearTx`, `closeFiscalYearTx` (§3.1.5: lock → FY abierto
+  más antiguo → meses (B1) → borradores (A5/B4) → cuenta Resultado → vista previa (B20) → refundición
+  POSTED en CLOSING con el FY abierto (D12) → `ensureFiscalYearTx` del siguiente (B24) → apertura
+  verificada en OPENING (B21) → FY y todos sus períodos cerrados, `closingEntryId`/`openingEntryId`,
+  OPENING del siguiente cerrado (C7) → `syncLockedUntilDateTx` → Ajustes al FY abierto más antiguo).
+- `FYC/fiscal-year-close-common.ts` (tipos `ClosePreview`, `FiscalYearCloseStatus`, query key, links).
+- `FYC/components/_CloseChecklist.tsx` (93) y `_ClosePreviewTables.tsx` (106).
+- Tests: `UT/fiscal-year-close-math.test.ts` (19) y `FYC/fiscal-year-close.integration.test.ts` (17,
+  prefijo `TSK760-FYC-`).
+
+**Archivos modificados:**
+- `FYC/actions.server.ts` reescrito: `getFiscalYearStatus()`, `previewFiscalYearClose(fiscalYearId)` →
+  `ActionResult<ClosePreview>` y `closeFiscalYear({ fiscalYearId })` → `ActionResult<{ closingEntryNumber;
+  openingEntryNumber; nextFiscalYearNumber }>` (`timeout: 30_000, maxWait: 10_000`, H10), sin `companyId`
+  del cliente. `FiscalYearClose.tsx` ya no pasa `companyId`.
+- `_FiscalYearStatus.tsx` (116): ejercicio abierto más antiguo, checklist con links a Bloqueo de
+  Períodos (`#bloqueo-periodos`) y Asientos, botón "Cerrar ejercicio N° X" deshabilitado si
+  `!canClose`, tarjeta del último cerrado (refundición/apertura). `_ClosePreviewDialog.tsx` (215 → 116):
+  `useQuery` (fuera el `useEffect`) + `useMutation`, `Button` propio, toast con los números.
+- Exclusiones (§3.3.8): `UT/balances.ts` (los 5 cálculos; `whereCondition: any` → tipado), Mayor (saldo
+  anterior y movimientos), Estado de Resultados, Presupuesto vs. real, movimientos por centro de costo
+  (`reports/actions.server.ts`), `budgets/actions.server.ts` (ejecución), control de presupuesto de
+  gastos (`INT/commercial`), IVA (preview), diferencia de cambio e inflación.
+- Mes/día de inicio del ejercicio leídos con `moment.utc` en presupuestos (`budgets/actions.server.ts`
+  ×3, `getBudgetVarianceReport`, `checkBudgetForExpense`, `_CreateBudgetModal`): tras el cierre Ajustes
+  queda a 00:00Z y en hora local (dev, UTC-3) el ejercicio de presupuestos arrancaba el 31/12.
+
+**Tests** (TDD: math rojo por módulo inexistente; integración 13/17 en rojo con las actions viejas; con
+los fragmentos de exclusión neutralizados, 7 casos de reportes fallan; con la implementación, verdes):
+validaciones (meses abiertos B1 con texto exacto y `openMonths`; borrador viejo → texto y
+`pendingDrafts`; B20 en vista previa y cierre sin consumir número ni crear FY; sin cuenta de Resultado;
+FY que no es el más antiguo; FY inexistente); cierre feliz (vista previa = asientos; refundición
+CLOSING 31/12 y apertura OPENING 01/01 balanceadas; FY 1 con 14 períodos cerrados; FY 2 con 12 meses
+abiertos y OPENING cerrado; Ajustes y `lockedUntilDate`; estado posterior; "ya está cerrado"); después
+del cierre: Balance, Sumas y Saldos, `calculateAccountBalance` y Mayor de enero = saldos del cierre (B18),
+Estado de Resultados 2026 con sus valores (B19), presupuesto y centros de costo sin la refundición, IVA
+de enero, diferencia de cambio e inflación sin la apertura (H4); reabrir 12/2026 → rechazo; **segundo
+cierre** sin duplicar; FY 2 preexistente reutilizado (B24) con resultado previo al primer FY y cuenta
+inactiva incluidos (C4/H5) y sin línea de Resultado en 0.
+
+**Calidad:** `npm run test` = **62 archivos, 827 tests, verdes**; `check-types` = **219**; `eslint` de los
+archivos tocados sin errores (warnings previos: `Input` en `_CreateBudgetModal`, `fiscalYearStart/End` en
+`checkBudgetForExpense`, dos interfaces sin uso en `reports`). Sin `any` (se fue uno) ni `console`.
+Componentes < 200. No quedan empresas de test.
+
+**Prueba en navegador** (Playwright contra :3010; script temporal borrado; capturas `f9-01` a `f9-17` en
+el scratchpad). Empresa sembrada por SQL **"TSK760 Demo cierre anual (no usar)"**
+(`76076076-0000-4000-8000-000000000009`), el usuario de dev como dueño, Ajustes 2025 (03:00Z), 6 asientos
+POSTED 2025 y un borrador N° 7 en diciembre. Se cambió la empresa activa con el selector del sidebar.
+- Antes: la pantalla de cierre lista los 12 meses abiertos y "1 borrador sin registrar: 12/2025: N° 7",
+  botón deshabilitado. Balance al 31/12/2025 y Estado de Resultados 2025 (680.000 / 370.000).
+- Bloqueo de Períodos: enero → noviembre en orden; diciembre "tiene 1 borrador" → "Registrar el
+  borrador y cerrar".
+- Cierre: checklist en verde; vista previa (ingresos 680.000, gastos 375.000, ganancia 305.000;
+  refundición y apertura de 5 líneas por 1.405.000); "Confirmar cierre" → toast "Ejercicio N° 1 cerrado:
+  refundición N° 8 y apertura N° 9. Queda abierto el ejercicio N° 2." DB: FY 1 cerrado con 14 períodos
+  cerrados, FY 2 (2026, 00:00Z → 23:59:59.999Z) con OPENING cerrado, `locked_until_date` 31/12/2025.
+- Después: Balance al 31/01/2026 = 1.405.000 de activo (no el doble), Sumas y Saldos de enero 2026 y Mayor
+  con saldo anterior sin movimientos repetidos, plan de cuentas con saldos del Ej. 2, Estado de
+  Resultados 2025 = 305.000 (no cero), Diario con la refundición (31/12) y la apertura (01/01), Bloqueo de
+  Períodos con el FY 2 y la nota del piso. Móvil 390 px sin scroll horizontal.
+- **Ojo:** la primera vez los reportes de saldos salieron duplicados: el dev server (Turbopack) no había
+  recargado `balances.ts` (`'use server'`). Reiniciado el server, correctos. Reverificar en build de
+  producción (Fase 14).
+- Al terminar se volvió a "Empresa de Prueba 01 SA" (verificado en `user_preferences`).
+
+**Datos que quedaron en la DB de dev:** la empresa **"TSK760 Demo cierre anual (no usar)"**
+(`76076076-0000-4000-8000-000000000009`, 9 cuentas, asientos N° 1 a 9 POSTED, FY 1 2025 cerrado, FY 2
+2026 abierto) con el usuario de dev como miembro dueño. No se borró (asientos POSTED inmutables); para
+borrarla hace falta `session_replication_role = 'replica'`. "Empresa de Prueba 01 SA" no se tocó.
+
+**Desvíos y notas:**
+- `closing-entries.ts` sin `server-only` (solo constantes): si no, había que mockearlo en tests de
+  reportes existentes (`cost-center-movements.integration`).
+- Refundición fechada el último día a 00:00Z (no al `endDate` 23:59:59.999Z), como los demás asientos
+  de día. Textos de §3.3.9 respetados; nuevos: "Ejercicio no encontrado.", singular "hay 1 borrador sin
+  registrar", y la vista previa también devuelve B20.
+- `FiscalYearCloseStatus.fiscalYear.id` es `string | null` (sin ejercicios, desde Ajustes), como en la
+  Fase 8. `ClosePreview` agrega `openingDay`.
+- Preexistente, fuera de alcance: `getBalanceSheet.isBalanced` compara activo (deudor, +) contra pasivo
+  y patrimonio (acreedor, −), así que el Balance General muestra "no está equilibrado" en toda empresa
+  con pasivo o patrimonio (antes y después del cierre). Candidato a ticket aparte. Warnings de `key`
+  previos en `_AccountsTable`/reportes.
+- `docs/` y guía in-app quedan para la Fase 13.
 
 ### Fase 10: Reversión desde Asientos (+ "Eliminar borrador", C6)
 **Estado:** Pendiente

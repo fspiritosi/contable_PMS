@@ -47,6 +47,7 @@ import { prisma } from '@/shared/lib/prisma';
 import { logger } from '@/shared/lib/logger';
 import { BusinessError } from '@/shared/lib/action-result';
 import { createJournalEntryTx } from '@/modules/accounting/shared/utils/journal-entry-tx';
+import { NOT_CLOSING_ENTRY_SQL } from '@/modules/accounting/shared/utils/closing-entries';
 import { isCreditNote } from '@/modules/commercial/shared/voucher-utils';
 import { expandByCostCenter } from '@/modules/commercial/shared/cost-center';
 import { buildMissingTributeAccountsMessage } from '@/modules/commercial/shared/perceptions';
@@ -1011,7 +1012,7 @@ export async function checkBudgetForExpense(
     if (!settings) return null;
 
     // Determinar el año fiscal de la fecha del gasto
-    const startMonth = moment(settings.fiscalYearStart).month(); // 0-based
+    const startMonth = moment.utc(settings.fiscalYearStart).month(); // 0-based (día UTC, TSK-760)
     const expenseMoment = moment(expenseDate);
     const expenseMonth = expenseMoment.month(); // 0-based
     const expenseYear = expenseMoment.year();
@@ -1085,6 +1086,7 @@ export async function checkBudgetForExpense(
         AND je.status = 'POSTED'
         AND je.date >= ${monthStart}
         AND je.date <= ${monthEnd}
+        AND ${NOT_CLOSING_ENTRY_SQL} -- la refundición no es ejecución (TSK-760 B19)
     `;
 
     const row = results[0];

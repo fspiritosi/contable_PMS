@@ -56,7 +56,7 @@ interface CreateBudgetModalProps {
  * Ej: si fiscalYearStart es julio, retorna ['Julio', 'Agosto', ..., 'Junio'].
  */
 function getFiscalMonthLabels(fiscalYearStart: Date): string[] {
-  const startMonth = moment(fiscalYearStart).month(); // 0-based
+  const startMonth = moment.utc(fiscalYearStart).month(); // 0-based (día UTC, TSK-760)
   return Array.from({ length: 12 }, (_, i) =>
     moment()
       .month((startMonth + i) % 12)

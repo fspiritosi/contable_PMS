@@ -8,6 +8,7 @@ import { BusinessError, toActionResult, type ActionResult } from '@/shared/lib/a
 import { getCurrentUserId } from '@/shared/lib/current-user';
 import { revalidatePath } from 'next/cache';
 import { createJournalEntryTx } from '../../shared/utils/journal-entry-tx';
+import { NOT_CLOSE_GENERATED_OPENING_SQL } from '../../shared/utils/closing-entries';
 import type { JournalEntryLineDraft } from '../../shared/utils/journal-entry-lines';
 import { formatDayUtc } from '../../shared/utils/utc-month';
 
@@ -216,6 +217,7 @@ export async function previewExchangeDifference(
           AND je.company_id = ${companyId}::uuid
           AND je.status = 'POSTED'
           AND je.date <= ${closingDate}
+          AND ${NOT_CLOSE_GENERATED_OPENING_SQL} -- saldo acumulado sin la apertura del cierre (TSK-760 H4)
       `;
 
       const originalBalance = originalLines[0].total_original;
