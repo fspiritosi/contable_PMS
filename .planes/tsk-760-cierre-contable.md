@@ -1,7 +1,7 @@
 # TSK-760 — Cierre contable: el cierre anual no funciona y el bloqueo de períodos se saltea
 
 **Fecha de inicio:** 2026-10-06
-**Estado:** Completado — pendiente diagnóstico de producción antes del deploy
+**Estado:** Completado — diagnóstico de producción OK (2026-10-07), listo para deploy
 
 ---
 
@@ -3913,6 +3913,37 @@ empresa activa restaurada. Huella del diagnóstico `--local` después de todo: `
   Correrlo en prod antes del deploy: U > 0 = asientos existentes descuadrados en centavos (los de `main` que pasaban
   por la comparación en coma flotante); no se corrigen solos.
 
+
+### Diagnóstico de producción (2026-10-07, antes del deploy)
+
+Corrido por SSH (`fspiritosi@2.25.213.176`, `docker` sin sudo) con `diagnostico-tsk760.sh --db <contenedor contablemas-contablemas>`. Es de solo lectura (`ROLLBACK`) y terminó con exit 0. La salida completa quedó fuera del repo.
+
+- **App:** `TZ` vacío, `date` en UTC. La DB también está en UTC.
+- **RESUMEN:**
+  - A = true: el usuario `perezmarzo` es dueño y superusuario.
+  - B = 2.
+  - C = 0.
+  - D = 2.
+  - E = 2: "PMS SAS" y "Empresa Test", ninguna con ejercicio.
+  - F a U = 0.
+- **PMS SAS:**
+  - Ajustes de 2026-01-01 03:00 a 2026-12-31 03:00 (meses completos), contador en 8.
+  - 8 asientos DRAFT, todos vinculados a comprobantes, ninguno trabado.
+  - Sin bloqueo, sin cierres, sin números aislados, sin asientos fuera del ejercicio.
+  - Sección 17 vacía: no hay facturas con asiento descuadrado.
+  - Migración: crea el ejercicio 2026 con 14 períodos y asigna ejercicio y período a los 8 asientos. No cierra ningún mes.
+- **Empresa Test:**
+  - Ajustes de 2026-08-19 10:24 a 2027-08-19 03:00 (`meses_completos = f`), 0 asientos.
+  - La migración no le puede crear un ejercicio válido. No afecta nada porque no tiene asientos.
+  - Si se usa, se corrige desde Ajustes, porque las fechas siguen editables mientras no haya asientos.
+- **B22:**
+  - H = 0 e I = 0: nadie bloqueó meses en producción, lo que es coherente con que la app corre en UTC.
+  - No hay bloqueos que reinterpretar.
+- **Huella antes del deploy:**
+  - asientos `171c8a6abde80267219e528b30c48702`
+  - ajustes `f034a82843c9083dd5565e3604744cc6`
+  - fy y periodos vacíos
+- **Decisión:** ninguna letra bloquea ni invalida una suposición de la migración (tabla letra → suposición). No hace falta avisar nada a la clienta por J, K, L o Q. **Deploy habilitado**: falta solo el backup y el orden de merge (#33 → #34 → #35).
 
 ## 5. Verificación
 
