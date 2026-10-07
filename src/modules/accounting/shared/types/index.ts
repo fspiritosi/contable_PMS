@@ -67,17 +67,6 @@ export const journalEntrySchema = z.object({
 export type CreateJournalEntryInput = z.infer<typeof journalEntrySchema>;
 export type JournalEntryLineInput = z.infer<typeof journalEntryLineSchema>;
 
-// Validación de configuración contable
-export const accountingSettingsSchema = z.object({
-  fiscalYearStart: z.date(),
-  fiscalYearEnd: z.date(),
-}).refine(
-  (data) => data.fiscalYearEnd > data.fiscalYearStart,
-  { message: 'La fecha de fin debe ser posterior a la fecha de inicio' }
-);
-
-export type CreateAccountingSettingsInput = z.infer<typeof accountingSettingsSchema>;
-
 // Tipos de respuesta
 export interface AccountWithChildren {
   id: string;
