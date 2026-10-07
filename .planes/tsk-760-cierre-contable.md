@@ -1,7 +1,7 @@
 # TSK-760 — Cierre contable: el cierre anual no funciona y el bloqueo de períodos se saltea
 
 **Fecha de inicio:** 2026-10-06
-**Estado:** Implementación en progreso (Fases 1, 2 y 4 a 10 de 14 completadas; Fase 3 pendiente del diagnóstico de producción)
+**Estado:** Implementación en progreso (Fases 1, 2 y 4 a 11 de 14 completadas; Fase 3 pendiente del diagnóstico de producción)
 
 ---
 
@@ -1142,10 +1142,10 @@ Otras decisiones de esta planificación:
 
 - **Objetivo:** que no quede ningún creador que calle errores.
 - **Tareas:**
-  - [ ] Borrar `INT/treasury/index.ts` (y su export) y `createJournalEntryForCOGS`
+  - [x] Borrar `INT/treasury/index.ts` (y su export) y `createJournalEntryForCOGS`
         (`INT/commercial/index.ts:1204`), previa confirmación con grep de que no hay callers
         (incluido `src/app`, `prisma/` y tests).
-  - [ ] `grep -rn "return null" ` en los creadores restantes: ningún camino de asiento devuelve
+  - [x] `grep -rn "return null" ` en los creadores restantes: ningún camino de asiento devuelve
         `null` ante error; `grep -rn "journalEntry.create(\|lastEntryNumber + 1" src/modules` →
         solo `UT/journal-entry-tx.ts`.
 - **Archivos:** `INT/treasury/index.ts` (borrado), `INT/commercial/index.ts`, `INT/index.ts`.
@@ -3453,7 +3453,32 @@ tocados sin errores (warnings previos: `error` en `_CreateEntryModal`, dos inter
 - `docs/` y la guía in-app quedan para la Fase 13.
 
 ### Fase 11: Borrado de código muerto
-**Estado:** Pendiente
+**Estado:** Completada (2026-10-06)
+
+**Archivos borrados / modificados** (`INT/` = `src/modules/accounting/features/integrations/`):
+- `INT/treasury/index.ts` **borrado** (B9): `createJournalEntryForBankTransfer`, `createJournalEntryForCheckDeposit`
+  y `createJournalEntryForCheckRejection`, que devolvían `null` ante cualquier error. No había barrel que lo
+  exportara (`INT/index.ts` no existe), así que no hubo export que quitar.
+- `INT/commercial/index.ts`: **borrado** `createJournalEntryForCOGS` (D13, tragaba errores y devolvía `null`) con su
+  encabezado de sección. Los imports que usaba siguen en uso por otras funciones.
+- `docs/modules/accounting.md`: la línea de seguimientos de TSK-728 que listaba ambos como pendientes.
+
+**Verificación previa (0 llamadores):** `grep -rn "integrations/treasury\|createJournalEntryForBankTransfer\|
+createJournalEntryForCheckDeposit\|createJournalEntryForCheckRejection\|createJournalEntryForCOGS"` en `src/`
+(sin `src/generated`), `prisma/`, `scripts/`, `docs/` y `.claude/` → solo las propias definiciones (y dos menciones en
+documentación: la de `accounting.md`, actualizada, y el plan histórico `docs/contable/plan-implementacion-contable.md`,
+que no se toca). No hay carpeta `cypress/`.
+
+**Greps de cierre:**
+- `grep -rn "journalEntry.create(\|lastEntryNumber + 1\|last_entry_number + 1" src/modules` (sin tests) → solo
+  `UT/journal-entry-tx.ts` (`createJournalEntryTx` y el SQL de `nextEntryNumberTx`).
+- `return null` en `INT/`, `journal-entry-tx.ts`, bancos y fondos: ninguno es un creador de asientos que calle un
+  error. Quedan la excepción conservada a propósito (bancos sin Ajustes, `createTreasuryEntryTx`, con `logger.warn`),
+  el control de presupuesto de egresos (`checkBudgetForExpense`, no crea asientos) y lecturas de fondos.
+
+**Calidad:** `npm run test` = **63 archivos, 845 tests, verdes** (sin cambios: el código borrado no tenía tests);
+`check-types` = **219**; `eslint` de `INT/commercial/index.ts` sin errores (2 warnings previos en
+`checkBudgetForExpense`). Sin prueba en navegador: no hay comportamiento visible que cambie.
 
 ### Fase 12: Errores legibles en producción (`ActionResult`) en las actions restantes
 **Estado:** Pendiente

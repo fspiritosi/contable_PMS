@@ -355,7 +355,8 @@ descuadrado que `validateBalance` rechazaba), y los tres confirm tragaban el err
   `{ success: false, error }`.
 - Seguimientos (`.planes/tsk-728-…md` 2.4): dar cuenta a cheques/tarjetas/socios
   (`checksReceivedAccountId` existe sin UI), movimientos bancarios manuales y transferencias (siguen
-  no bloqueantes), `integrations/treasury/index.ts` sin llamadores, CMV.
+  no bloqueantes; TSK-760 los hizo rechazar el período cerrado). `integrations/treasury/index.ts` y
+  `createJournalEntryForCOGS` (sin llamadores, callaban errores) se borraron en TSK-760 (fase 11).
 
 ### Cuentas de Retenciones (8 campos)
 
