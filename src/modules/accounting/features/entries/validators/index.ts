@@ -1,54 +1,23 @@
-'use server';
-
+/**
+ * Validadores del asiento manual (TSK-760, Fase 4).
+ *
+ * Sin `'use server'` (H7): solo los importan las actions, no deben ser endpoints
+ * invocables desde el navegador. Los errores son `BusinessError` para que lleguen
+ * legibles al cliente como `ActionResult`. El balance, los importes, el período y
+ * la numeración los valida el núcleo (`createJournalEntryTx` / `postJournalEntryTx`).
+ */
 import { type CreateJournalEntryInput } from '../../../shared/types';
+import moment from 'moment';
+
 import { prisma } from '@/shared/lib/prisma';
+import { BusinessError } from '@/shared/lib/action-result';
+import { logger } from '@/shared/lib/logger';
 import { toNumber } from '../../../shared/utils/decimal';
 
 interface LineWithAmounts {
   accountId: string;
   debit: unknown;
   credit: unknown;
-}
-
-/**
- * Valida que el asiento esté balanceado (Debe = Haber)
- */
-export async function validateJournalEntryBalance(lines: LineWithAmounts[]) {
-  let totalDebit = 0;
-  let totalCredit = 0;
-
-  for (const line of lines) {
-    const debit = toNumber(line.debit);
-    const credit = toNumber(line.credit);
-
-    if (isNaN(debit) || isNaN(credit)) {
-      throw new Error('Los montos deben ser números válidos');
-    }
-
-    totalDebit += debit;
-    totalCredit += credit;
-  }
-
-  const tolerance = 0.01;
-  const difference = Math.abs(totalDebit - totalCredit);
-
-  if (difference >= tolerance) {
-    throw new Error(
-      `El asiento no está balanceado. ` +
-      `Debe: $${totalDebit.toFixed(2)}, Haber: $${totalCredit.toFixed(2)}, ` +
-      `Diferencia: $${difference.toFixed(2)}`
-    );
-  }
-
-  // Validar mínimo 2 líneas
-  if (lines.length < 2) {
-    throw new Error('Un asiento debe tener al menos 2 líneas');
-  }
-
-  // Validar que no todas las líneas sean 0
-  if (totalDebit === 0 && totalCredit === 0) {
-    throw new Error('El asiento no puede tener todos los montos en 0');
-  }
 }
 
 /**
@@ -71,13 +40,14 @@ export async function validateJournalEntryAccounts(companyId: string, accountIds
     },
   });
 
-  if (accounts.length !== accountIds.length) {
-    throw new Error('Una o más cuentas no existen o no pertenecen a la empresa');
+  // Una misma cuenta puede repetirse en varias líneas: se compara contra las distintas.
+  if (accounts.length !== new Set(accountIds).size) {
+    throw new BusinessError('Una o más cuentas no existen o no pertenecen a la empresa');
   }
 
   const nonLeafAccounts = accounts.filter(a => !a.isLeaf);
   if (nonLeafAccounts.length > 0) {
-    throw new Error(
+    throw new BusinessError(
       `Las siguientes cuentas no son imputables (tienen subcuentas): ${nonLeafAccounts.map(a => a.code).join(', ')}`
     );
   }
@@ -102,17 +72,17 @@ export async function validateAuxiliaries(
     switch (account.requiresAuxiliary) {
       case 'CUSTOMER':
         if (!line.customerId) {
-          throw new Error(`La ${lineRef} requiere un cliente como auxiliar`);
+          throw new BusinessError(`La ${lineRef} requiere un cliente como auxiliar`);
         }
         break;
       case 'SUPPLIER':
         if (!line.supplierId) {
-          throw new Error(`La ${lineRef} requiere un proveedor como auxiliar`);
+          throw new BusinessError(`La ${lineRef} requiere un proveedor como auxiliar`);
         }
         break;
       case 'COST_CENTER':
         if (!line.costCenterId) {
-          throw new Error(`La ${lineRef} requiere un centro de costo como auxiliar`);
+          throw new BusinessError(`La ${lineRef} requiere un centro de costo como auxiliar`);
         }
         break;
     }
@@ -122,13 +92,15 @@ export async function validateAuxiliaries(
 /**
  * Valida que la fecha no esté en un período bloqueado.
  * Usa el modelo AccountingPeriod si hay períodos creados; fallback a lockedUntilDate.
+ *
+ * @deprecated TSK-760: solo la usa `reverseJournalEntry` hasta la Fase 10, que la
+ * reemplaza por `reverseJournalEntryTx` (y entonces se borra). Usar `assertPeriodOpen`.
  */
 export async function validatePeriodLock(
   companyId: string,
   date: Date,
   settings?: { lockedUntilDate: Date | null } | null
 ) {
-  const moment = require('moment');
   const entryDate = moment(date);
 
   const period = await prisma.accountingPeriod.findFirst({
@@ -170,85 +142,6 @@ export async function validatePeriodLock(
 }
 
 /**
- * Valida que la fecha del asiento esté dentro de un ejercicio fiscal abierto.
- * Usa FiscalYear si existe; fallback a AccountingSettings.
- */
-export async function validateJournalEntryDate(companyId: string, date: Date) {
-  const moment = require('moment');
-  const { logger } = require('@/shared/lib/logger');
-  const entryDate = moment(date);
-
-  const fiscalYear = await prisma.fiscalYear.findFirst({
-    where: {
-      companyId,
-      startDate: { lte: date },
-      endDate: { gte: date },
-    },
-    select: { id: true, isClosed: true, startDate: true, endDate: true },
-  });
-
-  if (fiscalYear) {
-    if (fiscalYear.isClosed) {
-      throw new Error(
-        `El ejercicio fiscal (${moment(fiscalYear.startDate).format('DD/MM/YYYY')} - ${moment(fiscalYear.endDate).format('DD/MM/YYYY')}) está cerrado`
-      );
-    }
-    await validatePeriodLock(companyId, date);
-    return;
-  }
-
-  // Fallback: usar AccountingSettings
-  const settings = await prisma.accountingSettings.findUnique({
-    where: { companyId }
-  });
-
-  if (!settings) {
-    throw new Error('No se encontró configuración contable para la empresa');
-  }
-
-  const fiscalStart = moment(settings.fiscalYearStart);
-  const fiscalEnd = moment(settings.fiscalYearEnd);
-
-  if (!entryDate.isBetween(fiscalStart, fiscalEnd, 'day', '[]')) {
-    throw new Error(
-      `La fecha del asiento (${entryDate.format('DD/MM/YYYY')}) está fuera del ejercicio fiscal ` +
-      `(${fiscalStart.format('DD/MM/YYYY')} - ${fiscalEnd.format('DD/MM/YYYY')})`
-    );
-  }
-
-  await validatePeriodLock(companyId, date, settings);
-
-  if (entryDate.isBefore(moment().subtract(6, 'months'))) {
-    logger.warn('Asiento con fecha antigua', {
-      data: {
-        date: entryDate.format('YYYY-MM-DD'),
-        companyId,
-        monthsAgo: moment().diff(entryDate, 'months'),
-      }
-    });
-  }
-}
-
-/**
- * Valida que los montos sean positivos
- */
-export async function validateJournalEntryAmounts(lines: LineWithAmounts[]) {
-  for (const line of lines) {
-    if (toNumber(line.debit) < 0 || toNumber(line.credit) < 0) {
-      throw new Error('Los montos deben ser positivos');
-    }
-
-    if (toNumber(line.debit) > 0 && toNumber(line.credit) > 0) {
-      throw new Error('Una línea no puede tener Debe y Haber al mismo tiempo');
-    }
-
-    if (toNumber(line.debit) === 0 && toNumber(line.credit) === 0) {
-      throw new Error('Una línea debe tener Debe o Haber');
-    }
-  }
-}
-
-/**
  * Valida que las cuentas se usen según su naturaleza (DEBIT/CREDIT)
  * Emite warnings, no errores (permite flexibilidad contable)
  */
@@ -256,8 +149,6 @@ export async function validateAccountNatures(
   companyId: string,
   lines: LineWithAmounts[]
 ) {
-  const { logger } = require('@/shared/lib/logger');
-
   const accountIds = lines.map(line => line.accountId);
   const accounts = await prisma.account.findMany({
     where: {
@@ -303,9 +194,11 @@ export async function validateAccountNatures(
 /**
  * Resuelve el fiscalYearId y periodId para una fecha dada.
  * Retorna null si no se encuentra ejercicio (no bloquea, el asiento queda sin período).
+ *
+ * @deprecated TSK-760: solo la usa `reverseJournalEntry` hasta la Fase 10. Usar
+ * `assertPeriodOpen`, que además crea el ejercicio y valida el cierre.
  */
 export async function resolveFiscalPeriod(companyId: string, date: Date) {
-  const moment = require('moment');
   const entryDate = moment(date);
 
   const fiscalYear = await prisma.fiscalYear.findFirst({

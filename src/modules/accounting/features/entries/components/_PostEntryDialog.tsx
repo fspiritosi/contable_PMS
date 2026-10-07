@@ -29,16 +29,16 @@ export function _PostEntryDialog({ entry, onClose }: PostEntryDialogProps) {
   const handlePost = async () => {
     setIsLoading(true);
     try {
-      await postJournalEntry(entry.companyId, entry.id);
-      toast.success('Asiento registrado correctamente');
+      const result = await postJournalEntry(entry.id);
+      if (!result.success) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success(`Asiento N° ${result.number} registrado correctamente`);
       router.refresh();
       onClose();
-    } catch (error) {
-      if (error instanceof Error) {
-        toast.error(error.message);
-      } else {
-        toast.error('Error al registrar el asiento');
-      }
+    } catch {
+      toast.error('Error al registrar el asiento');
     } finally {
       setIsLoading(false);
     }

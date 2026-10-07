@@ -1,208 +1,97 @@
-﻿'use server';
+'use server';
 
 import { getCurrentUserId } from '@/shared/lib/current-user';
+import { getActiveCompanyId } from '@/shared/lib/company';
 import { prisma } from '@/shared/lib/prisma';
 import { logger } from '@/shared/lib/logger';
 import { checkPermission } from '@/shared/lib/permissions';
+import { BusinessError, toActionResult, type ActionResult } from '@/shared/lib/action-result';
+import { Prisma } from '@/generated/prisma/client';
 import { revalidateAccountingRoutes } from '../../shared/utils';
-import { type CreateJournalEntryInput } from '../../shared/types';
-import { validateJournalEntryAccounts, validateJournalEntryBalance, validateJournalEntryDate, validateJournalEntryAmounts, validateAccountNatures, validatePeriodLock, validateAuxiliaries, resolveFiscalPeriod } from './validators';
+import { journalEntrySchema, type CreateJournalEntryInput } from '../../shared/types';
+import { createJournalEntryTx, postJournalEntryTx } from '../../shared/utils/journal-entry-tx';
+import { validateJournalEntryAccounts, validateAccountNatures, validatePeriodLock, validateAuxiliaries, resolveFiscalPeriod } from './validators';
 
 import { JournalEntryStatus } from '@/generated/prisma/enums';
 
 /**
- * Crea un nuevo asiento contable
+ * Crea un asiento manual en borrador (TSK-760, Fase 4).
+ *
+ * El `companyId` sale de la empresa activa (no del cliente). Las validaciones de
+ * cuentas y auxiliares son de solo lectura y van antes de la tx; el período, la
+ * numeración y la creación las hace el núcleo (`createJournalEntryTx`) dentro de
+ * la tx, con el lock de la empresa. Errores de negocio como `ActionResult`.
  */
-export async function createJournalEntry(companyId: string, input: CreateJournalEntryInput) {
+export async function createJournalEntry(
+  input: CreateJournalEntryInput
+): Promise<ActionResult<{ id: string; number: number }>> {
   const userId = await getCurrentUserId();
   if (!userId) throw new Error('No autenticado');
   await checkPermission('accounting.entries', 'create', { redirect: true });
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
 
   try {
-    // Validaciones (fuera de la transacción, son de solo lectura)
-    const accounts = await validateJournalEntryAccounts(companyId, input.lines.map(line => line.accountId));
-    await validateJournalEntryDate(companyId, input.date);
-    await validateJournalEntryBalance(input.lines);
-    await validateJournalEntryAmounts(input.lines);
-    await validateAuxiliaries(companyId, input.lines, accounts);
+    const parsed = journalEntrySchema.safeParse(input);
+    if (!parsed.success) {
+      throw new BusinessError(parsed.error.issues[0]?.message ?? 'Los datos del asiento no son válidos.');
+    }
+    const data = parsed.data;
 
-    // Validación de naturaleza (warnings, no bloquean)
-    await validateAccountNatures(companyId, input.lines);
+    const accounts = await validateJournalEntryAccounts(companyId, data.lines.map((line) => line.accountId));
+    await validateAuxiliaries(companyId, data.lines, accounts);
+    // Naturaleza de las cuentas: solo advertencias en el log, no bloquean.
+    await validateAccountNatures(companyId, data.lines);
 
-    // Resolver ejercicio y período
-    const fiscal = await resolveFiscalPeriod(companyId, input.date);
+    const entry = await prisma.$transaction((tx) =>
+      createJournalEntryTx(tx, {
+        companyId,
+        date: data.date,
+        description: data.description,
+        status: 'DRAFT',
+        createdBy: userId,
+        source: 'manual',
+        lines: data.lines.map((line) => ({
+          accountId: line.accountId,
+          description: line.description ?? null,
+          debit: new Prisma.Decimal(line.debit),
+          credit: new Prisma.Decimal(line.credit),
+          customerId: line.customerId ?? null,
+          supplierId: line.supplierId ?? null,
+          costCenterId: line.costCenterId ?? null,
+        })),
+      })
+    );
 
-    // Crear asiento y actualizar número atómicamente
-    const result = await prisma.$transaction(async (tx) => {
-      // Incremento atómico: UPDATE ... RETURNING evita race conditions
-      const [{ last_entry_number: nextNumber }] = await tx.$queryRaw<[{ last_entry_number: number }]>`
-        UPDATE accounting_settings
-        SET last_entry_number = last_entry_number + 1, updated_at = NOW()
-        WHERE company_id = ${companyId}::uuid
-        RETURNING last_entry_number
-      `;
-
-      const entry = await tx.journalEntry.create({
-        data: {
-          companyId,
-          number: nextNumber,
-          date: input.date,
-          description: input.description,
-          createdBy: userId,
-          fiscalYearId: fiscal?.fiscalYearId,
-          periodId: fiscal?.periodId,
-          lines: {
-            create: input.lines.map(line => ({
-              accountId: line.accountId,
-              description: line.description,
-              debit: line.debit,
-              credit: line.credit,
-              customerId: line.customerId,
-              supplierId: line.supplierId,
-              costCenterId: line.costCenterId,
-            })),
-          },
-        },
-        select: {
-          id: true,
-          companyId: true,
-          number: true,
-          date: true,
-          description: true,
-          status: true,
-          postDate: true,
-          createdBy: true,
-          createdAt: true,
-          updatedAt: true,
-          lines: {
-            select: {
-              id: true,
-              entryId: true,
-              accountId: true,
-              description: true,
-              debit: true,
-              credit: true,
-              account: {
-                select: {
-                  code: true,
-                  name: true,
-                },
-              },
-            },
-          },
-        },
-      });
-
-      return entry;
-    });
-
-    logger.info('Asiento contable creado', { data: { entryId: result.id, userId } });
+    logger.info('Asiento contable creado', { data: { entryId: entry.id, number: entry.number, userId } });
     revalidateAccountingRoutes(companyId);
 
-    return result;
+    return { success: true, id: entry.id, number: entry.number };
   } catch (error) {
-    logger.error('Error al crear asiento contable', { data: { error, userId } });
-    throw error;
+    return toActionResult(error, 'Error al crear asiento contable');
   }
 }
 
 /**
- * Registra un asiento contable
+ * Registra un asiento en borrador (DRAFT → POSTED) con `postJournalEntryTx`:
+ * valida ejercicio cerrado, mes cerrado y bloqueo (B4) y el balance, dentro de la tx.
  */
-export async function postJournalEntry(companyId: string, entryId: string) {
+export async function postJournalEntry(entryId: string): Promise<ActionResult<{ number: number }>> {
   const userId = await getCurrentUserId();
   if (!userId) throw new Error('No autenticado');
   await checkPermission('accounting.entries', 'approve', { redirect: true });
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
 
   try {
-    const entry = await prisma.journalEntry.findUnique({
-      where: { id: entryId },
-      select: {
-        id: true,
-        companyId: true,
-        number: true,
-        date: true,
-        description: true,
-        status: true,
-        postDate: true,
-        createdBy: true,
-        createdAt: true,
-        updatedAt: true,
-        lines: {
-          select: {
-            id: true,
-            entryId: true,
-            accountId: true,
-            description: true,
-            debit: true,
-            credit: true,
-          },
-        },
-      },
-    });
+    const posted = await prisma.$transaction((tx) => postJournalEntryTx(tx, { companyId, entryId, userId }));
 
-    if (!entry) {
-      throw new Error('Asiento no encontrado');
-    }
-
-    if (entry.companyId !== companyId) {
-      throw new Error('El asiento no pertenece a la empresa');
-    }
-
-    if (entry.status !== JournalEntryStatus.DRAFT) {
-      throw new Error('El asiento no está en estado borrador');
-    }
-
-    // Validar que el período no esté bloqueado
-    await validatePeriodLock(companyId, entry.date);
-
-    // Validar nuevamente el balance
-    await validateJournalEntryBalance(entry.lines);
-    await validateJournalEntryAmounts(entry.lines);
-  
-    const updatedEntry = await prisma.journalEntry.update({
-      where: { id: entryId },
-      data: {
-        status: JournalEntryStatus.POSTED,
-        postDate: new Date(),
-      },
-      select: {
-        id: true,
-        companyId: true,
-        number: true,
-        date: true,
-        description: true,
-        status: true,
-        postDate: true,
-        createdBy: true,
-        createdAt: true,
-        updatedAt: true,
-        lines: {
-          select: {
-            id: true,
-            entryId: true,
-            accountId: true,
-            description: true,
-            debit: true,
-            credit: true,
-            account: {
-              select: {
-                code: true,
-                name: true,
-              },
-            },
-          },
-        },
-      },
-    });
-
-    logger.info('Asiento contable registrado', { data: { entryId, userId } });
+    logger.info('Asiento contable registrado', { data: { entryId, number: posted.number, userId } });
     revalidateAccountingRoutes(companyId);
 
-    return updatedEntry;
+    return { success: true, number: posted.number };
   } catch (error) {
-    logger.error('Error al registrar asiento contable', { data: { error, entryId, userId } });
-    throw error;
+    return toActionResult(error, 'Error al registrar asiento contable');
   }
 }
 

@@ -1,7 +1,7 @@
 # TSK-760 — Cierre contable: el cierre anual no funciona y el bloqueo de períodos se saltea
 
 **Fecha de inicio:** 2026-10-06
-**Estado:** Implementación en progreso (Fase 2 de 14 completada)
+**Estado:** Implementación en progreso (Fases 1, 2 y 4 de 14 completadas; Fase 3 pendiente del diagnóstico de producción)
 
 ---
 
@@ -938,15 +938,15 @@ Otras decisiones de esta planificación:
 - **Objetivo:** el asiento manual y el "Registrar" usan el núcleo; se borran los validadores
   duplicados (B3, B4 en registrar).
 - **Tareas:**
-  - [ ] `ACC/features/entries/actions.server.ts` `createJournalEntry`: todo dentro de una tx con
+  - [x] `ACC/features/entries/actions.server.ts` `createJournalEntry`: todo dentro de una tx con
         `createJournalEntryTx` (DRAFT); el `companyId` sale de `getActiveCompanyId()`, no del
         cliente.
-  - [ ] `postJournalEntry`: `postJournalEntryTx` (valida FY cerrado + mes + bloqueo y balance; B4).
-  - [ ] `ACC/features/entries/validators/index.ts`: borrar `validatePeriodLock`,
+  - [x] `postJournalEntry`: `postJournalEntryTx` (valida FY cerrado + mes + bloqueo y balance; B4).
+  - [x] `ACC/features/entries/validators/index.ts`: borrar `validatePeriodLock`,
         `validateJournalEntryDate` y `resolveFiscalPeriod` (o dejarlos delegando si quedan
         callers fuera de este ticket; grep antes). `ACC/shared/validators/index.ts:128`: borrar el
         duplicado si no se usa (verificar `accounts/actions.server.ts:23`), o delegarlo.
-  - [ ] `ACC/features/entries/entries.integration.test.ts` (nuevo): crea DRAFT con FY/período y
+  - [x] `ACC/features/entries/entries.integration.test.ts` (nuevo): crea DRAFT con FY/período y
         número; mes cerrado → rechaza; registrar DRAFT de un FY cerrado → rechaza (B4); registrar
         DRAFT desbalanceado → rechaza; `companyId` ajeno ignorado.
 - **Archivos:** `ACC/features/entries/actions.server.ts`, `ACC/features/entries/validators/index.ts`,
@@ -2734,7 +2734,74 @@ componentes cliente. Sin `any` ni `console`. Ningún caller cambiado.
 **Estado:** Pendiente
 
 ### Fase 4: Creadores I — asientos manuales y registrar
-**Estado:** Pendiente
+**Estado:** Completada (2026-10-06)
+
+**Archivos modificados** (`ACC/` = `src/modules/accounting/`):
+- `ACC/features/entries/actions.server.ts`:
+  - `createJournalEntry(input)` → `Promise<ActionResult<{ id; number }>>` (§3.6). Se quitó el
+    parámetro `companyId`: sale de `getActiveCompanyId()`. Revalida el input con
+    `journalEntrySchema` en el servidor; `validateJournalEntryAccounts` + `validateAuxiliaries`
+    (solo lectura, antes de la tx) y `validateAccountNatures` (solo log); después
+    `prisma.$transaction(tx => createJournalEntryTx(…, status: 'DRAFT', createdBy: userId,
+    source: 'manual'))`. Las líneas pasan `description`, auxiliares y **`costCenterId`**
+    (TSK-583/719) con importes como `Prisma.Decimal`.
+  - `postJournalEntry(entryId)` → `Promise<ActionResult<{ number }>>`: `postJournalEntryTx` en
+    una tx (FY cerrado + mes + bloqueo + balance + cuentas; B4). Sin `companyId` del cliente.
+  - "No autenticado"/"No hay empresa activa" siguen como `throw` (§3.6).
+  - `reverseJournalEntry` **no se tocó** (Fase 10).
+- `ACC/features/entries/validators/index.ts`: sin `'use server'` (H7); borrados
+  `validateJournalEntryDate`, `validateJournalEntryBalance` y `validateJournalEntryAmounts` (los
+  cubre el núcleo); `validateJournalEntryAccounts` y `validateAuxiliaries` lanzan `BusinessError`
+  con el mismo texto; `logger` y `moment` por `import` (el `require('@/shared/lib/logger')` no
+  resolvía el alias fuera de Next). `validatePeriodLock` y `resolveFiscalPeriod` **quedan**
+  marcadas `@deprecated`: su único caller es `reverseJournalEntry`; se borran en la Fase 10.
+- `ACC/shared/validators/index.ts`: borrado el duplicado `validateJournalEntryDate` (H8, sin
+  callers).
+- `_CreateEntryModal.tsx` (297 → 286 líneas) y `_PostEntryDialog.tsx`: `if (!result.success)
+  toast.error(result.error)`; toast de éxito con el número. El modal ya no manda `companyId` y
+  usa `CreateJournalEntryInput` como tipo del form (se fue el `as any`).
+
+**Tests:** `ACC/features/entries/entries.integration.test.ts` (12, nuevo; primero rojo: 12/12
+fallaban por la firma vieja). Crear: DRAFT con número, FY 1 y período MONTHLY 03/2026 creados en
+el momento; conserva `costCenterId` y descripción de línea; mes cerrado → texto exacto de §3.3.2
+sin consumir número; auxiliar faltante y cuenta no hoja → mensajes legibles (no el genérico); Zod
+en servidor (desbalanceado); cuentas de otra empresa → rechazo. Registrar: POSTED con
+`postDate`/FY/período; mes cerrado → texto exacto y sigue DRAFT; **B4** (FY cerrado con el mes
+abierto); DRAFT desbalanceado sembrado → texto actual; asiento de otra empresa → "Asiento no
+encontrado."; dos veces → "ya no está en borrador". El test mockea `revalidateAccountingRoutes`
+(su `require('next/cache')` no lo intercepta `vi.mock` y fuera de Next lanza).
+
+**Calidad:** `npm run test` = **54 archivos, 724 tests, verdes**; `check-types` = **219**; `eslint`
+de los archivos tocados sin errores (queda 1 warning previo en `_CreateEntryModal`: `error` sin
+usar en el `catch` de la carga de cuentas). Sin `any` ni `console`.
+
+**Prueba en navegador** (Playwright contra :3010, empresa "Empresa de Prueba 01 SA"):
+- Nuevo asiento 05/10/2026 Caja chica / Caja $1,00 → toast "Asiento N° 50 creado en borrador";
+  Registrar → "Asiento N° 50 registrado correctamente". DB: POSTED, FY 1, período MONTHLY 10/2026,
+  contador 50.
+- Octubre cerrado por SQL: crear con fecha 05/10/2026 y registrar el DRAFT N° 36 (06/10/2026) →
+  toasts "No se puede registrar con fecha 05/10/2026 (06/10/2026): el período está cerrado (mes
+  10/2026 cerrado). Para operar, reabrilo desde …". Octubre restaurado (`is_closed = false`), N° 36
+  sigue DRAFT, contador sin cambios.
+
+**Datos que quedaron en la DB de dev:**
+- Asiento **N° 50** `dd45a66d-5e64-4a0e-8b94-fdecba6e4bde`, POSTED (inmutable), 05/10/2026,
+  "Verificación interna TSK-760 (no usar)", Caja chica D / Caja H $1,00. `last_entry_number` = 50.
+- **FY 1** `1caebea1-a8e5-4298-b8d5-367cb9d8d671` (2026-01-01 00:00Z → 2026-12-31 23:59:59.999Z,
+  abierto) con 14 períodos, creado por `ensureFiscalYearTx` en el primer asiento. Ningún período
+  cerrado. Los otros 32 asientos siguen sin `fiscal_year_id` (los completa la Fase 3).
+
+**Desvíos:**
+- El plan decía que en las Fases 4–7 los tests afirmaran `rejects.toThrow` y que la Fase 12
+  pasara `createJournalEntry`/`postJournalEntry` y sus dos componentes a `ActionResult`. Se
+  adelantó acá (instrucción del líder: toda action tocada devuelve `ActionResult`). **La Fase 12
+  ya no tiene que tocar** `createJournalEntry`, `postJournalEntry`, `_CreateEntryModal` ni
+  `_PostEntryDialog`.
+- `validateJournalEntryAccounts` comparaba la cantidad de cuentas encontradas contra la de
+  líneas: una misma cuenta en dos líneas rechazaba el asiento. Ahora compara contra las cuentas
+  distintas.
+- No depende de la Fase 3: el núcleo crea FY y períodos al vuelo. Visto en el navegador: un
+  warning previo de React (`key` en `_EntriesTable`, archivo no tocado).
 
 ### Fase 5: Creadores II — comerciales, equipos y depreciación
 **Estado:** Pendiente
