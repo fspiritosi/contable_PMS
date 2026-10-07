@@ -1,7 +1,7 @@
 # TSK-760 — Cierre contable: el cierre anual no funciona y el bloqueo de períodos se saltea
 
 **Fecha de inicio:** 2026-10-06
-**Estado:** Diseño completado
+**Estado:** Implementación en progreso (Fase 1 de 14 completada)
 
 ---
 
@@ -750,6 +750,7 @@ recomendación dejaba margen, se eligió lo más simple (marcado con **[simple]*
 | D11 | Con FY existentes, las fechas de ejercicio de Ajustes son de solo lectura y se muestran desde el FY abierto más antiguo. Editables solo si hay un único FY sin asientos ni meses cerrados; en ese caso se regeneran sus períodos en la misma tx. |
 | D12 | `assertPeriodOpen(tx, companyId, date, { periodType: 'OPENING' \| 'CLOSING' })` solo mira FY no cerrado y período de ese tipo abierto. Lo usa solo `closeFiscalYear`. Convención de OPENING/CLOSING: la del código (mes real de inicio y de fin); el backfill corrige `month = 0/13` de la migración 20260625. |
 | D13 | Se **borran** `INT/treasury/index.ts` y `createJournalEntryForCOGS` (sin callers). |
+| C1–C8 | Decisiones de Diseño confirmadas por el líder el 2026-10-06: ver 3.7.7. C1–C5, C7 y C8 tal como propone el diseño; C6 cambia: se agrega "Eliminar borrador" (Fase 10). |
 
 Otras decisiones de esta planificación:
 
@@ -798,28 +799,30 @@ Otras decisiones de esta planificación:
 - **Objetivo:** que el usuario pueda medir producción **antes** de deployar (tamaño del cambio de
   comportamiento, B22, empresas a migrar) sin tocar nada; registrar la línea base.
 - **Tareas:**
-  - [ ] Crear `prisma/scripts/diagnostico-tsk760.sh` (ejecutable, `set -euo pipefail`) con el SQL
+  - [x] Crear `prisma/scripts/diagnostico-tsk760.sh` (ejecutable, `set -euo pipefail`) con el SQL
         de §1.6.3, en el formato de `prisma/scripts/verificacion-post-deploy.sh`
         (`sudo docker exec -i $(sudo docker ps -q --filter name=contablemas-contablemas) sh -c
         'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -P pager=off' <<'SQL'`). **Solo `SELECT`**:
         el script abre con `SET default_transaction_read_only = on;`.
-  - [ ] Modos: sin argumento = producción; `--local` = `docker exec -i contable-pms-db` sin
+  - [x] Modos: sin argumento = producción; `--local` = `docker exec -i contable-pms-db` sin
         `sudo` (mismo `sh -c 'psql …'`, usa las variables del contenedor); `--db <nombre>` para
-        correrlo contra una copia (Fase 3). Cabecera con uso y cómo leer cada consulta (texto de
+        correrlo contra otro contenedor y `--database <base>` para otra base del mismo
+        contenedor (la copia `contable_tsk760_copia` de la Fase 3 es una base, no un contenedor). Cabecera con uso y cómo leer cada consulta (texto de
         "Cómo leerlo" de §1.6.3).
-  - [ ] Agregar las consultas: 0) `current_user`, dueño de `journal_entries`
+  - [x] Agregar las consultas: 0) `current_user`, dueño de `journal_entries`
         (`pg_tables.tableowner`) y estado de los triggers (`pg_trigger.tgenabled`) — la migración
         hace `ALTER TABLE … DISABLE TRIGGER` y necesita ser dueña; 12) FY con `month = 0/13` y FY
         cuyo rango no coincide con Ajustes; 13) asientos anteriores al inicio de Ajustes con
         fecha de los últimos 90 días (impacto de D1).
-  - [ ] Al final, instrucciones (B22): `sudo docker exec $(sudo docker ps -q --filter
+  - [x] Al principio, instrucciones (B22): `sudo docker exec $(sudo docker ps -q --filter
         name=contablemas-frontend) sh -c 'date; printenv TZ'` (en modo producción lo ejecuta; en
         `--local` imprime `date` del host y `TZ`).
-  - [ ] Probar `--local` contra `contable-pms-db` y comparar con 1.2.7. Borrar antes el asiento
-        local de debug **999999** (solo dato local; anotarlo en la sección 4).
-  - [ ] Medir línea base: `npm run check-types 2>&1 | grep -c "error TS"` (219), `npm run test`
+  - [x] Probar `--local` contra `contable-pms-db` y comparar con 1.2.7. Borrar antes el asiento
+        local de debug **999999** (solo dato local; anotarlo en la sección 4). **No se borró**:
+        con C1 no hace falta para migrar y sirve de caso real de "número aislado" (ver sección 4).
+  - [x] Medir línea base: `npm run check-types 2>&1 | grep -c "error TS"` (219), `npm run test`
         (anotar cuántos pasan), `npx eslint` de los archivos a tocar. Registrar en la sección 4.
-  - [ ] Pedir al usuario que corra el script en producción y pegue la salida en la sección 4
+  - [x] Pedir al usuario que corra el script en producción y pegue la salida en la sección 4
         (**bloqueante para la Fase 3**: define cuántos FY crea el backfill y el texto de aviso a la
         clienta).
 - **Archivos:** `prisma/scripts/diagnostico-tsk760.sh` (nuevo).
@@ -1110,11 +1113,27 @@ Otras decisiones de esta planificación:
         anulalo desde el comprobante". `getReversalWarning(entryId)` para los `system` sin vínculo
         (D6).
   - [ ] `_ReverseEntryDialog.tsx`: `useQuery` del aviso + `toast.error(result.error)`.
+  - [ ] **C6 — "Eliminar borrador"** (decisión del líder, 3.7.7): `deleteDraftJournalEntry(entryId)`
+        en `ACC/features/entries/actions.server.ts` → `ActionResult`, con
+        `checkPermission('accounting.entries', 'delete')` (el permiso existe: `ACTIONS.delete` es
+        genérico en `src/shared/lib/permissions/constants.ts` y `accounting.entries` es módulo).
+        Solo asientos `DRAFT` de la empresa activa **sin documento vinculado**
+        (`getEntryDocumentLink` nulo); si no → `BusinessError` ("solo se eliminan borradores
+        manuales" / mensaje de documento). Borra líneas y cabecera en una tx (el trigger permite
+        DELETE de DRAFT). No valida período: su fin es destrabar el cierre de un mes con un
+        borrador imposible de registrar (H9). En `_EntriesTable.tsx`, acción "Eliminar borrador"
+        con `AlertDialog`, visible con `hasPermission('accounting.entries', 'delete')` y estado
+        DRAFT (sin crecer más de 3-4 líneas: el diálogo va en `_DeleteDraftEntryDialog.tsx`). El
+        mensaje de "Registrar y cerrar" (Fase 8) que nombra el borrador trabado sugiere
+        eliminarlo si es manual. Va en esta fase porque depende de `getEntryDocumentLink`.
+        Test en `reverse-entry.integration.test.ts` (o `delete-draft-entry.integration.test.ts`):
+        borra DRAFT manual; rechaza POSTED, DRAFT de factura/gasto/fondos y de otra empresa.
   - [ ] `ACC/features/entries/reverse-entry.integration.test.ts`: copia auxiliares, moneda y
         centro de costo; original en mes cerrado → rechaza; hoy en mes cerrado → rechaza; asiento
         de factura / gasto / fondos / cierre → rechaza nombrando el documento; manual → anula.
 - **Archivos:** `UT/entry-document-link.ts` (nuevo), `UT/journal-entry-tx.ts`,
-  `ACC/features/entries/actions.server.ts`, `_ReverseEntryDialog.tsx`,
+  `ACC/features/entries/actions.server.ts`, `_ReverseEntryDialog.tsx`, `_EntriesTable.tsx`,
+  `_DeleteDraftEntryDialog.tsx` (nuevo, C6),
   `ACC/features/reports/actions.server.ts`, test nuevo.
 - **Criterio de completitud:** criterio de aceptación 6 cubierto por test; commit
   `fix(accounting): la anulación de asientos copia todo y respeta documentos y períodos (TSK-760, fase 10)`.
@@ -2399,6 +2418,7 @@ autenticado"/"Sin empresa activa" siguen como `throw`.
 | `createJournalEntry` | `(input: CreateJournalEntryInput) => Promise<ActionResult<{ id: string; number: number }>>` | entries create | modificada |
 | `postJournalEntry` | `(entryId: string) => Promise<ActionResult<{ number: number }>>` | entries approve | modificada |
 | `reverseJournalEntry` | `(input: { entryId: string }) => Promise<ActionResult<{ reversalNumber: number }>>` | entries approve | modificada |
+| `deleteDraftJournalEntry` | `(entryId: string) => Promise<ActionResult>` | entries delete | nueva (C6, Fase 10) |
 | `getReversalCheck` | `(entryId: string) => Promise<ActionResult<{ link: EntryDocumentLink \| null; warning: string \| null; date: IsoDay }>>` | entries approve | nueva |
 | `getPeriodLockStatus` | `() => Promise<PeriodLockStatus \| null>` | settings view | nueva (reemplaza `getLockedPeriod`) |
 | `closeAccountingPeriod` | `(input: YearMonth & { postDrafts: boolean }) => Promise<ActionResult<{ lockedUntil: IsoDay; postedDrafts: number }>>` | settings update (+ entries approve) | nueva (reemplaza `setLockedPeriod`) |
@@ -2562,9 +2582,103 @@ Sin cambios respecto de la Fase 13; agregar en `docs/modules/accounting.md` la t
 | C7 | El OPENING del ejercicio creado por un cierre queda cerrado: no se cargan saldos de apertura manuales en FY ≥ 2 | Dejarlo abierto (riesgo de duplicar la apertura) |
 | C8 | La migración crea ejercicios hacia adelante hasta hoy + 1 año como máximo; lo posterior queda sin FY y se reporta | Sin tope (un asiento con año mal tipeado crearía decenas de FY) |
 
+**Decisiones del líder (2026-10-06):**
+
+| # | Decisión |
+|---|---|
+| C1 | Adoptada tal como propone el diseño (racha contigua + salteo de ocupados). |
+| C2 | Adoptada (editar apertura = revertir + nuevo). |
+| C3 | Adoptada (`saveFiscalYearSettings` separada, meses completos, fechas editables solo sin asientos). |
+| C4 | Adoptada (refundición sobre resultados acumulados, cuentas inactivas incluidas, sin línea de Resultado en 0). |
+| C5 | Adoptada (balance también en DRAFT + empresa y hoja de cada cuenta en el núcleo). |
+| C6 | **Cambia:** se agrega la acción **"Eliminar borrador"** solo para asientos DRAFT manuales sin documento vinculado (`getEntryDocumentLink` nulo), con `accounting.entries` `delete` (existe), para que un borrador trabado no impida cerrar un mes. D2 "todo o nada" se mantiene. Asignada a la **Fase 10** (depende de `getEntryDocumentLink`); ver tarea en 2.1 y `deleteDraftJournalEntry` en 3.6. |
+| C7 | Adoptada: la apertura generada por el cierre queda en un período (OPENING) cerrado. |
+| C8 | Adoptada (tope hoy + 1 año en la migración). |
+
 
 ## 4. Implementación
-_Pendiente - ejecutar `/implementar tsk-760-cierre-contable`_
+
+### Fase 1: Script de diagnóstico de producción y línea base
+**Estado:** Completada (2026-10-06)
+
+**Archivos creados:**
+- `prisma/scripts/diagnostico-tsk760.sh` (ejecutable): diagnóstico de solo lectura.
+
+**Notas:**
+- Solo lectura garantizada en tres capas: `SET default_transaction_read_only = on` (sesión),
+  todo dentro de `BEGIN TRANSACTION READ ONLY` … `ROLLBACK`, y ninguna sentencia de escritura
+  (verificado con grep: la única aparición de `ALTER TABLE` está dentro de un `\echo`). Los
+  `SET LOCAL` (`statement_timeout`, `TimeZone = 'UTC'`) mueren con la transacción.
+  `psql -X -v ON_ERROR_STOP=1`.
+- Modos: sin argumento = producción (`sudo docker`, contenedor por filtro
+  `name=contablemas-contablemas`; aborta si hay 0 o más de 1); `--local` (`contable-pms-db`,
+  `docker` sin `sudo` si alcanza); `--db <contenedor>`; `--database <base>` (nuevo respecto del
+  plan: la copia de la Fase 3 es una **base** dentro de `contable-pms-db`, no un contenedor).
+- Al inicio imprime los comandos para leer `printenv TZ` y `date` del contenedor de la app; en
+  modo producción además los ejecuta (sin fallar si TZ no está definida).
+- Consultas: 0 (dueño de `journal_entries`, triggers, migraciones fallidas), 1–11 de §1.6.3 (1 con
+  hora del bloqueo y `meses_completos` para C3; 5 con `LEFT JOIN`; 7 separa racha contigua de
+  números aislados para C1), 12 (FY existentes: meses 0/13, rango vs. Ajustes; empresas con Ajustes
+  sin FY), 13 (antes del inicio, recientes y más allá de hoy + 1 año, C8), 14 (huella de 3.2.4),
+  15 (resultados: cuentas inactivas con saldo y resultado previo al ejercicio, C4/H5), 16
+  (borradores trabados con/sin documento, C5/C6) y un **RESUMEN** A–T con "cómo leerlo", más un
+  texto final que separa lo que bloquea el deploy, lo que cambia la Fase 3 y lo que requiere aviso
+  a la clienta.
+- Asiento local **999999** ("dbg") **no se borró**: con C1 no hace falta para la migración y queda
+  como caso real de "número aislado" (P = 1 en el resumen). Se puede borrar a mano si molesta.
+- **Línea base:** `npm run check-types` = **219** errores `TS`; `npm run test` = **48 archivos,
+  601 tests, todos verdes**.
+- Salida `--local` (2026-10-06) resumida, coincide con 1.2.7:
+  - 0: usuario `postgres`, dueño y superusuario; los dos triggers `O`; 0 migraciones fallidas.
+  - 1: "Empresa de Prueba 01 SA" con Ajustes 2026-01-01 03:00 → 2026-12-31 03:00, sin bloqueo,
+    contador 49, 0 FY, 32 asientos; "Empresa Demo S.A." sin Ajustes.
+  - 2: 27 DRAFT + 5 POSTED, todos sin ejercicio ni período. 3, 4, 5, 6, 8, 9, 11, 13: sin filas.
+  - 7: 1 número aislado (999999), racha contigua 0. 10: 4 asientos cambian de mes UTC vs. UTC-3.
+  - 12: sin FY; 1 empresa con Ajustes sin FY. 15: 7 cuentas de resultado con saldo, 0 inactivas,
+    resultado previo 0. 16: 27 borradores, 6 sin documento, 0 trabados.
+  - Resumen: A=true, B=2, C=0, D=1, E=1, F=0, G=0, H=0, I=0, J=0, K=0, L=0, M=0, N=0, O=0, P=1,
+    Q=0, R=0, S=0, T=0.
+- **Pendiente del usuario (bloqueante para la Fase 3):** correr el script en producción y pegar
+  la salida acá.
+
+### Fase 2: Núcleo — mes UTC, `assertPeriodOpen`, numeración y `createJournalEntryTx` (TDD)
+**Estado:** Pendiente
+
+### Fase 3: Migración de datos y sincronización de Ajustes con el ejercicio
+**Estado:** Pendiente
+
+### Fase 4: Creadores I — asientos manuales y registrar
+**Estado:** Pendiente
+
+### Fase 5: Creadores II — comerciales, equipos y depreciación
+**Estado:** Pendiente
+
+### Fase 6: Creadores III — tesorería
+**Estado:** Pendiente
+
+### Fase 7: Creadores IV — generadores contables
+**Estado:** Pendiente
+
+### Fase 8: Cierre y reapertura de meses
+**Estado:** Pendiente
+
+### Fase 9: Cierre anual
+**Estado:** Pendiente
+
+### Fase 10: Reversión desde Asientos (+ "Eliminar borrador", C6)
+**Estado:** Pendiente
+
+### Fase 11: Borrado de código muerto
+**Estado:** Pendiente
+
+### Fase 12: Errores legibles en producción (`ActionResult`) en las actions restantes
+**Estado:** Pendiente
+
+### Fase 13: Capturas, documentación, guía in-app y presentación
+**Estado:** Pendiente
+
+### Fase 14: Verificación final y notas de deploy
+**Estado:** Pendiente
 
 ## 5. Verificación
 _Pendiente - ejecutar `/verificar tsk-760-cierre-contable`_
