@@ -5,8 +5,12 @@ import { getCurrentUserId } from '@/shared/lib/current-user';
 import { logger } from '@/shared/lib/logger';
 import { checkPermission } from '@/shared/lib/permissions';
 import { prisma } from '@/shared/lib/prisma';
-import moment from 'moment';
+import { toActionResult, type ActionResult } from '@/shared/lib/action-result';
+import { getActiveCompanyId } from '@/shared/lib/company';
 import { revalidateAccountingRoutes } from '../../shared/utils';
+import type { IsoDay, YearMonth } from '../../shared/utils/journal-entry-types';
+import { buildPeriodLockStatusTx, closeMonthTx, reopenMonthTx } from './period-closing';
+import type { PeriodLockStatus } from './period-lock-common';
 
 /**
  * Obtiene la configuración contable de una empresa
@@ -108,89 +112,67 @@ export async function saveAccountingSettings(
 }
 
 /**
- * Obtiene la información de bloqueo de períodos contables
+ * Estado del panel "Bloqueo de Períodos" (TSK-760, Fase 8): meses del ejercicio abierto
+ * más antiguo y del siguiente, con borradores y la acción disponible. `null` = sin Ajustes.
  */
-export async function getLockedPeriod(companyId: string) {
+export async function getPeriodLockStatus(): Promise<PeriodLockStatus | null> {
   const userId = await getCurrentUserId();
   if (!userId) throw new Error('No autenticado');
   await checkPermission('accounting.settings', 'view', { redirect: true });
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  return buildPeriodLockStatusTx(prisma, companyId);
+}
+
+/**
+ * Cierra un mes (A1, D2): solo el primer mes abierto; con borradores, `postDrafts`
+ * los registra todos en la misma transacción o no cierra nada. Recalcula
+ * `lockedUntilDate`. Recibe `{ year, month }` (B22).
+ */
+export async function closeAccountingPeriod(
+  input: YearMonth & { postDrafts: boolean }
+): Promise<ActionResult<{ lockedUntil: IsoDay; postedDrafts: number }>> {
+  const userId = await getCurrentUserId();
+  if (!userId) throw new Error('No autenticado');
+  await checkPermission('accounting.settings', 'update', { redirect: true });
+  if (input.postDrafts) await checkPermission('accounting.entries', 'approve', { redirect: true });
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
 
   try {
-    const settings = await prisma.accountingSettings.findUnique({
-      where: { companyId },
-      select: {
-        lockedUntilDate: true,
-        fiscalYearStart: true,
-        fiscalYearEnd: true,
-      },
-    });
-
-    if (!settings) return null;
-
-    return {
-      lockedUntilDate: settings.lockedUntilDate,
-      fiscalYearStart: settings.fiscalYearStart,
-      fiscalYearEnd: settings.fiscalYearEnd,
-    };
+    const result = await prisma.$transaction(
+      (tx) => closeMonthTx(tx, { ...input, companyId, userId }),
+      { timeout: 30_000, maxWait: 10_000 } // H10: registrar N borradores puede pasar los 5 s
+    );
+    logger.info('Mes contable cerrado', { data: { companyId, userId, ...input, ...result } });
+    revalidateAccountingRoutes(companyId);
+    return { success: true, ...result };
   } catch (error) {
-    logger.error('Error al obtener período bloqueado', { data: { error, companyId, userId } });
-    throw error;
+    return toActionResult(error, 'Error al cerrar el mes contable');
   }
 }
 
 /**
- * Bloquea o desbloquea períodos contables hasta una fecha determinada.
- * La fecha debe ser el último día de un mes dentro del ejercicio fiscal.
- * Pasar null para desbloquear todos los períodos.
+ * Reabre un mes (A1, B5): solo el último cerrado y nunca uno de un ejercicio cerrado.
+ * Recalcula `lockedUntilDate` (piso: fin del último ejercicio cerrado).
  */
-export async function setLockedPeriod(companyId: string, lockedUntilDate: Date | null) {
+export async function reopenAccountingPeriod(
+  input: YearMonth
+): Promise<ActionResult<{ lockedUntil: IsoDay | null }>> {
   const userId = await getCurrentUserId();
   if (!userId) throw new Error('No autenticado');
   await checkPermission('accounting.settings', 'update', { redirect: true });
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
 
   try {
-    if (lockedUntilDate) {
-      const settings = await prisma.accountingSettings.findUnique({
-        where: { companyId },
-        select: { fiscalYearStart: true, fiscalYearEnd: true },
-      });
-
-      if (!settings) {
-        throw new Error('No se encontró configuración contable');
-      }
-
-      const lockDate = moment(lockedUntilDate);
-      const fiscalStart = moment(settings.fiscalYearStart);
-      const fiscalEnd = moment(settings.fiscalYearEnd);
-
-      // Validar que la fecha esté dentro del ejercicio fiscal
-      if (!lockDate.isBetween(fiscalStart, fiscalEnd, 'day', '[]')) {
-        throw new Error('La fecha de bloqueo debe estar dentro del ejercicio fiscal');
-      }
-
-      // Validar que sea fin de mes
-      if (!lockDate.isSame(lockDate.clone().endOf('month'), 'day')) {
-        throw new Error('La fecha de bloqueo debe ser el último día de un mes');
-      }
-    }
-
-    await prisma.accountingSettings.update({
-      where: { companyId },
-      data: { lockedUntilDate },
-    });
-
-    logger.info('Período contable actualizado', {
-      data: {
-        companyId,
-        userId,
-        lockedUntilDate: lockedUntilDate ? moment(lockedUntilDate).format('DD/MM/YYYY') : null,
-      },
-    });
-
+    const result = await prisma.$transaction((tx) => reopenMonthTx(tx, { ...input, companyId }));
+    logger.info('Mes contable reabierto', { data: { companyId, userId, ...input, ...result } });
     revalidateAccountingRoutes(companyId);
+    return { success: true, ...result };
   } catch (error) {
-    logger.error('Error al actualizar período bloqueado', { data: { error, companyId, userId } });
-    throw error;
+    return toActionResult(error, 'Error al reabrir el mes contable');
   }
 }
 

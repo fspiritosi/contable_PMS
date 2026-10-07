@@ -28,6 +28,8 @@ import { prisma } from '@/shared/lib/prisma';
 // Frontera aislada: sesión, permisos, empresa activa y caché de Next. El mock
 // de permisos conserva el módulo original (constantes, tipos) y solo
 // reemplaza `checkPermission`.
+// TSK-760: las actions de Ajustes importan el núcleo contable (`import 'server-only'`).
+vi.mock('server-only', () => ({}));
 vi.mock('@/shared/lib/current-user', () => ({ getCurrentUserId: vi.fn() }));
 vi.mock('@/shared/lib/company', () => ({ getActiveCompanyId: vi.fn() }));
 vi.mock('@/shared/lib/permissions', async (importOriginal) => ({

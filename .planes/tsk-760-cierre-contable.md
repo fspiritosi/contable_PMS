@@ -1,7 +1,7 @@
 # TSK-760 — Cierre contable: el cierre anual no funciona y el bloqueo de períodos se saltea
 
 **Fecha de inicio:** 2026-10-06
-**Estado:** Implementación en progreso (Fases 1, 2 y 4 a 7 de 14 completadas; Fase 3 pendiente del diagnóstico de producción)
+**Estado:** Implementación en progreso (Fases 1, 2 y 4 a 8 de 14 completadas; Fase 3 pendiente del diagnóstico de producción)
 
 ---
 
@@ -1028,7 +1028,7 @@ Otras decisiones de esta planificación:
 - **Objetivo:** el bloqueo de períodos cierra y abre `AccountingPeriod` en orden, sincroniza
   `lockedUntilDate`, nunca reabre un ejercicio cerrado y ofrece registrar los borradores.
 - **Tareas:**
-  - [ ] `ACC/features/settings/actions.server.ts`: reemplazar `setLockedPeriod` por
+  - [x] `ACC/features/settings/actions.server.ts`: reemplazar `setLockedPeriod` por
         `closeAccountingPeriod({ year, month, postDrafts })` y `reopenAccountingPeriod({ year,
         month })`, ambas `ActionResult`, con `checkPermission('accounting.settings', 'update')`
         (+ `accounting.entries` `approve` si `postDrafts`, D10). Reglas: solo el primer MONTHLY
@@ -1036,15 +1036,15 @@ Otras decisiones de esta planificación:
         `lockedUntilDate` recalculado en la misma tx tras `FOR UPDATE`. Con DRAFT en el mes y sin
         `postDrafts` → `BusinessError` con cantidad y primeros números; con `postDrafts` →
         `postJournalEntryTx` de cada uno o aborta todo (D2).
-  - [ ] `getPeriodLockStatus()` (reemplaza `getLockedPeriod`): meses del FY abierto más antiguo y
+  - [x] `getPeriodLockStatus()` (reemplaza `getLockedPeriod`): meses del FY abierto más antiguo y
         del siguiente si existe, desde `AccountingPeriod`, con `isClosed`, `draftCount`,
         `canClose`, `canReopen` y el motivo (`reason`) cuando no se puede.
-  - [ ] UI: partir `_PeriodLockingForm.tsx` (238) en `_PeriodLockingPanel.tsx` (lista de meses
+  - [x] UI: partir `_PeriodLockingForm.tsx` (238) en `_PeriodLockingPanel.tsx` (lista de meses
         con `useQuery(['periodLockStatus'])`), `_PeriodMonthRow.tsx` y `_ClosePeriodDialog.tsx`
         (`AlertDialog`: "Marzo 2026 tiene 4 borradores" + botón "Registrar los 4 borradores y
         cerrar"), y hook `usePeriodLockMutations.ts`; todos < 200 líneas;
         `toast.error(result.error)`. `AccountingSettings.tsx` deja de pasar el rango de Ajustes.
-  - [ ] `ACC/features/settings/period-lock.integration.test.ts`: cerrar en orden; cerrar fuera de
+  - [x] `ACC/features/settings/period-lock.integration.test.ts`: cerrar en orden; cerrar fuera de
         orden → rechaza; reabrir el último; reabrir el primer mes del FY nuevo con el anterior
         cerrado → rechaza (B5); con DRAFT sin/con `postDrafts`; DRAFT desbalanceado aborta todo;
         `lockedUntilDate` = fin del último cerrado; mes de diciembre en UTC con servidor `TZ=UTC`
@@ -3129,7 +3129,138 @@ apertura de prueba):
   `_AccountBalancesForm`.
 
 ### Fase 8: Cierre y reapertura de meses
-**Estado:** Pendiente
+**Estado:** Completada (2026-10-06)
+
+**Archivos creados** (`ACC/` = `src/modules/accounting/`, `SET/` = `ACC/features/settings/`):
+- `SET/period-lock-common.ts` (puro, usable en cliente): tipos `PeriodMonthStatus`,
+  `PeriodLockFiscalYear`, `PeriodLockStatus` (§3.3.5), `PERIOD_LOCK_STATUS_QUERY_KEY`
+  (`['accounting', 'periodLockStatus']`), `formatMonthLong` ('marzo 2026'), `postDraftsLabel`
+  ("Registrar los N borradores y cerrar" / "Registrar el borrador y cerrar") y
+  `draftsPendingMessage` (texto de §3.3.5, hasta 5 números y `…`, singular/plural).
+- `SET/period-closing.ts` (`server-only`, sin `'use server'`, H7): `closeMonthTx`, `reopenMonthTx`,
+  `buildPeriodLockStatusTx` y `parseYearMonth`, todos con el cliente transaccional del llamador.
+  Toman primero `lockAccountingSettingsTx`; sobre `listMonthlyPeriodsTx` eligen el primer mes
+  abierto (un FY cerrado cuenta como todo cerrado) y el último cerrado de un FY abierto; borradores
+  del mes por rango UTC (`startOfMonthUtc`/`endOfMonthUtc`); con `postDrafts`,
+  `postJournalEntryTx` de cada uno por número y, si uno lanza `BusinessError`, se relanza como
+  "No se cerró MM/YYYY: el borrador N° X no se puede registrar. <causa>" (la tx entera se
+  revierte: D2 todo o nada); después marca el período (`closedAt`/`closedBy`) y
+  `syncLockedUntilDateTx`. Sin ejercicios (Fase 3 pendiente) el cierre crea el FY 1 desde Ajustes
+  con `ensureFiscalYearTx` y completa períodos faltantes de los FY abiertos (`ensurePeriodsTx`);
+  el estado (solo lectura) se arma desde el rango de Ajustes sin crear nada (`id: null`).
+- `SET/hooks/usePeriodLockMutations.ts`: `useMutation` de cierre y reapertura; siempre invalida
+  `PERIOD_LOCK_STATUS_QUERY_KEY` y hace `router.refresh()` (también ante un rechazo, para corregir
+  una pantalla desactualizada); `toast.error(result.error)`.
+- `SET/components/_PeriodLockingPanel.tsx` (109), `_PeriodMonthCell.tsx` (65),
+  `_ClosePeriodDialog.tsx` (91), `_ReopenPeriodDialog.tsx` (60): todos < 200. El panel usa
+  `useQuery` con `initialData` del Server Component; un bloque por FY (abierto más antiguo y el
+  siguiente), "Cerrado hasta el DD/MM/YYYY", nota del piso (B5) si hay FY cerrado, insignia de
+  borradores por mes y botón solo en el mes con `action`. Diálogos con `AlertDialog` y `Button`
+  propio (no `AlertDialogAction`, para no cerrarse antes de terminar). Con borradores y sin
+  `accounting.entries` `approve`, el botón queda deshabilitado con el texto de §3.4.
+- `SET/period-lock.integration.test.ts` (20 tests, prefijo `TSK760-PLK-`).
+
+**Archivos modificados:**
+- `SET/actions.server.ts`: **borrados** `getLockedPeriod` y `setLockedPeriod` (sin otros callers;
+  ya no queda ningún fin de mes armado en el navegador). Nuevos `getPeriodLockStatus()`
+  (`accounting.settings` `view`), `closeAccountingPeriod({ year, month, postDrafts })` y
+  `reopenAccountingPeriod({ year, month })` con `ActionResult` (§3.6), `accounting.settings`
+  `update` y además `accounting.entries` `approve` si `postDrafts` (D10, sin permisos nuevos),
+  `getActiveCompanyId()` (sin `companyId` del cliente), `$transaction` con `timeout: 30_000,
+  maxWait: 10_000` en el cierre (H10), `revalidateAccountingRoutes`. Se fue el `import moment`.
+- `SET/AccountingSettings.tsx`: card con `id="bloqueo-periodos"` (`scroll-mt-20`, destino de los
+  links de §3.5), descripción nueva y `_PeriodLockingPanel initialStatus={…}`; ya no pasa el rango
+  de Ajustes. `SET/components/_PeriodLockingForm.tsx` **borrado** (238 líneas).
+- `src/modules/commercial/features/products/features/list/product-imputation-filter.integration.test.ts`:
+  `vi.mock('server-only')` (importa `getItemsWithoutAccountCounts` de las actions de Ajustes, que
+  ahora importan el núcleo).
+
+**Tests** (TDD: escritos primero; 18 de 20 fallaron por las actions inexistentes, los 2 que
+pasaban eran el chequeo de TZ; con la implementación, 20/20):
+- Orden (A1): estado sin FY desde Ajustes (12 meses, `id: null`, enero `close`, no crea FY);
+  cerrar enero crea el FY y deja `lockedUntilDate` = `2026-01-31T23:59:59.999Z`, `closedBy`,
+  `closedAt` y solo el permiso de Ajustes; cerrar marzo o enero de nuevo → "Solo se puede cerrar el
+  primer mes abierto: 02/2026."; mes inexistente (07/2031) y mes 13 → texto; **B3**: asiento
+  manual del 15/01 con enero cerrado → texto estándar; `action` = `[null, reopen, close, null]`;
+  reabrir enero o marzo con febrero como último → "Solo se puede reabrir el último mes cerrado:
+  02/2026."; reabrir febrero → `lockedUntil` 2026-01-31; reabrir enero → `null`; otra vez → "No hay
+  meses cerrados para reabrir."; empresa sin Ajustes → estado `null` y texto NO_SETTINGS.
+- **D2**: dos borradores en enero (uno a las 23:30Z del 31) → `draftCount` 2 y rechazo con
+  "El mes 01/2026 tiene 2 borradores sin registrar (N° 1, 2). Registralos o elegí "Registrar los 2
+  borradores y cerrar"."; con un borrador **desbalanceado** sembrado (N° 3) → "No se cerró 01/2026:
+  el borrador N° 3 no se puede registrar. El asiento no está balanceado. Debe: $100.00, Haber:
+  $90.00, Diferencia: $10.00", los tres siguen DRAFT (aunque 1 y 2 se registraron antes dentro de
+  la tx), enero abierto, `lockedUntilDate` nulo, y se verificó el permiso `accounting.entries`
+  `approve`; con una **cuenta no imputable** (N° 4) → mismo esquema con "La cuenta T760-RUBRO no es
+  imputable (tiene subcuentas)."; sin los trabados → `{ lockedUntil: '2026-01-31', postedDrafts: 2 }`,
+  ambos POSTED con `postDate` y período de enero; 6 borradores → lista 5 y `…`.
+- **B5**: FY 1 (2026) cerrado con diciembre desincronizado (abierto) y FY 2 (2027) abierto: el estado
+  muestra solo el FY 2 y `lastClosedFiscalYear` `{ 1, 2026-12-31 }`; cerrar 12/2026 → "Solo se puede
+  cerrar el primer mes abierto: 01/2027."; reabrir 12/2026 u 11/2026 → "No se puede reabrir
+  12/2026: pertenece al ejercicio N° 1, que está cerrado."; cerrar y reabrir 01/2027 →
+  `lockedUntil` **2026-12-31** (piso, no `null`); el FY 1 sigue cerrado.
+- **B22**: el bloque de diciembre corre dos veces, con `process.env.TZ = 'UTC'` y
+  `'America/Argentina/Buenos_Aires'` (verifica que la zona cambió: el 01/12 01:00Z es día 1 o 30):
+  cierra enero→noviembre por `{ year, month }`, un borrador del 01/12 01:00Z cuenta en diciembre
+  (noviembre 0), "Registrar y cerrar" deja `lockedUntilDate` = `2026-12-31T23:59:59.999Z` y un
+  asiento del 31/12 23:30Z se rechaza con "(mes 12/2026 cerrado)". Además el archivo completo se
+  corrió con `TZ=UTC` y con `TZ=America/Argentina/Buenos_Aires` en el entorno: 20/20 en ambos.
+
+**Calidad:** `npm run test` = **60 archivos, 791 tests, verdes**; `check-types` = **219**; `eslint`
+de `SET/` sin errores ni warnings. Sin `any` ni `console`. No quedan empresas de test.
+
+**Prueba en navegador** (Playwright contra :3010, "Empresa de Prueba 01 SA"; script temporal
+borrado; capturas `f8-01` a `f8-10` en el scratchpad). `locked_until_date` inicial: **NULL**.
+Borradores sembrados por SQL en mayo: N° 68 (Caja chica / Caja $1) y N° 69 (cuenta 1.0.0/00/00
+ACTIVO, no imputable).
+- Cerrar enero → abril en orden por la grilla: toasts "Se cerró enero 2026" … "abril 2026"; la
+  grilla muestra "Cerrado hasta el 30/04/2026", abril con "Reabrir" y mayo con "Cerrar".
+- **Fuera de orden**: una segunda pestaña abierta antes de cerrar abril (abril como "primer
+  abierto") intenta cerrar abril → toast "Solo se puede cerrar el primer mes abierto: 05/2026." y
+  la pestaña se actualiza.
+- **D2**: el diálogo de mayo dice "Mayo 2026 tiene 2 borradores sin registrar" con el botón
+  "Registrar los 2 borradores y cerrar" → toast "No se cerró 05/2026: el borrador N° 69 no se puede
+  registrar. La cuenta 1.0.0/00/00 no es imputable (tiene subcuentas)."; en la DB 68 y 69 siguen
+  DRAFT y mayo abierto. Borrado el N° 69 (dato de la prueba), el diálogo ofrece "Registrar el
+  borrador y cerrar" → "Se registró el borrador y se cerró mayo 2026"; N° 68 POSTED con el período
+  de mayo; `locked_until_date` = 2026-05-31 23:59:59.999.
+- **B3**: Asientos → Nuevo asiento 10/03/2026 Caja chica / Caja $1 → toast "No se puede registrar
+  con fecha 10/03/2026: el período está cerrado (mes 03/2026 cerrado). Para operar, reabrilo desde
+  Contabilidad → Configuración → Bloqueo de Períodos." (no se creó).
+- Reabrir mayo → abril → … → enero de a uno ("Se reabrió …"). **Final: 0 períodos cerrados y
+  `locked_until_date` NULL** (igual que al inicio).
+- Móvil (390 px): grilla de 3 columnas correcta. El `scrollWidth` de 408 px viene de los selectores
+  de la card "Integración Comercial" (previo, fuera del panel).
+- Primera corrida: el script se cortó tras cerrar febrero (detección de toasts del script); se
+  dejó enero/febrero abiertos por SQL (`is_closed = false`, `closed_at/by = NULL`,
+  `locked_until_date = NULL`) y se repitió entera.
+
+**Datos que quedaron en la DB de dev:**
+- Asiento **N° 68** `a771de5f-9181-4abe-be1b-d6288d1761c7`, **POSTED** (inmutable), 12/05/2026,
+  "Verificación interna TSK-760 F8 (no usar)", Caja chica D / Caja H $1,00, período MONTHLY 05/2026
+  `814a5e6e-2fa5-4388-a3af-de9239641f9a`, `created_by = 'tsk760-f8'`. Lo registró "Registrar el
+  borrador y cerrar".
+- N° 69 (`297ed9bf-9686-4ebe-8dae-7d9fc9dbd395`, DRAFT con cuenta no imputable) **borrado**: queda
+  como hueco. `last_entry_number` = 69. Ningún borrador real de dev se registró.
+- Ningún período cerrado; `locked_until_date` NULL.
+
+**Desvíos y notas:**
+- `PeriodLockFiscalYear.id` es `string | null` (`null` = empresa sin ejercicios, estado armado desde
+  Ajustes); el diseño lo tipaba `string`. El panel recibe `initialStatus` del Server Component
+  (el diseño lo listaba sin props) para no mostrar la grilla vacía mientras carga.
+- La lógica transaccional va en `SET/period-closing.ts` (no en `actions.server.ts`) para que las
+  actions sean envoltorios finos y la lógica no quede expuesta como endpoint (H7).
+- `closeAccountingPeriod` con un mes ya cerrado responde "Solo se puede cerrar el primer mes
+  abierto: …" (el diseño no tenía texto propio para ese caso). Mes inválido: "Mes inválido:
+  2026-13." (texto no fijado).
+- Mientras no corra la Fase 3, una empresa con `lockedUntilDate` desincronizado de los períodos
+  (escenario 1 de 1.6.2) vería **bajar** `lockedUntilDate` al cerrar o reabrir un mes, porque se
+  deriva de los períodos. La Fase 3 hace el backfill por unión (D3) antes del deploy; en dev
+  `locked_until_date` era NULL.
+- El cierre de mes solo considera FY existentes: si todos los meses del FY abierto están cerrados y
+  no existe el siguiente, responde "No hay meses abiertos para cerrar…" (el siguiente lo crea el
+  primer asiento de esa fecha o el cierre anual).
+- `docs/` y la guía in-app (textos nuevos de "Bloqueo de Períodos") quedan para la Fase 13.
 
 ### Fase 9: Cierre anual
 **Estado:** Pendiente
