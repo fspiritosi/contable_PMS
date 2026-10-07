@@ -36,6 +36,7 @@ import { BusinessError } from '@/shared/lib/action-result';
 import { logger } from '@/shared/lib/logger';
 import { prisma } from '@/shared/lib/prisma';
 import { createJournalEntryTx } from '@/modules/accounting/shared/utils/journal-entry-tx';
+import { todayBusinessDayUtc } from '@/modules/accounting/shared/utils/utc-month';
 
 // Tipo para el cliente de transacción de Prisma
 type PrismaTransactionClient = Omit<
@@ -209,7 +210,7 @@ export async function createJournalEntryForAssetSale(
   return createJournalEntry(
     {
       companyId,
-      date: new Date(),
+      date: todayBusinessDayUtc(), // hoy en Argentina (TSK-760, D5 revisado)
       description: `Baja por venta de bien de uso: Equipo ${figures.vehicleLabel}`,
       lines: buildDisposalLines(figures, accounts, 'Resultado por venta'),
       source: `asset-sale:${vehicleId}`,
@@ -239,7 +240,7 @@ export async function createJournalEntryForAssetDisposal(
   return createJournalEntry(
     {
       companyId,
-      date: new Date(),
+      date: todayBusinessDayUtc(), // hoy en Argentina (TSK-760, D5 revisado)
       description: `Baja por ${motivo} de bien de uso: Equipo ${figures.vehicleLabel}`,
       lines: buildDisposalLines(figures, accounts, 'Pérdida por baja'),
       source: `asset-disposal:${vehicleId}`,

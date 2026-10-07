@@ -399,6 +399,44 @@ describe.skipIf(!dbAvailable)('anular y eliminar desde Asientos (TSK-760, Fase 1
       expect(result.success).toBe(true);
       expect(await statusOf(original.id)).toBe('REVERSED');
     });
+
+    it('"hoy" es el día de Argentina: a las 22:40 AR (01:40Z del día siguiente) fecha 06/10 (D5 revisado)', async () => {
+      const original = await seedEntry(main);
+      vi.setSystemTime(new Date('2026-10-07T01:40:00.000Z'));
+      try {
+        const check = await getReversalCheck(original.id);
+        expect(check.success && check.date).toBe('2026-10-06');
+
+        const result = await reverseJournalEntry({ entryId: original.id });
+        expect(result.success).toBe(true);
+        const reversal = await prisma.journalEntry.findFirstOrThrow({
+          where: { originalEntryId: original.id },
+          select: { date: true, period: { select: { year: true, month: true } } },
+        });
+        expect(reversal.date.toISOString()).toBe('2026-10-06T00:00:00.000Z');
+        expect(reversal.period).toEqual({ year: 2026, month: 10 });
+      } finally {
+        vi.setSystemTime(NOW);
+      }
+    });
+
+    it('"hoy" en Argentina cae en un mes cerrado aunque en UTC ya sea el mes siguiente', async () => {
+      const original = await seedEntry(main);
+      // 30/09 22:00 AR = 01/10 01:00Z: la reversión va a septiembre, que está cerrado.
+      const reopen = await closeMonthForTest(main.companyId, new Date('2026-09-15T00:00:00.000Z'));
+      vi.setSystemTime(new Date('2026-10-01T01:00:00.000Z'));
+      try {
+        const result = await reverseJournalEntry({ entryId: original.id });
+        expect(result).toEqual({
+          success: false,
+          error: expect.stringContaining('No se puede registrar con fecha 30/09/2026: el período está cerrado'),
+        });
+        expect(await statusOf(original.id)).toBe('POSTED');
+      } finally {
+        vi.setSystemTime(NOW);
+        await reopen();
+      }
+    });
   });
 
   describe('getReversalCheck', () => {

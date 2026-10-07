@@ -8,6 +8,7 @@ import { logger } from '@/shared/lib/logger';
 import { checkPermission } from '@/shared/lib/permissions';
 import { type RecurringFrequency } from '@/generated/prisma/enums';
 import { formatMonth, monthKeyUtc, revalidateAccountingRoutes } from '../../shared/utils';
+import { endOfDayUtc, todayBusinessDayUtc } from '../../shared/utils/utc-month';
 import { createJournalEntryTx } from '../../shared/utils/journal-entry-tx';
 import { recurringEntrySchema } from './validators';
 import moment from 'moment';
@@ -44,6 +45,16 @@ const FREQUENCY_LABELS: Record<string, string> = {
 };
 
 /**
+ * "Hoy" para decidir qué plantillas vencieron: el día calendario de Argentina (TSK-760,
+ * D5 revisado), comparado por día UTC (D8). Una plantilla que vence hoy, a cualquier hora,
+ * está pendiente; la de mañana no, aunque en UTC ya sea mañana.
+ */
+function businessToday(): { today: Date; endOfToday: Date } {
+  const today = todayBusinessDayUtc();
+  return { today, endOfToday: endOfDayUtc(today) };
+}
+
+/**
  * Obtiene todos los asientos recurrentes de la empresa
  */
 export async function getRecurringEntries(companyId: string) {
@@ -72,11 +83,11 @@ export async function getRecurringEntries(companyId: string) {
       orderBy: { nextDueDate: 'asc' },
     });
 
-    const now = new Date();
+    const { today, endOfToday } = businessToday();
     return entries.map((entry) => ({
       ...entry,
       frequencyLabel: FREQUENCY_LABELS[entry.frequency] ?? entry.frequency,
-      isPending: entry.nextDueDate <= now && (!entry.endDate || entry.endDate >= now),
+      isPending: entry.nextDueDate <= endOfToday && (!entry.endDate || entry.endDate >= today),
     }));
   } catch (error) {
     logger.error('Error al obtener asientos recurrentes', { data: { error, companyId } });
@@ -266,13 +277,13 @@ export async function generateAllPendingRecurringEntries(): Promise<
   if (!companyId) throw new Error('No hay empresa activa');
 
   try {
-    const now = new Date();
+    const { today, endOfToday } = businessToday();
     const pending = await prisma.recurringEntry.findMany({
       where: {
         companyId,
         isActive: true,
-        nextDueDate: { lte: now },
-        OR: [{ endDate: null }, { endDate: { gte: now } }],
+        nextDueDate: { lte: endOfToday },
+        OR: [{ endDate: null }, { endDate: { gte: today } }],
       },
       select: { id: true, name: true },
       orderBy: { nextDueDate: 'asc' },

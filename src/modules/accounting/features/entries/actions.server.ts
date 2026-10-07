@@ -16,7 +16,7 @@ import {
   type EntryDocumentLink,
 } from '../../shared/utils/entry-document-link';
 import type { IsoDay } from '../../shared/utils/journal-entry-types';
-import { startOfDayUtc, toUtcDay } from '../../shared/utils/utc-month';
+import { todayBusinessDay, todayBusinessDayUtc } from '../../shared/utils/utc-month';
 import { validateJournalEntryAccounts, validateAccountNatures, validateAuxiliaries } from './validators';
 
 import { JournalEntryStatus } from '@/generated/prisma/enums';
@@ -115,7 +115,7 @@ export interface ReversalCheck {
   blockedMessage: string | null;
   /** Advertencia para asientos de sistema sin vínculo (D6). */
   warning: string | null;
-  /** Fecha con la que se registraría la anulación: hoy, en UTC (D5). */
+  /** Fecha con la que se registraría la anulación: hoy en Argentina (D5 revisado). */
   date: IsoDay;
 }
 
@@ -143,7 +143,7 @@ export async function getReversalCheck(entryId: string): Promise<ActionResult<Re
       link,
       blockedMessage: link ? buildDocumentLinkedMessage(link) : null,
       warning: !link && entry.createdBy === 'system' ? SYSTEM_ENTRY_WARNING : null,
-      date: toUtcDay(new Date()),
+      date: todayBusinessDay(),
     };
   } catch (error) {
     return toActionResult(error, 'Error al verificar la anulación del asiento');
@@ -154,7 +154,8 @@ export async function getReversalCheck(entryId: string): Promise<ActionResult<Re
  * Anula un asiento registrado desde Asientos (TSK-760, Fase 10: B10, D5, D6).
  *
  * Rechaza los asientos que pertenecen a un documento (8 tablas + refundición/apertura):
- * se anulan desde su comprobante. La reversión se registra con fecha de hoy (UTC) y
+ * se anulan desde su comprobante. La reversión se registra con fecha de hoy (día
+ * calendario de Argentina, `todayBusinessDayUtc`) y
  * `reverseJournalEntryTx` valida el período del original y el de hoy, y copia todas las
  * columnas de línea invertidas (auxiliares, centro de costo, moneda).
  */
@@ -175,7 +176,7 @@ export async function reverseJournalEntry(input: {
       return reverseJournalEntryTx(tx, {
         companyId,
         entryId,
-        date: startOfDayUtc(new Date()),
+        date: todayBusinessDayUtc(),
         createdBy: userId,
         source: `manual-reversal:${entryId}`,
       });

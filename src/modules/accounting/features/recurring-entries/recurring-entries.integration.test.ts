@@ -260,5 +260,27 @@ describe.skipIf(!dbAvailable)('asientos recurrentes respetan el período cerrado
       expect(entries).toEqual([{ number: 1, period: { month: 3 } }]);
       expect(await readLastEntryNumber(c.companyId)).toBe(1);
     });
+
+    it('"hoy" es el día de Argentina: vence hoy aunque sea a mediodía, y mañana no vence a las 22:40 AR', async () => {
+      const c = await setupCompany('Hoy AR');
+      asCompany(c);
+      // Mediodía local (como guarda el formulario) del 06/10 y 00:00Z del 07/10.
+      const today = await createTemplate(c, 'Hoy', new Date('2026-10-06T15:00:00.000Z'));
+      const tomorrow = await createTemplate(c, 'Mañana', new Date('2026-10-07T00:00:00.000Z'));
+      vi.useFakeTimers({ toFake: ['Date'] });
+      try {
+        // 10:00 AR del 06/10: la de hoy ya vence (antes esperaba al mediodía).
+        vi.setSystemTime(new Date('2026-10-06T13:00:00.000Z'));
+        expect(await generateAllPendingRecurringEntries()).toEqual({ success: true, generated: 1, errors: [] });
+        expect((await readTemplate(today.id)).lastGenerated).toEqual(new Date('2026-10-06T15:00:00.000Z'));
+
+        // 22:40 AR del 06/10 = 01:40Z del 07/10: la de mañana todavía no vence.
+        vi.setSystemTime(new Date('2026-10-07T01:40:00.000Z'));
+        expect(await generateAllPendingRecurringEntries()).toEqual({ success: true, generated: 0, errors: [] });
+        expect((await readTemplate(tomorrow.id)).lastGenerated).toBeNull();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 });

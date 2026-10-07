@@ -39,6 +39,7 @@ import {
   readEntryPeriod,
   readLastEntryNumber,
 } from '@/modules/accounting/shared/test-utils/period-test-helpers';
+import { todayBusinessDayUtc } from '@/modules/accounting/shared/utils/utc-month';
 // Código real de producción: nada de esto se reimplementa acá.
 import { createValueAdjustment } from '../depreciation/actions.server';
 import { softDeleteVehicle } from './actions.server';
@@ -325,7 +326,13 @@ describe.skipIf(!dbAvailable)(
       it('caso 1b (TSK-760): el asiento de la baja nace DRAFT con ejercicio y período del mes de hoy', async () => {
         expect(saleEntryId).toBeTruthy();
         const entry = await readEntryPeriod(saleEntryId!);
-        const today = new Date();
+        // "Hoy" es el día calendario de Argentina (D5 revisado), a las 00:00Z.
+        const today = todayBusinessDayUtc();
+        const { date } = await prisma.journalEntry.findUniqueOrThrow({
+          where: { id: saleEntryId! },
+          select: { date: true },
+        });
+        expect(date.toISOString()).toBe(today.toISOString());
         expect(entry.status).toBe('DRAFT');
         expect(entry.createdBy).toBe('system');
         expect(entry.fiscalYearId).not.toBeNull();
@@ -411,7 +418,7 @@ describe.skipIf(!dbAvailable)(
 
     describe('caso 4b (TSK-760, B3): mes cerrado por período sin lockedUntilDate', () => {
       it('la baja se rechaza con el mes cerrado, sin consumir número, y el equipo sigue activo', async () => {
-        const today = new Date();
+        const today = todayBusinessDayUtc();
         const reopen = await closeMonthForTest(companyId, today);
         const counterBefore = await readLastEntryNumber(companyId);
         try {

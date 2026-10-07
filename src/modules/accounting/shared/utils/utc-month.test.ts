@@ -6,7 +6,7 @@
  * (UTC-3): la zona se fija antes de importar el módulo (y moment) con
  * `vi.resetModules`, en dos `describe`.
  */
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 type UtcMonthModule = typeof import('./utc-month');
 
@@ -169,6 +169,52 @@ for (const tz of ['UTC', 'America/Argentina/Buenos_Aires']) {
       it('formatDayUtc → DD/MM/YYYY del día UTC', () => {
         expect(m.formatDayUtc(new Date('2026-03-10T02:00:00.000Z'))).toBe('10/03/2026');
         expect(m.formatDayUtc('2026-03-10')).toBe('10/03/2026');
+      });
+    });
+
+    describe('todayBusinessDayUtc (D5 revisado: "hoy" es el día calendario de Argentina)', () => {
+      afterEach(() => {
+        vi.useRealTimers();
+      });
+
+      it('la zona del negocio es una sola constante', () => {
+        expect(m.BUSINESS_TIME_ZONE).toBe('America/Argentina/Buenos_Aires');
+      });
+
+      it('23:30 AR (02:30Z del día siguiente) → el día de Argentina a 00:00Z', () => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(new Date('2026-10-07T02:30:00.000Z'));
+        expect(iso(m.todayBusinessDayUtc())).toBe('2026-10-06T00:00:00.000Z');
+        expect(m.todayBusinessDay()).toBe('2026-10-06');
+      });
+
+      it('22:40 AR (01:40Z) → el día de Argentina, no el de UTC', () => {
+        expect(iso(m.todayBusinessDayUtc(new Date('2026-10-07T01:40:00.000Z')))).toBe(
+          '2026-10-06T00:00:00.000Z'
+        );
+      });
+
+      it('00:00 AR (03:00Z) ya es el día siguiente', () => {
+        expect(iso(m.todayBusinessDayUtc(new Date('2026-10-07T03:00:00.000Z')))).toBe(
+          '2026-10-07T00:00:00.000Z'
+        );
+      });
+
+      it('23:59:59.999 AR (02:59:59.999Z) sigue siendo el día anterior', () => {
+        expect(iso(m.todayBusinessDayUtc(new Date('2026-10-07T02:59:59.999Z')))).toBe(
+          '2026-10-06T00:00:00.000Z'
+        );
+      });
+
+      it('fin de mes y de año: 31/12 21:30 AR (01/01 00:30Z) → 31/12', () => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(new Date('2027-01-01T00:30:00.000Z'));
+        expect(iso(m.todayBusinessDayUtc())).toBe('2026-12-31T00:00:00.000Z');
+        expect(m.monthKeyUtc(m.todayBusinessDayUtc())).toEqual({ year: 2026, month: 12 });
+      });
+
+      it('mediodía AR → el mismo día', () => {
+        expect(m.todayBusinessDay(new Date('2026-03-01T15:00:00.000Z'))).toBe('2026-03-01');
       });
     });
   });
