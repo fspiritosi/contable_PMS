@@ -185,3 +185,25 @@ Asiento manual: `<Controller name="date" … render={({ field }) => <_DateInput 
   </Button>
 </PermissionGuard>
 ```
+
+## 4. Verificación (2026-10-20)
+
+| Chequeo | Resultado |
+|---------|-----------|
+| Vitest (`npm run test`) | 71 archivos, 988 tests en verde (8 nuevos en `date-input.test.ts`, también con `TZ=UTC`) |
+| `tsc --noEmit` | 93 errores en `main` y 93 en la rama: ninguno nuevo |
+| ESLint sobre los 15 archivos `src/` de la rama | 6 errores previos (comillas sin escapar y `any` en líneas no tocadas), ninguno nuevo |
+| `npm run build` | OK |
+| Regresión en navegador (tipear 15/06/2026 tecla por tecla) | 10/10 sitios con datos en `2026-06-15`. Control sobre `main`: los 10 fallan y el asiento manual cae en "Algo salió mal — Invalid time value" |
+| Devolución a socio | **Sin verificar en navegador**: dev no tiene socios con saldo adeudado y el campo solo aparece con cuotas pendientes. Mismo cableado (`<_DateInput {...field} />` + `z.date`) que recibos y OP, que sí pasaron |
+| Fecha incompleta al guardar | "La fecha de emisión es requerida" y no se guarda |
+| Botón Nueva Factura | Navega a `/dashboard/commercial/purchases/new`. Sin desborde a 1440, 1100 y 375 px (antes, 690 px a 375) |
+
+Las capturas y chequeos del PDF se reproducen con `node scripts/guia-presentacion/capturas-tsk782.mjs`.
+
+### Seguimientos detectados (fuera de alcance)
+
+- `PurchaseInvoicesList.tsx:35`: el "Nueva Factura" del listado no está dentro de un `PermissionGuard` de `create`.
+- `_CreateEntryModal.tsx`: el valor por defecto de la fecha es `new Date()` (hora actual), no
+  `todayBusinessDayUtc()` (D8). Después de las 21:00 de Argentina el input muestra el día siguiente. Ya
+  pasaba antes de este ticket.
