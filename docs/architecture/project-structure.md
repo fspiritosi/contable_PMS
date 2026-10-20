@@ -171,7 +171,7 @@ src/shared/
 ├── components/
 │   ├── ui/                        # shadcn/ui (40+ componentes)
 │   ├── layout/                    # Sidebar, Header, CompanySelector
-│   └── common/                    # DataTable, FileDropzone, PermissionGuard
+│   └── common/                    # DataTable, FileDropzone, PermissionGuard, _DateInput
 │
 ├── hooks/
 │   ├── useCatalogs.ts             # React Query para catalogos
@@ -203,6 +203,7 @@ src/shared/
 │
 ├── utils/
 │   ├── formatters.ts              # formatDate, formatCurrency, etc.
+│   ├── date-input.ts              # Date ↔ valor de <input type="date"> (local / UTC)
 │   ├── mappers.ts                 # Labels y badges para enums
 │   ├── documentPaths.ts           # Path builders para storage
 │   └── slugify.ts                 # Slugificacion de strings
