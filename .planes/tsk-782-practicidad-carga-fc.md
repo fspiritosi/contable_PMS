@@ -204,6 +204,48 @@ Las capturas y chequeos del PDF se reproducen con `node scripts/guia-presentacio
 ### Seguimientos detectados (fuera de alcance)
 
 - `PurchaseInvoicesList.tsx:35`: el "Nueva Factura" del listado no está dentro de un `PermissionGuard` de `create`.
-- `_CreateEntryModal.tsx`: el valor por defecto de la fecha es `new Date()` (hora actual), no
-  `todayBusinessDayUtc()` (D8). Después de las 21:00 de Argentina el input muestra el día siguiente. Ya
-  pasaba antes de este ticket.
+- ~~`_CreateEntryModal.tsx`: fecha por defecto `new Date()`~~ → resuelto en la sección 5.
+
+## 5. Fecha por defecto en hora de Argentina (2026-10-20)
+
+### 5.1 Problema
+
+Pedido del usuario al revisar la verificación: *"el tema de horario no es aceptable, debe respetar hora
+argentina"*.
+
+Las fechas por defecto de los formularios eran `new Date()`, o sea el instante actual con hora. Producción
+corre en UTC y el núcleo contable lee el día en UTC (D8). Desde las 21:00 de Argentina, ese instante ya cae
+en el día siguiente en UTC:
+
+- **Asiento manual**: `_DateInput mode="utc"` mostraba directamente el día siguiente (verificado: a las
+  22:40 AR del 20/10 mostraba `2026-10-21`).
+- **Formularios comerciales**: en pantalla se veía el día correcto (el navegador formatea en hora local),
+  pero se guardaba `2026-10-21T01:40Z`. La integración contable usa `invoice.issueDate` como fecha del
+  asiento, así que el asiento quedaba del 21 y, el último día del mes, en el período siguiente.
+- **Servidor**: la factura que se genera desde un remito (`issueDate: new Date()`) y la referencia de "hoy"
+  de `getCurrentFiscalYear` / `buildImputableAccountsWhere`. Los ejercicios terminan a las
+  `23:59:59.999Z`: el 31/12 desde las 21 h, el "ejercicio en curso" pasaba a ser el siguiente.
+
+### 5.2 Decisión
+
+- **D5.** "Hoy" es el día calendario de Argentina. `BUSINESS_TIME_ZONE` y `todayBusinessDay()` pasan de
+  `accounting/shared/utils/utc-month.ts` a `src/shared/utils/business-day.ts` (comercial no puede importar
+  de accounting), y `utc-month.ts` los reexporta. Siguen teniendo una sola fuente.
+- `businessToday(mode)` en `date-input.ts` devuelve ese día con la convención del modo: `'local'` = 12:00
+  (cae el mismo día en Argentina y en UTC) y `'utc'` = 00:00Z (D8).
+- Se reemplaza en todas las fechas de negocio por defecto: los 14 formularios con `_DateInput` u otros
+  inputs de fecha, más remitos, recepciones, endoso y depósito de cheques, cuotas de OC y los diálogos de
+  amortización de equipos. También en el servidor: la factura desde remito, `getCurrentFiscalYear` y
+  `buildImputableAccountsWhere`.
+- **No** se tocan las marcas de tiempo de un evento (`createdAt`, `date` de `stockMovement`, `postedDate`,
+  `terminationDate`): son instantes y están bien como tales.
+
+### 5.3 Verificación
+
+| Chequeo | Resultado |
+|---------|-----------|
+| `date-input.test.ts` | 3 tests nuevos de `businessToday`: 22:40 AR, 00:00 AR y 31/10 23:30 AR, en modo local y utc |
+| Vitest completo | 71 archivos, 991 tests en verde, también con `TZ=UTC` y `TZ=America/Argentina/Buenos_Aires` (`utc-month`) |
+| `tsc --noEmit` | 219 líneas de error, idénticas antes y después del cambio: ninguna nueva |
+| ESLint sobre los archivos tocados | 9 errores, los mismos que antes (`any` y comillas en líneas no tocadas) |
+| Navegador con el reloj en 20/10 22:40 AR (`timezoneId` AR) | Asiento manual `2026-10-20` (control con el código previo: `2026-10-21`). Factura de compra `2026-10-20` |

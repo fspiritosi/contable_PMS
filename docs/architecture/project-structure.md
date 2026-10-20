@@ -203,7 +203,8 @@ src/shared/
 │
 ├── utils/
 │   ├── formatters.ts              # formatDate, formatCurrency, etc.
-│   ├── date-input.ts              # Date ↔ valor de <input type="date"> (local / UTC)
+│   ├── business-day.ts            # "Hoy" en Argentina (zona del negocio)
+│   ├── date-input.ts              # Date ↔ valor de <input type="date"> (local / UTC), businessToday
 │   ├── mappers.ts                 # Labels y badges para enums
 │   ├── documentPaths.ts           # Path builders para storage
 │   └── slugify.ts                 # Slugificacion de strings

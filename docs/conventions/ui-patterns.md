@@ -146,6 +146,23 @@ Para un campo de fecha cuyo valor es un `Date`, usar `_DateInput`
 - Los campos que guardan la fecha como string `'YYYY-MM-DD'` no tienen el problema y pueden seguir con
   `<Input type="date">`.
 
+### Fecha por defecto: "hoy" en Argentina (`businessToday`)
+
+La fecha por defecto de un formulario (o la fecha de negocio que arma el servidor) es
+`businessToday()` (`@/shared/utils/date-input`), **nunca `new Date()`**:
+
+```tsx
+defaultValues: { issueDate: businessToday() }        // comercial: el día de Argentina a las 12:00
+defaultValues: { date: businessToday('utc') }        // núcleo contable: el día de Argentina a las 00:00Z
+```
+
+`new Date()` guarda la hora actual. Desde las 21:00 de Argentina eso ya es el día siguiente en UTC, que
+es como lo leen el servidor de producción y el núcleo contable: la factura o el asiento quedaban fechados
+mañana y, el último día del mes, en el período siguiente (TSK-782). "Hoy" se calcula con
+`todayBusinessDay()` (`@/shared/utils/business-day`, zona `America/Argentina/Buenos_Aires`). En el núcleo
+contable, `todayBusinessDayUtc()` (`utc-month.ts`) es lo mismo con la convención D8. Las marcas de tiempo
+de un evento (`createdAt`, la fecha de un movimiento de stock) siguen con `new Date()`.
+
 ### Schemas en `validators.ts`
 
 Los schemas Zod van en el archivo `validators.ts` de cada feature o en `shared/validators.ts` si son compartidos.

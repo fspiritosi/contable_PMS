@@ -1023,6 +1023,8 @@ Tanto Recibos como Órdenes de Pago soportan retenciones impositivas:
   encabezado se apila debajo de `lg` y los botones hacen wrap (TSK-782)
 - La fecha de emisión (y las de ventas, presupuestos, recibos, OP, devoluciones a socios, reportes y
   asiento manual) usa `_DateInput`: ver `docs/conventions/ui-patterns.md` (TSK-782)
+- La fecha por defecto de todos los formularios comerciales es "hoy" en Argentina (`businessToday()`),
+  no `new Date()`: cargando después de las 21 h la factura ya no queda fechada al día siguiente (TSK-782)
 
 ### Factura de Venta
 - voucherType válido según reglas AFIP (matriz emisor/receptor)
