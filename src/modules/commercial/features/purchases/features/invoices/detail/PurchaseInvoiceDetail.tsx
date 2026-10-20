@@ -5,7 +5,7 @@ import { Button } from '@/shared/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/card';
 import { Badge } from '@/shared/components/ui/badge';
 import { Alert, AlertDescription } from '@/shared/components/ui/alert';
-import { PackageCheck, PackageMinus, PackageSearch, Paperclip } from 'lucide-react';
+import { PackageCheck, PackageMinus, PackageSearch, Paperclip, Plus } from 'lucide-react';
 import { BackButton } from '@/shared/components/common/BackButton';
 import moment from 'moment';
 import { PURCHASE_INVOICE_STATUS_LABELS, VOUCHER_TYPE_LABELS } from '../shared/validators';
@@ -88,8 +88,8 @@ export async function PurchaseInvoiceDetail({ invoiceId }: Props) {
     <PermissionGuard module="commercial.purchases" action="view" redirect>
       <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex items-center gap-4 lg:flex-1">
           <BackButton variant="outline" />
           <div>
             <h1 className="text-3xl font-bold tracking-tight">
@@ -100,7 +100,16 @@ export async function PurchaseInvoiceDetail({ invoiceId }: Props) {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Atajo para cargar la siguiente factura sin volver al listado (TSK-782) */}
+          <PermissionGuard module="commercial.purchases" action="create">
+            <Button variant="outline" asChild>
+              <Link href="/dashboard/commercial/purchases/new">
+                <Plus className="mr-2 h-4 w-4" />
+                Nueva Factura
+              </Link>
+            </Button>
+          </PermissionGuard>
           <_PurchaseInvoicePDFButton invoice={invoice} />
           {(invoice.status === 'CONFIRMED' || invoice.status === 'PARTIAL_PAID') && (
             <_LinkPurchaseInvoiceToProjection
