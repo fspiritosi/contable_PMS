@@ -22,6 +22,7 @@ import {
   SelectValue,
 } from '@/shared/components/ui/select';
 import { Input } from '@/shared/components/ui/input';
+import { _DateInput } from '@/shared/components/common/_DateInput';
 import { Textarea } from '@/shared/components/ui/textarea';
 import {
   Popover,
@@ -41,6 +42,7 @@ import { useEffect, useState } from 'react';
 import { Card } from '@/shared/components/ui/card';
 import { Separator } from '@/shared/components/ui/separator';
 import { MoneyInput } from '@/shared/components/ui/money-input';
+import { businessToday } from '@/shared/utils/date-input';
 
 type FormInput = z.infer<typeof quoteFormSchema>;
 
@@ -525,7 +527,7 @@ export function QuoteForm({
       recipientType: 'customer',
       customerId: '',
       leadId: '',
-      issueDate: new Date(),
+      issueDate: businessToday(),
       expirationDate: undefined,
       currency: 'ARS',
       notes: '',
@@ -807,15 +809,7 @@ export function QuoteForm({
                 <FormItem>
                   <FormLabel>Fecha de Emisión</FormLabel>
                   <FormControl>
-                    <Input
-                      type="date"
-                      value={moment(field.value).format('YYYY-MM-DD')}
-                      onChange={(e) =>
-                        field.onChange(
-                          new Date(e.target.value + 'T12:00:00'),
-                        )
-                      }
-                    />
+                    <_DateInput {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

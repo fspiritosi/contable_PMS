@@ -1,0 +1,478 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>TSK-782 — Cargar facturas de compra más rápido</title>
+<style>
+  @page {
+    size: A4;
+    margin: 0;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #1f2430;
+    font-size: 13px;
+    line-height: 1.55;
+    background: #ffffff;
+  }
+
+  .page {
+    padding: 4mm 2mm;
+  }
+
+  header.cover {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    text-align: left;
+    padding: 10mm 2mm 8mm 2mm;
+    border-bottom: 3px solid #2f6f4f;
+    margin-bottom: 10mm;
+  }
+
+  .eyebrow {
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 11px;
+    font-weight: 700;
+    color: #2f6f4f;
+    margin-bottom: 6px;
+  }
+
+  h1 {
+    font-size: 26px;
+    margin: 0 0 8px 0;
+    color: #14251c;
+  }
+
+  .subtitle {
+    font-size: 14px;
+    color: #4b5563;
+    margin: 0;
+  }
+
+  section {
+    margin-bottom: 9mm;
+    page-break-inside: avoid;
+  }
+
+  section.allow-break {
+    page-break-inside: auto;
+  }
+
+  section:last-of-type { margin-bottom: 2mm; }
+
+  h2 {
+    font-size: 16px;
+    color: #14251c;
+    border-left: 4px solid #2f6f4f;
+    padding-left: 8px;
+    margin: 0 0 6mm 0;
+    page-break-after: avoid;
+  }
+
+  h3.sub {
+    font-size: 13.5px;
+    color: #14251c;
+    margin: 6mm 0 3mm 0;
+    page-break-after: avoid;
+  }
+
+  .quote {
+    background: #f4f7f5;
+    border-left: 4px solid #2f6f4f;
+    padding: 10px 14px;
+    font-style: italic;
+    color: #2b3a33;
+    margin: 0 0 6px 0;
+  }
+
+  .quote cite {
+    display: block;
+    font-style: normal;
+    font-size: 11.5px;
+    color: #6b7280;
+    margin-top: 6px;
+  }
+
+  .before-after {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    page-break-inside: avoid;
+  }
+
+  .card {
+    border: 1px solid #e2e5e0;
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+
+  .card.before { background: #fbf7f2; border-color: #ecd9bd; }
+  .card.after { background: #f2f8f4; border-color: #bfe0cb; }
+
+  .card h3 {
+    margin: 0 0 6px 0;
+    font-size: 12.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .card.before h3 { color: #9a6a1f; }
+  .card.after h3 { color: #226240; }
+
+  .card p { margin: 0; }
+
+  ol.steps {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    counter-reset: step;
+  }
+
+  ol.steps > li {
+    counter-increment: step;
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+    page-break-inside: avoid;
+  }
+
+  ol.steps > li::before {
+    content: counter(step);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    border-radius: 50%;
+    background: #2f6f4f;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  ol.steps.letters > li::before {
+    content: counter(step, lower-alpha);
+  }
+
+  .step-body { flex: 1; }
+
+  .step-body strong { color: #14251c; }
+
+  figure {
+    margin: 8px 0 0 0;
+    page-break-inside: avoid;
+  }
+
+  figure img {
+    max-width: 100%;
+    border: 1px solid #d9dce0;
+    border-radius: 6px;
+    display: block;
+  }
+
+  figure.small img { max-width: 320px; }
+
+  figure.sidebar img { max-width: 150px; }
+
+  figure.modal img { max-width: 400px; }
+
+  figure.modal-sm img { max-width: 340px; }
+
+  ol.steps.long > li { page-break-inside: auto; }
+
+  figcaption {
+    font-size: 11px;
+    color: #6b7280;
+    margin-top: 4px;
+  }
+
+  .callout {
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin: 0 0 8px 0;
+    page-break-inside: avoid;
+  }
+
+  .callout.config {
+    background: #f2f6fb;
+    border: 1px solid #cddaeb;
+  }
+
+  .callout.warning {
+    background: #fdf5ec;
+    border: 1px solid #efd6a8;
+  }
+
+  .callout h3 {
+    margin: 0 0 4px 0;
+    font-size: 13px;
+  }
+
+  .callout p { margin: 0 0 6px 0; }
+  .callout p:last-child { margin-bottom: 0; }
+
+  ul.plain {
+    margin: 4px 0 0 0;
+    padding-left: 18px;
+  }
+
+  ul.plain li { margin-bottom: 4px; }
+
+  .no-change-list {
+    display: grid;
+    gap: 6px;
+  }
+
+  .no-change-item {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+  }
+
+  .check {
+    color: #2f6f4f;
+    font-weight: 700;
+  }
+
+  .side-by-side {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8mm;
+    align-items: start;
+    page-break-inside: avoid;
+  }
+
+  .side-by-side figure { margin-top: 0; }
+
+  .side-by-side.narrow-left {
+    grid-template-columns: 160px 1fr;
+  }
+
+  .ui-text {
+    font-style: italic;
+    color: #374151;
+  }
+
+  table.chain {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 6px 0 8px 0;
+    font-size: 12px;
+    page-break-inside: avoid;
+  }
+
+  table.chain th, table.chain td {
+    border: 1px solid #dfe3e0;
+    padding: 6px 8px;
+    text-align: left;
+    vertical-align: top;
+  }
+
+  table.chain th {
+    background: #f4f7f5;
+    color: #14251c;
+    font-weight: 700;
+  }
+
+  .entry {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 11.5px;
+    background: #f7f8f7;
+    border: 1px solid #e2e5e0;
+    border-radius: 6px;
+    padding: 8px 10px;
+    margin: 6px 0;
+    white-space: pre;
+  }
+
+  /* TSK-782: los campos de fecha se muestran a su tamaño real; el encabezado del detalle, a lo ancho */
+  figure.field img { max-width: 360px; }
+  figure.phone img { max-width: 190px; }
+  .side-by-side.phone-left { grid-template-columns: 200px 1fr; }
+  .keep-together { page-break-inside: avoid; }
+
+  footer.doc-footer {
+    text-align: center;
+    color: #9ca3af;
+    font-size: 10.5px;
+    margin-top: 2mm;
+  }
+</style>
+
+</head>
+
+<body>
+
+<div class="page">
+
+  <header class="cover">
+    <div class="eyebrow">Ticket 782 · Comercial → Compras → Facturas de Compra</div>
+    <h1>Cargar facturas de compra más rápido</h1>
+    <p class="subtitle">Guía de presentación — qué pediste, qué cambió, cómo se usa paso a paso y qué no cambia</p>
+  </header>
+
+  <section>
+    <h2>1. Qué pediste</h2>
+    <div class="quote">
+      "Estoy poniéndome al día con la carga de facturas y podría tener un botón de 'nueva factura' o
+      algo así y no volver de cero a entrar a facturas compra, 'nueva factura'. Y también, algo que
+      siempre no anda bien, es la fecha. Ponés el día, bien, ponés mes, y la fecha se pone DD.
+      Después la podés corregir pero SIEMPRE :)"
+      <cite>— Elizabeth Perez, ticket 782</cite>
+    </div>
+    <p>Eran dos cosas distintas, y las dos están resueltas:</p>
+    <ul class="plain">
+      <li><strong>La fecha se borraba al tipearla.</strong> Escribías el día, pasabas al mes y el día
+      volvía a quedar en blanco (<span class="ui-text">dd</span>).</li>
+      <li><strong>Faltaba un atajo para cargar la siguiente factura.</strong> Después de guardar una
+      factura había que volver al listado y entrar otra vez a <span class="ui-text">Nueva Factura</span>.</li>
+    </ul>
+  </section>
+
+  <section class="allow-break">
+    <h2>2. La fecha ya no se borra al tipearla</h2>
+    <div class="before-after">
+      <div class="card before">
+        <h3>Antes</h3>
+        <p>Al empezar a escribir el mes, el campo se vaciaba y solo quedaba el mes. Había que volver a
+        escribir el día (o elegir la fecha en el calendario).</p>
+        <figure class="field">
+          <img src="assets/tsk782-01-fecha-antes.png" alt="Campo Fecha de Emisión que muestra dd/06/aaaa después de tipear 15 y 06" />
+          <figcaption>Tipeando 15 y 06: el día y el año se pierden.</figcaption>
+        </figure>
+      </div>
+      <div class="card after">
+        <h3>Ahora</h3>
+        <p>La fecha se escribe de corrido, como en cualquier campo: día, mes y año. Lo que tipeás
+        queda.</p>
+        <figure class="field">
+          <img src="assets/tsk782-01-fecha-despues.png" alt="Campo Fecha de Emisión que muestra 15/06/2026 después de tipear 15 y 06" />
+          <figcaption>Las mismas teclas: queda 15/06/2026.</figcaption>
+        </figure>
+      </div>
+    </div>
+
+    <h3 class="sub">No era solo en Compras</h3>
+    <p>El mismo problema estaba en otras pantallas donde se escribe una fecha, y quedó arreglado en
+    todas:</p>
+    <ul class="plain">
+      <li>Facturas de compra y de venta, y presupuestos (<span class="ui-text">Fecha de Emisión</span>).</li>
+      <li>Recibos, órdenes de pago y devoluciones a socios (<span class="ui-text">Fecha</span>).</li>
+      <li>Reportes de Compras y de Ventas (<span class="ui-text">Desde</span> y <span class="ui-text">Hasta</span>).
+      Mientras una de las dos fechas está a medio escribir, el botón <span class="ui-text">Generar</span>
+      espera a que la termines.</li>
+      <li>Asiento manual en Contabilidad. Ahí era peor: al empezar a escribir el mes aparecía la
+      pantalla <span class="ui-text">Algo salió mal</span> y se perdía lo que estaba cargado en el
+      asiento.</li>
+    </ul>
+
+    <div class="keep-together">
+    <h3 class="sub">Si guardás con la fecha incompleta</h3>
+    <p>Si borrás una parte de la fecha (por ejemplo el día) y guardás, el sistema no guarda y te
+    avisa en el mismo campo.</p>
+    <figure class="field">
+      <img src="assets/tsk782-03-fecha-incompleta.png" alt="Campo Fecha de Emisión en rojo con dd/10/2026 y el mensaje La fecha de emisión es requerida" />
+      <figcaption>Día borrado y clic en <span class="ui-text">Guardar Factura</span>: el campo se marca en
+      rojo con <span class="ui-text">La fecha de emisión es requerida</span>.</figcaption>
+    </figure>
+    </div>
+
+    <div class="keep-together">
+    <h3 class="sub">Si cargás de noche</h3>
+    <p>Al abrir una factura, un recibo, un asiento o cualquier otro formulario, la fecha que aparece
+    es la de <strong>hoy en Argentina</strong>. Antes, desde las 21 h, el sistema podía tomar el día
+    siguiente: en el asiento se veía directamente, y en las facturas la fecha en pantalla era la
+    correcta pero el asiento contable quedaba con el día siguiente (el último día del mes, en el mes
+    siguiente). Ahora una factura cargada el 31 a las 23 h queda del 31.</p>
+    </div>
+  </section>
+
+  <section class="allow-break">
+    <h2>3. Botón "Nueva Factura" en el detalle</h2>
+    <p>Cuando guardás una factura de compra, el sistema te muestra su detalle. Ahora ese detalle tiene
+    el botón <span class="ui-text">Nueva Factura</span> arriba, al lado de
+    <span class="ui-text">Descargar PDF</span>, en el lugar que marcaste en la captura del ticket.</p>
+
+    <ol class="steps">
+      <li><div class="step-body">
+        <strong>Cargá y guardá la factura</strong> como siempre, desde Comercial → Compras → Facturas de
+        Compra → <span class="ui-text">Nueva Factura</span>.
+      </div></li>
+      <li><div class="step-body">
+        <strong>En el detalle, hacé clic en <span class="ui-text">Nueva Factura</span>.</strong>
+        <figure>
+          <img src="assets/tsk782-04-detalle-boton.png" alt="Encabezado del detalle de la Factura 0001-97643935 con los botones Nueva Factura, Descargar PDF, Vincular a Proyección, Pagar Factura y la etiqueta Parcialmente pagada" />
+          <figcaption>El botón nuevo es el primero de la fila. Los demás siguen donde estaban.</figcaption>
+        </figure>
+      </div></li>
+      <li><div class="step-body">
+        <strong>Se abre una factura nueva, vacía</strong>, lista para la siguiente. La fecha de emisión
+        arranca en el día de hoy, igual que cuando entrás desde el listado.
+        <figure>
+          <img src="assets/tsk782-06-nueva-factura.png" alt="Pantalla Nueva Factura de Compra con los Datos del Comprobante vacíos: Proveedor, Tipo de Comprobante, Punto de Venta, Número, Fecha de Emisión 20/10/2026 y Fecha de Vencimiento" />
+          <figcaption>Comercial → Compras → Nueva Factura de Compra, sin pasar por el listado.</figcaption>
+        </figure>
+      </div></li>
+    </ol>
+
+    <div class="side-by-side phone-left">
+      <figure class="phone">
+        <img src="assets/tsk782-05-detalle-movil.png" alt="Detalle de la factura en un celular: título, y debajo los botones Nueva Factura, Descargar PDF, Vincular a Proyección y Pagar Factura acomodados en varias líneas" />
+      </figure>
+      <div>
+        <p><strong>En el celular</strong> los botones se acomodan en varias líneas debajo del título.
+        Antes, en pantallas chicas, quedaban cortados hacia la derecha y había que desplazar la página
+        de costado para llegar a ellos.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>4. Qué hay que configurar</h2>
+    <div class="callout config">
+      <h3>Nada</h3>
+      <p>Los cambios funcionan solos. El botón <span class="ui-text">Nueva Factura</span> lo ven las
+      personas que tienen permiso para crear facturas de compra; a quien solo puede consultarlas no le
+      aparece.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>5. Qué no cambia</h2>
+    <div class="no-change-list">
+      <div class="no-change-item"><span class="check">✓</span><div>Las fechas se guardan igual que
+      antes: una factura del 15/06 sigue quedando con fecha 15/06, también en los asientos y reportes.</div></div>
+      <div class="no-change-item"><span class="check">✓</span><div>Podés seguir eligiendo la fecha con
+      el calendario del campo, además de tipearla.</div></div>
+      <div class="no-change-item"><span class="check">✓</span><div>El botón no copia datos de la
+      factura anterior: abre una factura en blanco, igual que desde el listado.</div></div>
+      <div class="no-change-item"><span class="check">✓</span><div>Los demás campos de fecha del
+      sistema (vencimientos, cheques, egresos, remitos y otros) ya se podían tipear bien. Lo único que
+      cambia en ellos es que la fecha propuesta es la de hoy en Argentina.</div></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>6. Algo para conversar</h2>
+    <div class="callout config">
+      <p>Si cargás muchas facturas del <strong>mismo proveedor</strong> o de la <strong>misma
+      fecha</strong>, podríamos sumar un botón <span class="ui-text">Guardar y cargar otra</span> en el
+      formulario, que guarde y abra la siguiente con el proveedor y la fecha ya puestos. ¿Te serviría?</p>
+    </div>
+  </section>
+
+  <footer class="doc-footer">
+    TSK-782 — Cargar facturas de compra más rápido · Comercial → Compras → Facturas de Compra
+  </footer>
+
+</div>
+
+</body>
+</html>

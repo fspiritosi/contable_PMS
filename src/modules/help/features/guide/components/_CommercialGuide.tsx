@@ -499,7 +499,29 @@ export function _CommercialGuide() {
               aparece solo si el ítem se imputa a una cuenta de resultado:
               comprar un activo no consume presupuesto de ningún centro
             </li>
+            <li>
+              La <strong>fecha de emisión</strong> se puede tipear de corrido:
+              día, mes y año. Si queda incompleta (por ejemplo, borrando el
+              día), al guardar el campo se marca en rojo con “La fecha de
+              emisión es requerida”. Lo mismo vale para las fechas de ventas,
+              presupuestos, recibos, órdenes de pago, reportes y asientos
+            </li>
+            <li>
+              La fecha que aparece al abrir el formulario es la de{' '}
+              <strong>hoy en Argentina</strong>, aunque cargues de noche: una
+              factura cargada a las 23 h queda con la fecha de ese día, no del
+              siguiente
+            </li>
           </ul>
+
+          <p className="font-medium mt-3">Cargar varias facturas seguidas</p>
+          <p className="text-muted-foreground">
+            Al guardar, el sistema muestra el detalle de la factura. Arriba,
+            junto a <strong>Descargar PDF</strong>, el botón{' '}
+            <strong>Nueva Factura</strong> abre una factura en blanco para
+            cargar la siguiente sin volver al listado. Lo ven quienes tienen
+            permiso para crear facturas de compra.
+          </p>
 
           <p className="font-medium mt-3">Repartir una línea entre varios centros de costo</p>
           <p className="text-muted-foreground">

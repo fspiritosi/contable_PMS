@@ -14,6 +14,7 @@ import {
   stateToPrismaParams,
 } from '@/shared/components/common/DataTable/helpers';
 import { checkPermission } from '@/shared/lib/permissions';
+import { businessToday } from '@/shared/utils/date-input';
 import type { DeliveryNoteFormInput } from '../shared/validators';
 import moment from 'moment';
 
@@ -735,7 +736,7 @@ export async function invoiceDeliveryNotes(deliveryNoteIds: string[]) {
           voucherType,
           number: nextNumber,
           fullNumber: `${pointOfSale.number.toString().padStart(4, '0')}-${nextNumber.toString().padStart(8, '0')}`,
-          issueDate: new Date(),
+          issueDate: businessToday(),
           subtotal: new Prisma.Decimal(totals.subtotal),
           netTaxed: new Prisma.Decimal(totals.subtotal),
           netNonTaxed: new Prisma.Decimal(0),

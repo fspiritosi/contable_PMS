@@ -22,6 +22,7 @@ import {
   SelectValue,
 } from '@/shared/components/ui/select';
 import { Input } from '@/shared/components/ui/input';
+import { _DateInput } from '@/shared/components/common/_DateInput';
 import { Textarea } from '@/shared/components/ui/textarea';
 import {
   Popover,
@@ -55,6 +56,7 @@ import { Card } from '@/shared/components/ui/card';
 import { logger } from '@/shared/lib/logger';
 import { Separator } from '@/shared/components/ui/separator';
 import { MoneyInput } from '@/shared/components/ui/money-input';
+import { businessToday } from '@/shared/utils/date-input';
 import type { VoucherType } from '@/generated/prisma/enums';
 
 type FormInput = z.infer<typeof invoiceFormSchema>;
@@ -584,7 +586,7 @@ export function InvoiceForm({ customers, pointsOfSale, products, costCenters, de
       pointOfSaleId: '',
       voucherType: 'FACTURA_B',
       originalInvoiceId: '',
-      issueDate: new Date(),
+      issueDate: businessToday(),
       dueDate: undefined,
       notes: '',
       internalNotes: '',
@@ -1060,11 +1062,7 @@ export function InvoiceForm({ customers, pointsOfSale, products, costCenters, de
                 <FormItem>
                   <FormLabel>Fecha de Emisión</FormLabel>
                   <FormControl>
-                    <Input
-                      type="date"
-                      value={moment(field.value).format('YYYY-MM-DD')}
-                      onChange={(e) => field.onChange(new Date(e.target.value + 'T12:00:00'))}
-                    />
+                    <_DateInput {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

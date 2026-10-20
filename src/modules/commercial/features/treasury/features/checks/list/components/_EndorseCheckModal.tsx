@@ -23,6 +23,7 @@ import {
 import { Input } from '@/shared/components/ui/input';
 import { Button } from '@/shared/components/ui/button';
 import { formatCurrency } from '@/shared/utils/formatters';
+import { businessToday } from '@/shared/utils/date-input';
 import { endorseCheckSchema, type EndorseCheckFormData } from '../../../../shared/validators';
 import { endorseCheck } from '../../actions.server';
 import type { CheckListItem } from '../../../../shared/types';
@@ -43,7 +44,7 @@ export function _EndorseCheckModal({ check, open, onOpenChange }: Props) {
       endorsedToName: '',
       endorsedToTaxId: null,
       supplierId: null,
-      endorsedDate: new Date(),
+      endorsedDate: businessToday(),
     },
   });
 
@@ -55,7 +56,7 @@ export function _EndorseCheckModal({ check, open, onOpenChange }: Props) {
       endorsedToName: '',
       endorsedToTaxId: null,
       supplierId: null,
-      endorsedDate: new Date(),
+      endorsedDate: businessToday(),
     });
     onOpenChange(false);
   }, [form, check.id, onOpenChange]);

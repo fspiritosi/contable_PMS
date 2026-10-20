@@ -22,6 +22,7 @@ import {
   SelectValue,
 } from '@/shared/components/ui/select';
 import { Input } from '@/shared/components/ui/input';
+import { _DateInput } from '@/shared/components/common/_DateInput';
 import { padPointOfSale, padVoucherNumber } from '@/modules/commercial/shared/voucher-number';
 import { MoneyInput } from '@/shared/components/ui/money-input';
 import {
@@ -55,6 +56,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Card } from '@/shared/components/ui/card';
 import { Separator } from '@/shared/components/ui/separator';
 import { formatCurrency } from '@/shared/utils/formatters';
+import { businessToday } from '@/shared/utils/date-input';
 import type {
   SupplierSelectItem,
   ProductSelectItem,
@@ -202,7 +204,7 @@ export function _PurchaseInvoiceForm({
       purchaseOrderId: '',
       pointOfSale: '',
       number: '',
-      issueDate: new Date(),
+      issueDate: businessToday(),
       dueDate: undefined,
       cae: '',
       notes: '',
@@ -676,11 +678,7 @@ export function _PurchaseInvoiceForm({
                 <FormItem>
                   <FormLabel>Fecha de Emisión *</FormLabel>
                   <FormControl>
-                    <Input
-                      type="date"
-                      value={moment(field.value).format('YYYY-MM-DD')}
-                      onChange={(e) => field.onChange(new Date(e.target.value + 'T12:00:00'))}
-                    />
+                    <_DateInput {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

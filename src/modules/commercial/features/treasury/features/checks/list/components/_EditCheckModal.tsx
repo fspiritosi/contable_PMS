@@ -13,6 +13,7 @@ import { Input } from '@/shared/components/ui/input';
 import { Textarea } from '@/shared/components/ui/textarea';
 import { Button } from '@/shared/components/ui/button';
 import { Skeleton } from '@/shared/components/ui/skeleton';
+import { businessToday } from '@/shared/utils/date-input';
 import { updateCheckSchema, type UpdateCheckFormData } from '../../../../shared/validators';
 import { updateCheck, getCheckById } from '../../actions.server';
 
@@ -33,8 +34,8 @@ export function _EditCheckModal({ checkId, open, onOpenChange }: Props) {
       bankName: '',
       branch: null,
       accountNumber: null,
-      issueDate: new Date(),
-      dueDate: new Date(),
+      issueDate: businessToday(),
+      dueDate: businessToday(),
       drawerName: '',
       drawerTaxId: null,
       payeeName: null,

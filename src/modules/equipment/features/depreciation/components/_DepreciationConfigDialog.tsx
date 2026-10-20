@@ -28,6 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/shared/components/ui/select';
+import { businessToday } from '@/shared/utils/date-input';
 
 import { depreciationConfigSchema, type DepreciationConfigInput } from '../validators';
 import { createVehicleDepreciation } from '../actions.server';
@@ -52,7 +53,7 @@ export function _DepreciationConfigDialog({ vehicleId, vehiclePrice, open, onOpe
       grossValue: vehiclePrice ?? 0,
       salvageValue: 0,
       usefulLifeMonths: 60, // 5 años por defecto
-      startDate: new Date(),
+      startDate: businessToday(),
       depreciationRate: null,
     },
   });

@@ -41,6 +41,7 @@ import {
   CommandList,
 } from '@/shared/components/ui/command';
 import { cn } from '@/shared/lib/utils';
+import { businessToday } from '@/shared/utils/date-input';
 
 import {
   deliveryNoteFormSchema,
@@ -85,7 +86,7 @@ export function _DeliveryNoteForm({
     defaultValues: initialValues ?? {
       customerId: '',
       warehouseId: defaultWarehouseId ?? '',
-      deliveryDate: new Date(),
+      deliveryDate: businessToday(),
       notes: '',
       lines: [],
     },

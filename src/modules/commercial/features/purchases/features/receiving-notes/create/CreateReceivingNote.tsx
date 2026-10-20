@@ -1,6 +1,7 @@
 import { getSuppliersForSelect, getWarehousesForSelect } from '../list/actions.server';
 import { _ReceivingNoteForm } from './components/_ReceivingNoteForm';
 import { PermissionGuard } from '@/shared/components/common/PermissionGuard';
+import { businessToday } from '@/shared/utils/date-input';
 
 interface Props {
   purchaseInvoiceId?: string;
@@ -21,7 +22,7 @@ export async function CreateReceivingNote({ purchaseInvoiceId, supplierId }: Pro
         supplierId: supplierId || '',
         warehouseId: defaultWarehouse?.id ?? '',
         purchaseOrderId: '',
-        receptionDate: new Date(),
+        receptionDate: businessToday(),
         notes: '' as string | null,
         lines: [] as { productId: string; description: string; quantity: string; purchaseOrderLineId?: string; notes?: string | null }[],
       }

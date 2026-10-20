@@ -33,6 +33,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/shared/components/ui/select';
+import { businessToday } from '@/shared/utils/date-input';
 import { ArrowRight, Plus, Trash2 } from 'lucide-react';
 import moment from 'moment';
 
@@ -57,7 +58,7 @@ export function _StockTransferModal({ open, onOpenChange, warehouses, products }
     defaultValues: {
       sourceWarehouseId: '',
       destinationWarehouseId: '',
-      date: new Date(),
+      date: businessToday(),
       notes: '',
       lines: [{ productId: '', quantity: '' }],
     },

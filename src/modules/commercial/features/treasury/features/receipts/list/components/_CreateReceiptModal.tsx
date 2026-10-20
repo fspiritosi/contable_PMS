@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Button } from '@/shared/components/ui/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/shared/components/ui/form';
 import { Input } from '@/shared/components/ui/input';
+import { _DateInput } from '@/shared/components/common/_DateInput';
 import { Textarea } from '@/shared/components/ui/textarea';
 import {
   Select,
@@ -28,6 +29,7 @@ import { Alert, AlertDescription } from '@/shared/components/ui/alert';
 import { MoneyInput } from '@/shared/components/ui/money-input';
 import moment from 'moment';
 import { formatCurrency } from '@/shared/utils/formatters';
+import { businessToday } from '@/shared/utils/date-input';
 
 interface CreateReceiptModalProps {
   onSuccess: () => void;
@@ -42,7 +44,7 @@ export function CreateReceiptModal({ onSuccess }: CreateReceiptModalProps) {
     resolver: zodResolver(createReceiptSchema),
     defaultValues: {
       customerId: '',
-      date: new Date(),
+      date: businessToday(),
       notes: null,
       items: [],
       payments: [],
@@ -129,7 +131,7 @@ export function CreateReceiptModal({ onSuccess }: CreateReceiptModalProps) {
       reference: null,
       // Metadata de cheque/e-cheq: fecha de emisión por defecto = fecha del recibo
       checkBankName: null,
-      checkIssueDate: form.getValues('date') ?? new Date(),
+      checkIssueDate: form.getValues('date') ?? businessToday(),
       checkDueDate: null,
       checkDrawerName: null,
       checkDrawerTaxId: null,
@@ -247,11 +249,7 @@ export function CreateReceiptModal({ onSuccess }: CreateReceiptModalProps) {
                     <FormItem>
                       <FormLabel>Fecha *</FormLabel>
                       <FormControl>
-                        <Input
-                          type="date"
-                          value={moment(field.value).format('YYYY-MM-DD')}
-                          onChange={(e) => field.onChange(new Date(e.target.value + 'T12:00:00'))}
-                        />
+                        <_DateInput {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

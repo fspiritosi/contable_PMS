@@ -32,6 +32,7 @@ import {
 import { Button } from '@/shared/components/ui/button';
 import { Skeleton } from '@/shared/components/ui/skeleton';
 import { formatCurrency } from '@/shared/utils/formatters';
+import { businessToday } from '@/shared/utils/date-input';
 import { depositCheckSchema, type DepositCheckFormData } from '../../../../shared/validators';
 import { depositCheck, getActiveBankAccounts } from '../../actions.server';
 import type { CheckListItem } from '../../../../shared/types';
@@ -50,7 +51,7 @@ export function _DepositCheckModal({ check, open, onOpenChange }: Props) {
     defaultValues: {
       checkId: check.id,
       bankAccountId: '',
-      depositDate: new Date(),
+      depositDate: businessToday(),
     },
   });
 
@@ -66,7 +67,7 @@ export function _DepositCheckModal({ check, open, onOpenChange }: Props) {
     form.reset({
       checkId: check.id,
       bankAccountId: '',
-      depositDate: new Date(),
+      depositDate: businessToday(),
     });
     onOpenChange(false);
   }, [form, check.id, onOpenChange]);

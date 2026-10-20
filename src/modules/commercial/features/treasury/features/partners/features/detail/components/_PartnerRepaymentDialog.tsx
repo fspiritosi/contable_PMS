@@ -19,6 +19,7 @@ import {
 import { Button } from '@/shared/components/ui/button';
 import { Checkbox } from '@/shared/components/ui/checkbox';
 import { Input } from '@/shared/components/ui/input';
+import { _DateInput } from '@/shared/components/common/_DateInput';
 import { Textarea } from '@/shared/components/ui/textarea';
 import { Badge } from '@/shared/components/ui/badge';
 import { Separator } from '@/shared/components/ui/separator';
@@ -42,6 +43,7 @@ import {
 } from '@/shared/components/ui/select';
 import { formatCurrency } from '@/shared/utils/formatters';
 import { logger } from '@/shared/lib/logger';
+import { businessToday } from '@/shared/utils/date-input';
 import {
   partnerRepaymentSchema,
   type PartnerRepaymentFormData,
@@ -104,7 +106,7 @@ export function _PartnerRepaymentDialog({
     resolver: zodResolver(partnerRepaymentSchema),
     defaultValues: {
       partnerId: partnerId ?? '',
-      date: new Date(),
+      date: businessToday(),
       notes: null,
       installmentIds: [],
       payments: [],
@@ -212,7 +214,7 @@ export function _PartnerRepaymentDialog({
       installmentsCount: null,
       reference: null,
       checkBankName: null,
-      checkIssueDate: form.getValues('date') ?? new Date(),
+      checkIssueDate: form.getValues('date') ?? businessToday(),
       checkDueDate: null,
       checkDrawerName: null,
       checkDrawerTaxId: null,
@@ -273,7 +275,7 @@ export function _PartnerRepaymentDialog({
     if (!next) {
       form.reset({
         partnerId: fixedPartnerId ?? '',
-        date: new Date(),
+        date: businessToday(),
         notes: null,
         installmentIds: [],
         payments: [],
@@ -423,13 +425,7 @@ export function _PartnerRepaymentDialog({
                         <FormItem>
                           <FormLabel>Fecha *</FormLabel>
                           <FormControl>
-                            <Input
-                              type="date"
-                              value={moment(field.value).format('YYYY-MM-DD')}
-                              onChange={(e) =>
-                                field.onChange(new Date(e.target.value + 'T12:00:00'))
-                              }
-                            />
+                            <_DateInput {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>

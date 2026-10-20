@@ -10,7 +10,7 @@ import {
   SelectValue,
 } from '@/shared/components/ui/select';
 import { Button } from '@/shared/components/ui/button';
-import { Input } from '@/shared/components/ui/input';
+import { _DateInput } from '@/shared/components/common/_DateInput';
 import { FileText } from 'lucide-react';
 import moment from 'moment';
 
@@ -30,12 +30,13 @@ interface Props {
 
 export function _ReportSelector({ onGenerate, loading }: Props) {
   const [reportType, setReportType] = useState<ReportType>('period');
-  const [startDate, setStartDate] = useState<Date>(
+  const [startDate, setStartDate] = useState<Date | null>(
     moment().startOf('month').toDate()
   );
-  const [endDate, setEndDate] = useState<Date>(moment().endOf('month').toDate());
+  const [endDate, setEndDate] = useState<Date | null>(moment().endOf('month').toDate());
 
   const handleGenerate = () => {
+    if (!startDate || !endDate) return;
     onGenerate(reportType, startDate, endDate);
   };
 
@@ -70,21 +71,13 @@ export function _ReportSelector({ onGenerate, loading }: Props) {
           {/* Fecha Desde */}
           <div className="space-y-2">
             <label className="text-sm font-medium">Desde</label>
-            <Input
-              type="date"
-              value={moment(startDate).format('YYYY-MM-DD')}
-              onChange={(e) => setStartDate(new Date(e.target.value + 'T12:00:00'))}
-            />
+            <_DateInput value={startDate} onChange={setStartDate} />
           </div>
 
           {/* Fecha Hasta */}
           <div className="space-y-2">
             <label className="text-sm font-medium">Hasta</label>
-            <Input
-              type="date"
-              value={moment(endDate).format('YYYY-MM-DD')}
-              onChange={(e) => setEndDate(new Date(e.target.value + 'T12:00:00'))}
-            />
+            <_DateInput value={endDate} onChange={setEndDate} />
           </div>
 
           {/* Botón Generar */}

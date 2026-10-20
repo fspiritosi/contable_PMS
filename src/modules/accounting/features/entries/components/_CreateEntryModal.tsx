@@ -1,6 +1,6 @@
 'use client';
 
-import { useForm, useFieldArray } from 'react-hook-form';
+import { Controller, useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
@@ -18,6 +18,8 @@ import { Input } from '@/shared/components/ui/input';
 import { Label } from '@/shared/components/ui/label';
 import { Textarea } from '@/shared/components/ui/textarea';
 import { AccountCombobox } from '@/shared/components/common/AccountCombobox';
+import { _DateInput } from '@/shared/components/common/_DateInput';
+import { businessToday } from '@/shared/utils/date-input';
 
 import { journalEntrySchema, type CreateJournalEntryInput } from '../../../shared/types';
 import { createJournalEntry } from '../actions.server';
@@ -38,7 +40,7 @@ export function _CreateEntryModal({ onClose }: CreateEntryModalProps) {
   const form = useForm<CreateJournalEntryInput>({
     resolver: zodResolver(journalEntrySchema),
     defaultValues: {
-      date: new Date(),
+      date: businessToday('utc'),
       description: '',
       lines: [
         { accountId: '', debit: '0.00', credit: '0.00', description: '' },
@@ -121,12 +123,12 @@ export function _CreateEntryModal({ onClose }: CreateEntryModalProps) {
               <Label htmlFor="date">
                 Fecha <span className="text-destructive">*</span>
               </Label>
-              <Input
-                id="date"
-                type="date"
-                value={form.watch('date')?.toISOString().split('T')[0]}
-                onChange={(e) => form.setValue('date', new Date(e.target.value))}
-                disabled={isLoading}
+              <Controller
+                control={form.control}
+                name="date"
+                render={({ field }) => (
+                  <_DateInput {...field} id="date" mode="utc" disabled={isLoading} />
+                )}
               />
               {form.formState.errors.date && (
                 <p className="text-sm text-destructive">

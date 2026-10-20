@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Button } from '@/shared/components/ui/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/shared/components/ui/form';
 import { Input } from '@/shared/components/ui/input';
+import { _DateInput } from '@/shared/components/common/_DateInput';
 import { Textarea } from '@/shared/components/ui/textarea';
 import {
   Select,
@@ -29,6 +30,7 @@ import { Separator } from '@/shared/components/ui/separator';
 import { MoneyInput } from '@/shared/components/ui/money-input';
 import moment from 'moment';
 import { formatCurrency } from '@/shared/utils/formatters';
+import { businessToday } from '@/shared/utils/date-input';
 
 type ActiveCard = Awaited<ReturnType<typeof getActiveCardsForPayment>>[number];
 
@@ -113,7 +115,7 @@ export function CreatePaymentOrderModal({
     resolver: zodResolver(createPaymentOrderSchema),
     defaultValues: {
       supplierId: prefilledSupplierId ?? null,
-      date: initialDate ?? new Date(),
+      date: initialDate ?? businessToday(),
       notes: initialNotes ?? null,
       items: [
         ...(prefilledInvoices?.map((inv) => ({
@@ -200,7 +202,7 @@ export function CreatePaymentOrderModal({
     if (open && !wasOpen.current) {
       form.reset({
         supplierId: prefilledSupplierId ?? null,
-        date: initialDate ?? new Date(),
+        date: initialDate ?? businessToday(),
         notes: initialNotes ?? null,
         items: [
           ...(prefilledInvoices?.map((inv) => ({
@@ -263,7 +265,7 @@ export function CreatePaymentOrderModal({
       reference: null,
       // Metadata de cheque/e-cheq: fecha de emisión por defecto = fecha de la OP
       checkBankName: null,
-      checkIssueDate: form.getValues('date') ?? new Date(),
+      checkIssueDate: form.getValues('date') ?? businessToday(),
       checkDueDate: null,
       checkDrawerName: null,
       checkDrawerTaxId: null,
@@ -318,7 +320,7 @@ export function CreatePaymentOrderModal({
       setOpen(false);
       form.reset({
         supplierId: prefilledSupplierId ?? null,
-        date: initialDate ?? new Date(),
+        date: initialDate ?? businessToday(),
         notes: initialNotes ?? null,
         items: [
           ...(prefilledInvoices?.map((inv) => ({
@@ -544,11 +546,7 @@ export function CreatePaymentOrderModal({
                     <FormItem>
                       <FormLabel>Fecha *</FormLabel>
                       <FormControl>
-                        <Input
-                          type="date"
-                          value={moment(field.value).format('YYYY-MM-DD')}
-                          onChange={(e) => field.onChange(new Date(e.target.value + 'T12:00:00'))}
-                        />
+                        <_DateInput {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

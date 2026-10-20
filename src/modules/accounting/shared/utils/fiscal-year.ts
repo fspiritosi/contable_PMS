@@ -2,6 +2,8 @@ import { prisma } from '@/shared/lib/prisma';
 import { logger } from '@/shared/lib/logger';
 import moment from 'moment';
 
+import { todayBusinessDayUtc } from './utc-month';
+
 /**
  * Representación plana y serializable del ejercicio en curso.
  * `number` puede ser `null` cuando el ejercicio se derivó del fallback
@@ -27,7 +29,7 @@ export async function getCurrentFiscalYear(
   companyId: string,
   atDate?: Date
 ): Promise<CurrentFiscalYear | null> {
-  const date = atDate ?? new Date();
+  const date = atDate ?? todayBusinessDayUtc(); // hoy en Argentina: el 31/12 a las 22 h sigue en este ejercicio
 
   // Buscar el/los FiscalYear cuyo rango contiene la fecha; preferir no cerrado.
   const fiscalYears = await prisma.fiscalYear.findMany({
@@ -114,7 +116,7 @@ export async function getNextFiscalYear(
   }
 
   // 2) Fallback: el inmediato posterior por startDate.
-  const referenceDate = currentFY?.endDate ?? currentFY?.startDate ?? new Date();
+  const referenceDate = currentFY?.endDate ?? currentFY?.startDate ?? todayBusinessDayUtc();
   const byDate = await prisma.fiscalYear.findFirst({
     where: { companyId, startDate: { gt: referenceDate } },
     select: {

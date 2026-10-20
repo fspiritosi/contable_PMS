@@ -39,6 +39,7 @@ import type { SupplierSelectItem, ProductSelectItem } from '../../list/actions.s
 import { formatCurrency } from '@/shared/utils/formatters';
 import moment from 'moment';
 import { MoneyInput } from '@/shared/components/ui/money-input';
+import { businessToday } from '@/shared/utils/date-input';
 
 function _LineTotals({
   form,
@@ -96,7 +97,7 @@ export function _PurchaseOrderForm({
     resolver: zodResolver(purchaseOrderFormSchema),
     defaultValues: initialValues || {
       supplierId: '',
-      issueDate: new Date(),
+      issueDate: businessToday(),
       expectedDeliveryDate: null,
       paymentConditions: '',
       deliveryAddress: '',

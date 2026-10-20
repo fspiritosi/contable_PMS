@@ -34,6 +34,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/shared/components/ui/select';
+import { businessToday } from '@/shared/utils/date-input';
 import moment from 'moment';
 
 import { createStockAdjustment } from '../actions.server';
@@ -60,7 +61,7 @@ export function _StockAdjustmentModal({ open, onOpenChange, warehouses, products
       quantity: '',
       reason: 'ENTRY',
       notes: '',
-      date: new Date(),
+      date: businessToday(),
     },
   });
 

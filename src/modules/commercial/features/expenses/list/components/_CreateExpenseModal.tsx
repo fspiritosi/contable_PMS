@@ -34,6 +34,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/shared/components/ui/select';
+import { businessToday } from '@/shared/utils/date-input';
 
 import { expenseFormSchema, type ExpenseFormInput } from '../../validators';
 import { createExpense, updateExpense, getExpenseById, getExpenseCategories } from '../../actions.server';
@@ -67,7 +68,7 @@ export function _CreateExpenseModal({ expenseId, open: controlledOpen, onOpenCha
     defaultValues: {
       description: '',
       amount: '',
-      date: new Date(),
+      date: businessToday(),
       dueDate: null,
       categoryId: '',
       supplierId: '',

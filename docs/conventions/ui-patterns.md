@@ -113,6 +113,56 @@ Usar los componentes de shadcn/ui `Form`:
 </Form>
 ```
 
+### Campos de fecha: `_DateInput`
+
+Para un campo de fecha cuyo valor es un `Date`, usar `_DateInput`
+(`@/shared/components/common/_DateInput`) en lugar de `<Input type="date">` con conversión a mano:
+
+```tsx
+<FormField
+  control={form.control}
+  name="issueDate"
+  render={({ field }) => (
+    <FormItem>
+      <FormLabel>Fecha de Emisión *</FormLabel>
+      <FormControl>
+        <_DateInput {...field} />
+      </FormControl>
+      <FormMessage />
+    </FormItem>
+  )}
+/>
+```
+
+- Mientras un segmento está a medio tipear, el navegador reporta `''`. `_DateInput` emite `null` en ese
+  caso (nunca un `Date` inválido) y guarda localmente lo que se ve, así React no reescribe el input a
+  mitad del tipeo. El patrón `new Date(e.target.value + 'T12:00:00')` sin contemplar el vacío vaciaba
+  el campo al tipear el mes (TSK-782).
+- `mode="local"` (por defecto): el día a las 12:00 locales, convención de los formularios comerciales.
+  `mode="utc"`: el día a las 00:00Z, convención del núcleo contable (D8 de TSK-760).
+- Con un schema `z.date({ message: '… es requerida' })`, una fecha incompleta al guardar muestra ese
+  mensaje. Fuera de un formulario (filtros), el estado es `Date | null` y la acción espera fechas completas.
+- La conversión pura está en `@/shared/utils/date-input` (`toDateInputValue`, `fromDateInputValue`).
+- Los campos que guardan la fecha como string `'YYYY-MM-DD'` no tienen el problema y pueden seguir con
+  `<Input type="date">`.
+
+### Fecha por defecto: "hoy" en Argentina (`businessToday`)
+
+La fecha por defecto de un formulario (o la fecha de negocio que arma el servidor) es
+`businessToday()` (`@/shared/utils/date-input`), **nunca `new Date()`**:
+
+```tsx
+defaultValues: { issueDate: businessToday() }        // comercial: el día de Argentina a las 12:00
+defaultValues: { date: businessToday('utc') }        // núcleo contable: el día de Argentina a las 00:00Z
+```
+
+`new Date()` guarda la hora actual. Desde las 21:00 de Argentina eso ya es el día siguiente en UTC, que
+es como lo leen el servidor de producción y el núcleo contable: la factura o el asiento quedaban fechados
+mañana y, el último día del mes, en el período siguiente (TSK-782). "Hoy" se calcula con
+`todayBusinessDay()` (`@/shared/utils/business-day`, zona `America/Argentina/Buenos_Aires`). En el núcleo
+contable, `todayBusinessDayUtc()` (`utc-month.ts`) es lo mismo con la convención D8. Las marcas de tiempo
+de un evento (`createdAt`, la fecha de un movimiento de stock) siguen con `new Date()`.
+
 ### Schemas en `validators.ts`
 
 Los schemas Zod van en el archivo `validators.ts` de cada feature o en `shared/validators.ts` si son compartidos.
