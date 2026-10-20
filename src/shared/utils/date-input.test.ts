@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { fromDateInputValue, toDateInputValue } from './date-input';
+import { businessToday, fromDateInputValue, toDateInputValue } from './date-input';
 
 describe('fromDateInputValue', () => {
   it('devuelve null mientras la fecha está vacía o a medio tipear (el navegador reporta "")', () => {
@@ -44,5 +44,25 @@ describe('toDateInputValue', () => {
     expect(toDateInputValue(fromDateInputValue('2026-01-01'))).toBe('2026-01-01');
     expect(toDateInputValue(fromDateInputValue('2026-12-31', 'utc'), 'utc')).toBe('2026-12-31');
     expect(toDateInputValue(fromDateInputValue('0002-06-15'))).toBe('0002-06-15');
+  });
+});
+
+describe('businessToday (fecha por defecto: "hoy" en Argentina)', () => {
+  it('a las 22:40 de Argentina (01:40Z del día siguiente) sigue siendo el día de Argentina', () => {
+    const now = new Date('2026-10-07T01:40:00.000Z');
+    expect(businessToday('local', now)).toEqual(new Date(2026, 9, 6, 12, 0, 0, 0));
+    expect(businessToday('utc', now)).toEqual(new Date('2026-10-06T00:00:00.000Z'));
+  });
+
+  it('a las 00:00 de Argentina (03:00Z) ya es el día siguiente', () => {
+    const now = new Date('2026-10-07T03:00:00.000Z');
+    expect(toDateInputValue(businessToday('local', now))).toBe('2026-10-07');
+    expect(toDateInputValue(businessToday('utc', now), 'utc')).toBe('2026-10-07');
+  });
+
+  it('el último día del mes a la noche no pasa al mes siguiente', () => {
+    const now = new Date('2026-11-01T02:30:00.000Z'); // 31/10 23:30 en Argentina
+    expect(toDateInputValue(businessToday('local', now))).toBe('2026-10-31');
+    expect(toDateInputValue(businessToday('utc', now), 'utc')).toBe('2026-10-31');
   });
 });

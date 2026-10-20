@@ -21,6 +21,7 @@ import { Input } from '@/shared/components/ui/input';
 import { Label } from '@/shared/components/ui/label';
 import { Textarea } from '@/shared/components/ui/textarea';
 import { MoneyInput } from '@/shared/components/ui/money-input';
+import { businessToday } from '@/shared/utils/date-input';
 
 import { valueAdjustmentSchema, type ValueAdjustmentInput } from '../validators';
 import { createValueAdjustment } from '../actions.server';
@@ -49,7 +50,7 @@ export function _ValueAdjustmentDialog({
   const form = useForm<ValueAdjustmentInput>({
     resolver: zodResolver(valueAdjustmentSchema),
     defaultValues: {
-      date: new Date(),
+      date: businessToday(),
       newValue: currentBookValue,
       reason: '',
     },

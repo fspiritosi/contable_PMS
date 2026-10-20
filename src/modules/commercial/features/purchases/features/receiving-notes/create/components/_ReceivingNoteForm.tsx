@@ -31,6 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/shared/components/ui/select';
+import { businessToday } from '@/shared/utils/date-input';
 
 import {
   receivingNoteFormSchema,
@@ -81,7 +82,7 @@ export function _ReceivingNoteForm({
       warehouseId: defaultWarehouse?.id ?? '',
       purchaseOrderId: '',
       purchaseInvoiceId: '',
-      receptionDate: new Date(),
+      receptionDate: businessToday(),
       notes: '',
       lines: [],
     },

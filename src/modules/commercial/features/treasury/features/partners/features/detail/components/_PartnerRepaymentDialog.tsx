@@ -43,6 +43,7 @@ import {
 } from '@/shared/components/ui/select';
 import { formatCurrency } from '@/shared/utils/formatters';
 import { logger } from '@/shared/lib/logger';
+import { businessToday } from '@/shared/utils/date-input';
 import {
   partnerRepaymentSchema,
   type PartnerRepaymentFormData,
@@ -105,7 +106,7 @@ export function _PartnerRepaymentDialog({
     resolver: zodResolver(partnerRepaymentSchema),
     defaultValues: {
       partnerId: partnerId ?? '',
-      date: new Date(),
+      date: businessToday(),
       notes: null,
       installmentIds: [],
       payments: [],
@@ -213,7 +214,7 @@ export function _PartnerRepaymentDialog({
       installmentsCount: null,
       reference: null,
       checkBankName: null,
-      checkIssueDate: form.getValues('date') ?? new Date(),
+      checkIssueDate: form.getValues('date') ?? businessToday(),
       checkDueDate: null,
       checkDrawerName: null,
       checkDrawerTaxId: null,
@@ -274,7 +275,7 @@ export function _PartnerRepaymentDialog({
     if (!next) {
       form.reset({
         partnerId: fixedPartnerId ?? '',
-        date: new Date(),
+        date: businessToday(),
         notes: null,
         installmentIds: [],
         payments: [],

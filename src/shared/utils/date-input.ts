@@ -11,6 +11,8 @@
  */
 import moment from 'moment';
 
+import { todayBusinessDay } from './business-day';
+
 export type DateInputMode = 'local' | 'utc';
 
 const INPUT_FORMAT = 'YYYY-MM-DD';
@@ -30,4 +32,13 @@ export function fromDateInputValue(value: string, mode: DateInputMode = 'local')
   }
   const day = moment(value, INPUT_FORMAT, true);
   return day.isValid() ? day.hour(12).toDate() : null;
+}
+
+/**
+ * "Hoy" en Argentina con la convención del modo, para la fecha por defecto de un formulario.
+ * No usar `new Date()`: guarda la hora actual y, desde las 21:00 de Argentina, en UTC ya es el
+ * día siguiente (el asiento queda fechado mañana; a fin de mes, en el período siguiente).
+ */
+export function businessToday(mode: DateInputMode = 'local', now: Date = new Date()): Date {
+  return fromDateInputValue(todayBusinessDay(now), mode) as Date;
 }

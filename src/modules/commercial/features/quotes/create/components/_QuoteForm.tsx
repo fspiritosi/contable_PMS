@@ -42,6 +42,7 @@ import { useEffect, useState } from 'react';
 import { Card } from '@/shared/components/ui/card';
 import { Separator } from '@/shared/components/ui/separator';
 import { MoneyInput } from '@/shared/components/ui/money-input';
+import { businessToday } from '@/shared/utils/date-input';
 
 type FormInput = z.infer<typeof quoteFormSchema>;
 
@@ -526,7 +527,7 @@ export function QuoteForm({
       recipientType: 'customer',
       customerId: '',
       leadId: '',
-      issueDate: new Date(),
+      issueDate: businessToday(),
       expirationDate: undefined,
       currency: 'ARS',
       notes: '',

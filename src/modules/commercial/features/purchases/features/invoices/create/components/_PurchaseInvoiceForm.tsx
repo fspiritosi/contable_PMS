@@ -56,6 +56,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Card } from '@/shared/components/ui/card';
 import { Separator } from '@/shared/components/ui/separator';
 import { formatCurrency } from '@/shared/utils/formatters';
+import { businessToday } from '@/shared/utils/date-input';
 import type {
   SupplierSelectItem,
   ProductSelectItem,
@@ -203,7 +204,7 @@ export function _PurchaseInvoiceForm({
       purchaseOrderId: '',
       pointOfSale: '',
       number: '',
-      issueDate: new Date(),
+      issueDate: businessToday(),
       dueDate: undefined,
       cae: '',
       notes: '',

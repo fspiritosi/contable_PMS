@@ -1,5 +1,6 @@
 import type { AccountType } from '@/generated/prisma/enums';
 import type { Prisma } from '@/generated/prisma/client';
+import { businessToday } from '@/shared/utils/date-input';
 
 /**
  * Opciones para construir el filtro de cuentas imputables.
@@ -34,7 +35,7 @@ export function buildImputableAccountsWhere(
   options: BuildImputableAccountsWhereOptions
 ): Prisma.AccountWhereInput {
   const { companyId, types, atDate } = options;
-  const referenceDate = atDate ?? new Date();
+  const referenceDate = atDate ?? businessToday('utc'); // hoy en Argentina, no en UTC
 
   return {
     companyId,

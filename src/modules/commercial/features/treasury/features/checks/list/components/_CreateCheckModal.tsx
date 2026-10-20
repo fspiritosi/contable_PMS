@@ -31,6 +31,7 @@ import {
 } from '@/shared/components/ui/select';
 import { Button } from '@/shared/components/ui/button';
 import { MoneyInput } from '@/shared/components/ui/money-input';
+import { businessToday } from '@/shared/utils/date-input';
 import { createCheckSchema, type CreateCheckFormData, CHECK_TYPE_LABELS } from '../../../../shared/validators';
 import { createCheck } from '../../actions.server';
 
@@ -51,8 +52,8 @@ export function _CreateCheckModal({ open, onOpenChange }: Props) {
       branch: null,
       accountNumber: null,
       amount: '',
-      issueDate: new Date(),
-      dueDate: new Date(),
+      issueDate: businessToday(),
+      dueDate: businessToday(),
       drawerName: '',
       drawerTaxId: null,
       payeeName: null,

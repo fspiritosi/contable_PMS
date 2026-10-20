@@ -19,6 +19,7 @@ import { Label } from '@/shared/components/ui/label';
 import { Textarea } from '@/shared/components/ui/textarea';
 import { AccountCombobox } from '@/shared/components/common/AccountCombobox';
 import { _DateInput } from '@/shared/components/common/_DateInput';
+import { businessToday } from '@/shared/utils/date-input';
 
 import { journalEntrySchema, type CreateJournalEntryInput } from '../../../shared/types';
 import { createJournalEntry } from '../actions.server';
@@ -39,7 +40,7 @@ export function _CreateEntryModal({ onClose }: CreateEntryModalProps) {
   const form = useForm<CreateJournalEntryInput>({
     resolver: zodResolver(journalEntrySchema),
     defaultValues: {
-      date: new Date(),
+      date: businessToday('utc'),
       description: '',
       lines: [
         { accountId: '', debit: '0.00', credit: '0.00', description: '' },

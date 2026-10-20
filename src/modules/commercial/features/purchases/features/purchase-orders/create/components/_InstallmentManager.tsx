@@ -20,6 +20,7 @@ import { Input } from '@/shared/components/ui/input';
 import { Plus, Trash2, Wand2 } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
 import { formatCurrency } from '@/shared/utils/formatters';
+import { businessToday } from '@/shared/utils/date-input';
 import {
   INSTALLMENT_FREQUENCIES,
   type InstallmentFrequency,
@@ -185,7 +186,7 @@ export function _InstallmentManager({ form, orderTotal }: InstallmentManagerProp
         type="button"
         variant="outline"
         size="sm"
-        onClick={() => append({ dueDate: new Date(), amount: '0', notes: null })}
+        onClick={() => append({ dueDate: businessToday(), amount: '0', notes: null })}
       >
         <Plus className="mr-2 h-4 w-4" />
         Agregar cuota

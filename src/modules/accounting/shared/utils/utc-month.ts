@@ -8,6 +8,7 @@
 import moment from 'moment';
 
 import { BusinessError } from '@/shared/lib/action-result';
+import { todayBusinessDay } from '@/shared/utils/business-day';
 
 import type { IsoDay, YearMonth } from './journal-entry-types';
 
@@ -95,28 +96,9 @@ export function formatMonthLabel(ym: YearMonth): string {
   return `${MONTH_LABELS[ym.month - 1]} ${ym.year}`;
 }
 
-/**
- * Zona horaria del negocio: define qué día es "hoy" para fechar asientos del servidor
- * (TSK-760, D5 revisado). Única fuente de esta constante.
- */
-export const BUSINESS_TIME_ZONE = 'America/Argentina/Buenos_Aires';
-
-const businessDayFormatter = new Intl.DateTimeFormat('en-US', {
-  timeZone: BUSINESS_TIME_ZONE,
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-});
-
-/**
- * Día calendario de "hoy" en la zona del negocio ('YYYY-MM-DD'), sin depender de la
- * zona del proceso: a las 23:30 en Argentina (02:30Z del día siguiente) sigue siendo hoy.
- */
-export function todayBusinessDay(now: Date = new Date()): IsoDay {
-  const parts = businessDayFormatter.formatToParts(now);
-  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value ?? '';
-  return `${part('year')}-${part('month')}-${part('day')}`;
-}
+// "Hoy" en Argentina vive en shared (lo usan también los formularios comerciales); se reexporta
+// para no cambiar los imports del núcleo contable.
+export { BUSINESS_TIME_ZONE, todayBusinessDay } from '@/shared/utils/business-day';
 
 /** "Hoy" del negocio con la convención D8: ese día calendario a las 00:00:00.000Z. */
 export function todayBusinessDayUtc(now: Date = new Date()): Date {

@@ -34,6 +34,7 @@ import {
 } from '@/shared/components/ui/select';
 import { Checkbox } from '@/shared/components/ui/checkbox';
 import { MoneyInput } from '@/shared/components/ui/money-input';
+import { businessToday } from '@/shared/utils/date-input';
 
 import {
   createProjectionSchema,
@@ -58,7 +59,7 @@ export function _CreateProjectionModal({ onSuccess }: Props) {
       category: 'SALES',
       description: '',
       amount: '',
-      date: new Date(),
+      date: businessToday(),
       isRecurring: false,
       notes: null,
     },
