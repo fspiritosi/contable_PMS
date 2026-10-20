@@ -22,6 +22,7 @@ import {
   SelectValue,
 } from '@/shared/components/ui/select';
 import { Input } from '@/shared/components/ui/input';
+import { _DateInput } from '@/shared/components/common/_DateInput';
 import { padPointOfSale, padVoucherNumber } from '@/modules/commercial/shared/voucher-number';
 import { MoneyInput } from '@/shared/components/ui/money-input';
 import {
@@ -676,11 +677,7 @@ export function _PurchaseInvoiceForm({
                 <FormItem>
                   <FormLabel>Fecha de Emisión *</FormLabel>
                   <FormControl>
-                    <Input
-                      type="date"
-                      value={moment(field.value).format('YYYY-MM-DD')}
-                      onChange={(e) => field.onChange(new Date(e.target.value + 'T12:00:00'))}
-                    />
+                    <_DateInput {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

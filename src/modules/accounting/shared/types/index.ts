@@ -34,7 +34,7 @@ export const journalEntryLineSchema = z.object({
 });
 
 export const journalEntrySchema = z.object({
-  date: z.date(),
+  date: z.date({ message: 'La fecha es requerida' }),
   description: z.string().min(2, 'La descripción debe tener al menos 2 caracteres'),
   lines: z.array(journalEntryLineSchema)
     .min(2, 'El asiento debe tener al menos 2 líneas')

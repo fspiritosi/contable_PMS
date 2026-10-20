@@ -19,6 +19,7 @@ import {
 import { Button } from '@/shared/components/ui/button';
 import { Checkbox } from '@/shared/components/ui/checkbox';
 import { Input } from '@/shared/components/ui/input';
+import { _DateInput } from '@/shared/components/common/_DateInput';
 import { Textarea } from '@/shared/components/ui/textarea';
 import { Badge } from '@/shared/components/ui/badge';
 import { Separator } from '@/shared/components/ui/separator';
@@ -423,13 +424,7 @@ export function _PartnerRepaymentDialog({
                         <FormItem>
                           <FormLabel>Fecha *</FormLabel>
                           <FormControl>
-                            <Input
-                              type="date"
-                              value={moment(field.value).format('YYYY-MM-DD')}
-                              onChange={(e) =>
-                                field.onChange(new Date(e.target.value + 'T12:00:00'))
-                              }
-                            />
+                            <_DateInput {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
