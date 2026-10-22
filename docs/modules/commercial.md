@@ -298,9 +298,9 @@ dentro de una única transacción. Confirmado no se edita ni se elimina.
   `AccountCombobox` (el fieldset no alcanza a Radix). La opacidad del `disabled` se neutraliza con
   `[&_:disabled]:opacity-100! [&_:disabled]:cursor-default!` (con `!`: sin él empata en
   especificidad con `disabled:opacity-50`). El footer queda fuera del fieldset con un único
-  "Cerrar". En vista se ocultan "Agregar concepto", los tachos, `_PartnerAccountNotice`,
-  `_BankChargesDefaultNotice` y el aviso de "no hay bancos ni cajas"; el total de conceptos se
-  mantiene. `useFundMovementSubmit` ignora el submit en `view`.
+  "Cerrar". En vista se ocultan "Agregar concepto", los tachos, `_PartnerAccountNotice`
+  (que además no anticipa bloqueos hasta elegir concepto, si el tipo tiene conceptos) y el aviso
+  de "no hay bancos ni cajas"; el total de conceptos se mantiene. `useFundMovementSubmit` ignora el submit en `view`.
 - **Resumen** (`_FundMovementViewSummary`): badge de estado y, si existen, "Confirmado el"
   (`confirmedAt`, `DD/MM/YYYY HH:mm` local) y "Asiento N°" (`journalEntryNumber`, texto sin link:
   no hay página de detalle de asiento). Es el lugar donde se consulta el N° de asiento.

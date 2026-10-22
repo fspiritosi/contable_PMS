@@ -53,6 +53,8 @@ export function _CreateBankMovementDialog({ open, onOpenChange, bankAccountId, o
     queryKey: ['concepts-for-bank-movement'],
     queryFn: getBankMovementConcepts,
     enabled: open,
+    // TSK-791: el catálogo lo edita Contabilidad; no se sirve una copia vieja al reabrir.
+    staleTime: 0,
   });
 
   const form = useForm<BankMovementFormData>({

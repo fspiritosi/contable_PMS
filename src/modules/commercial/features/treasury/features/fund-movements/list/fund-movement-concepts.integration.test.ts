@@ -477,7 +477,7 @@ describe.skipIf(!dbAvailable)('integración: movimientos de fondo con concepto (
 
       await expectRejectedWithoutMovingBalances(
         movementId,
-        `El concepto «${PREFIX}Concepto inactivado» está desactivado. Elegí otro concepto.`
+        `El concepto «${PREFIX}Concepto inactivado» está desactivado. Editá el movimiento y elegí otro concepto.`
       );
     });
 
@@ -490,7 +490,7 @@ describe.skipIf(!dbAvailable)('integración: movimientos de fondo con concepto (
 
       await expectRejectedWithoutMovingBalances(
         movementId,
-        `El concepto «${PREFIX}Concepto sin el uso» ya no aplica a Gastos e impuestos bancarios. Elegí otro concepto.`
+        `El concepto «${PREFIX}Concepto sin el uso» ya no aplica a Gastos e impuestos bancarios. Editá el movimiento y elegí otro concepto.`
       );
     });
 

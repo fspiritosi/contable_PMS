@@ -16,6 +16,8 @@ interface PartnerAccountNoticeProps {
   defaultAccount: FundMovementAccountRef | null;
   /** Concepto elegido (TSK-791); `undefined` si no hay o todavía no se eligió. */
   concept?: FundMovementConceptOption;
+  /** Hay conceptos activos para el tipo: hasta elegir uno no se sabe qué cuenta aplica. */
+  hasConcepts?: boolean;
 }
 
 const ACCOUNTING_SETTINGS_HREF = '/dashboard/company/accounting/settings';
@@ -35,7 +37,12 @@ export function _PartnerAccountNotice({
   partner,
   defaultAccount,
   concept,
+  hasConcepts = false,
 }: PartnerAccountNoticeProps) {
+  // TSK-791: con conceptos disponibles y ninguno elegido, el concepto puede definir la
+  // cuenta; no se anticipa un bloqueo que quizá no aplique hasta que se elija.
+  if (hasConcepts && !concept) return null;
+
   // TSK-791: un concepto con cuenta propia define el asiento; la cuenta del socio
   // no se usa, así que no se evalúa ni bloquea, y Gestión no ve la cuenta.
   if (concept?.accountMode === 'OWN_ACCOUNT') {

@@ -79,11 +79,11 @@ export async function resolveConceptForUsage(
   });
   if (!concept) throw new BusinessError('El concepto elegido ya no existe. Elegí otro.');
   if (!concept.isActive) {
-    throw new BusinessError(`El concepto «${concept.name}» está desactivado. Elegí otro concepto.`);
+    throw new BusinessError(`El concepto «${concept.name}» está desactivado. Editá el movimiento y elegí otro concepto.`);
   }
   if (!concept.usages.includes(usage)) {
     throw new BusinessError(
-      `El concepto «${concept.name}» ya no aplica a ${CONCEPT_USAGE_LABELS[usage]}. Elegí otro concepto.`
+      `El concepto «${concept.name}» ya no aplica a ${CONCEPT_USAGE_LABELS[usage]}. Editá el movimiento y elegí otro concepto.`
     );
   }
 

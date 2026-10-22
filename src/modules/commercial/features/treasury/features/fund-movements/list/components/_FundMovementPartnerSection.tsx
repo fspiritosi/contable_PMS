@@ -47,6 +47,7 @@ export function _FundMovementPartnerSection({
           partner={selectedPartner}
           defaultAccount={defaultContributionsAccount}
           concept={selectedConcept}
+          hasConcepts={concepts.length > 0}
         />
       )}
     </>

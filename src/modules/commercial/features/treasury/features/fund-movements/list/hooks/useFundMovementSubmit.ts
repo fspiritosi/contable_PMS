@@ -1,4 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import type { UseFormReturn } from 'react-hook-form';
 import { toast } from 'sonner';
@@ -40,6 +41,7 @@ export function useFundMovementSubmit({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isEdit = mode === 'edit' && Boolean(movement);
   const queryClient = useQueryClient();
+  const router = useRouter();
 
   const persist = async (formData: FundMovementFormInput, confirm: boolean) => {
     // Defensivo: la vista no ofrece guardar (TSK-720a).
@@ -63,7 +65,15 @@ export function useFundMovementSubmit({
       // Los errores esperables llegan como dato con su mensaje real: en producción
       // una excepción del server action se ve como un digest ilegible (TSK-481).
       if (!result.success) {
-        toast.error(result.error);
+        // TSK-791: si el rechazo es por el concepto, el catálogo del formulario puede
+        // estar desactualizado (Contabilidad lo cambió con la pantalla abierta): se
+        // recarga el Server Component para traer los conceptos vigentes.
+        if (/concepto/i.test(result.error)) {
+          toast.error(`${result.error} (se actualizó la lista de conceptos)`);
+          router.refresh();
+        } else {
+          toast.error(result.error);
+        }
         return;
       }
 

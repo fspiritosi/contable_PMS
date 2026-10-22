@@ -595,10 +595,17 @@ describe.skipIf(!dbAvailable)('integración: conceptos del movimiento de fondos 
       if (!result.success) throw new Error(result.error);
 
       const found = await getFundMovementById(result.id!);
-      releidas = found!.lines.map((l) => ({
+      // TSK-791: la action no manda la cuenta al cliente; se lee de la base.
+      expect(found!.lines.every((l) => !('accountId' in l))).toBe(true);
+      const dbLines = await prisma.fundMovementLine.findMany({
+        where: { movementId: result.id! },
+        orderBy: { position: 'asc' },
+        select: { accountId: true },
+      });
+      releidas = found!.lines.map((l, i) => ({
         description: l.description,
         conceptId: l.conceptId,
-        accountId: l.accountId,
+        accountId: dbLines[i].accountId,
         amount: l.amount,
       }));
     });

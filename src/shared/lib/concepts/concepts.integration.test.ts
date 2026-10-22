@@ -181,14 +181,14 @@ describe.skipIf(!dbAvailable)('conceptos compartidos (integración)', () => {
   it('rechaza concepto inactivo', async () => {
     await expect(
       resolveConceptForUsage(prisma, { companyId, conceptId: ids.inactivo, usage: 'FUND_BANK_CHARGES' })
-    ).rejects.toThrow(`El concepto «${PREFIX}Inactivo» está desactivado. Elegí otro concepto.`);
+    ).rejects.toThrow(`El concepto «${PREFIX}Inactivo» está desactivado. Editá el movimiento y elegí otro concepto.`);
   });
 
   it('rechaza concepto sin el uso', async () => {
     await expect(
       resolveConceptForUsage(prisma, { companyId, conceptId: ids.otroUso, usage: 'FUND_BANK_CHARGES' })
     ).rejects.toThrow(
-      `El concepto «${PREFIX}Otro uso» ya no aplica a Gastos e impuestos bancarios. Elegí otro concepto.`
+      `El concepto «${PREFIX}Otro uso» ya no aplica a Gastos e impuestos bancarios. Editá el movimiento y elegí otro concepto.`
     );
   });
 

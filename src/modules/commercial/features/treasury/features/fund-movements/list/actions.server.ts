@@ -97,7 +97,18 @@ export async function getFundMovementById(id: string) {
   return {
     ...movement,
     amount: Number(movement.amount),
-    lines: movement.lines.map((line) => ({ ...line, amount: Number(line.amount) })),
+    // TSK-791: la cuenta contable de la línea no viaja al cliente (Gestión no ve cuentas).
+    lines: movement.lines.map((line) => ({
+      id: line.id,
+      movementId: line.movementId,
+      description: line.description,
+      amount: Number(line.amount),
+      position: line.position,
+      conceptId: line.conceptId,
+      conceptName: line.conceptName,
+      createdAt: line.createdAt,
+      updatedAt: line.updatedAt,
+    })),
   };
 }
 
