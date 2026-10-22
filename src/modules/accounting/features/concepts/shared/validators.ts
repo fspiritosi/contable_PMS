@@ -8,7 +8,11 @@ import { z } from 'zod';
  */
 export const conceptSchema = z
   .object({
-    name: z.string().trim().min(1, 'El nombre del concepto es obligatorio.').max(100),
+    name: z
+      .string()
+      .trim()
+      .min(1, 'El nombre del concepto es obligatorio.')
+      .max(100, 'El nombre no puede superar los 100 caracteres'),
     usages: z.array(z.nativeEnum(ConceptUsage)),
     accountMode: z.nativeEnum(ConceptAccountMode),
     // El combo emite null al limpiar; '' queda por compatibilidad con inputs vacíos.
