@@ -194,6 +194,7 @@ model Company {
   paymentOrderInstallments PaymentOrderInstallment[]
   partnerAccountMovements  PartnerAccountMovement[]
   fundMovements            FundMovement[]
+  movementConcepts         MovementConcept[]
 
   // Retenciones y padrones
   withholdingRegimes WithholdingRegime[]
@@ -381,6 +382,7 @@ model Account {
   productsAsExpenseAccount           Product[]              @relation("ProductExpenseAccount")
   productsAsIncomeAccount            Product[]              @relation("ProductIncomeAccount")
   fundMovementLines                  FundMovementLine[]
+  movementConcepts                   MovementConcept[]
 
   @@unique([companyId, code])
   @@index([companyId, disabledFromFiscalYearId])
@@ -3268,11 +3270,16 @@ model BankMovement {
   reconciledAt DateTime? @map("reconciled_at")
   reconciledBy String?   @map("reconciled_by")
 
-  bankAccount  BankAccount   @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
-  company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  receipt      Receipt?      @relation(fields: [receiptId], references: [id])
-  paymentOrder PaymentOrder? @relation(fields: [paymentOrderId], references: [id])
+  // TSK-791: concepto elegido (nullable: los históricos no tienen) y snapshot de su nombre
+  conceptId   String? @map("concept_id") @db.Uuid
+  conceptName String? @map("concept_name")
+
+  bankAccount  BankAccount      @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
+  company      Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  receipt      Receipt?         @relation(fields: [receiptId], references: [id])
+  paymentOrder PaymentOrder?    @relation(fields: [paymentOrderId], references: [id])
   check        Check?
+  concept      MovementConcept? @relation(fields: [conceptId], references: [id], onDelete: SetNull)
 
   createdBy String   @map("created_by")
   createdAt DateTime @default(now()) @map("created_at")
@@ -4390,6 +4397,10 @@ model FundMovement {
   partnerId   String? @map("partner_id") @db.Uuid // socio (aporte/retiro), informativo
   partnerName String? @map("partner_name")
 
+  // TSK-791: concepto elegido (nullable: los históricos no tienen) y snapshot de su nombre
+  conceptId   String? @map("concept_id") @db.Uuid
+  conceptName String? @map("concept_name")
+
   journalEntryId     String?   @map("journal_entry_id") @db.Uuid // asiento generado (al confirmar)
   journalEntryNumber Int?      @map("journal_entry_number")
   confirmedAt        DateTime? @map("confirmed_at")
@@ -4399,10 +4410,63 @@ model FundMovement {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   company Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  concept MovementConcept?   @relation(fields: [conceptId], references: [id], onDelete: SetNull)
   lines   FundMovementLine[]
 
   @@index([companyId])
   @@map("fund_movements")
+}
+
+/// Usos a los que puede aplicar un concepto (TSK-791). Abarca las dos familias:
+/// movimientos de fondo (FUND_*) y movimientos bancarios manuales (BANK_*).
+/// Sumar un uso nuevo es agregar un valor al enum: no migra datos de conceptos existentes.
+enum ConceptUsage {
+  FUND_BANK_CHARGES
+  FUND_PARTNER_CONTRIBUTION
+  FUND_PARTNER_WITHDRAWAL
+  BANK_DEPOSIT
+  BANK_WITHDRAWAL
+  BANK_TRANSFER_IN
+  BANK_TRANSFER_OUT
+  BANK_CHECK
+  BANK_DEBIT
+  BANK_FEE
+  BANK_INTEREST
+
+  @@map("concept_usage")
+}
+
+/// De dónde sale la cuenta contable de un concepto (TSK-791).
+enum ConceptAccountMode {
+  OWN_ACCOUNT // cuenta imputable elegida por Contabilidad
+  PARTNER_ACCOUNT // la cuenta que corresponde hoy al socio (TSK-717)
+
+  @@map("concept_account_mode")
+}
+
+/// Concepto de movimiento (TSK-791): lo define Contabilidad y lo eligen Gestión en gastos bancarios,
+/// aporte/retiro de socio y movimientos bancarios manuales. Resuelve la cuenta contable.
+model MovementConcept {
+  id          String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId   String             @map("company_id") @db.Uuid
+  name        String
+  usages      ConceptUsage[]
+  accountMode ConceptAccountMode @default(OWN_ACCOUNT) @map("account_mode")
+  accountId   String?            @map("account_id") @db.Uuid
+  isActive    Boolean            @default(true) @map("is_active")
+
+  createdBy String   @map("created_by")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  company           Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  account           Account?           @relation(fields: [accountId], references: [id])
+  fundMovementLines FundMovementLine[]
+  fundMovements     FundMovement[]
+  bankMovements     BankMovement[]
+
+  @@index([companyId, isActive])
+  @@map("movement_concepts")
 }
 
 /// Un concepto dentro de un movimiento de gastos e impuestos bancarios (TSK-585).
@@ -4415,11 +4479,16 @@ model FundMovementLine {
   /// Orden de carga, para mostrarlos como los escribió el usuario.
   position    Int
 
+  // TSK-791: concepto elegido (nullable: los históricos no tienen) y snapshot de su nombre
+  conceptId   String? @map("concept_id") @db.Uuid
+  conceptName String? @map("concept_name")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  movement FundMovement @relation(fields: [movementId], references: [id], onDelete: Cascade)
-  account  Account      @relation(fields: [accountId], references: [id])
+  movement FundMovement     @relation(fields: [movementId], references: [id], onDelete: Cascade)
+  account  Account          @relation(fields: [accountId], references: [id])
+  concept  MovementConcept? @relation(fields: [conceptId], references: [id], onDelete: SetNull)
 
   @@index([movementId])
   @@map("fund_movement_lines")
