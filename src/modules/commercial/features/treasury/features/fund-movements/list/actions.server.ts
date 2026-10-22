@@ -3,8 +3,8 @@
 import { revalidatePath } from 'next/cache';
 
 import { Prisma } from '@/generated/prisma/client';
+import type { FundMovementType } from '@/generated/prisma/enums';
 import { createJournalEntryTx } from '@/modules/accounting/features/integrations/core';
-import { filterExpenseAccounts } from '@/modules/commercial/features/products/shared/account-filters';
 import type { DataTableSearchParams } from '@/shared/components/common/DataTable';
 import {
   parseSearchParams,
@@ -13,6 +13,13 @@ import {
 import { buildImputableAccountsWhere } from '@/shared/lib/accounts/imputable-accounts';
 import { ActionResult, BusinessError, toActionResult } from '@/shared/lib/action-result';
 import { getActiveCompanyId } from '@/shared/lib/company';
+import {
+  countActiveConcepts,
+  getActiveConceptOptions,
+  resolveConceptForUsage,
+  type ConceptOption,
+} from '@/shared/lib/concepts/concepts.server';
+import { fundMovementUsage } from '@/shared/lib/concepts/usages';
 import { getCurrentUserId } from '@/shared/lib/current-user';
 import { logger } from '@/shared/lib/logger';
 import { checkPermission } from '@/shared/lib/permissions';
@@ -94,17 +101,30 @@ export async function getFundMovementById(id: string) {
   };
 }
 
+/** Tipos de movimiento de fondo que imputan por concepto (TSK-791). */
+export type FundMovementConceptType = Exclude<FundMovementType, 'ACCOUNT_TRANSFER'>;
+
+/** Un concepto como lo ve Gestión: id, nombre y modo, nunca la cuenta (TSK-791). */
+export type FundMovementConceptOption = ConceptOption;
+
+/** Conceptos activos por tipo de movimiento, para los combos del formulario. */
+export type FundMovementConceptCatalog = Record<
+  FundMovementConceptType,
+  FundMovementConceptOption[]
+>;
+
 /**
  * Catálogos para el formulario: bancos, cajas con sesión abierta, socios (con
- * su cuenta de aportes), cuenta de aportes por defecto y cuenta de gastos
- * bancarios por defecto (TSK-718).
+ * su cuenta de aportes), cuenta de aportes por defecto y los conceptos activos
+ * de cada tipo (TSK-791). La cuenta de gastos bancarios por defecto (TSK-718)
+ * ya no viaja: la cuenta de cada línea sale de su concepto.
  */
 export async function getFundMovementCatalogs() {
   await checkPermission('commercial.treasury.fund-movements', 'view', { redirect: true });
   const companyId = await getActiveCompanyId();
   if (!companyId) throw new Error('No hay empresa activa');
 
-  const [banks, cashRegisters, partners, settings] = await Promise.all([
+  const [banks, cashRegisters, partners, settings, conceptsByUsage] = await Promise.all([
     prisma.bankAccount.findMany({
       where: { companyId, status: 'ACTIVE' },
       select: { id: true, bankName: true, accountNumber: true },
@@ -128,10 +148,21 @@ export async function getFundMovementCatalogs() {
       where: { companyId },
       select: {
         partnerContributionsAccount: { select: { id: true, code: true, name: true } },
-        bankChargesAccount: { select: { id: true, code: true, name: true } },
       },
     }),
+    // Gestión los lee con su propio permiso: no necesita `accounting.concepts`.
+    getActiveConceptOptions(prisma, companyId, [
+      'FUND_BANK_CHARGES',
+      'FUND_PARTNER_CONTRIBUTION',
+      'FUND_PARTNER_WITHDRAWAL',
+    ]),
   ]);
+
+  const concepts: FundMovementConceptCatalog = {
+    BANK_CHARGES: conceptsByUsage.FUND_BANK_CHARGES,
+    PARTNER_CONTRIBUTION: conceptsByUsage.FUND_PARTNER_CONTRIBUTION,
+    PARTNER_WITHDRAWAL: conceptsByUsage.FUND_PARTNER_WITHDRAWAL,
+  };
 
   return {
     banks: banks.map((b) => ({ id: b.id, label: `${b.bankName} - ${b.accountNumber}` })),
@@ -144,49 +175,8 @@ export async function getFundMovementCatalogs() {
     // TSK-717: reemplaza `hasContributionsAccount: boolean`. El modal necesita
     // código y nombre para decir "se usará la cuenta por defecto X".
     defaultContributionsAccount: settings?.partnerContributionsAccount ?? null,
-    // TSK-718: se preselecciona en cada concepto nuevo de "Gastos e impuestos
-    // bancarios" si sigue imputable (lo decide `pickDefaultLineAccount` en el
-    // cliente contra las cuentas que ofrece `getFundMovementLineAccounts`).
-    defaultBankChargesAccount: settings?.bankChargesAccount ?? null,
+    concepts,
   };
-}
-
-/**
- * Cuentas imputables para los conceptos de gastos e impuestos bancarios: el
- * mismo criterio con el que `assertLineAccounts` valida en el servidor
- * (`filterExpenseAccounts`, TSK-579), para que el combobox nunca ofrezca algo
- * que el guardado va a rechazar después (TSK-585).
- *
- * `includeIds` preserva cuentas ya guardadas en un borrador aunque hoy no
- * cumplan el filtro (ej. una cuenta dada de baja por corte de ejercicio
- * después de cargar el concepto), con el mismo patrón que
- * `getAccountsForBankMovement` en `treasury/bank-movements`: sin esto, al
- * reabrir el borrador el combobox no encuentra la cuenta y el campo se ve
- * vacío aunque el formulario todavía la tenga cargada (hallazgo de revisión
- * final, TSK-585).
- */
-export async function getFundMovementLineAccounts(includeIds?: string[]) {
-  await checkPermission('commercial.treasury.fund-movements', 'view', { redirect: true });
-  const companyId = await getActiveCompanyId();
-  if (!companyId) throw new Error('No hay empresa activa');
-
-  const imputableWhere = buildImputableAccountsWhere({ companyId });
-  const where =
-    includeIds && includeIds.length > 0
-      ? { OR: [imputableWhere, { companyId, id: { in: includeIds } }] }
-      : imputableWhere;
-
-  const accounts = await prisma.account.findMany({
-    where,
-    select: { id: true, code: true, name: true, type: true },
-    orderBy: { code: 'asc' },
-  });
-
-  return filterExpenseAccounts(accounts).map((account) => ({
-    id: account.id,
-    code: account.code,
-    name: account.name,
-  }));
 }
 
 // ============================================================================
@@ -219,13 +209,48 @@ async function resolveFundRefLabel(
   return { kind: 'CASH', id: ref.id, label: `Caja ${cash.name}` };
 }
 
-/** De dónde salió la cuenta de capital del asiento (para el log y los tests). */
-type CapitalAccountSource = 'partner' | 'default';
+/**
+ * De dónde salió la cuenta de capital del asiento (para el log y los tests).
+ * `concept`: la cuenta propia del concepto del movimiento (TSK-791).
+ */
+type CapitalAccountSource = 'partner' | 'default' | 'concept';
 
 interface ResolvedCapitalAccount {
   accountId: string;
   source: CapitalAccountSource;
   partnerName: string;
+}
+
+/**
+ * Socio de un aporte o retiro al confirmar (pasos 1 y 2 de
+ * `resolvePartnerCapitalAccount`). Se separó en TSK-791 porque el socio sigue
+ * siendo obligatorio aunque el concepto tenga cuenta propia y su cuenta de
+ * aportes no se use.
+ */
+async function findMovementPartner(
+  tx: PrismaTransactionClient,
+  companyId: string,
+  partnerId: string | null
+) {
+  if (!partnerId) {
+    throw new BusinessError(
+      'Este movimiento no tiene socio asignado. Editá el movimiento y elegí el socio antes de confirmarlo.'
+    );
+  }
+
+  const partner = await tx.partner.findFirst({
+    where: { id: partnerId, companyId },
+    select: {
+      name: true,
+      contributionsAccount: { select: { id: true, code: true, name: true } },
+    },
+  });
+  if (!partner) {
+    throw new BusinessError(
+      'El socio del movimiento ya no existe. Editá el movimiento y elegí otro socio.'
+    );
+  }
+  return partner;
 }
 
 /**
@@ -252,25 +277,7 @@ async function resolvePartnerCapitalAccount(
   partnerId: string | null,
   defaultAccountId: string | null
 ): Promise<ResolvedCapitalAccount> {
-  if (!partnerId) {
-    throw new BusinessError(
-      'Este movimiento no tiene socio asignado. Editá el movimiento y elegí el socio antes de confirmarlo.'
-    );
-  }
-
-  const partner = await tx.partner.findFirst({
-    where: { id: partnerId, companyId },
-    select: {
-      name: true,
-      contributionsAccountId: true,
-      contributionsAccount: { select: { id: true, code: true, name: true } },
-    },
-  });
-  if (!partner) {
-    throw new BusinessError(
-      'El socio del movimiento ya no existe. Editá el movimiento y elegí otro socio.'
-    );
-  }
+  const partner = await findMovementPartner(tx, companyId, partnerId);
 
   // Con la FK `SetNull` nunca hay id sin cuenta, así que alcanza con mirar la relación.
   if (partner.contributionsAccount) {
@@ -298,6 +305,119 @@ async function resolvePartnerCapitalAccount(
     );
   }
   return { accountId: defaultAccountId, source: 'default', partnerName: partner.name };
+}
+
+/** Un concepto de gastos bancarios ya validado, con su cuenta (TSK-791). */
+interface ResolvedLineConcept {
+  id: string;
+  name: string;
+  accountId: string;
+}
+
+/**
+ * Valida el concepto de una línea de gastos bancarios y devuelve su cuenta. Se
+ * usa al guardar y al confirmar: Contabilidad puede haberlo desactivado, haberle
+ * quitado el uso o haberle cambiado la cuenta entre una cosa y otra (TSK-791).
+ *
+ * `cache` evita volver a consultar el mismo concepto cuando varias líneas lo
+ * repiten (es habitual: "Comisión" e "IVA sobre comisión" del mismo mes).
+ */
+async function resolveLineConcept(
+  db: PrismaTransactionClient,
+  companyId: string,
+  conceptId: string,
+  cache: Map<string, ResolvedLineConcept>
+): Promise<ResolvedLineConcept> {
+  const cached = cache.get(conceptId);
+  if (cached) return cached;
+
+  const concept = await resolveConceptForUsage(db, {
+    companyId,
+    conceptId,
+    usage: 'FUND_BANK_CHARGES',
+  });
+  // Un concepto de gastos bancarios siempre tiene cuenta propia (lo exige el ABM
+  // de Contabilidad); se verifica igual para no imputar a una cuenta nula.
+  if (!concept.accountId) {
+    throw new BusinessError(
+      `El concepto «${concept.name}» no tiene cuenta propia. Pedile a Contabilidad que la corrija en Empresa → Contabilidad → Conceptos.`
+    );
+  }
+  const resolved = { id: concept.id, name: concept.name, accountId: concept.accountId };
+  cache.set(conceptId, resolved);
+  return resolved;
+}
+
+/**
+ * Cuenta de capital de un aporte o retiro al confirmar, con conceptos (TSK-791).
+ * El concepto se vuelve a resolver acá porque Contabilidad pudo cambiarlo
+ * mientras el movimiento estaba en borrador. Corre dentro de la transacción y
+ * ANTES de `applyFundSide`, así un rechazo no mueve saldos.
+ *
+ *  - Sin concepto y con conceptos activos para el tipo → error: editar y elegir uno
+ *    (borradores creados antes de que existieran conceptos para el tipo).
+ *  - Sin concepto y sin conceptos activos → exactamente como antes (TSK-717).
+ *  - Concepto "cuenta del socio"          → `resolvePartnerCapitalAccount`, como antes.
+ *  - Concepto con cuenta propia           → la cuenta del concepto. El socio sigue
+ *                                           siendo obligatorio, aunque su cuenta no se use.
+ */
+async function resolveMovementCapitalAccount(
+  tx: PrismaTransactionClient,
+  companyId: string,
+  movement: {
+    type: 'PARTNER_CONTRIBUTION' | 'PARTNER_WITHDRAWAL';
+    partnerId: string | null;
+    conceptId: string | null;
+  },
+  defaultAccountId: string | null
+): Promise<ResolvedCapitalAccount & { conceptName: string | null }> {
+  const usage = fundMovementUsage(movement.type);
+  // Aporte y retiro siempre tienen uso de concepto: esto no debería pasar nunca.
+  if (!usage) throw new BusinessError('Tipo de movimiento no soportado');
+
+  if (!movement.conceptId) {
+    if ((await countActiveConcepts(tx, companyId, usage)) > 0) {
+      throw new BusinessError(
+        'Este movimiento no tiene concepto. Editalo y elegí uno antes de confirmarlo.'
+      );
+    }
+    const capital = await resolvePartnerCapitalAccount(
+      tx,
+      companyId,
+      movement.partnerId,
+      defaultAccountId
+    );
+    return { ...capital, conceptName: null };
+  }
+
+  const concept = await resolveConceptForUsage(tx, {
+    companyId,
+    conceptId: movement.conceptId,
+    usage,
+  });
+  if (concept.accountMode === 'PARTNER_ACCOUNT') {
+    const capital = await resolvePartnerCapitalAccount(
+      tx,
+      companyId,
+      movement.partnerId,
+      defaultAccountId
+    );
+    return { ...capital, conceptName: concept.name };
+  }
+  // `resolveConceptForUsage` ya garantiza la cuenta de un concepto de cuenta
+  // propia; se verifica igual para no caer en silencio a la cuenta del socio.
+  if (!concept.accountId) {
+    throw new BusinessError(
+      `El concepto «${concept.name}» no tiene cuenta propia. Pedile a Contabilidad que la corrija en Empresa → Contabilidad → Conceptos.`
+    );
+  }
+  const partner = await findMovementPartner(tx, companyId, movement.partnerId);
+  return {
+    accountId: concept.accountId,
+    source: 'concept',
+    partnerName: partner.name,
+    conceptName: concept.name,
+  };
 }
 
 /**
@@ -503,33 +623,91 @@ async function createJournalEntryForFundMovement(
   });
 }
 
-/** Un concepto listo para persistir. */
+/** Una línea de gastos bancarios lista para persistir. */
 interface FundMovementLineData {
+  conceptId: string;
+  /** Snapshot del nombre del concepto, para el historial (TSK-791). */
+  conceptName: string;
+  /** Cuenta resuelta desde el concepto en el servidor: nunca viene del cliente. */
   accountId: string;
+  /** Detalle opcional, trimmeado; puede ser ''. */
   description: string;
   amount: Prisma.Decimal;
   position: number;
 }
 
 /**
- * Conceptos listos para persistir. Solo los tiene el tipo BANK_CHARGES; el resto
- * de los tipos guarda el movimiento sin líneas. El importe se redondea acá a los
- * 2 decimales de la columna, para que la base no lo redondee por su cuenta y el
- * total quede diferente de la suma de los conceptos.
+ * Líneas listas para persistir. Solo las tiene el tipo BANK_CHARGES; el resto
+ * de los tipos guarda el movimiento sin líneas, aunque el cliente mande alguna.
+ * El importe se redondea acá a los 2 decimales de la columna, para que la base
+ * no lo redondee por su cuenta y el total quede diferente de la suma.
+ *
+ * TSK-791: cada línea trae un concepto y la cuenta se resuelve desde él con
+ * `resolveConceptForUsage`, que reemplaza a `assertLineAccounts`: valida que el
+ * concepto sea de la empresa, esté activo, tenga el uso y que su cuenta siga
+ * siendo imputable y de un tipo admitido (egreso o activo, TSK-579). Así un id
+ * manipulado en el payload no puede imputar a otra empresa ni a una cuenta
+ * inválida.
  */
-function buildLinesData(data: FundMovementFormInput): FundMovementLineData[] {
+async function buildLinesData(
+  db: PrismaTransactionClient,
+  companyId: string,
+  data: FundMovementFormInput
+): Promise<FundMovementLineData[]> {
   if (data.type !== 'BANK_CHARGES') return [];
-  return (data.lines ?? []).map((line, index) => ({
-    accountId: line.accountId,
-    description: line.description.trim(),
-    amount: new Prisma.Decimal(parseFloat(line.amount)).toDecimalPlaces(2),
-    position: index,
-  }));
+  const cache = new Map<string, ResolvedLineConcept>();
+  const lines: FundMovementLineData[] = [];
+  for (const [index, line] of (data.lines ?? []).entries()) {
+    const concept = await resolveLineConcept(db, companyId, line.conceptId, cache);
+    lines.push({
+      conceptId: concept.id,
+      conceptName: concept.name,
+      accountId: concept.accountId,
+      description: line.description.trim(),
+      amount: new Prisma.Decimal(parseFloat(line.amount)).toDecimalPlaces(2),
+      position: index,
+    });
+  }
+  return lines;
 }
 
 /**
- * Importe del movimiento. En gastos bancarios lo calcula el servidor sumando los
- * conceptos ya redondeados: `amount` ni siquiera llega para ese tipo (TSK-585).
+ * Concepto de un aporte o retiro al guardar el borrador (TSK-791). Que sea
+ * obligatorio depende de los conceptos activos del tipo, así que se decide acá
+ * y no en el schema:
+ *  - viene un concepto  → se valida y se guarda con su nombre (snapshot);
+ *  - no viene y hay conceptos activos para el tipo → error;
+ *  - no viene y no hay conceptos activos → se guarda sin concepto, como antes.
+ * Los demás tipos no llevan concepto en el movimiento: gastos bancarios lo lleva
+ * en cada línea y la transferencia nunca usa conceptos.
+ */
+async function resolveMovementConcept(
+  db: PrismaTransactionClient,
+  companyId: string,
+  data: FundMovementFormInput
+): Promise<{ conceptId: string | null; conceptName: string | null }> {
+  const isPartnerMovement =
+    data.type === 'PARTNER_CONTRIBUTION' || data.type === 'PARTNER_WITHDRAWAL';
+  const usage = isPartnerMovement ? fundMovementUsage(data.type) : null;
+  if (!usage) return { conceptId: null, conceptName: null };
+
+  if (data.conceptId) {
+    const concept = await resolveConceptForUsage(db, {
+      companyId,
+      conceptId: data.conceptId,
+      usage,
+    });
+    return { conceptId: concept.id, conceptName: concept.name };
+  }
+  if ((await countActiveConcepts(db, companyId, usage)) > 0) {
+    throw new BusinessError('Elegí el concepto del movimiento');
+  }
+  return { conceptId: null, conceptName: null };
+}
+
+/**
+ * Importe del movimiento. En gastos bancarios lo calcula el servidor sumando las
+ * líneas ya redondeadas: `amount` ni siquiera llega para ese tipo (TSK-585).
  * Así el total guardado es exactamente la suma de las líneas, que es lo que
  * después se acredita al banco en el asiento.
  */
@@ -544,45 +722,11 @@ function resolveMovementAmount(
   if (data.type !== 'BANK_CHARGES') return parseFloat(data.amount!);
   return sumLines(
     linesData.map((line) => ({
-      accountId: line.accountId,
+      conceptId: line.conceptId,
       description: line.description,
       amount: line.amount.toString(),
     }))
   );
-}
-
-/**
- * Verifica que las cuentas de los conceptos sean de la empresa, estén activas,
- * sean imputables (hoja, sin corte de ejercicio vigente) y de un tipo que
- * pueda ser contrapartida de un débito bancario.
- *
- * El criterio de "imputable" es `buildImputableAccountsWhere` (compartido con
- * `getFundMovementLineAccounts`, que arma el combobox): antes esta función
- * repetía `isActive`/`isLeaf` a mano y se olvidaba de excluir las cuentas con
- * `disabledFrom` ya vigente, así que el servidor terminaba siendo más
- * permisivo que el combobox que decía replicar (hallazgo de revisión final,
- * TSK-585). El tipo se decide aparte con `filterExpenseAccounts` (TSK-579),
- * el mismo criterio que usan los ítems al comprarse: egreso o activo. El
- * activo entra porque hay conceptos que son retenciones a computar (Sircreb)
- * y no gastos; pasivo y patrimonio quedan fuera.
- *
- * Sin esta comprobación la regla viviría solo en el combobox, y un id
- * manipulado en el payload del server action podía imputar a otra empresa, a
- * una cuenta de agrupación, a una cuenta dada de baja por corte de ejercicio
- * o a una cuenta de un tipo que no corresponde.
- */
-async function assertLineAccounts(accountIds: string[], companyId: string) {
-  if (accountIds.length === 0) return;
-  const unicos = Array.from(new Set(accountIds));
-  const cuentas = await prisma.account.findMany({
-    where: { ...buildImputableAccountsWhere({ companyId }), id: { in: unicos } },
-    select: { id: true, type: true },
-  });
-  if (filterExpenseAccounts(cuentas).length !== unicos.length) {
-    throw new BusinessError(
-      'Alguna de las cuentas de los conceptos no es válida: revisá que estén activas, sean imputables y de tipo egreso o activo.'
-    );
-  }
 }
 
 /** Datos del movimiento resueltos desde el form, para crear/editar en borrador. */
@@ -614,11 +758,8 @@ export async function createFundMovement(
 
     const data = fundMovementSchema.parse(input);
     const { sourceRef, destRef } = buildDraftData(data);
-    const linesData = buildLinesData(data);
-    await assertLineAccounts(
-      linesData.map((line) => line.accountId),
-      companyId
-    );
+    const linesData = await buildLinesData(prisma, companyId, data);
+    const concept = await resolveMovementConcept(prisma, companyId, data);
 
     // fundOut = origen (retiro/transferencia); fundIn = destino (aporte/transferencia)
     const fundOut = sourceRef ? await resolveFundRefLabel(sourceRef, companyId) : null;
@@ -641,6 +782,8 @@ export async function createFundMovement(
         fundInLabel: fundIn?.label ?? null,
         partnerId: data.partnerId || null,
         partnerName,
+        conceptId: concept.conceptId,
+        conceptName: concept.conceptName,
         createdBy: userId,
         ...(linesData.length > 0 ? { lines: { create: linesData } } : {}),
       },
@@ -686,17 +829,14 @@ export async function updateFundMovement(
 
     const data = fundMovementSchema.parse(input);
     const { sourceRef, destRef } = buildDraftData(data);
-    const linesData = buildLinesData(data);
-    await assertLineAccounts(
-      linesData.map((line) => line.accountId),
-      companyId
-    );
+    const linesData = await buildLinesData(prisma, companyId, data);
+    const concept = await resolveMovementConcept(prisma, companyId, data);
 
     const fundOut = sourceRef ? await resolveFundRefLabel(sourceRef, companyId) : null;
     const fundIn = destRef ? await resolveFundRefLabel(destRef, companyId) : null;
     const partnerName = await resolvePartnerName(data, companyId);
 
-    // Los conceptos se reemplazan enteros: se borran los anteriores y se
+    // Las líneas se reemplazan enteras: se borran las anteriores y se
     // recrean con la posición del formulario, en la misma transacción.
     await prisma.$transaction(async (tx) => {
       await tx.fundMovement.update({
@@ -714,6 +854,8 @@ export async function updateFundMovement(
           fundInLabel: fundIn?.label ?? null,
           partnerId: data.partnerId || null,
           partnerName,
+          conceptId: concept.conceptId,
+          conceptName: concept.conceptName,
         },
       });
 
@@ -772,7 +914,8 @@ export async function confirmFundMovement(id: string): Promise<FundMovementActio
     const isTransfer = movement.type === 'ACCOUNT_TRANSFER';
     // TSK-717: la cuenta del asiento la decide el socio (propia o por defecto)
     // dentro de la transacción, en `resolvePartnerCapitalAccount`. La global ya
-    // no es condición necesaria para confirmar.
+    // no es condición necesaria para confirmar. TSK-791: antes pasa por el
+    // concepto del movimiento (`resolveMovementCapitalAccount`).
     const defaultContributionsAccountId = settings.partnerContributionsAccountId ?? null;
     let capitalSource: CapitalAccountSource | null = null; // para el log final
 
@@ -811,18 +954,22 @@ export async function confirmFundMovement(id: string): Promise<FundMovementActio
       ];
 
       let entryLines: JournalLineInput[];
+      // Snapshot del nombre del concepto del movimiento, si lo tiene (TSK-791).
+      let movementConceptName: string | null = null;
 
       if (movement.type === 'PARTNER_CONTRIBUTION') {
         if (!movement.fundInKind || !movement.fundInId)
           throw new BusinessError('Falta el banco/caja destino');
-        // Antes de `applyFundSide`, para que un socio sin cuenta falle antes de mover saldos.
-        const capital = await resolvePartnerCapitalAccount(
+        // Antes de `applyFundSide`, para que un socio sin cuenta o un concepto
+        // inválido fallen antes de mover saldos.
+        const capital = await resolveMovementCapitalAccount(
           tx,
           companyId,
-          movement.partnerId,
+          { type: movement.type, partnerId: movement.partnerId, conceptId: movement.conceptId },
           defaultContributionsAccountId
         );
         capitalSource = capital.source;
+        movementConceptName = capital.conceptName;
         const dest = await applyFundSide(
           tx,
           { kind: movement.fundInKind as FundSourceKind, id: movement.fundInId },
@@ -834,13 +981,14 @@ export async function confirmFundMovement(id: string): Promise<FundMovementActio
       } else if (movement.type === 'PARTNER_WITHDRAWAL') {
         if (!movement.fundOutKind || !movement.fundOutId)
           throw new BusinessError('Falta el banco/caja origen');
-        const capital = await resolvePartnerCapitalAccount(
+        const capital = await resolveMovementCapitalAccount(
           tx,
           companyId,
-          movement.partnerId,
+          { type: movement.type, partnerId: movement.partnerId, conceptId: movement.conceptId },
           defaultContributionsAccountId
         );
         capitalSource = capital.source;
+        movementConceptName = capital.conceptName;
         const src = await applyFundSide(
           tx,
           { kind: movement.fundOutKind as FundSourceKind, id: movement.fundOutId },
@@ -857,18 +1005,47 @@ export async function confirmFundMovement(id: string): Promise<FundMovementActio
         if (movement.lines.length === 0) {
           throw new BusinessError('El movimiento no tiene conceptos cargados');
         }
+        // TSK-791: borradores viejos (líneas con cuenta y sin concepto) no se
+        // confirman hasta elegir el concepto de cada línea.
+        if (movement.lines.some((line) => !line.conceptId)) {
+          throw new BusinessError(
+            'Hay conceptos sin elegir: editá el movimiento y elegí el concepto de cada línea.'
+          );
+        }
+        // Cada concepto se vuelve a resolver ANTES de `applyFundSide`: si
+        // Contabilidad lo desactivó, le quitó el uso o su cuenta dejó de ser
+        // imputable, se rechaza sin mover saldos. Si le cambió la cuenta, gana
+        // la cuenta actual, que queda fija en la línea al confirmar.
+        const cache = new Map<string, ResolvedLineConcept>();
+        const resolvedLines: {
+          line: (typeof movement.lines)[number];
+          concept: ResolvedLineConcept;
+        }[] = [];
+        for (const line of movement.lines) {
+          // El `some` de arriba garantiza que todas las líneas tienen concepto.
+          const concept = await resolveLineConcept(tx, companyId, line.conceptId!, cache);
+          resolvedLines.push({ line, concept });
+        }
+
         const src = await applyFundSide(
           tx,
           { kind: movement.fundOutKind as FundSourceKind, id: movement.fundOutId },
           'OUT',
           sideCtx
         );
+        for (const { line, concept } of resolvedLines) {
+          await tx.fundMovementLine.update({
+            where: { id: line.id },
+            data: { accountId: concept.accountId, conceptName: concept.name },
+          });
+        }
         entryLines = [
-          ...movement.lines.map((line) => ({
-            accountId: line.accountId,
+          ...resolvedLines.map(({ line, concept }) => ({
+            accountId: concept.accountId,
             debit: Number(line.amount),
             credit: 0,
-            description: line.description,
+            // Sin detalle, la línea del asiento lleva el nombre del concepto.
+            description: line.description || concept.name,
           })),
           {
             accountId: src.accountId,
@@ -924,6 +1101,8 @@ export async function confirmFundMovement(id: string): Promise<FundMovementActio
           journalEntryId: entry.id,
           journalEntryNumber: entry.number,
           confirmedAt: new Date(),
+          // El nombre vigente del concepto al confirmar queda como snapshot.
+          ...(movementConceptName ? { conceptName: movementConceptName } : {}),
         },
       });
     });

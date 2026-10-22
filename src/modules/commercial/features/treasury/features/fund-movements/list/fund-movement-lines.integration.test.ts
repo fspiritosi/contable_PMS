@@ -58,6 +58,11 @@
  * 4 casos pedidos, que son sobre el asiento contable y la persistencia de
  * los conceptos.
  *
+ * TSK-791: las líneas eligen un concepto y la cuenta sale de él, así que el
+ * `beforeAll` siembra un concepto por cada cuenta de gasto. Los casos de
+ * concepto inválido, cambio de cuenta entre guardar y confirmar, y aporte/retiro
+ * con concepto viven en `fund-movement-concepts.integration.test.ts`.
+ *
  * Aislamiento de datos: todo lo que este archivo crea usa el prefijo
  * `TSK585-TEST-` (empresa, cuentas, bancos, descripciones de movimientos y
  * asientos). El `afterAll` borra todo en orden inverso de dependencias y
@@ -82,20 +87,19 @@ vi.mock('@/shared/lib/permissions', () => ({
 }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 
-import { getActiveCompanyId } from '@/shared/lib/company';
-import { getCurrentUserId } from '@/shared/lib/current-user';
 import {
   closeMonthForTest,
   readEntryPeriod,
   readLastEntryNumber,
 } from '@/modules/accounting/shared/test-utils/period-test-helpers';
+import { getActiveCompanyId } from '@/shared/lib/company';
+import { getCurrentUserId } from '@/shared/lib/current-user';
 // Código real de producción: nada de esto se reimplementa acá.
 import {
   confirmFundMovement,
   createFundMovement,
   getFundMovementById,
   getFundMovementCatalogs,
-  getFundMovementLineAccounts,
 } from './actions.server';
 
 const PREFIX = 'TSK585-TEST-';
@@ -148,6 +152,8 @@ describe.skipIf(!dbAvailable)('integración: conceptos del movimiento de fondos 
   let capitalAccountId: string; // aportes de socios (patrimonio)
   let commissionAccountId: string; // concepto: comisión bancaria (egreso)
   let sircrebAccountId: string; // concepto: percepción Sircreb (activo, a computar)
+  let commissionConceptId: string; // concepto de gastos bancarios → commissionAccountId
+  let sircrebConceptId: string; // concepto de gastos bancarios → sircrebAccountId
 
   let bankSourceId: string; // BankAccount de origen (retiro/gasto/transferencia)
   let bankDestId: string; // BankAccount de destino (aporte/transferencia)
@@ -258,6 +264,25 @@ describe.skipIf(!dbAvailable)('integración: conceptos del movimiento de fondos 
     });
     partnerId = partner.id;
 
+    // TSK-791: la cuenta de cada línea sale de su concepto.
+    const mkConcept = (name: string, accountId: string) =>
+      prisma.movementConcept.create({
+        data: {
+          companyId,
+          name: `${PREFIX}${name}`,
+          usages: ['FUND_BANK_CHARGES'],
+          accountId,
+          createdBy: `${PREFIX}user`,
+        },
+        select: { id: true },
+      });
+    const [commissionConcept, sircrebConcept] = await Promise.all([
+      mkConcept('Comision bancaria', commissionAccountId),
+      mkConcept('Percepcion Sircreb', sircrebAccountId),
+    ]);
+    commissionConceptId = commissionConcept.id;
+    sircrebConceptId = sircrebConcept.id;
+
     // Único punto donde se aísla la frontera: la empresa activa y el usuario
     // son los de este test, no una sesión real.
     vi.mocked(getActiveCompanyId).mockResolvedValue(companyId);
@@ -283,19 +308,28 @@ describe.skipIf(!dbAvailable)('integración: conceptos del movimiento de fondos 
       await prisma.accountingSettings.deleteMany({ where: { companyId } });
       // El socio antes que las cuentas: `Partner.contributionsAccountId` apunta a `accounts` (TSK-717).
       await prisma.partner.deleteMany({ where: { companyId } });
+      // Los conceptos también apuntan a `accounts` (TSK-791).
+      await prisma.movementConcept.deleteMany({ where: { companyId } });
       await prisma.account.deleteMany({ where: { companyId } });
       await prisma.company.deleteMany({ where: { id: companyId } });
     }
 
     // Verificación de que no sobrevive ninguna fila de la corrida.
-    const [remainingMovements, remainingPartners, remainingAccounts, remainingCompanies] =
-      await Promise.all([
-        prisma.fundMovement.count({ where: { description: { startsWith: PREFIX } } }),
-        prisma.partner.count({ where: { name: { startsWith: PREFIX } } }),
-        prisma.account.count({ where: { name: { startsWith: PREFIX } } }),
-        prisma.company.count({ where: { name: { startsWith: PREFIX } } }),
-      ]);
+    const [
+      remainingMovements,
+      remainingPartners,
+      remainingConcepts,
+      remainingAccounts,
+      remainingCompanies,
+    ] = await Promise.all([
+      prisma.fundMovement.count({ where: { description: { startsWith: PREFIX } } }),
+      prisma.partner.count({ where: { name: { startsWith: PREFIX } } }),
+      prisma.movementConcept.count({ where: { name: { startsWith: PREFIX } } }),
+      prisma.account.count({ where: { name: { startsWith: PREFIX } } }),
+      prisma.company.count({ where: { name: { startsWith: PREFIX } } }),
+    ]);
     expect(remainingMovements).toBe(0);
+    expect(remainingConcepts).toBe(0);
     expect(remainingPartners).toBe(0);
     expect(remainingAccounts).toBe(0);
     expect(remainingCompanies).toBe(0);
@@ -319,12 +353,12 @@ describe.skipIf(!dbAvailable)('integración: conceptos del movimiento de fondos 
         partnerId: '',
         lines: [
           {
-            accountId: commissionAccountId,
+            conceptId: commissionConceptId,
             description: `${PREFIX}Comision de mantenimiento`,
             amount: '302574.16',
           },
           {
-            accountId: sircrebAccountId,
+            conceptId: sircrebConceptId,
             description: `${PREFIX}Percepcion Sircreb`,
             amount: '1434154.28',
           },
@@ -342,7 +376,7 @@ describe.skipIf(!dbAvailable)('integración: conceptos del movimiento de fondos 
       expect(lines).toHaveLength(3);
     });
 
-    it('cada concepto queda debitado en su propia cuenta por su importe exacto', () => {
+    it('cada concepto queda debitado en la cuenta de su concepto por su importe exacto', () => {
       const comision = lines.find((l) => l.accountId === commissionAccountId);
       const sircreb = lines.find((l) => l.accountId === sircrebAccountId);
       expect(comision).toMatchObject({ debit: 302574.16, credit: 0 });
@@ -486,13 +520,13 @@ describe.skipIf(!dbAvailable)('integración: conceptos del movimiento de fondos 
     let storedAmount: number;
     const sentAmount = '999999.99'; // deliberadamente distinto de la suma de las líneas
     const conceptos = [
-      { accountId: '', description: 'Comision', amount: '100.50' },
-      { accountId: '', description: 'Sircreb', amount: '50.25' },
+      { conceptId: '', description: 'Comision', amount: '100.50' },
+      { conceptId: '', description: 'Sircreb', amount: '50.25' },
     ];
 
     beforeAll(async () => {
-      conceptos[0].accountId = commissionAccountId;
-      conceptos[1].accountId = sircrebAccountId;
+      conceptos[0].conceptId = commissionConceptId;
+      conceptos[1].conceptId = sircrebConceptId;
 
       const result = await createFundMovement({
         type: 'BANK_CHARGES',
@@ -524,7 +558,12 @@ describe.skipIf(!dbAvailable)('integración: conceptos del movimiento de fondos 
     // reales: los tres conceptos se cargan en un orden con sentido -no
     // alfabético, para que no coincida por casualidad con un posible orden
     // por descripción- y se verifica que la relectura respeta ese orden.
-    let releidas: { description: string; accountId: string; amount: number }[];
+    let releidas: {
+      description: string;
+      conceptId: string | null;
+      accountId: string;
+      amount: number;
+    }[];
 
     beforeAll(async () => {
       const result = await createFundMovement({
@@ -536,17 +575,17 @@ describe.skipIf(!dbAvailable)('integración: conceptos del movimiento de fondos 
         partnerId: '',
         lines: [
           {
-            accountId: commissionAccountId,
+            conceptId: commissionConceptId,
             description: `${PREFIX}Comision mantenimiento`,
             amount: '850.30',
           },
           {
-            accountId: commissionAccountId,
+            conceptId: commissionConceptId,
             description: `${PREFIX}IVA sobre comision`,
             amount: '178.56',
           },
           {
-            accountId: sircrebAccountId,
+            conceptId: sircrebConceptId,
             description: `${PREFIX}Percepcion Sircreb`,
             amount: '1200.00',
           },
@@ -558,6 +597,7 @@ describe.skipIf(!dbAvailable)('integración: conceptos del movimiento de fondos 
       const found = await getFundMovementById(result.id!);
       releidas = found!.lines.map((l) => ({
         description: l.description,
+        conceptId: l.conceptId,
         accountId: l.accountId,
         amount: l.amount,
       }));
@@ -575,21 +615,33 @@ describe.skipIf(!dbAvailable)('integración: conceptos del movimiento de fondos 
       ]);
     });
 
-    it('conserva la cuenta y el importe de cada concepto', () => {
-      expect(releidas[0]).toMatchObject({ accountId: commissionAccountId, amount: 850.3 });
-      expect(releidas[1]).toMatchObject({ accountId: commissionAccountId, amount: 178.56 });
-      expect(releidas[2]).toMatchObject({ accountId: sircrebAccountId, amount: 1200 });
+    it('conserva el concepto, la cuenta resuelta desde él y el importe de cada línea', () => {
+      expect(releidas[0]).toMatchObject({
+        conceptId: commissionConceptId,
+        accountId: commissionAccountId,
+        amount: 850.3,
+      });
+      expect(releidas[1]).toMatchObject({
+        conceptId: commissionConceptId,
+        accountId: commissionAccountId,
+        amount: 178.56,
+      });
+      expect(releidas[2]).toMatchObject({
+        conceptId: sircrebConceptId,
+        accountId: sircrebAccountId,
+        amount: 1200,
+      });
     });
   });
 
-  describe('caso 5: assertLineAccounts respeta el corte de ejercicio (hallazgo de revisión final, TSK-585)', () => {
-    // Antes de este arreglo, `assertLineAccounts` armaba su propio `where`
-    // (`isActive`/`isLeaf` a mano) en vez de reusar `buildImputableAccountsWhere`
-    // -el mismo criterio con el que `getFundMovementLineAccounts` arma el
-    // combobox- y no replicaba la exclusión de cuentas con `disabledFrom` ya
-    // vigente. Una cuenta dada de baja por corte de ejercicio, que el combobox
-    // ya no ofrece, igual pasaba el guardado si el id llegaba en el payload.
+  describe('caso 5: la cuenta del concepto respeta el corte de ejercicio (TSK-585, TSK-791)', () => {
+    // Antes de TSK-585 el servidor no excluía las cuentas con `disabledFrom`
+    // vigente. Desde TSK-791 la cuenta sale del concepto y la valida
+    // `resolveConceptForUsage` con `buildImputableAccountsWhere`: un concepto
+    // cuya cuenta quedó cortada por ejercicio no se puede usar.
     let disabledAccountId: string;
+    let disabledConceptId: string;
+    const conceptName = `${PREFIX}Concepto con cuenta dada de baja`;
 
     beforeAll(async () => {
       const disabled = await prisma.account.create({
@@ -603,9 +655,20 @@ describe.skipIf(!dbAvailable)('integración: conceptos del movimiento de fondos 
         },
       });
       disabledAccountId = disabled.id;
+      const concept = await prisma.movementConcept.create({
+        data: {
+          companyId,
+          name: conceptName,
+          usages: ['FUND_BANK_CHARGES'],
+          accountId: disabledAccountId,
+          createdBy: `${PREFIX}user`,
+        },
+        select: { id: true },
+      });
+      disabledConceptId = concept.id;
     });
 
-    it('rechaza un concepto que imputa a una cuenta con corte de ejercicio vigente', async () => {
+    it('rechaza una línea cuyo concepto imputa a una cuenta con corte de ejercicio vigente', async () => {
       const result = await createFundMovement({
         type: 'BANK_CHARGES',
         date: '2026-03-01',
@@ -615,7 +678,7 @@ describe.skipIf(!dbAvailable)('integración: conceptos del movimiento de fondos 
         partnerId: '',
         lines: [
           {
-            accountId: disabledAccountId,
+            conceptId: disabledConceptId,
             description: `${PREFIX}Concepto invalido`,
             amount: '100',
           },
@@ -625,25 +688,8 @@ describe.skipIf(!dbAvailable)('integración: conceptos del movimiento de fondos 
       expect(result.success).toBe(false);
       if (result.success) return;
       expect(result.error).toBe(
-        'Alguna de las cuentas de los conceptos no es válida: revisá que estén activas, sean imputables y de tipo egreso o activo.'
+        `La cuenta del concepto «${conceptName}» no está activa o no es imputable. Pedile a Contabilidad que la corrija en Empresa → Contabilidad → Conceptos.`
       );
-    });
-
-    // `getFundMovementLineAccounts` arma el combobox con el mismo criterio
-    // (`buildImputableAccountsWhere`), así que la cuenta dada de baja no debe
-    // ofrecerse para conceptos nuevos...
-    it('no ofrece la cuenta dada de baja para conceptos nuevos', async () => {
-      const accounts = await getFundMovementLineAccounts();
-      expect(accounts.some((a) => a.id === disabledAccountId)).toBe(false);
-    });
-
-    // ...pero si el borrador ya la tenía cargada (`includeIds`), tiene que
-    // seguir apareciendo: si no, al reabrir el borrador el combobox no
-    // encuentra la cuenta y el campo se ve vacío aunque el formulario todavía
-    // la tenga guardada (hallazgo de revisión final, TSK-585).
-    it('preserva la cuenta dada de baja cuando viene en `includeIds` (borrador ya cargado)', async () => {
-      const accounts = await getFundMovementLineAccounts([disabledAccountId]);
-      expect(accounts.some((a) => a.id === disabledAccountId)).toBe(true);
     });
 
     it('la misma cuenta, sin el corte, sigue siendo aceptada (control: el rechazo es por disabledFrom, no por otra razón)', async () => {
@@ -660,7 +706,7 @@ describe.skipIf(!dbAvailable)('integración: conceptos del movimiento de fondos 
         destinationFund: '',
         partnerId: '',
         lines: [
-          { accountId: disabledAccountId, description: `${PREFIX}Concepto valido`, amount: '100' },
+          { conceptId: disabledConceptId, description: `${PREFIX}Concepto valido`, amount: '100' },
         ],
       });
 
@@ -668,40 +714,17 @@ describe.skipIf(!dbAvailable)('integración: conceptos del movimiento de fondos 
     });
   });
 
-  describe('caso 6: la cuenta de gastos bancarios por defecto llega al formulario (TSK-718)', () => {
-    // `getFundMovementCatalogs` es lo que `FundMovementsList` pasa al modal;
-    // si no trae la cuenta, el concepto nuevo nace vacío aunque esté configurada.
-    afterAll(async () => {
-      await prisma.accountingSettings.update({
-        where: { companyId },
-        data: { bankChargesAccountId: null },
-      });
-    });
-
-    it('con la cuenta configurada en Ajustes contables, devuelve su id, código y nombre', async () => {
-      await prisma.accountingSettings.update({
-        where: { companyId },
-        data: { bankChargesAccountId: commissionAccountId },
-      });
-
+  describe('caso 6: los conceptos de gastos bancarios llegan al formulario (TSK-791, reemplaza TSK-718)', () => {
+    // `getFundMovementCatalogs` es lo que `FundMovementsList` pasa al modal. La
+    // cuenta de gastos bancarios por defecto ya no viaja: cada línea elige un
+    // concepto, y Gestión nunca ve la cuenta.
+    it('devuelve los conceptos activos de gastos bancarios y ya no la cuenta por defecto', async () => {
       const catalogs = await getFundMovementCatalogs();
 
-      expect(catalogs.defaultBankChargesAccount).toEqual({
-        id: commissionAccountId,
-        code: 'T585-COMISION',
-        name: `${PREFIX}Comisiones Bancarias`,
-      });
-    });
-
-    it('sin la cuenta configurada, devuelve null (el concepto nace sin cuenta, como hasta ahora)', async () => {
-      await prisma.accountingSettings.update({
-        where: { companyId },
-        data: { bankChargesAccountId: null },
-      });
-
-      const catalogs = await getFundMovementCatalogs();
-
-      expect(catalogs.defaultBankChargesAccount).toBeNull();
+      expect(catalogs.concepts.BANK_CHARGES.map((c) => c.id)).toEqual(
+        expect.arrayContaining([commissionConceptId, sircrebConceptId])
+      );
+      expect('defaultBankChargesAccount' in catalogs).toBe(false);
     });
   });
 
@@ -824,7 +847,10 @@ describe.skipIf(!dbAvailable)('integración: conceptos del movimiento de fondos 
         where: { id: { in: ids } },
         select: { journalEntryNumber: true },
       });
-      expect(numbers.map((n) => n.journalEntryNumber ?? 0).sort((a, b) => a - b)).toEqual([before + 1, before + 2]);
+      expect(numbers.map((n) => n.journalEntryNumber ?? 0).sort((a, b) => a - b)).toEqual([
+        before + 1,
+        before + 2,
+      ]);
       expect(await readLastEntryNumber(companyId)).toBe(before + 2);
     });
   });

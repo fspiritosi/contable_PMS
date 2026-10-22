@@ -11,6 +11,7 @@ import type { ModulePermissions } from '@/shared/lib/permissions';
 import type { FundMovementDetailMode } from '../../shared/view-mode';
 import type {
   FundMovementAccountRef,
+  FundMovementConceptCatalog,
   FundMovementListItem,
   FundMovementPartnerOption,
   FundOption,
@@ -28,7 +29,7 @@ interface Props {
   cashRegisters: FundOption[];
   partners: FundMovementPartnerOption[];
   defaultContributionsAccount: FundMovementAccountRef | null;
-  defaultBankChargesAccount: FundMovementAccountRef | null;
+  concepts: FundMovementConceptCatalog;
 }
 
 type DetailSelection = { movement: FundMovementListItem; mode: FundMovementDetailMode };
@@ -42,7 +43,7 @@ export function _FundMovementsTable({
   cashRegisters,
   partners,
   defaultContributionsAccount,
-  defaultBankChargesAccount,
+  concepts,
 }: Props) {
   const router = useRouter();
   const [createOpen, setCreateOpen] = useState(false);
@@ -75,7 +76,7 @@ export function _FundMovementsTable({
     cashRegisters,
     partners,
     defaultContributionsAccount,
-    defaultBankChargesAccount,
+    concepts,
     onSuccess: refresh,
   };
 

@@ -29,8 +29,8 @@ import {
 const BANK_ID = '11111111-1111-4111-8111-111111111111';
 const CASH_ID = '22222222-2222-4222-8222-222222222222';
 const PARTNER_ID = '33333333-3333-4333-8333-333333333333';
-const ACCOUNT_A = '44444444-4444-4444-8444-444444444444';
-const ACCOUNT_B = '55555555-5555-4555-8555-555555555555';
+const CONCEPT_A = '44444444-4444-4444-8444-444444444444';
+const CONCEPT_B = '55555555-5555-4555-8555-555555555555';
 
 const ALL: RowActionPermissions = { canView: true, canUpdate: true, canDelete: true };
 const NONE: RowActionPermissions = { canView: false, canUpdate: false, canDelete: false };
@@ -278,17 +278,26 @@ describe('formValuesFromMovement', () => {
 
   it('gastos bancarios: mapea los conceptos en orden, con importes a string', () => {
     const lines: FundMovementLineSource[] = [
-      { accountId: ACCOUNT_A, description: 'Comisión', amount: 1234.5 },
-      { accountId: ACCOUNT_B, description: 'IVA', amount: 259.25 },
+      { conceptId: CONCEPT_A, description: 'Comisión', amount: 1234.5 },
+      { conceptId: CONCEPT_B, description: 'IVA', amount: 259.25 },
     ];
     const values = formValuesFromMovement(
       movementSource({ type: 'BANK_CHARGES', fundOutKind: 'BANK', fundOutId: BANK_ID, partnerId: null }),
       lines
     );
     expect(values.lines).toEqual([
-      { accountId: ACCOUNT_A, description: 'Comisión', amount: '1234.5' },
-      { accountId: ACCOUNT_B, description: 'IVA', amount: '259.25' },
+      { conceptId: CONCEPT_A, description: 'Comisión', amount: '1234.5' },
+      { conceptId: CONCEPT_B, description: 'IVA', amount: '259.25' },
     ]);
+  });
+
+  it('gastos bancarios: una línea vieja sin concepto llega vacía y conserva el detalle (TSK-791)', () => {
+    const lines: FundMovementLineSource[] = [{ conceptId: null, description: 'Sircreb', amount: 10 }];
+    const values = formValuesFromMovement(
+      movementSource({ type: 'BANK_CHARGES', fundOutKind: 'BANK', fundOutId: BANK_ID, partnerId: null }),
+      lines
+    );
+    expect(values.lines).toEqual([{ conceptId: '', description: 'Sircreb', amount: '10' }]);
   });
 
   it('gastos bancarios sin conceptos cargados → []', () => {
@@ -296,7 +305,7 @@ describe('formValuesFromMovement', () => {
   });
 
   it('otro tipo con conceptos pasados → []', () => {
-    const lines: FundMovementLineSource[] = [{ accountId: ACCOUNT_A, description: 'X', amount: 10 }];
+    const lines: FundMovementLineSource[] = [{ conceptId: CONCEPT_A, description: 'X', amount: 10 }];
     expect(formValuesFromMovement(movementSource(), lines).lines).toEqual([]);
   });
 

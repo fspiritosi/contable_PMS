@@ -150,7 +150,7 @@ export type FundMovementFormSource = Pick<
 >;
 export type FundMovementLineSource = Pick<
   FundMovementRecord['lines'][number],
-  'accountId' | 'description' | 'amount'
+  'conceptId' | 'description' | 'amount'
 >;
 
 /**
@@ -174,7 +174,9 @@ export function formValuesFromMovement(
     lines:
       type === 'BANK_CHARGES' && lines
         ? lines.map((line) => ({
-            accountId: line.accountId,
+            // TSK-791: una línea vieja (con cuenta y sin concepto) llega con el
+            // concepto vacío, para obligar a elegirlo; el detalle se conserva.
+            conceptId: line.conceptId ?? '',
             description: line.description,
             amount: String(line.amount),
           }))

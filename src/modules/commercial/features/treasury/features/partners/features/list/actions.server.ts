@@ -156,7 +156,8 @@ export async function getPartnerFacetCounts() {
  * Neto (TSK-717). `includeIds` preserva la cuenta ya guardada aunque hoy no
  * cumpla el filtro (dada de baja, con hijas, cortada por ejercicio), para que al
  * editar el socio el combo la muestre seleccionada en vez de vacía; mismo patrón
- * que `getFundMovementLineAccounts` en `fund-movements`.
+ * que tenía `getFundMovementLineAccounts` en `fund-movements` (lo reemplazaron
+ * los conceptos en TSK-791).
  *
  * El `where` imputable ya tiene su propio `OR` por `disabledFrom`, por eso se
  * envuelve en otro `OR` y no se mezcla. No se importa nada de `accounting`.
