@@ -951,8 +951,10 @@ export function _TreasuryGuide() {
             </li>
             <li>
               <strong>Retiro de socio</strong>: sale dinero de una cuenta hacia
-              un socio. Disminuye el capital y el activo, y usa la misma cuenta
-              del socio que el aporte.
+              un socio. Disminuye el capital y el activo. Sin concepto, o con un
+              concepto que usa la cuenta del socio, imputa a la misma cuenta
+              del socio que el aporte; con un concepto de cuenta propia, el
+              asiento va a la cuenta de ese concepto.
             </li>
             <li>
               <strong>Transferencia entre cuentas</strong>: mueve fondos de una
@@ -1035,7 +1037,7 @@ export function _TreasuryGuide() {
               caja, socio, concepto, descripción y, en gastos bancarios, cada línea con
               su concepto, detalle e importe, y el total. Los movimientos
               anteriores a los conceptos muestran su descripción de siempre. No hay botones de
-              guardar ni de agregar conceptos: es solo para consultar.
+              guardar ni de agregar líneas: es solo para consultar.
             </li>
             <li>
               Arriba del formulario, un recuadro resume el{' '}

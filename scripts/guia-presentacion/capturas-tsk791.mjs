@@ -51,6 +51,7 @@ const EMAIL = 'fspiritosi@codecontrol.com.ar';
 const PASSWORD = 'Contable2026!';
 const COMPANY = '02885d43-1358-4eb2-b774-c52d5be372f3'; // empresa activa habitual en dev
 const TEMP_NAME = 'TSK791 temporal';
+const RUN = Date.now(); // descripciones únicas por corrida: los chequeos no se mezclan con datos de corridas previas
 
 const ONLY_BANK = process.argv.includes('--only=banco');
 const RECAPTURE = process.argv.includes('--recapture-forms');
@@ -246,7 +247,7 @@ if (!ONLY_FUND) try {
 
 // ---------------------------------------------------------------- Gestión (tarea 6)
 const ACCOUNT_CODE = /\d\.\d\.\d\/\d\d(\/\d\d)?/; // código de cuenta tipo 4.2.1/07/06
-const MOV_DESC = 'TSK791 gastos bancarios';
+const MOV_DESC = `TSK791 gastos bancarios ${RUN}`;
 const FUND_URL = `${BASE}/dashboard/commercial/treasury/fund-movements`;
 
 const openFundModal = async (page) => {
@@ -438,7 +439,7 @@ if (!ONLY_BANK && !RECAPTURE) try {
 
 // ---------------------------------------------------------------- Movimiento bancario (tarea 7)
 const BANK_ID = '63f3b949-5107-4b81-b903-da1766be23ae'; // Banco Santander 1085628-1
-const BANK_DESC = 'TSK791 comisión bancaria';
+const BANK_DESC = `TSK791 comisión bancaria ${RUN}`;
 
 const ensureBankConcept = (name, usage, accountCode) => {
   if (conceptExists(name)) return;
@@ -476,6 +477,7 @@ try {
   const conceptTrigger = dialog.getByRole('combobox', { name: /Concepto/ });
   check((await conceptTrigger.count()) === 1, 'el formulario tiene el campo Concepto');
   await conceptTrigger.click();
+  await page.getByRole('option').first().waitFor({ timeout: 10000 });
   const feeOptions = await page.getByRole('option').allInnerTexts();
   check(feeOptions.includes('Comisión bancaria') && !feeOptions.includes('Depósito de efectivo'), `Comisión ofrece solo sus conceptos (${feeOptions.join(' | ')})`);
   await page.getByRole('option', { name: 'Comisión bancaria' }).click();
@@ -485,6 +487,7 @@ try {
   await page.waitForTimeout(600);
   check((await conceptTrigger.innerText()).includes('Seleccionar concepto'), 'Comisión → Depósito limpia el concepto');
   await conceptTrigger.click();
+  await page.getByRole('option').first().waitFor({ timeout: 10000 });
   const depOptions = await page.getByRole('option').allInnerTexts();
   check(depOptions.includes('Depósito de efectivo') && !depOptions.includes('Comisión bancaria'), `Depósito ofrece solo sus conceptos (${depOptions.join(' | ')})`);
   await page.keyboard.press('Escape');
