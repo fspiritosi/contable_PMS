@@ -10,6 +10,8 @@ import type { FundMovementModalMode } from '../../shared/view-mode';
 interface FundMovementFormFooterProps {
   mode: FundMovementModalMode;
   isSubmitting: boolean;
+  /** Deshabilita Guardar y Confirmar (ej.: sin conceptos configurados, TSK-791). */
+  submitDisabled?: boolean;
   /** Cancelar (create/edit) o Cerrar (view). */
   onCancel: () => void;
   /** Solo create/edit: false = Guardar, true = Guardar y Confirmar. */
@@ -20,6 +22,7 @@ interface FundMovementFormFooterProps {
 export function _FundMovementFormFooter({
   mode,
   isSubmitting,
+  submitDisabled = false,
   onCancel,
   onSubmit,
 }: FundMovementFormFooterProps) {
@@ -42,12 +45,16 @@ export function _FundMovementFormFooter({
         type="button"
         variant="secondary"
         onClick={() => onSubmit(false)}
-        disabled={isSubmitting}
+        disabled={isSubmitting || submitDisabled}
       >
         {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
         Guardar
       </Button>
-      <Button type="button" onClick={() => onSubmit(true)} disabled={isSubmitting}>
+      <Button
+        type="button"
+        onClick={() => onSubmit(true)}
+        disabled={isSubmitting || submitDisabled}
+      >
         {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
         Guardar y Confirmar
       </Button>

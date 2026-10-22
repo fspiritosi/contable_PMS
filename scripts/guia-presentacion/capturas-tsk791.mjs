@@ -12,6 +12,18 @@
  *     intenta borrar desde la UI y al final se limpia todo (movimiento y concepto).
  *   Capturas: tsk791-01-listado, tsk791-02-alta-gasto, tsk791-03-alta-aporte-radio
  *
+ * Sección Gestión — formulario de movimientos de fondo (tarea 6), Tesorería → Movimientos de fondos:
+ *   - Gastos bancarios: combo de conceptos por línea, sin cuenta en pantalla; se confirma un
+ *     movimiento de dos líneas y el asiento (psql) tiene las cuentas de los conceptos
+ *   - Aporte: campo Concepto, aviso según el concepto, y se limpia al cambiar de tipo
+ *   - Empresa sin conceptos de Gastos bancarios: aviso y Guardar deshabilitado (se desactivan
+ *     los conceptos de ese uso con psql y se restauran en un finally)
+ *   Capturas: tsk791-04-gastos-bancarios-conceptos, tsk791-05-aporte-concepto, tsk791-06-sin-conceptos
+ *   Deja en dev el concepto `Comisión de mantenimiento` (Gastos bancarios) y un movimiento
+ *   confirmado `TSK791 gastos bancarios` por corrida.
+ *
+ * Opciones: --only=fondos  (salta la sección de Contabilidad)
+ *
  * Es idempotente: si un concepto ya existe, no lo vuelve a crear.
  *
  * Uso: node scripts/guia-presentacion/capturas-tsk791.mjs [baseUrl]   (dev :3010)
@@ -27,6 +39,8 @@ const EMAIL = 'fspiritosi@codecontrol.com.ar';
 const PASSWORD = 'Contable2026!';
 const COMPANY = '02885d43-1358-4eb2-b774-c52d5be372f3'; // empresa activa habitual en dev
 const TEMP_NAME = 'TSK791 temporal';
+
+const ONLY_FUND = process.argv.includes('--only=fondos');
 
 let failures = 0;
 const check = (ok, msg) => {
@@ -89,7 +103,7 @@ const save = async (page, dialog) => {
   await page.waitForTimeout(1000);
 };
 
-try {
+if (!ONLY_FUND) try {
   const context = await browser.newContext({ locale: 'es-AR', viewport: { width: 1440, height: 900 } });
   const page = await context.newPage();
   await login(page);
@@ -187,6 +201,198 @@ try {
   await openList(page);
   await shot(page, 'tsk791-01-listado');
   await context.close();
+} catch (error) {
+  console.error(error);
+  failures++;
+}
+
+// ---------------------------------------------------------------- Gestión (tarea 6)
+const ACCOUNT_CODE = /\d\.\d\.\d\/\d\d(\/\d\d)?/; // código de cuenta tipo 4.2.1/07/06
+const MOV_DESC = 'TSK791 gastos bancarios';
+const FUND_URL = `${BASE}/dashboard/commercial/treasury/fund-movements`;
+
+const openFundModal = async (page) => {
+  await page.goto(FUND_URL, { waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: 'Nuevo Movimiento' }).waitFor({ timeout: 90000 });
+  await page.waitForTimeout(1000);
+  await page.getByRole('button', { name: 'Nuevo Movimiento' }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.waitFor();
+  return dialog;
+};
+
+const pickOption = async (page, trigger, optionName) => {
+  await trigger.click();
+  await page.getByRole('option', { name: optionName }).click();
+};
+
+const chooseType = (page, dialog, label) => pickOption(page, dialog.getByRole('combobox').first(), label);
+
+const waitToastsGone = async (page) => {
+  await page.waitForFunction(() => document.querySelectorAll('[data-sonner-toast]').length === 0, null, {
+    timeout: 20000,
+  });
+};
+
+const conceptsOf = (usage) =>
+  psql(`select id from movement_concepts where company_id='${COMPANY}' and '${usage}' = any(usages) and is_active`)
+    .split('\n')
+    .filter(Boolean);
+
+try {
+  // Segundo concepto de Gastos bancarios (cuenta distinta), para tener dos líneas distintas.
+  if (!conceptExists('Comisión de mantenimiento')) {
+    const accId = psql(`select id from accounts where company_id='${COMPANY}' and code='4.2.1/03/09'`);
+    psql(
+      `insert into movement_concepts (company_id, name, usages, account_mode, account_id, created_by, updated_at) ` +
+        `values ('${COMPANY}', 'Comisión de mantenimiento', '{FUND_BANK_CHARGES}', 'OWN_ACCOUNT', '${accId}', 'tsk791-script', now())`,
+    );
+  }
+  const acct = (name) =>
+    psql(
+      `select a.code from movement_concepts c join accounts a on a.id=c.account_id where c.company_id='${COMPANY}' and c.name='${name}'`,
+    );
+  const CODE_IMPUESTO = acct('Impuesto ley 25.413');
+  const CODE_COMISION = acct('Comisión de mantenimiento');
+
+  const context = await browser.newContext({ locale: 'es-AR', viewport: { width: 1440, height: 900 } });
+  const page = await context.newPage();
+  await login(page);
+
+  console.log('Gastos bancarios con conceptos');
+  let dialog = await openFundModal(page);
+  await chooseType(page, dialog, 'Gastos e impuestos bancarios');
+  await pickOption(page, dialog.getByRole('combobox').nth(1), /Banco Santander/);
+  await dialog.getByRole('button', { name: 'Agregar concepto' }).click();
+  await dialog.getByRole('button', { name: 'Agregar concepto' }).click();
+  // Los combos de concepto de línea siguen al tipo (0) y al fondo (1).
+  const lineSelect = (i) => dialog.getByRole('combobox').nth(2 + i);
+  await lineSelect(0).click();
+  const offered = await page.getByRole('option').allInnerTexts();
+  check(
+    offered.includes('Impuesto ley 25.413') && offered.includes('Comisión de mantenimiento'),
+    `el combo ofrece los conceptos activos (${offered.join(' | ')})`,
+  );
+  check(!offered.some((t) => ACCOUNT_CODE.test(t)), 'las opciones del combo no muestran código de cuenta');
+  await page.getByRole('option', { name: 'Impuesto ley 25.413' }).click();
+  await pickOption(page, lineSelect(1), 'Comisión de mantenimiento');
+  await dialog.getByPlaceholder('Detalle (opcional)').nth(0).fill('Débitos del mes');
+  // El segundo detalle queda vacío a propósito: el asiento usa el nombre del concepto.
+  await dialog.getByPlaceholder('0,00').nth(0).fill('1500');
+  await dialog.getByPlaceholder('0,00').nth(1).fill('800');
+  await dialog.locator('textarea').fill(MOV_DESC);
+  await page.waitForTimeout(500);
+  const modalText = await dialog.innerText();
+  check(!ACCOUNT_CODE.test(modalText), 'el modal no contiene ningún código de cuenta');
+  check(!modalText.includes(CODE_IMPUESTO) && !modalText.includes('Débitos y Créditos Bancarios'), 'no aparece la cuenta del concepto');
+  check((await dialog.getByPlaceholder('Detalle (opcional)').count()) === 2, 'el detalle es opcional (placeholder "Detalle (opcional)")');
+  await dialog.getByText('Total').scrollIntoViewIfNeeded();
+  await shot(page, 'tsk791-04-gastos-bancarios-conceptos');
+
+  psql(`delete from fund_movements where company_id='${COMPANY}' and status='DRAFT' and description='${MOV_DESC}'`);
+  await dialog.getByRole('button', { name: 'Guardar y Confirmar' }).click();
+  await page.getByText('Movimiento confirmado').first().waitFor({ timeout: 30000 });
+  check(true, 'el movimiento de dos líneas se confirmó');
+  const movId = psql(
+    `select id from fund_movements where company_id='${COMPANY}' and description='${MOV_DESC}' order by created_at desc limit 1`,
+  );
+  const entryLines = psql(
+    `select a.code || ':' || l.debit || ':' || coalesce(l.description,'') from journal_entry_lines l ` +
+      `join accounts a on a.id=l.account_id join fund_movements m on m.journal_entry_id=l.entry_id ` +
+      `where m.id='${movId}' and l.debit > 0 order by l.debit desc`,
+  ).split('\n');
+  console.log(`  asiento (débitos): ${entryLines.join(' ; ')}`);
+  check(
+    entryLines.length === 2 &&
+      entryLines[0].startsWith(`${CODE_IMPUESTO}:1500`) &&
+      entryLines[0].endsWith('Débitos del mes') &&
+      entryLines[1].startsWith(`${CODE_COMISION}:800`) &&
+      entryLines[1].endsWith('Comisión de mantenimiento'),
+    'el asiento tiene las cuentas de los conceptos (y el nombre del concepto si no hay detalle)',
+  );
+  await waitToastsGone(page);
+
+  console.log('Vista del movimiento confirmado');
+  await page.goto(FUND_URL, { waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: 'Nuevo Movimiento' }).waitFor({ timeout: 90000 });
+  await page.waitForTimeout(1000);
+  await page.getByRole('row', { name: new RegExp(MOV_DESC) }).first().getByRole('button', { name: 'Abrir menú' }).click();
+  await page.getByRole('menuitem', { name: 'Ver' }).click();
+  dialog = page.getByRole('dialog');
+  await dialog.getByText('Impuesto ley 25.413').first().waitFor({ timeout: 30000 });
+  const viewText = await dialog.innerText();
+  check(viewText.includes('Comisión de mantenimiento') && !ACCOUNT_CODE.test(viewText), 'la vista muestra el concepto de cada línea y ninguna cuenta');
+  await dialog.getByRole('button', { name: 'Cerrar' }).click();
+
+  console.log('Aporte con concepto');
+  dialog = await openFundModal(page);
+  const conceptTrigger = dialog.getByRole('combobox', { name: /Concepto/ });
+  check((await conceptTrigger.count()) === 1, 'Aporte muestra el campo Concepto');
+  await pickOption(page, dialog.getByRole('combobox', { name: /Socio/ }), /Juan Perez/);
+  await conceptTrigger.click();
+  const aporteOptions = await page.getByRole('option').allInnerTexts();
+  check(
+    aporteOptions.includes('Aporte para obra') && aporteOptions.includes('Aporte común') && !aporteOptions.some((t) => ACCOUNT_CODE.test(t)),
+    `el campo Concepto ofrece los conceptos de Aporte (${aporteOptions.join(' | ')})`,
+  );
+  await page.getByRole('option', { name: 'Aporte para obra' }).click();
+  await page.waitForTimeout(500);
+  const aporteText = await dialog.innerText();
+  check(
+    aporteText.includes('El asiento se imputará según el concepto «Aporte para obra».') && !ACCOUNT_CODE.test(aporteText) && !aporteText.includes('Aportes Irrevocables'),
+    'concepto con cuenta propia: aviso "según el concepto" y sin cuenta',
+  );
+  await dialog.getByPlaceholder('0,00').fill('1000');
+  await dialog.locator('textarea').fill('TSK791 aporte (captura)');
+  await pickOption(page, dialog.getByRole('combobox', { name: /Banco\/caja donde ingresan/ }), /Banco Santander/);
+  await page.waitForTimeout(300);
+  await shot(page, 'tsk791-05-aporte-concepto');
+
+  await pickOption(page, conceptTrigger, 'Aporte común');
+  await page.waitForTimeout(400);
+  check(!(await dialog.innerText()).includes('según el concepto'), 'concepto con cuenta del socio: el aviso es el de la cuenta del socio');
+
+  await chooseType(page, dialog, 'Retiro de socio');
+  await page.waitForTimeout(400);
+  check((await dialog.getByRole('combobox', { name: /Concepto/ }).count()) === 0, 'Retiro sin conceptos: no se muestra el campo');
+  await chooseType(page, dialog, 'Aporte de socio');
+  await page.waitForTimeout(400);
+  check(
+    (await dialog.getByRole('combobox', { name: /Concepto/ }).innerText()).includes('Seleccionar concepto'),
+    'al cambiar de tipo y volver, el concepto quedó limpio',
+  );
+  await dialog.getByRole('button', { name: 'Cancelar' }).click();
+  await context.close();
+
+  console.log('Empresa sin conceptos de Gastos bancarios');
+  const ids = conceptsOf('FUND_BANK_CHARGES');
+  check(ids.length >= 2, `hay ${ids.length} conceptos de Gastos bancarios activos antes de la prueba`);
+  const ctx2 = await browser.newContext({ locale: 'es-AR', viewport: { width: 1440, height: 900 } });
+  const page2 = await ctx2.newPage();
+  try {
+    psql(`update movement_concepts set is_active=false where id in (${ids.map((i) => `'${i}'`).join(',')})`);
+    await login(page2);
+    const d2 = await openFundModal(page2);
+    await chooseType(page2, d2, 'Gastos e impuestos bancarios');
+    await page2.waitForTimeout(600);
+    const text2 = await d2.innerText();
+    check(
+      text2.includes('No hay conceptos configurados para «Gastos e impuestos bancarios». Pedile a Contabilidad que los cree en Empresa → Contabilidad → Conceptos.'),
+      'aparece el aviso con el texto acordado',
+    );
+    await d2.getByRole('link', { name: 'Ir a Conceptos' }).waitFor({ timeout: 15000 }).catch(() => {});
+    check(
+      (await d2.getByRole('link', { name: 'Ir a Conceptos' }).count()) === 1,
+      'con permiso sobre Conceptos el aviso trae el link',
+    );
+    check(await d2.getByRole('button', { name: 'Guardar', exact: true }).isDisabled(), 'Guardar está deshabilitado');
+    check(await d2.getByRole('button', { name: 'Guardar y Confirmar' }).isDisabled(), 'Guardar y Confirmar está deshabilitado');
+    await shot(page2, 'tsk791-06-sin-conceptos');
+  } finally {
+    psql(`update movement_concepts set is_active=true where id in (${ids.map((i) => `'${i}'`).join(',')})`);
+  }
+  check(conceptsOf('FUND_BANK_CHARGES').length === ids.length, 'restaurado: los conceptos de Gastos bancarios volvieron a estar activos');
+  await ctx2.close();
 } catch (error) {
   console.error(error);
   failures++;

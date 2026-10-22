@@ -10,12 +10,15 @@ import {
 import type { FundMovementListItem } from '../actions.server';
 
 interface FundMovementViewSummaryProps {
-  movement: Pick<FundMovementListItem, 'status' | 'confirmedAt' | 'journalEntryNumber'>;
+  movement: Pick<
+    FundMovementListItem,
+    'status' | 'confirmedAt' | 'journalEntryNumber' | 'conceptName'
+  >;
 }
 
 /**
- * Datos de solo lectura del modo vista (TSK-720a): estado, fecha de
- * confirmación y N° de asiento. El N° de asiento ya no está en el listado, así
+ * Datos de solo lectura del modo vista (TSK-720a): estado, concepto (aporte/retiro),
+ * fecha de confirmación y N° de asiento. El N° de asiento ya no está en el listado, así
  * que este es el lugar para consultarlo. Es texto, sin link: no hay página de
  * detalle de asiento.
  */

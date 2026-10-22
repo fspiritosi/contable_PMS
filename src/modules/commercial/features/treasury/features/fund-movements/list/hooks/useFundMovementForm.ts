@@ -3,14 +3,13 @@ import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 import { useForm, type UseFormReturn } from 'react-hook-form';
 
-import type { AccountOption } from '@/shared/components/common/AccountCombobox';
-
 import {
   fundMovementSchema,
   type FundMovementFormInput,
   type FundMovementTypeValue,
 } from '../../shared/validators';
 import {
+  clearInactiveConcepts,
   emptyFundMovementFormValues,
   formResetKey,
   formValuesFromMovement,
@@ -20,7 +19,7 @@ import {
 } from '../../shared/view-mode';
 import {
   getFundMovementById,
-  getFundMovementLineAccounts,
+  type FundMovementConceptCatalog,
   type FundMovementListItem,
   type FundMovementRecord,
 } from '../actions.server';
@@ -31,13 +30,14 @@ export interface UseFundMovementFormParams {
   mode: FundMovementModalMode;
   /** Obligatorio en edit/view; ignorado en create. */
   movement: FundMovementListItem | null | undefined;
+  /** Conceptos activos por tipo (TSK-791). */
+  concepts: FundMovementConceptCatalog;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
 }
 
 export interface UseFundMovementFormResult {
   form: UseFormReturn<FundMovementFormInput>;
-  lineAccounts: AccountOption[];
   movementDetail: FundMovementRecord | null | undefined;
   type: FundMovementTypeValue;
   isContribution: boolean;
@@ -54,6 +54,7 @@ export function useFundMovementForm({
   open,
   mode,
   movement,
+  concepts,
   onOpenChange,
   onSuccess,
 }: UseFundMovementFormParams): UseFundMovementFormResult {
@@ -69,19 +70,6 @@ export function useFundMovementForm({
     queryKey: ['fund-movement-detail', movement?.id],
     queryFn: () => getFundMovementById(movement!.id),
     enabled: open && Boolean(movement) && needsMovementDetail(mode, movement?.type),
-  });
-
-  // Cuentas imputables para los conceptos (egreso o activo, TSK-579): siempre
-  // se piden con el modal abierto, para tenerlas listas apenas se elige el
-  // tipo "Gastos e impuestos bancarios". `includeIds` preserva las cuentas ya
-  // guardadas en el detalle aunque hoy no cumplan el filtro (mismo patrón que
-  // `getAccountsForBankMovement`), para que reabrir un borrador con una cuenta
-  // dada de baja no muestre el combo vacío (hallazgo de revisión final, TSK-585).
-  const detailAccountIds = movementDetail?.lines.map((line) => line.accountId) ?? [];
-  const { data: lineAccounts = [] } = useQuery({
-    queryKey: ['fund-movement-line-accounts', detailAccountIds],
-    queryFn: () => getFundMovementLineAccounts(detailAccountIds),
-    enabled: open,
   });
 
   // Evita que el `useQuery` de `movementDetail` pise lo que el usuario ya
@@ -113,11 +101,16 @@ export function useFundMovementForm({
       if (needsDetail && !movementDetail) return;
       if (appliedDetailRef.current === key) return;
       appliedDetailRef.current = key;
-      form.reset(formValuesFromMovement(movement, needsDetail ? movementDetail?.lines : null));
+      const values = formValuesFromMovement(movement, needsDetail ? movementDetail?.lines : null);
+      // En edición, un concepto que ya no está activo se blanquea (TSK-791): el
+      // usuario elige otro, y un campo oculto no arrastra un id que no se puede guardar.
+      form.reset(mode === 'edit' ? clearInactiveConcepts(values, concepts) : values);
     } else if (appliedDetailRef.current !== key) {
       appliedDetailRef.current = key;
       form.reset(emptyFundMovementFormValues());
     }
+    // `concepts` no es dependencia a propósito: el reset se aplica una sola vez por apertura.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, mode, movement, movementDetail, form]);
 
   const type = form.watch('type') as FundMovementTypeValue;
@@ -169,6 +162,8 @@ export function useFundMovementForm({
     // del asiento); una transferencia tampoco debe arrastrar un socio elegido
     // en un tipo anterior.
     if (!isPartnerMovement && form.getValues('partnerId')) form.setValue('partnerId', '');
+    // TSK-791: el concepto único es solo de aporte y retiro.
+    if (!isPartnerMovement && form.getValues('conceptId')) form.setValue('conceptId', '');
     if (isContribution && form.getValues('sourceFund')) {
       form.setValue('sourceFund', '');
     }
@@ -178,13 +173,13 @@ export function useFundMovementForm({
     form,
     mode,
     movement,
+    concepts,
     onOpenChange,
     onSuccess,
   });
 
   return {
     form,
-    lineAccounts,
     movementDetail,
     type,
     isContribution,
