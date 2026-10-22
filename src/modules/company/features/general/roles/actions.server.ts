@@ -264,6 +264,7 @@ export async function getPermissionsConfig() {
         { key: MODULES['accounting.budgets'], label: 'Presupuestos Contables' },
         { key: MODULES['accounting.reports'], label: 'Informes' },
         { key: MODULES['accounting.settings'], label: 'Configuración Contable' },
+        { key: MODULES['accounting.concepts'], label: 'Conceptos' },
         { key: MODULES['accounting.fiscal-year-close'], label: 'Cierre de Ejercicio' },
       ],
     },
