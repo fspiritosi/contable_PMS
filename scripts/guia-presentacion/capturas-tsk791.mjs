@@ -22,7 +22,17 @@
  *   Deja en dev el concepto `Comisión de mantenimiento` (Gastos bancarios) y un movimiento
  *   confirmado `TSK791 gastos bancarios` por corrida.
  *
+ * Sección Gestión — movimiento bancario manual (tarea 7), Tesorería → Cuentas bancarias → detalle:
+ *   - "Nuevo Movimiento" no tiene ningún campo de cuenta, solo Concepto
+ *   - el combo ofrece los conceptos del tipo y pasar de Comisión a Depósito limpia el concepto
+ *   - se registra una comisión con concepto: queda conceptId/concept_name y el asiento usa la
+ *     cuenta del concepto (psql); el movimiento se ve en la tabla con su Concepto
+ *   Captura: tsk791-07-movimiento-bancario
+ *   Deja en dev los conceptos `Comisión bancaria` (BANK_FEE) y `Depósito de efectivo`
+ *   (BANK_DEPOSIT) y un movimiento `TSK791 comisión bancaria` por corrida.
+ *
  * Opciones: --only=fondos  (salta la sección de Contabilidad)
+ *           --only=banco   (solo la sección del movimiento bancario)
  *
  * Es idempotente: si un concepto ya existe, no lo vuelve a crear.
  *
@@ -40,7 +50,8 @@ const PASSWORD = 'Contable2026!';
 const COMPANY = '02885d43-1358-4eb2-b774-c52d5be372f3'; // empresa activa habitual en dev
 const TEMP_NAME = 'TSK791 temporal';
 
-const ONLY_FUND = process.argv.includes('--only=fondos');
+const ONLY_BANK = process.argv.includes('--only=banco');
+const ONLY_FUND = process.argv.includes('--only=fondos') || ONLY_BANK;
 
 let failures = 0;
 const check = (ok, msg) => {
@@ -239,7 +250,7 @@ const conceptsOf = (usage) =>
     .split('\n')
     .filter(Boolean);
 
-try {
+if (!ONLY_BANK) try {
   // Segundo concepto de Gastos bancarios (cuenta distinta), para tener dos líneas distintas.
   if (!conceptExists('Comisión de mantenimiento')) {
     const accId = psql(`select id from accounts where company_id='${COMPANY}' and code='4.2.1/03/09'`);
@@ -393,6 +404,87 @@ try {
   }
   check(conceptsOf('FUND_BANK_CHARGES').length === ids.length, 'restaurado: los conceptos de Gastos bancarios volvieron a estar activos');
   await ctx2.close();
+} catch (error) {
+  console.error(error);
+  failures++;
+}
+
+// ---------------------------------------------------------------- Movimiento bancario (tarea 7)
+const BANK_ID = '63f3b949-5107-4b81-b903-da1766be23ae'; // Banco Santander 1085628-1
+const BANK_DESC = 'TSK791 comisión bancaria';
+
+const ensureBankConcept = (name, usage, accountCode) => {
+  if (conceptExists(name)) return;
+  const accId = psql(`select id from accounts where company_id='${COMPANY}' and code='${accountCode}'`);
+  psql(
+    `insert into movement_concepts (company_id, name, usages, account_mode, account_id, created_by, updated_at) ` +
+      `values ('${COMPANY}', '${name}', '{${usage}}', 'OWN_ACCOUNT', '${accId}', 'tsk791-script', now())`,
+  );
+};
+
+try {
+  console.log('Movimiento bancario manual');
+  ensureBankConcept('Comisión bancaria', 'BANK_FEE', '1.1.4/01/30');
+  ensureBankConcept('Depósito de efectivo', 'BANK_DEPOSIT', '1.1.4/02/07');
+  const feeAccount = psql(
+    `select a.id from movement_concepts c join accounts a on a.id=c.account_id where c.company_id='${COMPANY}' and c.name='Comisión bancaria'`,
+  );
+  psql(`delete from bank_movements where company_id='${COMPANY}' and description='${BANK_DESC}'`);
+
+  const context = await browser.newContext({ locale: 'es-AR', viewport: { width: 1440, height: 900 } });
+  const page = await context.newPage();
+  await login(page);
+  await page.goto(`${BASE}/dashboard/commercial/treasury/bank-accounts/${BANK_ID}`, { waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: 'Nuevo Movimiento' }).waitFor({ timeout: 90000 });
+  await page.waitForTimeout(1000);
+  await page.getByRole('button', { name: 'Nuevo Movimiento' }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.waitFor();
+
+  await pickOption(page, dialog.getByRole('combobox', { name: /Tipo de Movimiento/ }), 'Comisión');
+  await page.waitForTimeout(600);
+  const text = await dialog.innerText();
+  check(!/Cuenta Contable|Contrapartida/i.test(text), 'el formulario no tiene ningún campo de cuenta');
+  check(!ACCOUNT_CODE.test(text), 'el formulario no muestra códigos de cuenta');
+  const conceptTrigger = dialog.getByRole('combobox', { name: /Concepto/ });
+  check((await conceptTrigger.count()) === 1, 'el formulario tiene el campo Concepto');
+  await conceptTrigger.click();
+  const feeOptions = await page.getByRole('option').allInnerTexts();
+  check(feeOptions.includes('Comisión bancaria') && !feeOptions.includes('Depósito de efectivo'), `Comisión ofrece solo sus conceptos (${feeOptions.join(' | ')})`);
+  await page.getByRole('option', { name: 'Comisión bancaria' }).click();
+  check((await conceptTrigger.innerText()).includes('Comisión bancaria'), 'queda elegido el concepto Comisión bancaria');
+
+  await pickOption(page, dialog.getByRole('combobox', { name: /Tipo de Movimiento/ }), 'Depósito');
+  await page.waitForTimeout(600);
+  check((await conceptTrigger.innerText()).includes('Seleccionar concepto'), 'Comisión → Depósito limpia el concepto');
+  await conceptTrigger.click();
+  const depOptions = await page.getByRole('option').allInnerTexts();
+  check(depOptions.includes('Depósito de efectivo') && !depOptions.includes('Comisión bancaria'), `Depósito ofrece solo sus conceptos (${depOptions.join(' | ')})`);
+  await page.keyboard.press('Escape');
+
+  await pickOption(page, dialog.getByRole('combobox', { name: /Tipo de Movimiento/ }), 'Comisión');
+  await page.waitForTimeout(400);
+  await pickOption(page, conceptTrigger, 'Comisión bancaria');
+  await dialog.getByPlaceholder('0.00').fill('1234.5');
+  await dialog.getByPlaceholder('Descripción del movimiento...').fill(BANK_DESC);
+  await page.waitForTimeout(300);
+  await shot(page, 'tsk791-07-movimiento-bancario');
+
+  const balanceBefore = Number(psql(`select balance from bank_accounts where id='${BANK_ID}'`));
+  await dialog.getByRole('button', { name: 'Registrar Movimiento' }).click();
+  await dialog.waitFor({ state: 'hidden', timeout: 30000 });
+  await page.waitForTimeout(1500);
+  const row = psql(
+    `select concept_name, amount from bank_movements where company_id='${COMPANY}' and description='${BANK_DESC}'`,
+  );
+  check(row === 'Comisión bancaria|1234.50', `el movimiento quedó con su concepto (${row})`);
+  const lines = psql(
+    `select count(*) from journal_entry_lines l join journal_entries e on e.id=l.entry_id where e.company_id='${COMPANY}' and e.description like '%${BANK_DESC}%' and l.account_id='${feeAccount}' and l.debit=1234.5`,
+  );
+  check(lines === '1', 'el asiento debita la cuenta del concepto');
+  check(Number(psql(`select balance from bank_accounts where id='${BANK_ID}'`)) === balanceBefore - 1234.5, 'el saldo bajó el monto de la comisión');
+  check((await page.getByRole('row', { name: new RegExp(BANK_DESC) }).first().innerText()).includes('Comisión bancaria'), 'la tabla muestra el concepto del movimiento');
+  await context.close();
 } catch (error) {
   console.error(error);
   failures++;

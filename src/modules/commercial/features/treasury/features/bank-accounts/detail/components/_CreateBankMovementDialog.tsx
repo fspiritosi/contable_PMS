@@ -18,7 +18,6 @@ import {
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -32,10 +31,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/shared/components/ui/select';
-import { AccountCombobox } from '@/shared/components/common/AccountCombobox';
 import { Textarea } from '@/shared/components/ui/textarea';
 
-import { createBankMovement, getAccountsForBankMovement } from '../../../bank-movements/actions.server';
+import { _BankMovementConceptField } from './_BankMovementConceptField';
+import { createBankMovement, getBankMovementConcepts } from '../../../bank-movements/actions.server';
 import {
   bankMovementSchema,
   BANK_MOVEMENT_TYPE_LABELS,
@@ -50,9 +49,9 @@ interface Props {
 }
 
 export function _CreateBankMovementDialog({ open, onOpenChange, bankAccountId, onSuccess }: Props) {
-  const { data: accounts = [] } = useQuery({
-    queryKey: ['accounts-for-bank-movement'],
-    queryFn: getAccountsForBankMovement,
+  const { data: conceptsByType } = useQuery({
+    queryKey: ['concepts-for-bank-movement'],
+    queryFn: getBankMovementConcepts,
     enabled: open,
   });
 
@@ -66,9 +65,13 @@ export function _CreateBankMovementDialog({ open, onOpenChange, bankAccountId, o
       description: '',
       reference: null,
       statementNumber: null,
-      accountId: '',
+      conceptId: '',
     },
   });
+
+  const type = form.watch('type');
+  const typeConcepts = conceptsByType?.[type];
+  const noConcepts = typeConcepts?.length === 0;
 
   const onSubmit = async (data: BankMovementFormData) => {
     try {
@@ -83,7 +86,7 @@ export function _CreateBankMovementDialog({ open, onOpenChange, bankAccountId, o
         description: '',
         reference: null,
         statementNumber: null,
-        accountId: '',
+        conceptId: '',
       });
       onSuccess();
     } catch (error) {
@@ -178,27 +181,12 @@ export function _CreateBankMovementDialog({ open, onOpenChange, bankAccountId, o
               )}
             />
 
-            <FormField
+            <_BankMovementConceptField
               control={form.control}
-              name="accountId"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Cuenta Contable (Contrapartida) *</FormLabel>
-                  <FormControl>
-                    <AccountCombobox
-                      accounts={accounts}
-                      value={field.value}
-                      onChange={(accountId) => field.onChange(accountId ?? '')}
-                      placeholder="Seleccionar cuenta contable"
-                      clearLabel={null}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    Cuenta contable a la que se imputa el movimiento
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
+              getValues={form.getValues}
+              setValue={form.setValue}
+              type={type}
+              options={typeConcepts}
             />
 
             <FormField
@@ -261,7 +249,7 @@ export function _CreateBankMovementDialog({ open, onOpenChange, bankAccountId, o
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                 Cancelar
               </Button>
-              <Button type="submit" disabled={form.formState.isSubmitting}>
+              <Button type="submit" disabled={form.formState.isSubmitting || noConcepts}>
                 {form.formState.isSubmitting ? 'Registrando...' : 'Registrar Movimiento'}
               </Button>
             </DialogFooter>

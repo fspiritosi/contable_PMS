@@ -190,7 +190,8 @@ export const bankMovementSchema = z.object({
     .max(50, 'El número de extracto no puede exceder 50 caracteres')
     .optional()
     .nullable(),
-  accountId: z.string().uuid('Cuenta contable inválida'),
+  // TSK-791: la contrapartida sale del concepto (el servidor resuelve la cuenta).
+  conceptId: z.string().uuid('Elegí el concepto'),
 });
 
 // Schema para conciliación bancaria

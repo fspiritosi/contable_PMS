@@ -6,8 +6,13 @@ import { logger } from '@/shared/lib/logger';
 import { prisma } from '@/shared/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { Prisma } from '@/generated/prisma/client';
-import { BankMovementType, AccountType } from '@/generated/prisma/enums';
-import { buildImputableAccountsWhere } from '@/shared/lib/accounts/imputable-accounts';
+import { BankMovementType } from '@/generated/prisma/enums';
+import { bankMovementUsage } from '@/shared/lib/concepts';
+import {
+  getActiveConceptOptions,
+  resolveConceptForUsage,
+  type ConceptOption,
+} from '@/shared/lib/concepts/concepts.server';
 import type { DataTableSearchParams } from '@/shared/components/common/DataTable';
 import {
   parseSearchParams,
@@ -81,29 +86,23 @@ export async function createBankMovement(
       throw new BusinessError('Cuenta bancaria no encontrada o inactiva');
     }
 
-    // Verificar que la cuenta contable contrapartida existe
-    const counterpartAccount = await prisma.account.findFirst({
-      where: {
-        id: validated.accountId,
-        companyId,
-        isActive: true,
-      },
-      select: {
-        id: true,
-        code: true,
-        name: true,
-      },
-    });
-
-    if (!counterpartAccount) {
-      throw new BusinessError('Cuenta contable no encontrada o inactiva');
-    }
-
     const amount = new Prisma.Decimal(validated.amount);
     const isIncome = ['DEPOSIT', 'TRANSFER_IN', 'INTEREST', 'CHECK'].includes(validated.type);
 
     // Crear movimiento, actualizar saldo y generar asiento en transacción
     const movement = await prisma.$transaction(async (tx) => {
+      // El concepto se resuelve antes de tocar saldos: si Contabilidad lo desactivó
+      // o cambió su cuenta, la transacción se rechaza sin dejar rastro (TSK-791).
+      const concept = await resolveConceptForUsage(tx, {
+        companyId,
+        conceptId: validated.conceptId,
+        usage: bankMovementUsage(validated.type),
+      });
+      const counterpartAccountId = concept.accountId;
+      if (!counterpartAccountId) {
+        throw new BusinessError(`El concepto «${concept.name}» no tiene una cuenta contable asignada.`);
+      }
+
       // Calcular nuevo saldo
       let newBalance = bankAccount.balance;
 
@@ -124,6 +123,8 @@ export async function createBankMovement(
           description: validated.description,
           reference: validated.reference || null,
           statementNumber: validated.statementNumber || null,
+          conceptId: concept.id,
+          conceptName: concept.name,
           createdBy: userId,
         },
       });
@@ -144,7 +145,7 @@ export async function createBankMovement(
             amount,
             isIncome,
             bankAccountId: bankAccount.accountId,
-            counterpartAccountId: validated.accountId,
+            counterpartAccountId,
             bankName: bankAccount.bankName,
             accountNumber: bankAccount.accountNumber,
           },
@@ -161,7 +162,7 @@ export async function createBankMovement(
         type: movement.type,
         amount: validated.amount,
         bankAccount: `${bankAccount.bankName} - ${bankAccount.accountNumber}`,
-        counterpartAccount: `${counterpartAccount.code} - ${counterpartAccount.name}`,
+        conceptId: validated.conceptId,
       },
     });
 
@@ -314,6 +315,7 @@ export async function getBankAccountMovements(bankAccountId: string, limit = 50)
         description: true,
         reference: true,
         statementNumber: true,
+        conceptName: true,
         reconciled: true,
         reconciledAt: true,
         createdBy: true,
@@ -391,6 +393,7 @@ export async function getBankMovementsPaginated(
           description: true,
           reference: true,
           statementNumber: true,
+          conceptName: true,
           reconciled: true,
           reconciledAt: true,
           createdBy: true,
@@ -534,45 +537,20 @@ export async function getBankMovementsTotals(
 }
 
 /**
- * Obtiene las cuentas contables disponibles para movimientos bancarios
+ * Conceptos activos para cada tipo de movimiento bancario manual (TSK-791).
+ * Gestión los lee con su propio permiso: no ve cuentas, solo el nombre.
  */
-export async function getAccountsForBankMovement(includeIds?: string[]) {
+export async function getBankMovementConcepts(): Promise<Record<BankMovementType, ConceptOption[]>> {
   await checkPermission('commercial.treasury.bank-accounts', 'view', { redirect: true });
   const companyId = await getActiveCompanyId();
   if (!companyId) throw new Error('No hay empresa activa');
 
-  try {
-    // Contrapartida del movimiento bancario: solo cuentas imputables (hojas)
-    // de naturaleza patrimonial (Activo/Pasivo/Patrimonio). Las cuentas de
-    // Resultado no se ofrecen acá (ticket #376, requisito 3).
-    const imputableWhere = buildImputableAccountsWhere({
-      companyId,
-      types: [AccountType.ASSET, AccountType.LIABILITY, AccountType.EQUITY],
-    });
-
-    // Preservar valores ya guardados aunque hoy no cumplan el filtro
-    // (ej. una contrapartida elegida antes de esta regla).
-    const where =
-      includeIds && includeIds.length > 0
-        ? { OR: [imputableWhere, { companyId, id: { in: includeIds } }] }
-        : imputableWhere;
-
-    const accounts = await prisma.account.findMany({
-      where,
-      select: {
-        id: true,
-        code: true,
-        name: true,
-        type: true,
-      },
-      orderBy: { code: 'asc' },
-    });
-
-    return accounts;
-  } catch (error) {
-    logger.error('Error al obtener cuentas contables', { data: { error } });
-    return [];
-  }
+  const types = Object.values(BankMovementType);
+  const byUsage = await getActiveConceptOptions(prisma, companyId, types.map(bankMovementUsage));
+  return Object.fromEntries(types.map((t) => [t, byUsage[bankMovementUsage(t)]])) as Record<
+    BankMovementType,
+    ConceptOption[]
+  >;
 }
 
 /**
@@ -1335,6 +1313,7 @@ export async function getAllBankMovementsForExport(
         description: true,
         reference: true,
         statementNumber: true,
+        conceptName: true,
         reconciled: true,
         reconciledAt: true,
         createdAt: true,
