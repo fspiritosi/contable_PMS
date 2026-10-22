@@ -325,21 +325,42 @@ dentro de una única transacción. Confirmado no se edita ni se elimina.
   arregló en `DataTablePagination` (ver `src/shared/components/common/DataTable/DOCS.md`). La fila
   de conceptos se apila en `< sm` (cuenta a ancho completo; debajo descripción, importe y tacho).
   Verificación: `scripts/guia-presentacion/capturas-tsk720a-726.mjs` (375 px con `isMobile: true`).
-- **Caso borde (D12)**: `getFundMovementLineAccounts` no cambió; si la cuenta de un concepto ya no
-  es de egreso/activo imputable, en la vista el combobox de esa fila puede quedar sin texto.
 
-**Gastos bancarios — cuenta por defecto preseleccionada (TSK-718)**: `getFundMovementCatalogs`
-devuelve `defaultBankChargesAccount` (`AccountingSettings.bankChargesAccountId`, "Gastos bancarios
-por defecto", `{ id, code, name } | null`). `_FundMovementLinesField` calcula
-`pickDefaultLineAccount(defaultAccount?.id, accounts)` (`shared/lines-calc.ts`: devuelve el id solo
-si está entre las cuentas que el combo ofrece hoy; si no, `''`) y lo usa como `accountId` inicial de
-cada concepto que se agrega. `_BankChargesDefaultNotice` (debajo de la tabla, siempre visible,
-`role="status"`) anticipa el estado: neutro «Los conceptos nuevos se imputan a `code - name`
-(cuenta de gastos bancarios por defecto). Podés cambiar la cuenta en cada fila.», naranja si la
-cuenta configurada ya no es imputable, o naranja «No hay cuenta de gastos bancarios por defecto:
-elegí la cuenta en cada concepto o configurala en Ajustes contables.» Ninguno bloquea:
-`FundMovementLine.accountId` sigue siendo obligatorio y el asiento usa la cuenta de cada línea, no
-la de configuración. Sircreb y otros conceptos que son activo se eligen a mano.
+**Conceptos en lugar de cuentas (TSK-791)**: Gestión ya no elige cuentas. Contabilidad define
+`MovementConcept` (ver `docs/modules/accounting.md` → Conceptos y `data-model.md`) y acá solo se elige el
+concepto; el servidor resuelve la cuenta con `resolveConceptForUsage` (`shared/lib/concepts`).
+
+- **Gastos e impuestos bancarios**: cada línea es `{ conceptId, description?, amount }`
+  (`Elegí el concepto` si falta; el detalle es opcional y, vacío, el asiento usa el nombre del
+  concepto). `getFundMovementCatalogs` devuelve `concepts` por tipo (`BANK_CHARGES`,
+  `PARTNER_CONTRIBUTION`, `PARTNER_WITHDRAWAL`) y ya **no** devuelve `defaultBankChargesAccount`.
+  `getFundMovementLineAccounts`, `_BankChargesDefaultNotice` y `pickDefaultLineAccount` se eliminaron;
+  `_CommercialIntegrationForm` ya no muestra `bankChargesAccountId` (la columna se conserva).
+- **Sin conceptos para el uso**: `_NoConceptsNotice` (en `shared/components/common/`) muestra «No hay
+  conceptos configurados para «{uso}». Pedile a Contabilidad que los cree en Empresa → Contabilidad →
+  Conceptos.» (con link si el usuario tiene `accounting.concepts` view) y deshabilita Guardar y Guardar y
+  Confirmar en Gastos bancarios.
+- **Aporte / Retiro**: si hay conceptos activos para el tipo, `Concepto` es obligatorio (uno por
+  movimiento; lo exige el servidor al guardar y confirmar, no Zod); si no hay ninguno, todo queda como
+  antes (cuenta del socio, `resolvePartnerCapitalAccount`). Con `OWN_ACCOUNT` el asiento usa la cuenta del
+  concepto y `_PartnerAccountNotice` solo nombra el concepto; con `PARTNER_ACCOUNT`, igual que antes.
+  El socio sigue siendo obligatorio.
+- **Confirmar** (`confirmFundMovement`): vuelve a resolver todos los conceptos **antes** de mover saldos
+  y rechaza concepto inactivo, sin el uso o con cuenta no imputable, o un borrador viejo sin concepto
+  cuando ya hay conceptos para el tipo. Los borradores anteriores abren con el concepto vacío y conservan
+  su detalle.
+- **Tipo del formulario**: al cambiar de tipo se limpia el concepto del movimiento; `buildLinesData`
+  ignora las líneas si el tipo no es `BANK_CHARGES`.
+- **Vista**: muestra el concepto (snapshot `conceptName`), nunca la cuenta.
+
+**Movimiento bancario manual con concepto (TSK-791)**: en el detalle de la cuenta bancaria, "Nuevo
+Movimiento" reemplaza "Cuenta Contable (Contrapartida)" por `Concepto` (obligatorio, filtrado por el
+tipo con `bankMovementUsage`). `getBankMovementConcepts()` (permiso `bank-accounts` view) devuelve las
+opciones por tipo y `getAccountsForBankMovement` se eliminó. `createBankMovement` ya no recibe
+`accountId`: resuelve el concepto dentro de la transacción (antes de tocar saldos) y guarda
+`conceptId`/`conceptName`; la contrapartida del asiento es la cuenta del concepto. Si no hay conceptos
+para el tipo, `_NoConceptsNotice` y Registrar deshabilitado. La tabla muestra la columna Concepto. No
+cambian las transferencias entre cuentas ni los movimientos que generan recibos, órdenes de pago o cheques.
 
 **Resolución de la cuenta de capital (TSK-717)** — `resolvePartnerCapitalAccount` en
 `fund-movements/list/actions.server.ts`:

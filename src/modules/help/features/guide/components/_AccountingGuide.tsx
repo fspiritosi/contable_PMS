@@ -33,6 +33,7 @@ import {
 } from '@/shared/components/ui/table';
 
 import { _AccountingClosingGuide } from './_AccountingClosingGuide';
+import { _AccountingConceptsGuide } from './_AccountingConceptsGuide';
 
 export function _AccountingGuide() {
   return (
@@ -250,9 +251,9 @@ export function _AccountingGuide() {
                   contable (Tesorería → Cajas / Cuentas Bancarias)
                 </li>
                 <li>
-                  Gastos bancarios <strong>por defecto</strong> (se preselecciona
-                  en cada concepto de un movimiento de Gastos e impuestos
-                  bancarios; podés cambiarla en cada fila)
+                  Los gastos bancarios ya no tienen una cuenta por defecto: la
+                  cuenta de cada gasto la define el <strong>concepto</strong>
+                  (Empresa → Contabilidad → Conceptos)
                 </li>
                 <li>
                   Cuenta de egresos <strong>por defecto</strong>: la usa el
@@ -390,6 +391,8 @@ export function _AccountingGuide() {
           </p>
         </CardContent>
       </Card>
+
+      <_AccountingConceptsGuide />
 
       {/* Asientos Recurrentes */}
       <Card>

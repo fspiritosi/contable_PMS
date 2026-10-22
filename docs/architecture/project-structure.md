@@ -197,6 +197,7 @@ src/shared/
 │   ├── email.ts                   # Servicio Resend
 │   ├── excel-export.ts            # Exportacion a Excel
 │   ├── permissions/               # Sistema RBAC completo
+│   ├── concepts/                  # Conceptos de movimientos: reglas puras + resolucion concepto→cuenta (TSK-791)
 │   ├── documentConditions.ts      # Evaluacion de condiciones de documentos
 │   ├── employeeStatus.ts          # Computacion de estado de empleado
 │   └── vehicleStatus.ts           # Computacion de estado de vehiculo

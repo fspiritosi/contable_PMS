@@ -322,6 +322,29 @@ incluir borradores a pedido (switch apagado por defecto) y avisa cuantos excluye
 
 ---
 
+## Conceptos (TSK-791)
+
+**Ruta:** `/dashboard/company/accounting/concepts` · **Archivos:** `features/concepts/` · **Permiso:** `accounting.concepts`
+
+Catálogo que Contabilidad arma para que Gestión (Comercial/Tesorería) elija **conceptos** en vez de
+cuentas en Gastos e impuestos bancarios, Aporte/Retiro de socio y el movimiento bancario manual.
+Modelo y campos en `docs/architecture/data-model.md` (`MovementConcept`).
+
+- **ABM** (`actions.server.ts`, todas con `checkPermission('accounting.concepts', …)` y `ActionResult`):
+  alta, edición, activar/desactivar y borrado. El nombre es único entre los **activos** sin distinguir
+  mayúsculas ni espacios en los bordes; reactivar uno cuyo nombre ya ocupa un activo se rechaza.
+  Borrar solo si no se usó en líneas ni movimientos; si se usó, solo desactivar.
+- **Validación** (`shared/validators.ts` + `validateConceptConfig` de `shared/lib/concepts`): cuenta
+  propia obligatoria si algún uso no es Aporte/Retiro; `PARTNER_ACCOUNT` solo si todos los usos son
+  Aporte/Retiro; la cuenta debe ser imputable y de un tipo admitido por **todos** los usos
+  (intersección: Gastos bancarios `EXPENSE`/`ASSET`; Aporte/Retiro y `BANK_*` `ASSET`/`LIABILITY`/`EQUITY`).
+- **UI**: DataTable con usos como badges; formulario con usos agrupados por familia (Movimientos de
+  fondo / Movimientos bancarios) y el campo de cuenta, que solo ofrece "cuenta del socio" cuando
+  corresponde.
+- **Consumo desde Comercial** sin importar de este módulo: `src/shared/lib/concepts/`.
+- **Confirmación**: un borrador con concepto inactivo, sin el uso o con cuenta ya no imputable se
+  rechaza al confirmar con un mensaje que nombra el concepto; un concepto desactivado no mueve saldos.
+
 ## Configuracion
 
 **Ruta:** `/company/accounting/settings`
@@ -383,7 +406,7 @@ Cuentas contables asignadas a funciones del sistema:
 | `vatCreditAccountId` | IVA Credito Fiscal |
 | `defaultCashAccountId` | Caja **por defecto**: respaldo cuando la caja de un pago no tiene `CashRegister.accountId` (TSK-728) |
 | `defaultBankAccountId` | Banco **por defecto**: respaldo cuando la cuenta bancaria de un pago no tiene `BankAccount.accountId` (TSK-728) |
-| `bankChargesAccountId` | Gastos bancarios **por defecto** (TSK-718): preseleccion de la cuenta de cada concepto nuevo de un movimiento de fondos `BANK_CHARGES`. Es solo UI: el asiento usa `FundMovementLine.accountId`, no esta cuenta |
+| `bankChargesAccountId` | **Sin uso desde TSK-791** (antes preseleccionaba la cuenta de cada linea de `BANK_CHARGES`, TSK-718): se sacó de la pantalla; la columna se conserva. La cuenta la define el Concepto |
 | `expensesAccountId` | Egresos **por defecto** (TSK-757): Debe del asiento de los egresos cuya `ExpenseCategory` no tiene `accountId`. Requerida mientras alguna categoria usada no tenga cuenta (antes "Gastos Operativos", obligatoria siempre, TSK-728) |
 | `resultAccountId` | Resultado del Ejercicio |
 
@@ -395,7 +418,7 @@ Cuentas contables asignadas a funciones del sistema:
 Configuración»); un test de `settings/validators.test.ts` verifica que cada `*AccountId` del
 schema tenga label (TSK-728). Ejemplos: "Cuenta de ventas por defecto", "Cuenta de compras por
 defecto" (seccion Cuentas de Resultado), "Cuentas por Cobrar", "Cuentas por Pagar", "Caja por
-Defecto", "Banco por Defecto", "Gastos bancarios por defecto" (seccion Cuentas de Tesoreria),
+Defecto", "Banco por Defecto", "Gastos bancarios por defecto" (ya no se muestra en pantalla desde TSK-791; el label queda en el modulo de labels),
 "Cuenta de egresos por defecto", "Ret. IVA Sufrida". Las ayudas dicen cuando se usa cada una; la de
 compras avisa que tiene que estar asignada si se cargan compras sin item, y la de egresos, si alguna
 categoria de egreso no tiene cuenta propia (TSK-757).

@@ -132,6 +132,18 @@ export function _TreasuryGuide() {
               <strong>Comisión / Interés</strong>: cargos o créditos bancarios
             </li>
           </ul>
+          <p>
+            Al registrar uno a mano desde <strong>Nuevo Movimiento</strong> en
+            el detalle de la cuenta, elegís el <strong>Concepto</strong> (en
+            lugar de una cuenta contable). El combo muestra solo los conceptos
+            que aplican al tipo elegido; si cambiás el tipo y el concepto ya no
+            aplica, se limpia. La tabla muestra el concepto de cada movimiento.
+            Si no hay conceptos para ese tipo, aparece un aviso y no se puede
+            registrar: Contabilidad tiene que crearlos en{' '}
+            <strong>Empresa → Contabilidad → Conceptos</strong>. Los movimientos
+            que generan los recibos, las órdenes de pago y las transferencias
+            entre cuentas no cambian.
+          </p>
         </CardContent>
       </Card>
 
@@ -932,8 +944,10 @@ export function _TreasuryGuide() {
             <li>
               <strong>Aporte de socio</strong>: ingresa dinero a una cuenta de
               banco o caja. Contablemente aumenta el activo y el capital, contra
-              la cuenta de aportes <strong>del socio</strong> (o la por defecto
-              si no tiene una propia).
+              la cuenta que define el <strong>concepto</strong> elegido. Si tu
+              empresa no tiene conceptos de aporte, se usa la cuenta de aportes{' '}
+              <strong>del socio</strong> (o la por defecto si no tiene una
+              propia).
             </li>
             <li>
               <strong>Retiro de socio</strong>: sale dinero de una cuenta hacia
@@ -948,9 +962,8 @@ export function _TreasuryGuide() {
               <strong>Gastos e impuestos bancarios</strong>: el débito que el
               banco cobra en el resumen del mes <strong>sin IVA</strong> —
               Sircreb, impuesto a los débitos y créditos, comisiones sin
-              discriminar, etc. En vez de un monto único se cargan uno o más{' '}
-              <strong>conceptos</strong>, cada uno con su propia cuenta
-              contable.
+              discriminar, etc. En vez de un monto único se cargan una o más{' '}
+              <strong>líneas</strong>, cada una con su <strong>concepto</strong>.
             </li>
           </ul>
           <p>
@@ -968,25 +981,24 @@ export function _TreasuryGuide() {
             <li>
               Seleccioná el banco o caja de origen y/o destino (según el tipo) y,
               para aportes o retiros, el <strong>socio</strong> (obligatorio).
-              Debajo del socio, un aviso te anticipa a qué cuenta se va a
-              imputar el asiento: la cuenta propia del socio o, si no tiene, la
-              por defecto de Ajustes contables. Las cajas deben tener una sesión
-              abierta para operar.
+              Si Contabilidad configuró conceptos para aportes o retiros,
+              aparece el campo <strong>Concepto</strong> (obligatorio, uno por
+              movimiento). Si el concepto usa la cuenta del socio, un aviso te
+              anticipa cuál es (la propia del socio o, si no tiene, la por
+              defecto de Ajustes contables); si tiene cuenta propia, el aviso
+              solo nombra el concepto. Las cajas deben tener una sesión abierta
+              para operar.
             </li>
             <li>
               Si el tipo es <strong>Gastos e impuestos bancarios</strong>, no
-              hay un monto único: cargá la tabla de <strong>Conceptos</strong>,
-              agregando una fila por cada ítem del resumen bancario. Por cada
-              uno elegís la cuenta contable, escribís una descripción y el
-              importe. El total se calcula solo, sumando los conceptos, y no
-              se puede confirmar sin al menos uno cargado. La cuenta de cada
-              concepto nuevo viene <strong>preseleccionada</strong> con la{' '}
-              <strong>Gastos bancarios por defecto</strong> de Ajustes
-              contables, y un aviso debajo de la tabla te dice cuál es; podés
-              cambiarla en cada fila (Sircreb y otros conceptos que son activo
-              se eligen a mano). Si esa cuenta no está configurada, el aviso
-              te lo indica con un enlace a Ajustes contables y elegís la
-              cuenta concepto por concepto, como hasta ahora.
+              hay un monto único: cargá la tabla de líneas, agregando una
+              fila por cada ítem del resumen bancario. Por cada una elegís el{' '}
+              <strong>Concepto</strong> (por ejemplo, &quot;Impuesto ley
+              25.413&quot;), escribís un detalle si querés (es opcional; si lo
+              dejás vacío, el asiento usa el nombre del concepto) y el importe.
+              Nunca elegís una cuenta contable: la define el concepto. El total
+              se calcula solo y no se puede confirmar sin al menos una línea
+              cargada.
             </li>
             <li>
               Escribí una descripción y elegí:
@@ -1020,8 +1032,9 @@ export function _TreasuryGuide() {
             <li>
               Se abre <strong>el mismo formulario</strong> de la carga, con todos
               los campos <strong>bloqueados</strong>: tipo, monto, fecha, banco o
-              caja, socio, descripción y, en gastos bancarios, cada concepto con
-              su cuenta, descripción e importe, y el total. No hay botones de
+              caja, socio, concepto, descripción y, en gastos bancarios, cada línea con
+              su concepto, detalle e importe, y el total. Los movimientos
+              anteriores a los conceptos muestran su descripción de siempre. No hay botones de
               guardar ni de agregar conceptos: es solo para consultar.
             </li>
             <li>
@@ -1052,8 +1065,8 @@ export function _TreasuryGuide() {
             <strong>Desde el celular:</strong> el formulario de alta, edición y
             vista entra completo en la pantalla, con la <strong>X</strong> de
             cerrar visible y sin desplazarse hacia los costados. En gastos
-            bancarios, cada concepto se apila: la cuenta ocupa toda la fila y
-            debajo van la descripción y el importe. La tabla del listado se
+            bancarios, cada línea se apila: el concepto ocupa toda la fila y
+            debajo van el detalle y el importe. La tabla del listado se
             desliza con el dedo para ver todas las columnas, y los controles de
             página (filas por página, página actual y flechas) se acomodan en
             varias líneas.
@@ -1061,14 +1074,30 @@ export function _TreasuryGuide() {
           <p className="text-sm text-muted-foreground">
             Al confirmar un movimiento de <strong>Gastos e impuestos
             bancarios</strong>, el asiento no imputa todo a una única cuenta de
-            gastos: lleva <strong>un débito por cada concepto</strong>, a su
-            propia cuenta, y un solo <strong>crédito</strong> al banco o caja
+            gastos: lleva <strong>un débito por cada línea</strong>, a la
+            cuenta de su concepto, y un solo <strong>crédito</strong> al banco o caja
             de origen por el total.
           </p>
           <Alert>
             <Info className="h-4 w-4" />
             <AlertDescription>
-              Para confirmar un aporte o retiro, el socio tiene que tener su{' '}
+              <strong>Antes de usar Gastos e impuestos bancarios, Contabilidad
+              tiene que crear los conceptos</strong> (Empresa → Contabilidad →
+              Conceptos). Sin conceptos de ese tipo ves el aviso &quot;No hay
+              conceptos configurados para «Gastos e impuestos bancarios»&quot; y
+              no podés guardar ni confirmar. En aportes y retiros el campo
+              Concepto solo aparece si hay conceptos para ese tipo; si no
+              hay, el formulario funciona como siempre. Si un borrador usa un
+              concepto que Contabilidad desactivó o le cambió, editalo y elegí
+              otro antes de confirmar. Los borradores anteriores a los conceptos
+              piden elegir el concepto de cada línea.
+            </AlertDescription>
+          </Alert>
+          <Alert>
+            <Info className="h-4 w-4" />
+            <AlertDescription>
+              Para confirmar un aporte o retiro <strong>sin concepto de cuenta
+              propia</strong>, el socio tiene que tener su{' '}
               <strong>cuenta de aportes</strong> (Tesorería → Socios) o tiene
               que existir la <strong>Cuenta de aportes de socios por defecto</strong>{' '}
               en <strong>Ajustes contables</strong>. Si falta, el aviso del
@@ -1096,7 +1125,7 @@ export function _TreasuryGuide() {
               gasto bancario <strong>no lleva IVA</strong> (Sircreb, impuesto a
               los débitos y créditos, comisiones sin discriminar), cargalo acá
               como <strong>Gastos e impuestos bancarios</strong>, con un
-              concepto por cada ítem del resumen. Si en cambio el gasto{' '}
+              línea por cada ítem del resumen. Si en cambio el gasto{' '}
               <strong>lleva IVA</strong> y tenés un comprobante fiscal del
               banco, cargalo en <strong>Compras → Facturas de Compra</strong>{' '}
               como una factura con el banco como proveedor y el tipo{' '}

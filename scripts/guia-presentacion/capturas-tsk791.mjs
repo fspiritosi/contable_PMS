@@ -33,6 +33,8 @@
  *
  * Opciones: --only=fondos  (salta la sección de Contabilidad)
  *           --only=banco   (solo la sección del movimiento bancario)
+ *           --recapture-forms  (solo vuelve a sacar tsk791-02 y tsk791-03 abriendo el alta SIN guardar,
+ *                              con el combo de cuentas cerrado y sin avisos; no crea conceptos)
  *
  * Es idempotente: si un concepto ya existe, no lo vuelve a crear.
  *
@@ -51,7 +53,8 @@ const COMPANY = '02885d43-1358-4eb2-b774-c52d5be372f3'; // empresa activa habitu
 const TEMP_NAME = 'TSK791 temporal';
 
 const ONLY_BANK = process.argv.includes('--only=banco');
-const ONLY_FUND = process.argv.includes('--only=fondos') || ONLY_BANK;
+const RECAPTURE = process.argv.includes('--recapture-forms');
+const ONLY_FUND = process.argv.includes('--only=fondos') || ONLY_BANK || RECAPTURE;
 
 let failures = 0;
 const check = (ok, msg) => {
@@ -113,6 +116,30 @@ const save = async (page, dialog) => {
   await dialog.waitFor({ state: 'hidden', timeout: 30000 });
   await page.waitForTimeout(1000);
 };
+
+if (RECAPTURE) try {
+  const context = await browser.newContext({ locale: 'es-AR', viewport: { width: 1440, height: 900 } });
+  const page = await context.newPage();
+  await login(page);
+  const forms = [
+    { shotName: 'tsk791-02-alta-gasto', name: 'Impuesto ley 25.413', usages: ['Gastos e impuestos bancarios'], accountSearch: 'Débitos y Créditos' },
+    { shotName: 'tsk791-03-alta-aporte-radio', name: 'Aporte para obra', usages: ['Aporte de socio'], partnerMode: 'Usar otra cuenta', accountSearch: 'Aportes Irrevocables' },
+  ];
+  for (const { shotName, ...form } of forms) {
+    await openList(page);
+    const dialog = await fillForm(page, form);
+    // cierra el combo de cuentas haciendo clic en el título del diálogo
+    await dialog.getByRole('heading', { name: 'Nuevo concepto' }).click();
+    await page.waitForTimeout(700);
+    await shot(page, shotName);
+    await dialog.getByRole('button', { name: 'Cancelar' }).click();
+    await dialog.waitFor({ state: 'hidden' });
+  }
+  await context.close();
+} catch (error) {
+  console.error(error);
+  failures++;
+}
 
 if (!ONLY_FUND) try {
   const context = await browser.newContext({ locale: 'es-AR', viewport: { width: 1440, height: 900 } });
@@ -250,7 +277,7 @@ const conceptsOf = (usage) =>
     .split('\n')
     .filter(Boolean);
 
-if (!ONLY_BANK) try {
+if (!ONLY_BANK && !RECAPTURE) try {
   // Segundo concepto de Gastos bancarios (cuenta distinta), para tener dos líneas distintas.
   if (!conceptExists('Comisión de mantenimiento')) {
     const accId = psql(`select id from accounts where company_id='${COMPANY}' and code='4.2.1/03/09'`);

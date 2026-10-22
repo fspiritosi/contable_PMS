@@ -356,7 +356,8 @@ Reglas:
 | Modelo | Descripcion |
 |--------|-------------|
 | `BankAccount` | Cuenta bancaria (type, status, balance) |
-| `BankMovement` | Movimiento bancario (type: DEBIT/CREDIT, amount) |
+| `BankMovement` | Movimiento bancario (type: DEBIT/CREDIT, amount); conceptId?/conceptName? (TSK-791, solo los manuales) |
+| `MovementConcept` | Concepto de movimiento (TSK-791) | name, usages (`ConceptUsage[]`), accountMode, accountId?, isActive |
 | `Receipt` | Recibo de cobro (clientId, status, total) |
 | `ReceiptItem` | Facturas aplicadas al recibo |
 | `ReceiptPayment` | Medios de pago del recibo |
@@ -395,16 +396,39 @@ Reglas:
   líneas, exactamente igual que antes de TSK-585.
 - Las cuentas de `FundMovementLine.accountId` deben ser imputables (hoja, activas) y de tipo
   `EXPENSE` o `ASSET` — igual criterio que las líneas de compra/venta desde TSK-579. `LIABILITY` y
-  `EQUITY` quedan afuera: no son contrapartida de un débito bancario.
-- `AccountingSettings.bankChargesAccountId` ("Gastos bancarios por defecto", TSK-718) es **solo
-  preselección de UI**: el modal la propone como cuenta de cada concepto nuevo de `BANK_CHARGES`
-  y el usuario puede cambiarla fila por fila. `FundMovementLine.accountId` sigue siendo NOT NULL y
-  es lo que lee el asiento; la global no participa en `createJournalEntryForFundMovement`.
+  `EQUITY` quedan afuera: no son contrapartida de un débito bancario. Desde TSK-791 la cuenta **no
+  la elige el usuario**: el servidor la resuelve desde el `MovementConcept` de la línea.
+- `AccountingSettings.bankChargesAccountId` ("Gastos bancarios por defecto", TSK-718) **quedó sin
+  uso en TSK-791**: se sacó de la UI (Configuración contable y Gestión). La columna se conserva en
+  la base para no hacer una migración destructiva. `FundMovementLine.accountId` sigue siendo NOT
+  NULL y es lo que lee el asiento.
 - **El asiento generado tiene N+1 líneas para `BANK_CHARGES`** (un débito por cada concepto, a su
   propia cuenta, más un crédito único al banco/caja de origen por el total), mientras que
   `PARTNER_CONTRIBUTION`, `PARTNER_WITHDRAWAL` y `ACCOUNT_TRANSFER` siguen generando su asiento de
   **2 líneas** de siempre. `createJournalEntryForFundMovement` se generalizó para aceptar N débitos
   contra un crédito sin cambiar el comportamiento de esos tres tipos existentes.
+
+**Conceptos de movimientos (`MovementConcept`, TSK-791):**
+- Tabla `movement_concepts`: `companyId`, `name`, `usages ConceptUsage[]`, `accountMode`
+  (`OWN_ACCOUNT` | `PARTNER_ACCOUNT`), `accountId?` (FK a `Account`), `isActive`, `createdBy`.
+  Índice `(companyId, isActive)`. Contabilidad los administra; Gestión los elige.
+- `ConceptUsage` (enum, array en el concepto): `FUND_BANK_CHARGES`, `FUND_PARTNER_CONTRIBUTION`,
+  `FUND_PARTNER_WITHDRAWAL` y los ocho `BANK_*` (`BANK_DEPOSIT`, `BANK_WITHDRAWAL`,
+  `BANK_TRANSFER_IN`, `BANK_TRANSFER_OUT`, `BANK_CHECK`, `BANK_DEBIT`, `BANK_FEE`,
+  `BANK_INTEREST`). Sumar un uso es agregar un valor al enum: no migra conceptos existentes.
+  `ACCOUNT_TRANSFER` nunca es un uso.
+- Campos nuevos (todos nullable, por los históricos; FK `SetNull`): `FundMovementLine.conceptId` +
+  `conceptName`, `FundMovement.conceptId` + `conceptName` (solo Aporte/Retiro), `BankMovement.conceptId` +
+  `conceptName`. `conceptName` es un snapshot: el historial se ve aunque el concepto se renombre o
+  desactive. `accountId` de la línea pasa a ser la cuenta **resuelta** del concepto.
+- Tipos de cuenta por uso (reglas previas, sin cambios): `FUND_BANK_CHARGES` = `EXPENSE`/`ASSET`;
+  `FUND_PARTNER_*` y `BANK_*` = `ASSET`/`LIABILITY`/`EQUITY`. Un concepto con varios usos admite la
+  intersección. `PARTNER_ACCOUNT` solo si todos los usos son Aporte/Retiro.
+- Reglas puras y resolución en `src/shared/lib/concepts/` (`usages.ts`, `concepts.server.ts`:
+  `getActiveConceptOptions`, `countActiveConcepts`, `resolveConceptForUsage`), porque las consumen
+  Contabilidad y Comercial. La cuenta se resuelve en el servidor al guardar y al confirmar (o al
+  registrar, en el movimiento bancario); nunca viene del cliente.
+- Migración `20261022154500_tsk_791_movement_concepts`: aditiva (2 enums, 6 columnas, 1 tabla, FKs).
 
 **Cuenta de aportes por socio (TSK-717):**
 - `Partner.contributionsAccountId` (nullable, `@db.Uuid`, índice propio) apunta a la cuenta del
@@ -466,7 +490,7 @@ Reglas:
 | `FiscalYear` | Ejercicio contable | number (unico por empresa), startDate (00:00:00.000Z del primer dia), endDate (23:59:59.999Z del ultimo), isClosed, closedAt, closedBy, closingEntryId? (refundicion), openingEntryId? (apertura del ejercicio siguiente generada por el cierre) |
 | `AccountingPeriod` | Periodo de un ejercicio | fiscalYearId, year, month, type (`MONTHLY` \| `OPENING` \| `CLOSING` \| `ADJUSTMENT`), isClosed, closedAt, closedBy; unique(fiscalYearId, year, month, type) |
 | `JournalEntryLine` | Linea de asiento | accountId, debit, credit, description, y los auxiliares opcionales customerId?, supplierId?, costCenterId?. Indices: `@@index([costCenterId])` y `@@index([entryId])` (TSK-719) |
-| `AccountingSettings` | Config contable | salesAccountId, purchasesAccountId (cuentas de ventas/compras **por defecto**: solo para lineas cuyo item no tiene cuenta propia, TSK-721), bankChargesAccountId? (gastos bancarios por defecto, FK SetNull, TSK-718), vatAccountId, fixedAssetAccountId, accumulatedDepreciationAccountId, depreciationExpenseAccountId (cuentas de Bienes de Uso **por defecto**: respaldo de `VehicleDepreciation` → `VehicleType`, TSK-724c), assetDisposalGainLossAccountId (resultado por venta/baja, unica), lockedUntilDate, productCodePrefix (default "PROD"), lastProductNumber (default 0), requireCostCenter (Boolean, default false, TSK-583), etc. |
+| `AccountingSettings` | Config contable | salesAccountId, purchasesAccountId (cuentas de ventas/compras **por defecto**: solo para lineas cuyo item no tiene cuenta propia, TSK-721), bankChargesAccountId? (sin uso desde TSK-791; se conserva la columna, FK SetNull, TSK-718), vatAccountId, fixedAssetAccountId, accumulatedDepreciationAccountId, depreciationExpenseAccountId (cuentas de Bienes de Uso **por defecto**: respaldo de `VehicleDepreciation` → `VehicleType`, TSK-724c), assetDisposalGainLossAccountId (resultado por venta/baja, unica), lockedUntilDate, productCodePrefix (default "PROD"), lastProductNumber (default 0), requireCostCenter (Boolean, default false, TSK-583), etc. |
 | `RecurringEntry` | Asiento recurrente | frequency, nextExecution, templateLines |
 | `RecurringEntryLine` | Linea de asiento recurrente | accountId, debitAmount, creditAmount |
 
