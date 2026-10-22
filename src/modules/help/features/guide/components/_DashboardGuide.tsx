@@ -40,21 +40,25 @@ export function _DashboardGuide() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          <p>El dashboard muestra 6 indicadores principales:</p>
+          <p>El dashboard muestra 7 indicadores principales:</p>
           <ul className="list-disc pl-6 space-y-1 text-muted-foreground">
             <li>
-              <strong>Ventas del período</strong>: total facturado a clientes
+              <strong>Ventas</strong>: total facturado a clientes en el período
             </li>
             <li>
-              <strong>Compras del período</strong>: total facturado por
-              proveedores
+              <strong>Compras</strong>: total facturado por proveedores en el
+              período
             </li>
             <li>
-              <strong>Cobros realizados</strong>: total de recibos confirmados
+              <strong>Gastos</strong>: total de gastos cargados en el período
             </li>
             <li>
-              <strong>Pagos realizados</strong>: total de órdenes de pago
-              confirmadas
+              <strong>Pendiente de cobro</strong>: lo que los clientes todavía
+              deben y en cuántos documentos
+            </li>
+            <li>
+              <strong>Pendiente de pago</strong>: lo que todavía se les debe a
+              los proveedores y en cuántos documentos
             </li>
             <li>
               <strong>Stock crítico</strong>: ítems con stock bajo mínimo
@@ -63,6 +67,17 @@ export function _DashboardGuide() {
               <strong>Saldo bancario</strong>: suma de todas las cuentas activas
             </li>
           </ul>
+          <p className="text-muted-foreground">
+            Las tarjetas se acomodan solas al ancho de la pantalla: si no
+            entran todas en una fila pasan a la siguiente, y los montos muy
+            grandes se muestran con una letra un poco más chica para que
+            siempre se lean completos. Al pasar el mouse sobre un monto se ve
+            su valor.
+          </p>
+          <p className="text-muted-foreground">
+            Puedes elegir qué indicadores ver desde el botón de configuración
+            del dashboard.
+          </p>
         </CardContent>
       </Card>
 
