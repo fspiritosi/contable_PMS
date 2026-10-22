@@ -3288,6 +3288,7 @@ model BankMovement {
   @@index([companyId, date])
   @@index([bankAccountId, date])
   @@index([reconciled])
+  @@index([conceptId])
   @@map("bank_movements")
 }
 
@@ -4414,6 +4415,7 @@ model FundMovement {
   lines   FundMovementLine[]
 
   @@index([companyId])
+  @@index([conceptId])
   @@map("fund_movements")
 }
 
@@ -4491,6 +4493,7 @@ model FundMovementLine {
   concept  MovementConcept? @relation(fields: [conceptId], references: [id], onDelete: SetNull)
 
   @@index([movementId])
+  @@index([conceptId])
   @@map("fund_movement_lines")
 }
 
