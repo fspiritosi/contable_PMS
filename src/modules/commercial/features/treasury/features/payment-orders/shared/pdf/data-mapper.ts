@@ -32,8 +32,13 @@ type PaymentOrderData = {
       fullNumber: string;
       issueDate: Date;
       total: any;
+      /** Solo imputaciones de OP confirmadas (EFFECTIVE_PAYMENT_ORDER_ITEM). */
       paymentOrderItems: Array<{
         amount: any;
+      }>;
+      /** Solo NC aplicadas no anuladas (EFFECTIVE_PURCHASE_CREDIT_NOTE_APPLICATION). */
+      creditNoteApplicationsReceived: Array<{
+        amount: unknown;
       }>;
     };
   }>;
@@ -109,8 +114,11 @@ export function mapPaymentOrderDataForPDF(
     invoices: paymentOrder.items.map((item) => {
       const invoice = item.invoice;
 
-      // Calcular total pagado de esta factura (incluye todos los pagos, no solo esta orden)
-      const totalPaid = invoice.paymentOrderItems.reduce((sum, poi) => sum + Number(poi.amount), 0);
+      // Cancelado vigente de la factura (TSK-792): OP confirmadas (incluida esta, si lo está)
+      // más NC aplicadas no anuladas. Las OP en borrador o anuladas no cuentan.
+      const totalPaid =
+        invoice.paymentOrderItems.reduce((sum, poi) => sum + Number(poi.amount), 0) +
+        invoice.creditNoteApplicationsReceived.reduce((sum, app) => sum + Number(app.amount), 0);
       const total = Number(invoice.total);
       const pendingAmount = total - totalPaid;
 
