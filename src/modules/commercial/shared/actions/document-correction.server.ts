@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
-import { BusinessError, toActionResult, type ActionResult } from '@/shared/lib/action-result';
+import { toActionResult, type ActionFailure, type ActionResult } from '@/shared/lib/action-result';
 import { getActiveCompanyId } from '@/shared/lib/company';
 import { getCurrentUserId } from '@/shared/lib/current-user';
 import { logger } from '@/shared/lib/logger';
@@ -45,9 +45,22 @@ const AFFECTED_PATHS = [
   '/dashboard/company/accounting/entries',
 ];
 
-async function authorize(raw: unknown) {
+type Authorized =
+  | { ok: true; request: CorrectionRequest; ctx: { companyId: string; userId: string } }
+  | { ok: false; failure: ActionFailure };
+
+/**
+ * Valida el pedido y verifica el permiso. Se llama FUERA del try de cada action: el
+ * `redirect()` de `checkPermission` lanza NEXT_REDIRECT y no debe caer en `toActionResult`.
+ */
+async function authorize(raw: unknown): Promise<Authorized> {
   const parsed = requestSchema.safeParse(raw);
-  if (!parsed.success) throw new BusinessError('La solicitud de corrección no es válida.');
+  if (!parsed.success) {
+    return {
+      ok: false,
+      failure: { success: false, error: 'La solicitud de corrección no es válida.' },
+    };
+  }
   const request = parsed.data as CorrectionRequest;
   await checkPermission(
     CORRECTION_HANDLERS[request.ref.kind].permissionModule,
@@ -55,17 +68,23 @@ async function authorize(raw: unknown) {
     { redirect: true }
   );
   const [companyId, userId] = await Promise.all([getActiveCompanyId(), getCurrentUserId()]);
-  if (!companyId || !userId)
-    throw new BusinessError('No se pudo identificar la empresa o el usuario.');
-  return { request, ctx: { companyId, userId } };
+  if (!companyId || !userId) {
+    return {
+      ok: false,
+      failure: { success: false, error: 'No se pudo identificar la empresa o el usuario.' },
+    };
+  }
+  return { ok: true, request, ctx: { companyId, userId } };
 }
 
 /** Vista previa de la corrección: no modifica nada. */
 export async function previewDocumentCorrection(
   rawRequest: CorrectionRequest
 ): Promise<ActionResult<{ proposal: CorrectionProposal }>> {
+  const auth = await authorize(rawRequest);
+  if (!auth.ok) return auth.failure;
   try {
-    const { request, ctx } = await authorize(rawRequest);
+    const { request, ctx } = auth;
     return { success: true, proposal: await previewCorrection(ctx, request) };
   } catch (error) {
     return toActionResult(error, 'Error al previsualizar la corrección');
@@ -79,8 +98,10 @@ export async function applyDocumentCorrection(
 ): Promise<
   ActionResult<{ applied: boolean; reason?: ApplyRejectionReason; proposal?: CorrectionProposal }>
 > {
+  const auth = await authorize(rawRequest);
+  if (!auth.ok) return auth.failure;
   try {
-    const { request, ctx } = await authorize(rawRequest);
+    const { request, ctx } = auth;
     const result = await applyCorrection(ctx, request, fingerprint);
     if (!result.applied) {
       return { success: true, applied: false, reason: result.reason, proposal: result.proposal };

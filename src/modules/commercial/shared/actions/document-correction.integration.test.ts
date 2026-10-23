@@ -145,11 +145,13 @@ describe.skipIf(!dbAvailable)('integración: actions de corrección (TSK-792)', 
     const fc = await confirmedFC(1000);
     vi.mocked(checkPermission).mockClear();
     vi.mocked(checkPermission).mockRejectedValueOnce(new Error('NEXT_REDIRECT'));
-    const result = await previewDocumentCorrection(editTo(fc.id, fc.data, 800));
-    expect(result.success).toBe(false);
+    await expect(previewDocumentCorrection(editTo(fc.id, fc.data, 800))).rejects.toThrow(
+      'NEXT_REDIRECT'
+    );
     expect(checkPermission).toHaveBeenCalledWith('commercial.purchases', 'update', {
       redirect: true,
     });
+    // El motor no corrió: nada cambió.
     expect(await totalOf(fc.id)).toBe(1000);
   });
 
