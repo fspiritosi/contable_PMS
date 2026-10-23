@@ -9,7 +9,7 @@ import { CHECK_STATUS_LABELS } from '@/modules/commercial/features/treasury/shar
 import { BusinessError } from '@/shared/lib/action-result';
 import { logger } from '@/shared/lib/logger';
 
-import { impediments } from '../correction/impediments';
+import { dedupeImpediments, impediments } from '../correction/impediments';
 import type { Impediment } from '../correction/types';
 import { recomputeSalesInvoiceStatusTx } from './document-status.server';
 import type { EffectsCtx, EffectsResult } from './types';
@@ -368,15 +368,5 @@ export async function receiptEffectImpedimentsTx(
     found.push(impediments.untraceable(docLabel));
   }
 
-  return dedupe(found);
-}
-
-function dedupe(list: Impediment[]): Impediment[] {
-  const seen = new Set<string>();
-  return list.filter((i) => {
-    const key = `${i.code}|${i.message}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  return dedupeImpediments(found);
 }

@@ -117,3 +117,14 @@ export const impediments = {
     return { code: 'SIMULATION_ERROR', severity: 'BLOCKED', message };
   },
 };
+
+/** Quita los impedimentos repetidos (mismo código y mensaje), conservando el primero y el orden. */
+export function dedupeImpediments(list: Impediment[]): Impediment[] {
+  const seen = new Set<string>();
+  return list.filter((i) => {
+    const key = `${i.code}|${i.message}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}

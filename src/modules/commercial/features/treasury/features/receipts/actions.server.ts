@@ -1,6 +1,7 @@
 ﻿'use server';
 
 import { applyReceiptEffectsTx } from '@/modules/commercial/shared/effects/receipt.server';
+import { writeReceiptDataTx } from '@/modules/commercial/shared/effects/receipt-data.server';
 import { getCurrentUserId } from '@/shared/lib/current-user';
 import { getActiveCompanyId } from '@/shared/lib/company';
 import { logger } from '@/shared/lib/logger';
@@ -17,7 +18,6 @@ import {
 import { CREDIT_NOTE_TYPES, isCreditNote } from '@/modules/commercial/shared/voucher-utils';
 import { createReceiptSchema, type CreateReceiptFormData } from '../../shared/validators';
 import type { PendingInvoice, ReceiptListItem, ReceiptWithDetails } from '../../shared/types';
-import type { Tx } from '@/modules/accounting/features/integrations/core';
 import { checkPermission } from '@/shared/lib/permissions';
 import { BusinessError, toActionResult, type ActionResult } from '@/shared/lib/action-result';
 import {
@@ -700,77 +700,6 @@ export async function deleteReceipt(receiptId: string) {
       throw error;
     }
     throw new Error('Error al eliminar recibo');
-  }
-}
-
-/**
- * Escribe los datos editables del recibo dentro de la transacción del llamador:
- * cliente, fecha, notas y total, y reemplaza items, pagos y retenciones. Mantiene
- * number/fullNumber/createdBy. No mira el estado ni mueve fondos: lo usan
- * `updateReceipt` (borrador) y el motor de corrección (TSK-792), que revierte y
- * reaplica los efectos alrededor de esta escritura.
- */
-export async function writeReceiptDataTx(
-  tx: Tx,
-  companyId: string,
-  receiptId: string,
-  input: CreateReceiptFormData
-): Promise<void> {
-  const totalCents = input.items.reduce((sum, item) => sum + Math.round(parseFloat(item.amount) * 100), 0);
-
-  await tx.receipt.update({
-    where: { id: receiptId, companyId },
-    data: {
-      customerId: input.customerId,
-      date: input.date,
-      totalAmount: new Prisma.Decimal(totalCents).div(100),
-      notes: input.notes || null,
-    },
-  });
-
-  await tx.receiptItem.deleteMany({ where: { receiptId } });
-  await tx.receiptPayment.deleteMany({ where: { receiptId } });
-  await tx.receiptWithholding.deleteMany({ where: { receiptId } });
-
-  await tx.receiptItem.createMany({
-    data: input.items.map((item) => ({
-      receiptId,
-      invoiceId: item.invoiceId,
-      amount: new Prisma.Decimal(item.amount),
-    })),
-  });
-
-  if (input.payments.length > 0) {
-    await tx.receiptPayment.createMany({
-      data: input.payments.map((payment) => ({
-        receiptId,
-        paymentMethod: payment.paymentMethod,
-        amount: new Prisma.Decimal(payment.amount),
-        cashRegisterId: payment.cashRegisterId || null,
-        bankAccountId: payment.bankAccountId || null,
-        checkNumber: payment.checkNumber || null,
-        cardLast4: payment.cardLast4 || null,
-        reference: payment.reference || null,
-        // Metadata del cheque / e-cheq
-        checkBankName: payment.checkBankName || null,
-        checkIssueDate: payment.checkIssueDate || null,
-        checkDueDate: payment.checkDueDate || null,
-        checkDrawerName: payment.checkDrawerName || null,
-        checkDrawerTaxId: payment.checkDrawerTaxId || null,
-      })),
-    });
-  }
-
-  if (input.withholdings.length > 0) {
-    await tx.receiptWithholding.createMany({
-      data: input.withholdings.map((w) => ({
-        receiptId,
-        taxType: w.taxType,
-        rate: new Prisma.Decimal(w.rate),
-        amount: new Prisma.Decimal(w.amount),
-        certificateNumber: w.certificateNumber || null,
-      })),
-    });
   }
 }
 

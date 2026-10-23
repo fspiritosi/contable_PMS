@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { impediments } from './impediments';
+import { dedupeImpediments, impediments } from './impediments';
 import type { Impediment } from './types';
 
 describe('impediments', () => {
@@ -83,5 +83,22 @@ describe('impediments', () => {
     expect(impediments.untraceable('OP 1').message).toBe(
       'Un movimiento de OP 1 es anterior a la trazabilidad y no se puede corregir automáticamente.'
     );
+  });
+});
+
+describe('dedupeImpediments', () => {
+  it('quita los repetidos por código y mensaje, conservando el orden', () => {
+    const closed = impediments.cashSessionClosed('Caja 1', 'OP 1');
+    const otherRegister = impediments.cashSessionClosed('Caja 2', 'OP 1');
+    const used = impediments.checkUsed('Galicia 0001', 'Depositado');
+    expect(dedupeImpediments([closed, used, { ...closed }, otherRegister, used])).toEqual([
+      closed,
+      used,
+      otherRegister,
+    ]);
+  });
+
+  it('lista vacía → vacía', () => {
+    expect(dedupeImpediments([])).toEqual([]);
   });
 });

@@ -68,6 +68,7 @@ describe.skipIf(!dbAvailable)('integración: efectos del recibo de cobro (TSK-79
   let cajaRegisterId: string;
   let sessionId: string;
   let bankAccountId: string;
+  let otherCompanyId: string | undefined;
   let seq = 1;
 
   const cash = (amount: string): PaymentInput => ({
@@ -291,6 +292,13 @@ describe.skipIf(!dbAvailable)('integración: efectos del recibo de cobro (TSK-79
       await prisma.accountingSettings.deleteMany({ where: { companyId } });
       await prisma.account.deleteMany({ where: { companyId } });
       await prisma.company.deleteMany({ where: { id: companyId } });
+    }
+    if (otherCompanyId) {
+      await prisma.bankAccount.deleteMany({ where: { companyId: otherCompanyId } });
+      await prisma.salesInvoice.deleteMany({ where: { companyId: otherCompanyId } });
+      await prisma.salesPointOfSale.deleteMany({ where: { companyId: otherCompanyId } });
+      await prisma.contractor.deleteMany({ where: { companyId: otherCompanyId } });
+      await prisma.company.deleteMany({ where: { id: otherCompanyId } });
     }
     expect(await prisma.company.count({ where: { name: { startsWith: PREFIX } } })).toBe(0);
     await prisma.$disconnect();
@@ -654,6 +662,115 @@ describe.skipIf(!dbAvailable)('integración: efectos del recibo de cobro (TSK-79
         error: 'Solo se pueden editar recibos en estado borrador',
       });
       expect(await snapshot()).toEqual(confirmedBefore);
+    });
+
+    it('rechaza imputar una factura de otra empresa sin tocar el borrador', async () => {
+      const { id, invoiceId } = await draftReceipt([cash('1000')]);
+      otherCompanyId = (
+        await prisma.company.create({
+          data: { name: `${PREFIX}Otra empresa`, isActive: true },
+          select: { id: true },
+        })
+      ).id;
+      const otherCustomerId = (
+        await prisma.contractor.create({
+          data: { companyId: otherCompanyId, name: `${PREFIX}Cliente ajeno` },
+          select: { id: true },
+        })
+      ).id;
+      const otherPosId = (
+        await prisma.salesPointOfSale.create({
+          data: {
+            companyId: otherCompanyId,
+            number: 9793,
+            name: `${PREFIX}PDV ajeno`,
+            createdBy: 'test',
+          },
+          select: { id: true },
+        })
+      ).id;
+      const foreignInvoiceId = (
+        await prisma.salesInvoice.create({
+          data: {
+            companyId: otherCompanyId,
+            customerId: otherCustomerId,
+            pointOfSaleId: otherPosId,
+            voucherType: 'FACTURA_A',
+            number: 1,
+            fullNumber: '9793-00000001',
+            issueDate: new Date('2026-03-01'),
+            subtotal: 1000,
+            netTaxed: 1000,
+            vatAmount: 0,
+            total: 1000,
+            totalBeforeDiscount: 1000,
+            discountTotal: 0,
+            status: 'CONFIRMED',
+            createdBy: 'test',
+          },
+          select: { id: true },
+        })
+      ).id;
+      const foreignBankId = (
+        await prisma.bankAccount.create({
+          data: {
+            companyId: otherCompanyId,
+            bankName: `${PREFIX}Banco ajeno`,
+            accountNumber: 'T792R-AJENO',
+            accountType: 'CHECKING',
+            balance: 0,
+            status: 'ACTIVE',
+          },
+          select: { id: true },
+        })
+      ).id;
+      const snapshot = () =>
+        prisma.receipt.findUniqueOrThrow({
+          where: { id },
+          select: {
+            customerId: true,
+            totalAmount: true,
+            items: { select: { invoiceId: true, amount: true } },
+            payments: { select: { paymentMethod: true, amount: true, bankAccountId: true } },
+          },
+        });
+      const before = await snapshot();
+      const base = {
+        customerId,
+        date: RECEIPT_DATE,
+        notes: null,
+        items: [{ invoiceId, amount: '1000' }],
+        payments: [cash('1000')],
+        withholdings: [],
+      };
+
+      // Factura de otra empresa
+      expect(
+        await updateReceipt(id, {
+          ...base,
+          items: [{ invoiceId: foreignInvoiceId, amount: '1000' }],
+        })
+      ).toEqual({
+        success: false,
+        error: 'Alguna de las facturas no es del cliente del recibo o no existe',
+      });
+      // Cliente de otra empresa
+      expect(await updateReceipt(id, { ...base, customerId: otherCustomerId })).toEqual({
+        success: false,
+        error: 'El cliente no existe en la empresa',
+      });
+      // Cuenta bancaria de otra empresa
+      expect(
+        await updateReceipt(id, {
+          ...base,
+          payments: [{ paymentMethod: 'TRANSFER', amount: '1000', bankAccountId: foreignBankId }],
+        })
+      ).toEqual({
+        success: false,
+        error: 'Alguna de las cuentas bancarias no existe en la empresa',
+      });
+
+      expect(await snapshot()).toEqual(before);
     });
 
     it('rechaza datos inválidos sin tocar el borrador', async () => {
