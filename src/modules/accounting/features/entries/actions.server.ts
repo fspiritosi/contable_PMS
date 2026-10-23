@@ -9,7 +9,12 @@ import { BusinessError, toActionResult, type ActionResult } from '@/shared/lib/a
 import { Prisma } from '@/generated/prisma/client';
 import { revalidateAccountingRoutes } from '../../shared/utils';
 import { journalEntrySchema, type CreateJournalEntryInput } from '../../shared/types';
-import { createJournalEntryTx, postJournalEntryTx, reverseJournalEntryTx } from '../../shared/utils/journal-entry-tx';
+import {
+  createJournalEntryTx,
+  postJournalEntryTx,
+  reverseJournalEntryTx,
+  revertJournalEntryToDraftTx,
+} from '../../shared/utils/journal-entry-tx';
 import {
   buildDocumentLinkedMessage,
   getEntryDocumentLink,
@@ -99,6 +104,67 @@ export async function postJournalEntry(entryId: string): Promise<ActionResult<{ 
     return { success: true, number: posted.number };
   } catch (error) {
     return toActionResult(error, 'Error al registrar asiento contable');
+  }
+}
+
+export interface RevertToDraftCheck {
+  /** Comprobante al que pertenece el asiento: queda editable desde su pantalla. */
+  link: EntryDocumentLink | null;
+  /** Motivo por el que no se puede volver a borrador (`null` si se puede). */
+  blockedMessage: string | null;
+}
+
+/** Qué pasaría al volver el asiento a borrador (lo usa el diálogo). Solo lectura. */
+export async function getRevertToDraftCheck(entryId: string): Promise<ActionResult<RevertToDraftCheck>> {
+  const userId = await getCurrentUserId();
+  if (!userId) throw new Error('No autenticado');
+  await checkPermission('accounting.entries', 'approve', { redirect: true });
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  try {
+    const entry = await prisma.journalEntry.findFirst({
+      where: { id: entryId, companyId },
+      select: { number: true, originalEntryId: true },
+    });
+    if (!entry) throw new BusinessError('Asiento no encontrado.');
+
+    const link = await getEntryDocumentLink(prisma, companyId, entryId);
+    const isFiscalYear = link?.kind === 'FISCAL_YEAR_CLOSING' || link?.kind === 'FISCAL_YEAR_OPENING';
+    let blockedMessage: string | null = null;
+    if (isFiscalYear) {
+      blockedMessage = `El asiento N° ${entry.number} es del cierre de ejercicio y no se puede volver a borrador.`;
+    } else if (entry.originalEntryId !== null) {
+      blockedMessage = `El asiento N° ${entry.number} es la anulación de otro asiento y no se puede volver a borrador.`;
+    }
+    return { success: true, link, blockedMessage };
+  } catch (error) {
+    return toActionResult(error, 'Error al verificar el asiento');
+  }
+}
+
+/**
+ * Vuelve un asiento registrado a borrador (TSK-792) con `revertJournalEntryToDraftTx`:
+ * conserva número y líneas, valida el período y rechaza cierre de ejercicio y contraasientos.
+ */
+export async function revertJournalEntryToDraft(entryId: string): Promise<ActionResult<{ number: number }>> {
+  const userId = await getCurrentUserId();
+  if (!userId) throw new Error('No autenticado');
+  await checkPermission('accounting.entries', 'approve', { redirect: true });
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  try {
+    const reverted = await prisma.$transaction((tx) =>
+      revertJournalEntryToDraftTx(tx, { companyId, entryId, userId })
+    );
+
+    logger.info('Asiento contable vuelto a borrador', { data: { entryId, number: reverted.number, userId } });
+    revalidateAccountingRoutes(companyId);
+
+    return { success: true, number: reverted.number };
+  } catch (error) {
+    return toActionResult(error, 'Error al volver el asiento a borrador');
   }
 }
 

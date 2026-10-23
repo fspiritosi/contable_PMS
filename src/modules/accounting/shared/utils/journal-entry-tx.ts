@@ -66,6 +66,13 @@ export interface ReverseJournalEntryTxInput {
   source?: string;
 }
 
+export interface RevertToDraftTxInput {
+  companyId: string;
+  entryId: string;
+  /** userId de quien lo vuelve a borrador (va a `revertedToDraftBy`). */
+  userId: string;
+}
+
 export interface ReversedJournalEntry {
   original: { id: string; number: number };
   reversal: CreatedJournalEntry;
@@ -341,4 +348,73 @@ export async function reverseJournalEntryTx(
   });
 
   return { original: { id: original.id, number: original.number }, reversal };
+}
+
+/**
+ * POSTED → DRAFT (TSK-792): el asiento conserva su número, fecha y líneas, pero deja
+ * de contar en el mayor y los balances hasta que se registre de nuevo. Rechaza la
+ * refundición/apertura de un ejercicio y los contraasientos (el trigger de la base no
+ * lo prohíbe: lo exige este código). Valida el período del asiento con el lock de la
+ * empresa. Puro: sin checkPermission ni $transaction propios, y sin mirar si el asiento
+ * pertenece a un comprobante (eso lo decide el llamador).
+ */
+export async function revertJournalEntryToDraftTx(
+  tx: Tx,
+  input: RevertToDraftTxInput
+): Promise<{ id: string; number: number }> {
+  const { companyId, entryId } = input;
+
+  const entry = await tx.journalEntry.findFirst({
+    where: { id: entryId, companyId },
+    select: {
+      id: true,
+      number: true,
+      status: true,
+      date: true,
+      originalEntryId: true,
+      period: { select: { type: true } },
+    },
+  });
+  if (!entry) throw new BusinessError('Asiento no encontrado.');
+  if (entry.status !== 'POSTED') {
+    throw new BusinessError(`El asiento N° ${entry.number} no está registrado.`);
+  }
+
+  const fiscalYear = await tx.fiscalYear.findFirst({
+    where: { companyId, OR: [{ closingEntryId: entry.id }, { openingEntryId: entry.id }] },
+    select: { id: true },
+  });
+  if (fiscalYear) {
+    throw new BusinessError(
+      `El asiento N° ${entry.number} es del cierre de ejercicio y no se puede volver a borrador.`
+    );
+  }
+  if (entry.originalEntryId !== null) {
+    throw new BusinessError(
+      `El asiento N° ${entry.number} es la anulación de otro asiento y no se puede volver a borrador.`
+    );
+  }
+
+  await assertPeriodOpen(tx, companyId, entry.date, {
+    periodType: toEntryPeriodType(entry.period?.type),
+    subject: `No se puede volver a borrador el asiento N° ${entry.number} (fecha ${formatDayUtc(entry.date)})`,
+  });
+
+  // Ídem registrar: si otra tx lo cambió mientras esperábamos el lock, no se toca.
+  const { count } = await tx.journalEntry.updateMany({
+    where: { id: entry.id, status: 'POSTED' },
+    data: {
+      status: 'DRAFT',
+      postDate: null,
+      revertedToDraftAt: new Date(),
+      revertedToDraftBy: input.userId,
+    },
+  });
+  if (count === 0) throw new BusinessError(`El asiento N° ${entry.number} no está registrado.`);
+
+  logger.debug('Asiento vuelto a borrador', {
+    data: { companyId, entryId: entry.id, number: entry.number, userId: input.userId },
+  });
+
+  return { id: entry.id, number: entry.number };
 }

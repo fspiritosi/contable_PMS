@@ -116,7 +116,7 @@ Archivos en `src/modules/accounting/shared/utils/` (los `server-only` se reexpor
 | Archivo | Funciones | Notas |
 |---|---|---|
 | `period-lock.ts` (`server-only`) | `lockAccountingSettingsTx`, `assertPeriodOpen`, `ensureFiscalYearTx`, `createFiscalYearWithPeriodsTx`, `ensurePeriodsTx`, `listMonthlyPeriodsTx`, `syncLockedUntilDateTx` | Una sola definicion de periodo cerrado |
-| `journal-entry-tx.ts` (`server-only`) | `nextEntryNumberTx`, `createJournalEntryTx`, `postJournalEntryTx`, `reverseJournalEntryTx`, `assertAccountsUsableTx` | Sin `checkPermission` ni `$transaction` propios: reciben el `tx` del llamador |
+| `journal-entry-tx.ts` (`server-only`) | `nextEntryNumberTx`, `createJournalEntryTx`, `postJournalEntryTx`, `reverseJournalEntryTx`, `revertJournalEntryToDraftTx` (POSTED → DRAFT, TSK-792; rechaza cierre de ejercicio y contraasientos), `assertAccountsUsableTx` | Sin `checkPermission` ni `$transaction` propios: reciben el `tx` del llamador |
 | `journal-entry-lines.ts` (puro) | `validateEntryLines`, `invertLines` | Decimal; sin lineas 0/0, balance ±0,01 |
 | `period-closure.ts` (puro) | `evaluatePeriodClosure`, `buildPeriodClosedMessage` | Textos de la tabla de abajo |
 | `utc-month.ts` (puro) | `monthKeyUtc`, `startOfMonthUtc`, `endOfMonthUtc`, `toUtcDay`, `formatDayUtc`, `todayBusinessDay(Utc)`, `BUSINESS_TIME_ZONE` | Convencion de dias, ver abajo |

@@ -11,11 +11,13 @@ export {
   createJournalEntryTx,
   postJournalEntryTx,
   reverseJournalEntryTx,
+  revertJournalEntryToDraftTx,
   type CreateJournalEntryTxInput,
   type CreatedJournalEntry,
   type PostJournalEntryTxInput,
   type ReverseJournalEntryTxInput,
   type ReversedJournalEntry,
+  type RevertToDraftTxInput,
 } from '@/modules/accounting/shared/utils/journal-entry-tx';
 export {
   assertPeriodOpen,
