@@ -154,7 +154,7 @@ describe('fundMovementSchema', () => {
       sourceFund: `BANK:${uuid}`,
       destinationFund: '',
       partnerId: '',
-      lines: [{ accountId: uuid, description: 'Comisión', amount: '10' }],
+      lines: [{ conceptId: uuid, description: 'Comisión', amount: '10' }],
     });
 
     expect(result.success).toBe(true);
@@ -215,7 +215,7 @@ describe('fundMovementSchema', () => {
 
 import { FUND_MOVEMENT_TYPE_LABELS } from './validators';
 
-const uuidCuenta = '11111111-1111-4111-8111-111111111111';
+const uuidConcepto = '11111111-1111-4111-8111-111111111111';
 const uuidBanco = '33333333-3333-4333-8333-333333333333';
 
 const gastosBancarios = {
@@ -227,8 +227,8 @@ const gastosBancarios = {
   destinationFund: '',
   partnerId: '',
   lines: [
-    { accountId: uuidCuenta, description: 'Sircreb IIBB', amount: '302574.16' },
-    { accountId: uuidCuenta, description: 'Impuesto a los débitos', amount: '1434154.28' },
+    { conceptId: uuidConcepto, description: 'Sircreb IIBB', amount: '302574.16' },
+    { conceptId: uuidConcepto, description: '', amount: '1434154.28' },
   ],
 };
 
@@ -274,40 +274,53 @@ describe('gastos e impuestos bancarios (TSK-585)', () => {
     expect(result.error?.issues[0]?.message).toBe('Agregá al menos un concepto');
   });
 
-  it('señala el concepto sin cuenta', () => {
+  it('señala la línea sin concepto (TSK-791)', () => {
     const result = fundMovementSchema.safeParse({
       ...gastosBancarios,
-      lines: [gastosBancarios.lines[0], { accountId: '', description: 'X', amount: '10' }],
+      lines: [gastosBancarios.lines[0], { conceptId: '', description: 'X', amount: '10' }],
     });
 
     expect(result.success).toBe(false);
-    // Con `.uuid()` en `accountId` (hallazgo de revisión final, TSK-585), una
-    // cuenta vacía también incumple el formato: `safeParse` reporta ese
-    // problema además del de `validateLines`, así que se busca el mensaje de
-    // dominio entre todos los issues en vez de asumir que es el primero. El
-    // combobox de conceptos (`_FundMovementLinesField`) solo lee el error de
-    // raíz de la línea, así que en la UI el usuario sigue viendo únicamente
-    // este mensaje.
+    // Un concepto vacío incumple el `.uuid()` y además `validateLines`: los dos
+    // dicen lo mismo, y al menos uno cae en la línea 1.
     expect(
-      result.error?.issues.some((i) => i.message === 'Elegí la cuenta contable del concepto')
+      result.error?.issues.some(
+        (i) => i.message === 'Elegí el concepto' && i.path[0] === 'lines' && i.path[1] === 1
+      )
     ).toBe(true);
   });
 
-  /**
-   * Regresión: `accountId` no tenía `.uuid()`, a diferencia de `partnerId`. Un
-   * id malformado (payload manipulado, o un bug en otro punto del formulario)
-   * llegaba hasta Prisma y explotaba con un P2023 que el usuario veía como
-   * "Ocurrió un error inesperado" en vez de un mensaje útil (hallazgo de
-   * revisión final, TSK-585).
-   */
-  it('rechaza un id de cuenta con formato inválido', () => {
+  it('el detalle de la línea es opcional (TSK-791)', () => {
     const result = fundMovementSchema.safeParse({
       ...gastosBancarios,
-      lines: [{ accountId: 'no-es-un-uuid', description: 'X', amount: '10' }],
+      lines: [{ conceptId: uuidConcepto, description: '', amount: '10' }],
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  /**
+   * Regresión de TSK-585 (antes sobre `accountId`): un id malformado
+   * (payload manipulado) llegaba hasta Prisma y explotaba con un P2023 que el
+   * usuario veía como "Ocurrió un error inesperado".
+   */
+  it('rechaza un id de concepto con formato inválido', () => {
+    const result = fundMovementSchema.safeParse({
+      ...gastosBancarios,
+      lines: [{ conceptId: 'no-es-un-uuid', description: 'X', amount: '10' }],
     });
 
     expect(result.success).toBe(false);
-    expect(result.error?.issues.some((i) => i.message === 'Cuenta contable inválida')).toBe(true);
+    expect(result.error?.issues.some((i) => i.message === 'Elegí el concepto')).toBe(true);
+  });
+
+  it('la línea ya no acepta cuenta: la resuelve el servidor desde el concepto (TSK-791)', () => {
+    const result = fundMovementSchema.safeParse({
+      ...gastosBancarios,
+      lines: [{ accountId: uuidConcepto, description: 'X', amount: '10' }],
+    });
+
+    expect(result.success).toBe(false);
   });
 
   /**
@@ -316,7 +329,7 @@ describe('gastos e impuestos bancarios (TSK-585)', () => {
    * final, TSK-585).
    */
   it('rechaza más de 100 conceptos, pero acepta exactamente 100', () => {
-    const unConcepto = { accountId: uuidCuenta, description: 'Concepto', amount: '10' };
+    const unConcepto = { conceptId: uuidConcepto, description: 'Concepto', amount: '10' };
 
     const conCien = fundMovementSchema.safeParse({
       ...gastosBancarios,
@@ -357,9 +370,34 @@ describe('los tipos que ya existían no piden conceptos (regresión TSK-585)', (
       ...aporte,
       type: 'ACCOUNT_TRANSFER' as const,
       sourceFund: `BANK:${uuidBanco}`,
-      destinationFund: `CASH:${uuidCuenta}`,
+      destinationFund: `CASH:${uuidConcepto}`,
     };
 
     expect(fundMovementSchema.safeParse(transferencia).success).toBe(true);
+  });
+});
+
+describe('concepto del movimiento (TSK-791)', () => {
+  const aporte = {
+    type: 'PARTNER_CONTRIBUTION' as const,
+    date: '2026-07-31',
+    amount: '1000.00',
+    description: 'Aporte del socio',
+    sourceFund: '',
+    destinationFund: `BANK:${uuidBanco}`,
+    partnerId: '22222222-2222-4222-8222-222222222222',
+  };
+
+  // Que sea obligatorio depende de los conceptos activos: lo decide el servidor.
+  it('es opcional en el schema: ausente o vacío', () => {
+    expect(fundMovementSchema.safeParse(aporte).success).toBe(true);
+    expect(fundMovementSchema.safeParse({ ...aporte, conceptId: '' }).success).toBe(true);
+  });
+
+  it('si viene, tiene que ser un uuid', () => {
+    expect(fundMovementSchema.safeParse({ ...aporte, conceptId: uuidConcepto }).success).toBe(true);
+    expect(fundMovementSchema.safeParse({ ...aporte, conceptId: 'no-es-un-uuid' }).success).toBe(
+      false
+    );
   });
 });

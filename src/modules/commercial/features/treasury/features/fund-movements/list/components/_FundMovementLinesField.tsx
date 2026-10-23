@@ -3,38 +3,43 @@
 import { Plus, Trash2 } from 'lucide-react';
 import { get, useFieldArray, useFormContext, useFormState, useWatch } from 'react-hook-form';
 
-import { AccountCombobox, type AccountOption } from '@/shared/components/common/AccountCombobox';
 import { Button } from '@/shared/components/ui/button';
 import { Input } from '@/shared/components/ui/input';
 import { MoneyInput } from '@/shared/components/ui/money-input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/shared/components/ui/select';
 import { formatCurrency } from '@/shared/utils/formatters';
 
-import {
-  pickDefaultLineAccount,
-  sumLines,
-  type FundMovementLineInput,
-} from '../../shared/lines-calc';
-import type { FundMovementAccountRef } from '../actions.server';
-import { _BankChargesDefaultNotice } from './_BankChargesDefaultNotice';
+import { sumLines, type FundMovementLineInput } from '../../shared/lines-calc';
+import { withSnapshotOption } from '../../shared/view-mode';
+import type { FundMovementConceptOption } from '../actions.server';
 
 interface FundMovementLinesFieldProps {
-  /** Cuentas imputables de tipo egreso o activo (ya filtradas por el servidor). */
-  accounts: AccountOption[];
-  /** "Gastos bancarios por defecto" de Ajustes contables; se preselecciona en cada concepto nuevo (TSK-718). */
-  defaultAccount?: FundMovementAccountRef | null;
+  /** Conceptos activos de "Gastos e impuestos bancarios" (nunca traen datos de cuenta). */
+  concepts: FundMovementConceptOption[];
   /**
-   * Modo vista (TSK-720a): sin "Agregar concepto", sin tachos, sin aviso de
-   * cuenta por defecto y con el combobox deshabilitado; se mantiene el total.
-   * Input y MoneyInput los deshabilita el `<fieldset disabled>` del modal.
+   * Solo en vista: nombre guardado de cada concepto (`conceptName`), por si
+   * Contabilidad lo desactivó después de confirmar el movimiento.
+   */
+  conceptNames?: Record<string, string>;
+  /**
+   * Modo vista (TSK-720a): sin "Agregar concepto", sin tachos y con el select
+   * deshabilitado; se mantiene el total. Input y MoneyInput los deshabilita el
+   * `<fieldset disabled>` del modal.
    */
   readOnly?: boolean;
 }
 
 /**
  * Tabla de conceptos de un movimiento de gastos e impuestos bancarios
- * (TSK-585): comisión, IVA, Sircreb, impuesto al cheque, etc. Cada concepto
- * lleva su propia cuenta contable, así el asiento sale con un débito por
- * concepto y no un único gasto genérico.
+ * (TSK-585): comisión, IVA, Sircreb, impuesto al cheque, etc. Cada línea
+ * elige un concepto (la cuenta contable la resuelve el servidor, Gestión no la
+ * ve), así el asiento sale con un débito por concepto (TSK-791).
  *
  * Sigue el patrón de `_CostCenterAllocationField` (TSK-583): `useFieldArray`
  * sobre el campo del formulario y el error de "el campo no cumple" leído a
@@ -43,17 +48,12 @@ interface FundMovementLinesFieldProps {
  * `<FormMessage>` genérico no lo encuentra.
  */
 export function _FundMovementLinesField({
-  accounts,
-  defaultAccount = null,
+  concepts,
+  conceptNames,
   readOnly = false,
 }: FundMovementLinesFieldProps) {
   const { control, register, setValue } = useFormContext();
   const { fields, append, remove } = useFieldArray({ control, name: 'lines' });
-
-  // '' si no hay cuenta por defecto o si ya no está entre las imputables
-  // (riesgo 1.6-6). Solo aplica al `append`: el `reset` del modal en edición
-  // sigue cargando las cuentas guardadas del borrador.
-  const defaultAccountId = pickDefaultLineAccount(defaultAccount?.id, accounts);
 
   const lines = (useWatch({ control, name: 'lines' }) ?? []) as FundMovementLineInput[];
   const total = sumLines(lines);
@@ -72,7 +72,7 @@ export function _FundMovementLinesField({
             type="button"
             variant="ghost"
             size="sm"
-            onClick={() => append({ accountId: defaultAccountId, description: '', amount: '' })}
+            onClick={() => append({ conceptId: '', description: '', amount: '' })}
           >
             <Plus className="mr-1 h-4 w-4" />
             Agregar concepto
@@ -88,27 +88,41 @@ export function _FundMovementLinesField({
         <>
           {fields.map((field, index) => {
             const lineError = lineErrors?.[index]?.message;
+            const conceptId = lines[index]?.conceptId ?? '';
+            // En vista, un concepto ya desactivado se muestra con su nombre guardado.
+            const options = withSnapshotOption(
+              concepts.map((c) => ({ value: c.id, label: c.name })),
+              conceptId,
+              conceptNames?.[conceptId]
+            );
 
             return (
               <div key={field.id} className="space-y-1">
-                <div className="flex flex-wrap items-start gap-2 sm:flex-nowrap">
-                  <AccountCombobox
-                    accounts={accounts}
-                    value={lines[index]?.accountId || null}
-                    onChange={(accountId) =>
-                      setValue(`lines.${index}.accountId`, accountId ?? '', {
-                        shouldValidate: true,
-                      })
+                <div className="flex flex-wrap items-start gap-2">
+                  <Select
+                    value={options.some((o) => o.value === conceptId) ? conceptId : undefined}
+                    onValueChange={(value) =>
+                      setValue(`lines.${index}.conceptId`, value, { shouldValidate: true })
                     }
-                    clearLabel={null}
                     disabled={readOnly}
-                    placeholder="Cuenta contable"
-                    className="min-w-0 basis-full sm:basis-auto sm:flex-1"
-                    aria-invalid={Boolean(lineError)}
-                  />
+                  >
+                    <SelectTrigger
+                      className="w-full min-w-0 basis-full"
+                      aria-invalid={Boolean(lineError)}
+                    >
+                      <SelectValue placeholder="Concepto" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {options.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
 
                   <Input
-                    placeholder="Descripción"
+                    placeholder="Detalle (opcional)"
                     className="min-w-0 flex-1"
                     aria-invalid={Boolean(lineError)}
                     {...register(`lines.${index}.description`)}
@@ -145,15 +159,6 @@ export function _FundMovementLinesField({
             <span className="text-sm font-medium">Total {formatCurrency(total)}</span>
           </div>
         </>
-      )}
-
-      {/* Siempre visible en alta/edición (con y sin conceptos) para que se lea antes del primer
-          "Agregar concepto". En vista se oculta: habla de conceptos nuevos (TSK-720a). */}
-      {!readOnly && (
-        <_BankChargesDefaultNotice
-          defaultAccount={defaultAccount}
-          available={defaultAccountId !== ''}
-        />
       )}
     </div>
   );

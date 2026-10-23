@@ -85,7 +85,9 @@ describe.skipIf(!dbAvailable)('integración: período cerrado en bancos y transf
   let bank1LedgerId: string;
   let bank2LedgerId: string;
   let cashLedgerId: string;
-  let expenseAccountId: string;
+  let counterpartAccountId: string;
+  /** Concepto de Comisión/Depósito (cuenta patrimonial) de la empresa principal (TSK-791). */
+  let conceptId: string;
 
   let bank1Id: string;
   let bank2Id: string;
@@ -94,7 +96,7 @@ describe.skipIf(!dbAvailable)('integración: período cerrado en bancos y transf
   let sessionId: string;
 
   let noSettingsBankId: string;
-  let noSettingsExpenseId: string;
+  let noSettingsConceptId: string;
 
   async function createAccount(cid: string, code: string, name: string, type: 'ASSET' | 'EXPENSE') {
     const account = await prisma.account.create({
@@ -141,8 +143,36 @@ describe.skipIf(!dbAvailable)('integración: período cerrado en bancos y transf
     bank1LedgerId = await createAccount(companyId, 'T760B-BANCO1', 'Banco 1', 'ASSET');
     bank2LedgerId = await createAccount(companyId, 'T760B-BANCO2', 'Banco 2', 'ASSET');
     cashLedgerId = await createAccount(companyId, 'T760B-CAJA', 'Caja', 'ASSET');
-    expenseAccountId = await createAccount(companyId, 'T760B-GASTO', 'Gastos bancarios', 'EXPENSE');
-    noSettingsExpenseId = await createAccount(noSettingsCompanyId, 'T760B-GASTO', 'Gastos sin Ajustes', 'EXPENSE');
+    // TSK-791: la contrapartida sale del concepto; los usos bancarios piden cuenta patrimonial.
+    counterpartAccountId = await createAccount(companyId, 'T760B-CONTRA', 'Contrapartida bancaria', 'ASSET');
+    const noSettingsCounterpartId = await createAccount(
+      noSettingsCompanyId,
+      'T760B-CONTRA',
+      'Contrapartida sin Ajustes',
+      'ASSET'
+    );
+    const concept = await prisma.movementConcept.create({
+      data: {
+        companyId,
+        name: `${PREFIX}Concepto bancario`,
+        usages: ['BANK_FEE', 'BANK_DEPOSIT'],
+        accountId: counterpartAccountId,
+        createdBy: `${PREFIX}user`,
+      },
+      select: { id: true },
+    });
+    conceptId = concept.id;
+    const noSettingsConcept = await prisma.movementConcept.create({
+      data: {
+        companyId: noSettingsCompanyId,
+        name: `${PREFIX}Concepto sin Ajustes`,
+        usages: ['BANK_FEE'],
+        accountId: noSettingsCounterpartId,
+        createdBy: `${PREFIX}user`,
+      },
+      select: { id: true },
+    });
+    noSettingsConceptId = noSettingsConcept.id;
     const noSettingsLedgerId = await createAccount(noSettingsCompanyId, 'T760B-BANCO', 'Banco sin Ajustes', 'ASSET');
 
     bank1Id = await createBank(companyId, '0001', bank1LedgerId);
@@ -191,6 +221,7 @@ describe.skipIf(!dbAvailable)('integración: período cerrado en bancos y transf
       await prisma.cashRegister.deleteMany({ where: { companyId: cid } });
       await prisma.bankMovement.deleteMany({ where: { companyId: cid } });
       await prisma.bankAccount.deleteMany({ where: { companyId: cid } });
+      await prisma.movementConcept.deleteMany({ where: { companyId: cid } });
       await prisma.accountingSettings.deleteMany({ where: { companyId: cid } });
       await prisma.account.deleteMany({ where: { companyId: cid } });
       await prisma.company.deleteMany({ where: { id: cid } });
@@ -221,7 +252,7 @@ describe.skipIf(!dbAvailable)('integración: período cerrado en bancos y transf
         description,
         reference: null,
         statementNumber: null,
-        accountId: expenseAccountId,
+        conceptId,
       });
 
       expect(result).toMatchObject({ success: true });
@@ -255,7 +286,7 @@ describe.skipIf(!dbAvailable)('integración: período cerrado en bancos y transf
           description,
           reference: null,
           statementNumber: null,
-          accountId: expenseAccountId,
+          conceptId,
         });
 
         expect(result.success).toBe(false);
@@ -281,7 +312,7 @@ describe.skipIf(!dbAvailable)('integración: período cerrado en bancos y transf
             description: `${PREFIX}Paralelo ${i}`,
             reference: null,
             statementNumber: null,
-            accountId: expenseAccountId,
+            conceptId,
           })
         )
       );
@@ -308,7 +339,7 @@ describe.skipIf(!dbAvailable)('integración: período cerrado en bancos y transf
         description,
         reference: null,
         statementNumber: null,
-        accountId: noSettingsExpenseId,
+        conceptId: noSettingsConceptId,
       });
 
       expect(result).toMatchObject({ success: true });

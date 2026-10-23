@@ -7,7 +7,11 @@ import { Alert, AlertDescription } from '@/shared/components/ui/alert';
 import { AlertCircle } from 'lucide-react';
 import { getPaymentOrder } from '../../actions.server';
 import { CreatePaymentOrderModal } from './_CreatePaymentOrderModal';
-import type { CreatePaymentOrderFormData } from '../../../../shared/validators';
+import { isCorrectableStatus } from '@/modules/commercial/shared/correctable-status';
+import {
+  PAYMENT_ORDER_STATUS_LABELS,
+  type CreatePaymentOrderFormData,
+} from '../../../../shared/validators';
 
 interface EditPaymentOrderModalProps {
   paymentOrderId: string | null;
@@ -79,8 +83,9 @@ export function EditPaymentOrderModal({
     );
   }
 
-  // Si la OP ya no está en DRAFT, no se puede editar
-  if (data.status !== 'DRAFT') {
+  // Borrador: edición directa. Confirmada: corrección en cadena (TSK-792).
+  const isCorrection = isCorrectableStatus(data.status);
+  if (data.status !== 'DRAFT' && !isCorrection) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-md">
@@ -91,7 +96,8 @@ export function EditPaymentOrderModal({
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
               Esta orden de pago no se puede editar porque está en estado{' '}
-              <strong>{data.status}</strong>. Solo se pueden editar órdenes en estado Borrador.
+              <strong>{PAYMENT_ORDER_STATUS_LABELS[data.status]}</strong>. Solo se pueden editar órdenes
+              en estado Borrador o Confirmada.
             </AlertDescription>
           </Alert>
         </DialogContent>
@@ -111,13 +117,13 @@ export function EditPaymentOrderModal({
     installmentsCount:
       'installmentsCount' in p ? (p.installmentsCount as number | null) ?? null : null,
     reference: p.reference,
-    checkBankName: null,
-    checkIssueDate: null,
-    checkDueDate: null,
-    checkDrawerName: null,
-    checkDrawerTaxId: null,
-    checkOwnership: 'OWN' as const,
-    endorsedCheckId: null,
+    checkBankName: p.checkBankName,
+    checkIssueDate: p.checkIssueDate ? new Date(p.checkIssueDate) : null,
+    checkDueDate: p.checkDueDate ? new Date(p.checkDueDate) : null,
+    checkDrawerName: p.checkDrawerName,
+    checkDrawerTaxId: p.checkDrawerTaxId,
+    checkOwnership: p.endorsedCheckId ? ('THIRD_PARTY' as const) : ('OWN' as const),
+    endorsedCheckId: p.endorsedCheckId,
   }));
 
   const initialWithholdings: CreatePaymentOrderFormData['withholdings'] = data.withholdings.map(
@@ -145,8 +151,18 @@ export function EditPaymentOrderModal({
       amount: item.amount,
     }));
 
+  const itemInfo = Object.fromEntries(
+    data.items.flatMap((item) => {
+      const doc = item.invoice ?? item.expense;
+      return doc ? [[doc.id, { label: doc.fullNumber, own: item.amount }]] : [];
+    })
+  );
+
   return (
     <CreatePaymentOrderModal
+      key={data.id}
+      isCorrection={isCorrection}
+      itemInfo={itemInfo}
       onSuccess={handleSuccess}
       prefilledSupplierId={data.supplier?.id}
       prefilledInvoices={prefilledInvoices}

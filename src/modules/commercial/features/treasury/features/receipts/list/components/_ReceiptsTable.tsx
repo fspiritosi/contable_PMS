@@ -23,6 +23,7 @@ import { getColumns } from '../columns';
 import { ReceiptDetailModal } from './_ReceiptDetailModal';
 import { EditReceiptModal } from './_EditReceiptModal';
 import { CreateReceiptModal } from './_CreateReceiptModal';
+import { useDocumentCorrection } from '@/modules/commercial/shared/hooks/useDocumentCorrection';
 import { usePermissions } from '@/shared/hooks/usePermissions';
 
 interface Props {
@@ -40,6 +41,7 @@ export function _ReceiptsTable({ data, totalRows, searchParams }: Props) {
   const [selectedReceiptId, setSelectedReceiptId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const { hasPermission } = usePermissions();
+  const correction = useDocumentCorrection({ onApplied: () => router.refresh() });
 
   const handleDelete = async () => {
     if (!selectedReceiptId) return;
@@ -113,10 +115,13 @@ export function _ReceiptsTable({ data, totalRows, searchParams }: Props) {
           setSelectedReceiptId(receipt.id);
           setDeleteDialogOpen(true);
         },
+        onCorrect: (receipt, mode) =>
+          correction.open({ mode, ref: { kind: 'RECEIPT', id: receipt.id } }),
         canEdit,
         canApprove,
         canDelete,
       }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [canEdit, canApprove, canDelete]
   );
 
@@ -184,7 +189,9 @@ export function _ReceiptsTable({ data, totalRows, searchParams }: Props) {
         receiptId={selectedReceiptId}
         open={editModalOpen}
         onOpenChange={setEditModalOpen}
+        onSuccess={() => router.refresh()}
       />
+      {correction.dialog}
     </>
   );
 }

@@ -24,7 +24,8 @@ import {
   DialogTitle,
 } from '@/shared/components/ui/dialog';
 import { _DocumentAttachment } from '@/modules/commercial/shared/components/_DocumentAttachment';
-import { confirmInvoice, cancelInvoice, type getInvoices } from '../actions.server';
+import { confirmInvoice, discardDraftInvoice, type getInvoices } from '../actions.server';
+import { useDocumentCorrection } from '@/modules/commercial/shared/hooks/useDocumentCorrection';
 import { getColumns } from '../columns';
 
 type Invoice = Awaited<ReturnType<typeof getInvoices>>[number];
@@ -75,16 +76,22 @@ export function _InvoicesTable({ data, totalRows, searchParams, facetCounts }: P
 
     setIsProcessing(true);
     try {
-      await cancelInvoice(selectedInvoice.id);
+      const result = await discardDraftInvoice(selectedInvoice.id);
+      if (!result.success) {
+        toast.error(result.error);
+        return;
+      }
       toast.success('Factura anulada correctamente');
       setCancelDialogOpen(false);
       router.refresh();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Error al anular la factura');
     } finally {
       setIsProcessing(false);
     }
   };
+
+  // Confirmadas: editar, eliminar y anular pasan por la propuesta de corrección (TSK-792).
+  const correction = useDocumentCorrection({ onApplied: () => router.refresh() });
+  const salesRef = (invoice: Invoice) => ({ kind: 'SALES_INVOICE' as const, id: invoice.id });
 
   const canUpdate = hasPermission('commercial.invoices', 'update');
   const canApprove = hasPermission('commercial.invoices', 'approve');
@@ -142,6 +149,9 @@ export function _InvoicesTable({ data, totalRows, searchParams, facetCounts }: P
               router.push(`/dashboard/commercial/invoices/${invoice.id}/edit`);
             }
           : undefined,
+        onDelete: canDelete
+          ? (invoice) => correction.open({ mode: 'DELETE', ref: salesRef(invoice) })
+          : undefined,
         onConfirm: canApprove
           ? (invoice) => {
               setSelectedInvoice(invoice);
@@ -150,6 +160,10 @@ export function _InvoicesTable({ data, totalRows, searchParams, facetCounts }: P
           : undefined,
         onCancel: canDelete
           ? (invoice) => {
+              if (invoice.status !== 'DRAFT') {
+                correction.open({ mode: 'CANCEL', ref: salesRef(invoice) });
+                return;
+              }
               setSelectedInvoice(invoice);
               setCancelDialogOpen(true);
             }
@@ -159,7 +173,8 @@ export function _InvoicesTable({ data, totalRows, searchParams, facetCounts }: P
           setAttachDialogOpen(true);
         },
       }),
-    [canUpdate, canApprove, canDelete]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [canUpdate, canApprove, canDelete, router]
   );
 
   return (
@@ -199,9 +214,8 @@ export function _InvoicesTable({ data, totalRows, searchParams, facetCounts }: P
           <AlertDialogHeader>
             <AlertDialogTitle>¿Anular factura?</AlertDialogTitle>
             <AlertDialogDescription>
-              Esta acción anulará la factura <strong>{selectedInvoice?.fullNumber}</strong>.
-              Si la factura fue confirmada, el stock será restaurado automáticamente.
-              Esta acción no se puede deshacer.
+              Esta acción descartará la factura en borrador{' '}
+              <strong>{selectedInvoice?.fullNumber}</strong>. Esta acción no se puede deshacer.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -216,6 +230,8 @@ export function _InvoicesTable({ data, totalRows, searchParams, facetCounts }: P
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {correction.dialog}
 
       <Dialog open={attachDialogOpen} onOpenChange={setAttachDialogOpen}>
         <DialogContent className="sm:max-w-md">

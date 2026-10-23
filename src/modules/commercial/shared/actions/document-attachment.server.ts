@@ -1,18 +1,21 @@
 ﻿'use server';
 
-import { getCurrentUserId } from '@/shared/lib/current-user';
-import { prisma } from '@/shared/lib/prisma';
-import { logger } from '@/shared/lib/logger';
-import { uploadFile, deleteFile, getPresignedDownloadUrl } from '@/shared/lib/storage';
 import { buildCommercialDocumentPath } from '@/shared/config/storage.config';
+import { getCurrentUserId } from '@/shared/lib/current-user';
+import { logger } from '@/shared/lib/logger';
+import { prisma } from '@/shared/lib/prisma';
+import { deleteFile, getPresignedDownloadUrl, uploadFile } from '@/shared/lib/storage';
 import { revalidatePath } from 'next/cache';
 
 type CommercialDocumentType = 'sales-invoice' | 'purchase-invoice' | 'receipt' | 'payment-order';
 
-const DOCUMENT_TYPE_TO_PATH: Record<CommercialDocumentType, 'facturas-venta' | 'facturas-compra' | 'recibos' | 'ordenes-pago'> = {
+const DOCUMENT_TYPE_TO_PATH: Record<
+  CommercialDocumentType,
+  'facturas-venta' | 'facturas-compra' | 'recibos' | 'ordenes-pago'
+> = {
   'sales-invoice': 'facturas-venta',
   'purchase-invoice': 'facturas-compra',
-  'receipt': 'recibos',
+  receipt: 'recibos',
   'payment-order': 'ordenes-pago',
 };
 
@@ -31,7 +34,8 @@ export async function uploadDocumentAttachment(params: {
   const userId = await getCurrentUserId();
   if (!userId) throw new Error('No autenticado');
 
-  const { documentType, documentId, companyId, companyName, documentNumber, fileName, file } = params;
+  const { documentType, documentId, companyId, companyName, documentNumber, fileName, file } =
+    params;
 
   try {
     const buffer = Buffer.from(file);
@@ -58,7 +62,9 @@ export async function uploadDocumentAttachment(params: {
       try {
         await deleteFile(existingDoc);
       } catch (error) {
-        logger.warn('No se pudo eliminar documento anterior', { data: { key: existingDoc, error } });
+        logger.warn('No se pudo eliminar documento anterior', {
+          data: { key: existingDoc, error },
+        });
       }
     }
 
@@ -110,7 +116,9 @@ export async function deleteDocumentAttachment(params: {
 
     return { success: true };
   } catch (error) {
-    logger.error('Error al eliminar documento adjunto', { data: { error, documentType, documentId } });
+    logger.error('Error al eliminar documento adjunto', {
+      data: { error, documentType, documentId },
+    });
     if (error instanceof Error) throw error;
     throw new Error('Error al eliminar documento adjunto');
   }
@@ -142,7 +150,7 @@ export async function getDocumentAttachmentUrl(params: {
 async function getExistingDocumentKey(
   documentType: CommercialDocumentType,
   documentId: string,
-  companyId: string,
+  companyId: string
 ): Promise<string | null> {
   const select = { documentKey: true };
   const where = { id: documentId, companyId };
@@ -172,7 +180,7 @@ async function updateDocumentFields(
   documentId: string,
   companyId: string,
   documentUrl: string | null,
-  documentKey: string | null,
+  documentKey: string | null
 ): Promise<void> {
   const data = { documentUrl, documentKey };
 

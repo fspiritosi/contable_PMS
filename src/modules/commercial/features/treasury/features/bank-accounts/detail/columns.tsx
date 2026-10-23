@@ -24,6 +24,7 @@ interface BankMovement extends Record<string, unknown> {
   description: string;
   reference: string | null;
   statementNumber: string | null;
+  conceptName?: string | null;
   reconciled: boolean;
   reconciledAt: Date | null;
   createdAt: Date;
@@ -134,6 +135,13 @@ export function getMovementColumns({ onToggleReconcile, onDelete, isLoading, can
           )}
         </div>
       ),
+    },
+    {
+      id: 'concept',
+      accessorKey: 'conceptName',
+      meta: { title: 'Concepto' },
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Concepto" />,
+      cell: ({ row }) => <span className="text-sm">{row.original.conceptName ?? '—'}</span>,
     },
     {
       id: 'document',

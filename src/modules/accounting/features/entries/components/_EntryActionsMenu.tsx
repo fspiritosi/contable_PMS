@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { CheckCircle, MoreHorizontal, Trash2, XCircle } from 'lucide-react';
+import { CheckCircle, MoreHorizontal, RotateCcw, Trash2, XCircle } from 'lucide-react';
 import { JournalEntryStatus } from '@/generated/prisma/enums';
 import { Button } from '@/shared/components/ui/button';
 import {
@@ -15,12 +15,13 @@ import { type JournalEntryWithLines } from '../../../shared/types';
 import { _DeleteDraftEntryDialog } from './_DeleteDraftEntryDialog';
 import { _PostEntryDialog } from './_PostEntryDialog';
 import { _ReverseEntryDialog } from './_ReverseEntryDialog';
+import { _RevertEntryToDraftDialog } from './_RevertEntryToDraftDialog';
 
-type EntryAction = 'post' | 'reverse' | 'delete';
+type EntryAction = 'post' | 'reverse' | 'revert' | 'delete';
 
 /**
  * Menú de acciones de una fila de Asientos con sus diálogos: Registrar y Eliminar
- * borrador (DRAFT) y Anular (POSTED). Cada acción según su permiso.
+ * borrador (DRAFT) y Anular (POSTED), además de Volver a borrador (POSTED). Cada acción según su permiso.
  */
 export function _EntryActionsMenu({ entry }: { entry: JournalEntryWithLines }) {
   const { hasPermission } = usePermissions();
@@ -30,9 +31,10 @@ export function _EntryActionsMenu({ entry }: { entry: JournalEntryWithLines }) {
   const canDelete = hasPermission('accounting.entries', 'delete') && isDraft;
   const canPost = canApprove && isDraft;
   const canReverse = canApprove && entry.status === JournalEntryStatus.POSTED;
+  const canRevert = canReverse;
   const close = () => setAction(null);
 
-  if (!canPost && !canReverse && !canDelete) return null;
+  if (!canPost && !canReverse && !canRevert && !canDelete) return null;
 
   return (
     <>
@@ -55,6 +57,12 @@ export function _EntryActionsMenu({ entry }: { entry: JournalEntryWithLines }) {
               Eliminar borrador
             </DropdownMenuItem>
           )}
+          {canRevert && (
+            <DropdownMenuItem onClick={() => setAction('revert')}>
+              <RotateCcw className="mr-2 h-4 w-4" />
+              Volver a borrador
+            </DropdownMenuItem>
+          )}
           {canReverse && (
             <DropdownMenuItem onClick={() => setAction('reverse')} className="text-destructive">
               <XCircle className="mr-2 h-4 w-4" />
@@ -66,6 +74,7 @@ export function _EntryActionsMenu({ entry }: { entry: JournalEntryWithLines }) {
 
       {action === 'post' && <_PostEntryDialog entry={entry} onClose={close} />}
       {action === 'reverse' && <_ReverseEntryDialog entry={entry} onClose={close} />}
+      {action === 'revert' && <_RevertEntryToDraftDialog entry={entry} onClose={close} />}
       {action === 'delete' && <_DeleteDraftEntryDialog entry={entry} onClose={close} />}
     </>
   );

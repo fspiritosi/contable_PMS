@@ -33,6 +33,7 @@ import {
 } from '@/shared/components/ui/table';
 
 import { _AccountingClosingGuide } from './_AccountingClosingGuide';
+import { _AccountingConceptsGuide } from './_AccountingConceptsGuide';
 
 export function _AccountingGuide() {
   return (
@@ -184,11 +185,21 @@ export function _AccountingGuide() {
           </div>
           <ul className="list-disc pl-6 space-y-1 text-muted-foreground mt-2">
             <li>
-              <strong>Registrar</strong>: confirma el asiento (irreversible)
+              <strong>Registrar</strong>: confirma el asiento (se puede volver a borrador mientras el período esté abierto)
             </li>
             <li>
               <strong>Anular</strong>: crea un asiento inverso con fecha de hoy
               que anula el original (ver &quot;Anular y eliminar asientos&quot;)
+            </li>
+            <li>
+              <strong>Volver a borrador</strong>: un asiento registrado vuelve a
+              borrador conservando su número y sus líneas. Mientras es borrador
+              deja de contar en el mayor y los balances, hasta que lo registres de
+              nuevo. Solo se puede si el período está abierto, y no en los asientos
+              de cierre o apertura de ejercicio ni en las anulaciones. Si el asiento
+              viene de un comprobante (factura, orden de pago, recibo, etc.), ese
+              comprobante queda editable desde su propia pantalla; así se corrigen
+              los comprobantes confirmados
             </li>
             <li>
               <strong>Eliminar borrador</strong>: borra un asiento manual que
@@ -250,9 +261,9 @@ export function _AccountingGuide() {
                   contable (Tesorería → Cajas / Cuentas Bancarias)
                 </li>
                 <li>
-                  Gastos bancarios <strong>por defecto</strong> (se preselecciona
-                  en cada concepto de un movimiento de Gastos e impuestos
-                  bancarios; podés cambiarla en cada fila)
+                  Los gastos bancarios ya no tienen una cuenta por defecto: la
+                  cuenta de cada gasto la define el <strong>concepto</strong>
+                  (Empresa → Contabilidad → Conceptos)
                 </li>
                 <li>
                   Cuenta de egresos <strong>por defecto</strong>: la usa el
@@ -390,6 +401,8 @@ export function _AccountingGuide() {
           </p>
         </CardContent>
       </Card>
+
+      <_AccountingConceptsGuide />
 
       {/* Asientos Recurrentes */}
       <Card>

@@ -196,6 +196,7 @@ export async function generateVatSettlementEntry(
         status: 'POSTED',
         createdBy: 'system',
         source: `vat-settlement:${year}-${month}`,
+        process: 'VAT_SETTLEMENT',
       })
     );
 

@@ -1,68 +1,104 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/shared/components/ui/dialog';
-import { Button } from '@/shared/components/ui/button';
-import { toast } from 'sonner';
-import { getReceipt } from '../../actions.server';
-import { Skeleton } from '@/shared/components/ui/skeleton';
-import { Alert, AlertDescription } from '@/shared/components/ui/alert';
+import { useQuery } from '@tanstack/react-query';
 import { AlertCircle } from 'lucide-react';
+import type { ReactNode } from 'react';
+
+import { Alert, AlertDescription } from '@/shared/components/ui/alert';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/shared/components/ui/dialog';
+import { Skeleton } from '@/shared/components/ui/skeleton';
+
+import { RECEIPT_STATUS_LABELS } from '../../../../shared/validators';
+import { isCorrectableStatus } from '@/modules/commercial/shared/correctable-status';
+import { getReceipt } from '../../actions.server';
+import { CreateReceiptModal } from './_CreateReceiptModal';
+import { receiptToFormValues } from './receipt-form-utils';
 
 interface EditReceiptModalProps {
   receiptId: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onSuccess?: () => void;
 }
 
-export function EditReceiptModal({ receiptId, open, onOpenChange }: EditReceiptModalProps) {
-  const [loading, setLoading] = useState(false);
+/** Edición de un recibo en borrador: carga el recibo y abre el formulario en modo edición. */
+export function EditReceiptModal({
+  receiptId,
+  open,
+  onOpenChange,
+  onSuccess,
+}: EditReceiptModalProps) {
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['receipt', receiptId],
+    queryFn: () => getReceipt(receiptId!),
+    enabled: open && Boolean(receiptId),
+  });
 
-  useEffect(() => {
-    if (open && receiptId) {
-      loadReceipt();
-    }
-  }, [open, receiptId]);
-
-  const loadReceipt = async () => {
-    if (!receiptId) return;
-
-    setLoading(true);
-    try {
-      await getReceipt(receiptId);
-      // Datos cargados, pero no implementamos edición aún
-    } catch (error) {
-      toast.error('Error al cargar el recibo');
-      onOpenChange(false);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
+  const shell = (title: string, body: ReactNode, wide = false) => (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogTrigger asChild>
-        <Button variant="ghost" className="hidden" />
-      </DialogTrigger>
-      <DialogContent className="max-w-4xl">
+      <DialogContent className={wide ? 'md:min-w-[800px]' : 'max-w-md'}>
         <DialogHeader>
-          <DialogTitle>Editar Recibo de Cobro</DialogTitle>
+          <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
-
-        {loading ? (
-          <div className="space-y-4">
-            <Skeleton className="h-20 w-full" />
-            <Skeleton className="h-40 w-full" />
-          </div>
-        ) : (
-          <Alert>
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
-              La funcionalidad de edición estará disponible próximamente. Por ahora, puedes eliminar este recibo y crear uno nuevo.
-            </AlertDescription>
-          </Alert>
-        )}
+        {body}
       </DialogContent>
     </Dialog>
+  );
+
+  if (!open || !receiptId) return null;
+
+  if (isLoading) {
+    return shell(
+      'Editar Recibo de Cobro',
+      <div className="space-y-4">
+        <Skeleton className="h-20 w-full" />
+        <Skeleton className="h-40 w-full" />
+      </div>,
+      true
+    );
+  }
+
+  if (error || !data) {
+    return shell(
+      'Editar Recibo de Cobro',
+      <Alert variant="destructive">
+        <AlertCircle className="h-4 w-4" />
+        <AlertDescription>
+          {error instanceof Error ? error.message : 'No se pudo cargar el recibo'}
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
+  // Borradores: edición directa. Confirmados: corrección en cadena (TSK-792).
+  const isCorrection = isCorrectableStatus(data.status);
+  if (data.status !== 'DRAFT' && !isCorrection) {
+    return shell(
+      `Editar Recibo ${data.fullNumber}`,
+      <Alert>
+        <AlertCircle className="h-4 w-4" />
+        <AlertDescription>
+          Este recibo no se puede editar porque está{' '}
+          <strong>{RECEIPT_STATUS_LABELS[data.status]}</strong>. Solo se pueden editar recibos en
+          Borrador o Confirmados.
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
+  return (
+    <CreateReceiptModal
+      key={data.id}
+      open={open}
+      onOpenChange={onOpenChange}
+      onSuccess={() => onSuccess?.()}
+      editReceiptId={data.id}
+      editReceiptNumber={data.fullNumber}
+      isCorrection={isCorrection}
+      initialValues={receiptToFormValues(data)}
+      initialInvoiceLabels={Object.fromEntries(
+        data.items.map((item) => [item.invoice.id, item.invoice.fullNumber])
+      )}
+    />
   );
 }

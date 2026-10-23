@@ -1,0 +1,540 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>TSK-792 — Corrección en cadena de comprobantes</title>
+<style>
+  @page {
+    size: A4;
+    margin: 0;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #1f2430;
+    font-size: 13px;
+    line-height: 1.55;
+    background: #ffffff;
+  }
+
+  .page {
+    padding: 4mm 2mm;
+  }
+
+  header.cover {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    text-align: left;
+    padding: 10mm 2mm 8mm 2mm;
+    border-bottom: 3px solid #2f6f4f;
+    margin-bottom: 10mm;
+  }
+
+  .eyebrow {
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 11px;
+    font-weight: 700;
+    color: #2f6f4f;
+    margin-bottom: 6px;
+  }
+
+  h1 {
+    font-size: 26px;
+    margin: 0 0 8px 0;
+    color: #14251c;
+  }
+
+  .subtitle {
+    font-size: 14px;
+    color: #4b5563;
+    margin: 0;
+  }
+
+  section {
+    margin-bottom: 9mm;
+    page-break-inside: avoid;
+  }
+
+  section.allow-break {
+    page-break-inside: auto;
+  }
+
+  section:last-of-type { margin-bottom: 2mm; }
+
+  h2 {
+    font-size: 16px;
+    color: #14251c;
+    border-left: 4px solid #2f6f4f;
+    padding-left: 8px;
+    margin: 0 0 6mm 0;
+    page-break-after: avoid;
+  }
+
+  h3.sub {
+    font-size: 13.5px;
+    color: #14251c;
+    margin: 6mm 0 3mm 0;
+    page-break-after: avoid;
+  }
+
+  .quote {
+    background: #f4f7f5;
+    border-left: 4px solid #2f6f4f;
+    padding: 10px 14px;
+    font-style: italic;
+    color: #2b3a33;
+    margin: 0 0 6px 0;
+  }
+
+  .quote cite {
+    display: block;
+    font-style: normal;
+    font-size: 11.5px;
+    color: #6b7280;
+    margin-top: 6px;
+  }
+
+  .before-after {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    page-break-inside: avoid;
+  }
+
+  .card {
+    border: 1px solid #e2e5e0;
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+
+  .card.before { background: #fbf7f2; border-color: #ecd9bd; }
+  .card.after { background: #f2f8f4; border-color: #bfe0cb; }
+
+  .card h3 {
+    margin: 0 0 6px 0;
+    font-size: 12.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .card.before h3 { color: #9a6a1f; }
+  .card.after h3 { color: #226240; }
+
+  .card p { margin: 0; }
+
+  ol.steps {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    counter-reset: step;
+  }
+
+  ol.steps > li {
+    counter-increment: step;
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+    page-break-inside: avoid;
+  }
+
+  ol.steps > li::before {
+    content: counter(step);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    border-radius: 50%;
+    background: #2f6f4f;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  ol.steps.letters > li::before {
+    content: counter(step, lower-alpha);
+  }
+
+  .step-body { flex: 1; }
+
+  .step-body strong { color: #14251c; }
+
+  figure {
+    margin: 8px 0 0 0;
+    page-break-inside: avoid;
+  }
+
+  figure img {
+    max-width: 100%;
+    border: 1px solid #d9dce0;
+    border-radius: 6px;
+    display: block;
+  }
+
+  figure.small img { max-width: 320px; }
+
+  figure.sidebar img { max-width: 150px; }
+
+  figure.modal img { max-width: 400px; }
+
+  figure.modal-sm img { max-width: 340px; }
+
+  ol.steps.long > li { page-break-inside: auto; }
+
+  figcaption {
+    font-size: 11px;
+    color: #6b7280;
+    margin-top: 4px;
+  }
+
+  .callout {
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin: 0 0 8px 0;
+    page-break-inside: avoid;
+  }
+
+  .callout.config {
+    background: #f2f6fb;
+    border: 1px solid #cddaeb;
+  }
+
+  .callout.warning {
+    background: #fdf5ec;
+    border: 1px solid #efd6a8;
+  }
+
+  .callout h3 {
+    margin: 0 0 4px 0;
+    font-size: 13px;
+  }
+
+  .callout p { margin: 0 0 6px 0; }
+  .callout p:last-child { margin-bottom: 0; }
+
+  ul.plain {
+    margin: 4px 0 0 0;
+    padding-left: 18px;
+  }
+
+  ul.plain li { margin-bottom: 4px; }
+
+  .no-change-list {
+    display: grid;
+    gap: 6px;
+  }
+
+  .no-change-item {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+  }
+
+  .check {
+    color: #2f6f4f;
+    font-weight: 700;
+  }
+
+  .side-by-side {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8mm;
+    align-items: start;
+    page-break-inside: avoid;
+  }
+
+  .side-by-side figure { margin-top: 0; }
+
+  .side-by-side.narrow-left {
+    grid-template-columns: 160px 1fr;
+  }
+
+  .ui-text {
+    font-style: italic;
+    color: #374151;
+  }
+
+  table.chain {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 6px 0 8px 0;
+    font-size: 12px;
+    page-break-inside: avoid;
+  }
+
+  table.chain th, table.chain td {
+    border: 1px solid #dfe3e0;
+    padding: 6px 8px;
+    text-align: left;
+    vertical-align: top;
+  }
+
+  table.chain th {
+    background: #f4f7f5;
+    color: #14251c;
+    font-weight: 700;
+  }
+
+  .entry {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 11.5px;
+    background: #f7f8f7;
+    border: 1px solid #e2e5e0;
+    border-radius: 6px;
+    padding: 8px 10px;
+    margin: 6px 0;
+    white-space: pre;
+  }
+
+  /* TSK-782: los campos de fecha se muestran a su tamaño real; el encabezado del detalle, a lo ancho */
+  figure.field img { max-width: 360px; }
+  figure.phone img { max-width: 190px; }
+  .side-by-side.phone-left { grid-template-columns: 200px 1fr; }
+  .keep-together { page-break-inside: avoid; }
+
+  footer.doc-footer {
+    text-align: center;
+    color: #9ca3af;
+    font-size: 10.5px;
+    margin-top: 2mm;
+  }
+
+  .callout.critical { background: #fdf0ee; border: 1px solid #e8b4ac; }
+  .callout.critical h3 { color: #9b2c1f; }
+  figure.wide img { max-width: 560px; }
+  figure.mid img { max-width: 430px; }
+  figure.tall img { max-width: 330px; }
+  figure.tall-sm img { max-width: 340px; }
+  .tag { display:inline-block; font-size:11px; font-weight:700; padding:1px 8px; border-radius:10px; background:#eef0f2; color:#374151; }
+  .tag.manual { background:#fdf5ec; color:#8a5a12; border:1px solid #efd6a8; }
+  .tag.blocked { background:#fdf0ee; color:#9b2c1f; border:1px solid #e8b4ac; }
+</style>
+</head>
+
+<body>
+<div class="page">
+
+  <header class="cover">
+    <div class="eyebrow">Ticket 792 · Comercial · Tesorería · Contabilidad → Asientos</div>
+    <h1>Corregir comprobantes ya confirmados, con toda la cadena a la vista</h1>
+    <p class="subtitle">Guía de presentación — qué pediste, qué cambió, cómo se edita, elimina o anula paso a paso, qué te avisa el sistema cuando no se puede y qué tenés que tener en cuenta</p>
+  </header>
+
+  <div class="callout critical">
+    <h3>Importante</h3>
+    <ul class="plain">
+      <li><strong>Período cerrado:</strong> si el mes del comprobante está cerrado, no se puede corregir. Hay que reabrir el período desde Contabilidad primero.</li>
+      <li><strong>Factura de venta con CAE de AFIP:</strong> no se modifica, no se elimina y no se anula desde acá. Se corrige emitiendo una <strong>nota de crédito</strong>.</li>
+      <li><strong>Liquidación de IVA del mes ya generada:</strong> primero hay que anular ese asiento de Contabilidad, corregir el comprobante y volver a generar la liquidación.</li>
+      <li><strong>Eliminar no es lo mismo que Anular:</strong> Eliminar borra el comprobante como si nunca se hubiera cargado; Anular lo deja en el listado con estado "Anulado" y, si su asiento estaba Registrado, genera el contraasiento. Ver el apartado 6.</li>
+    </ul>
+  </div>
+
+  <section>
+    <h2>1. Qué pediste</h2>
+    <p class="quote">"Si el período no está cerrado, se tiene que poder modificar."
+    <cite>Pedido original del ticket</cite></p>
+    <p>Hasta ahora, una factura o una orden de pago confirmada no se podía tocar: si te equivocabas en un
+    importe tenías que anular todo y empezar de cero, y el asiento contable de esa factura quedaba vivo.</p>
+    <div class="before-after">
+      <div class="card before">
+        <h3>Antes</h3>
+        <p>Una vez confirmada, había que ir de documento en documento: anular la orden de pago, corregir
+        la factura, volver a pagar. Y no había forma de arreglar el asiento.</p>
+      </div>
+      <div class="card after">
+        <h3>Ahora</h3>
+        <p>Mientras el período esté abierto, editás, eliminás o anulás directamente el comprobante
+        confirmado. El sistema te muestra qué más cambia y lo aplica todo junto.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>2. Lo que lo hace distinto: el sistema te propone la corrección de toda la cadena</h2>
+    <p>Un comprobante casi nunca está solo. Una factura de compra puede tener una orden de pago, que a su
+    vez tiene un movimiento bancario, un asiento contable y un saldo en la cuenta. Si cambiás el importe
+    de la factura, todo eso tiene que acompañarla.</p>
+    <p>Por eso, cuando corregís, <strong>no se guarda nada de inmediato</strong>. Primero el sistema arma
+    una <strong>propuesta</strong> con todo lo que va a cambiar, mostrando cada dato "antes" (tachado) y
+    "después". Vos la revisás y, si estás de acuerdo, la aplicás con <strong>un solo Confirmar</strong>.
+    Se aplica todo junto o no se aplica nada.</p>
+    <ul class="plain">
+      <li>La propuesta es solo una vista previa: mirarla no cambia ningún dato.</li>
+      <li>Si mientras la mirabas otra persona modificó algo relacionado, el sistema no aplica nada y te
+      muestra la propuesta actualizada para que la revises de nuevo.</li>
+      <li>Cada tarjeta tiene una etiqueta que dice qué le pasa a ese registro: <span class="tag">Se modifica</span>
+      <span class="tag">Se reescribe</span> <span class="tag">Se elimina</span> <span class="tag">Se anula</span>
+      <span class="tag">Contraasiento</span> <span class="tag">Vuelve a cartera</span>
+      <span class="tag">Se desvincula</span> <span class="tag">Se recalcula</span>.</li>
+    </ul>
+  </section>
+
+  <section class="allow-break">
+    <h2>3. Cómo editar un comprobante confirmado: el ejemplo de la factura de $1.000.000</h2>
+    <p>Cargaste una factura de compra por <strong>$1.000.000</strong> y la pagaste completa con una orden
+    de pago. Te das cuenta de que el importe correcto era <strong>$800.000</strong>.</p>
+    <ol class="steps long">
+      <li><div class="step-body">Entrá a <strong>Comercial → Compras → Facturas de Compra</strong> y, en la
+      fila de la factura, abrí el menú <span class="ui-text">…</span> y elegí <strong>Editar</strong>.
+      (También podés entrar al detalle de la factura y tocar <strong>Editar</strong>.)</div></li>
+      <li><div class="step-body">Cambiá el valor del ítem de $1.000.000 a $800.000. En lugar de
+      <span class="ui-text">Guardar</span>, el botón dice <strong>Revisar cambios</strong>: todavía no se
+      guardó nada.</div></li>
+      <li><div class="step-body">Se abre la pantalla <strong>"Revisá los cambios antes de guardar"</strong>
+      con la propuesta completa (ver abajo).</div></li>
+      <li><div class="step-body">Si está bien, tocá <strong>Confirmar corrección</strong>. Si querés
+      cambiar algo, tocá <strong>Volver a editar</strong> y tus datos siguen en el formulario.</div></li>
+    </ol>
+
+    <h3 class="sub">La pantalla de propuesta</h3>
+    <p>En este ejemplo la propuesta modifica 6 registros. Fijate cómo la baja de la factura se traslada
+    sola a toda la cadena:</p>
+    <ul class="plain">
+      <li><strong>La factura</strong> pasa de $1.000.000 a $800.000.</li>
+      <li><strong>El asiento de la factura</strong> se reescribe con los nuevos importes y
+      <strong>conserva su número</strong>.</li>
+      <li><strong>La orden de pago</strong> que la cancelaba baja de $1.000.000 a $800.000, porque el monto
+      de la factura bajó. Como la orden tenía un solo medio de pago, se ajusta ese medio.</li>
+      <li><strong>El asiento de la orden de pago</strong>, <strong>el movimiento bancario</strong> y
+      <strong>el saldo de la cuenta del banco</strong> acompañan el cambio.</li>
+    </ul>
+    <figure class="tall"><img src="assets/tsk792-02-propuesta-fc.png" alt="Pantalla Revisá los cambios antes de guardar, con la factura, su asiento, la orden de pago, su asiento, el movimiento bancario y el saldo del banco, cada uno con el antes tachado y el después" /><figcaption>La propuesta de editar la factura de $1.000.000 a $800.000: se aplica todo junto con un solo Confirmar.</figcaption></figure>
+    <div class="callout config">
+      <h3>¿Y si el importe sube en lugar de bajar?</h3>
+      <p>Si en lugar de bajar a $800.000 subiera a $1.200.000, la orden de pago <strong>no se toca</strong>
+      (no se puede inventar un pago): la factura simplemente queda como <strong>"Pago parcial"</strong>
+      con $200.000 pendientes.</p>
+    </div>
+
+    <h3 class="sub">El resultado</h3>
+    <p>Después de confirmar, la factura queda por $800.000, su estado final es <strong>Pagada</strong>, la
+    orden de pago figura por $800.000 y el saldo pendiente es $0.</p>
+    <figure class=""><img src="assets/tsk792-06-factura-editada.png" alt="Detalle de la factura corregida por 800.000 pesos con estado Pagada, la orden de pago confirmada por 800.000 y saldo pendiente cero" /><figcaption>La factura ya corregida: $800.000, estado Pagada, con su orden de pago por el mismo importe y saldo pendiente $0.</figcaption></figure>
+  </section>
+
+  <section class="allow-break">
+    <h2>4. Si la orden tiene varios medios de pago</h2>
+    <p>Cuando la orden de pago se pagó con <strong>más de un medio</strong> (por ejemplo, dos
+    transferencias), el sistema no puede adivinar de cuál descontar la diferencia. En la propuesta aparece
+    la pregunta <strong>"¿De qué medio de pago se descuenta?"</strong> y elegís uno. Hasta que lo elijas,
+    el botón de confirmar queda deshabilitado.</p>
+    <figure class="tall"><img src="assets/tsk792-05-eleccion-medio-de-pago.png" alt="Propuesta con la pregunta De qué medio de pago se descuenta y un selector para elegir el medio" /><figcaption>Una orden de pago con dos transferencias: elegís de cuál se descuenta la diferencia.</figcaption></figure>
+    <p>Cuando una factura se pagó con varias órdenes, la diferencia se descuenta primero de la
+    <strong>más reciente</strong>. Y si la orden pagaba varias facturas, solo cambia lo que corresponde
+    a la factura corregida: las demás quedan exactamente igual.</p>
+  </section>
+
+  <section class="allow-break">
+    <h2>5. Cuando el sistema te avisa que no se puede (todavía)</h2>
+    <p>Antes de aplicar nada, el sistema revisa que la corrección sea posible. Si hay algún
+    <strong>impedimento</strong>, no se aplica <strong>ningún</strong> cambio y la propuesta te dice
+    exactamente qué pasa. Hay dos tipos:</p>
+    <table class="chain">
+      <tr><th style="width:150px">Etiqueta</th><th>Qué significa</th><th>Ejemplos</th></tr>
+      <tr><td><span class="tag manual">Podés resolverlo</span></td><td>Lo podés arreglar vos y reintentar.</td>
+      <td>El asiento está Registrado. Ya se generó la liquidación de IVA del mes. El movimiento bancario
+      se vinculó a mano o ya está conciliado. Un cheque fue endosado en otra orden.</td></tr>
+      <tr><td><span class="tag blocked">No se puede</span></td><td>No hay forma de hacerlo desde acá.</td>
+      <td>El período está cerrado. La factura tiene CAE de AFIP. El pago en efectivo es de una sesión de
+      caja ya cerrada. Un cheque ya fue cobrado o utilizado.</td></tr>
+    </table>
+
+    <h3 class="sub">Ejemplo: "Podés resolverlo" porque el asiento está Registrado</h3>
+    <p>Mientras un asiento está Registrado cuenta en los libros y en los balances, así que el sistema no lo
+    toca sin que vos lo decidas. La propuesta te dice cuáles son y te lleva a resolverlo:</p>
+    <figure class="tall-sm"><img src="assets/tsk792-03-impedimentos-manual.png" alt="Propuesta con dos impedimentos Podés resolverlo: el asiento de la factura y el de la orden de pago están Registrados" /><figcaption>Dos asientos Registrados: la propuesta indica cómo resolverlo y no aplica nada hasta entonces.</figcaption></figure>
+
+    <h3 class="sub">Cómo resolverlo: volver a borrador en Asientos</h3>
+    <ol class="steps">
+      <li><div class="step-body">Entrá a <strong>Contabilidad → Asientos</strong>, abrí el menú
+      <span class="ui-text">…</span> del asiento Registrado y elegí <strong>Volver a borrador</strong>.</div></li>
+      <li><div class="step-body">El sistema te avisa qué pasa: el asiento deja de contar en el mayor y en los
+      balances hasta que lo registres de nuevo, y te dice de qué comprobante es.</div></li>
+      <li><div class="step-body">Confirmá. El asiento <strong>conserva su número y sus líneas</strong>.
+      Repetí lo mismo con cada asiento que figure en la propuesta y volvé a revisar los cambios.</div></li>
+    </ol>
+    <div class="side-by-side">
+      <figure class=""><img src="assets/tsk792-01-asientos-volver-a-borrador.png" alt="Libro Diario con el menú de un asiento Registrado mostrando Volver a borrador y Anular" /><figcaption>El menú de un asiento Registrado.</figcaption></figure>
+      <figure class=""><img src="assets/tsk792-01b-volver-a-borrador-dialogo.png" alt="Diálogo Volver el asiento a borrador, que avisa de qué factura es el asiento" /><figcaption>El aviso antes de volver a borrador.</figcaption></figure>
+    </div>
+    <p>Para volver a borrador necesitás el permiso de aprobar asientos. Los asientos del cierre de ejercicio
+    y los de anulación (contraasientos) no se pueden volver a borrador.</p>
+
+    <h3 class="sub">Ejemplo: "No se puede" porque el período está cerrado</h3>
+    <figure class="tall-sm"><img src="assets/tsk792-04-impedimentos-bloqueado.png" alt="Propuesta con un impedimento No se puede: el mes 09/2026 está cerrado" /><figcaption>El mes de la factura está cerrado: no se puede corregir hasta reabrirlo.</figcaption></figure>
+    <p>La propuesta también te dice dónde reabrirlo: <strong>Contabilidad → Configuración → Bloqueo de
+    Períodos</strong>.</p>
+  </section>
+
+  <section class="allow-break">
+    <h2>6. Eliminar y anular: paso a paso</h2>
+    <p>Las dos opciones están en el menú <span class="ui-text">…</span> de cada fila del listado y en el
+    encabezado del detalle del comprobante. Funcionan igual que editar: abren la propuesta, la revisás y
+    confirmás.</p>
+    <table class="chain">
+      <tr><th style="width:110px"></th><th>Eliminar</th><th>Anular</th></tr>
+      <tr><td><strong>Qué hace</strong></td><td>Borra el comprobante como si nunca se hubiera cargado.</td>
+      <td>Lo deja en el listado con estado "Anulado", como constancia.</td></tr>
+      <tr><td><strong>El asiento</strong></td><td>Tiene que estar en <strong>borrador</strong>; se elimina junto con el comprobante.</td>
+      <td>Si está en borrador se elimina; si está <strong>Registrado</strong>, se genera el
+      <strong>contraasiento</strong> con la <strong>fecha del comprobante</strong>.</td></tr>
+      <tr><td><strong>Cuándo conviene</strong></td><td>Una carga equivocada que no debería figurar.</td>
+      <td>Un comprobante que existió y dejó de valer.</td></tr>
+    </table>
+
+    <h3 class="sub">Ejemplo: anular una orden de pago</h3>
+    <ol class="steps">
+      <li><div class="step-body">En <strong>Tesorería → Órdenes de Pago</strong>, abrí el menú
+      <span class="ui-text">…</span> de la orden y elegí <strong>Anular</strong>.</div></li>
+      <li><div class="step-body">La propuesta muestra que la orden <strong>se anula</strong>, que su asiento y
+      su movimiento bancario <strong>se eliminan</strong>, que el saldo del banco se recompone y que
+      <strong>la factura se recalcula</strong>: deja de estar Pagada y vuelve a Confirmada, con el saldo
+      pendiente.</div></li>
+      <li><div class="step-body">Confirmá si es lo que querías. Si no, <strong>Cancelar</strong> y no pasó nada.</div></li>
+    </ol>
+    <figure class="tall-sm"><img src="assets/tsk792-07-anular-op.png" alt="Propuesta de anular una orden de pago: la orden se anula, su asiento y su movimiento bancario se eliminan, la factura se recalcula y el saldo del banco se modifica" /><figcaption>Anular una orden de pago: la factura que pagaba vuelve a quedar pendiente.</figcaption></figure>
+    <p>Si anulás o eliminás una <strong>factura</strong> que tenía pagos, el pago que solo cancelaba esa
+    factura se elimina; si la orden pagaba varias facturas, solo pierde la imputación de la factura
+    anulada y sigue pagando las demás.</p>
+  </section>
+
+  <section>
+    <h2>7. Qué comprobantes se pueden corregir y con qué permiso</h2>
+    <table class="chain">
+      <tr><th>Comprobante</th><th>Editar</th><th>Eliminar / Anular</th></tr>
+      <tr><td>Factura de compra</td><td>Sí</td><td>Sí</td></tr>
+      <tr><td>Factura de venta (no electrónica)</td><td>Sí (no cambia punto de venta, tipo ni número)</td><td>Sí</td></tr>
+      <tr><td>Factura de venta con CAE de AFIP</td><td>No: nota de crédito</td><td>No: nota de crédito</td></tr>
+      <tr><td>Orden de pago</td><td>Sí</td><td>Sí</td></tr>
+      <tr><td>Recibo de cobro</td><td>Sí</td><td>Sí</td></tr>
+      <tr><td>Movimiento de fondos</td><td>Sí</td><td>Sí</td></tr>
+    </table>
+    <p>Editar requiere permiso de <strong>modificar</strong> en el módulo del comprobante; Eliminar y
+    Anular, permiso de <strong>eliminar</strong>. Volver a borrador un asiento requiere el permiso de
+    <strong>aprobar</strong> en Asientos. Los botones que no tengas permitidos no aparecen.</p>
+  </section>
+
+  <section>
+    <h2>8. Qué no cambia</h2>
+    <div class="no-change-list">
+      <div class="no-change-item"><span class="check">✓</span><div>Los borradores se siguen editando y descartando como siempre.</div></div>
+      <div class="no-change-item"><span class="check">✓</span><div>Nada se aplica sin que lo confirmes: la propuesta es solo una vista previa.</div></div>
+      <div class="no-change-item"><span class="check">✓</span><div>Las retenciones no se recalculan solas: si una baja no se puede cubrir sin tocarlas, el sistema te avisa (<span class="tag manual">Podés resolverlo</span>) para que las corrijas a mano.</div></div>
+      <div class="no-change-item"><span class="check">✓</span><div>Los movimientos anteriores a este cambio que el sistema no puede rastrear con certeza se informan como <span class="tag blocked">No se puede</span> en lugar de corregirse a ciegas.</div></div>
+    </div>
+  </section>
+
+  <footer class="doc-footer">
+    TSK-792 — Corrección en cadena de comprobantes · Comercial · Tesorería · Contabilidad → Asientos
+  </footer>
+
+</div>
+</body>
+</html>

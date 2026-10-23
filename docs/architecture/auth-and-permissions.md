@@ -85,7 +85,9 @@ Archivo: `src/shared/lib/permissions/constants.ts`
 | Config RRHH | `company.cost-centers`, `company.contract-types`, `company.job-positions`, `company.job-categories`, `company.unions`, `company.collective-agreements` |
 | Config Equipos | `company.vehicle-brands`, `company.vehicle-types`, `company.equipment-owners`, `company.sectors`, `company.type-operatives`, `company.contractors` |
 | Config Documentos | `company.document-types` |
-| Contabilidad | `accounting.accounts`, `accounting.entries`, `accounting.reports`, `accounting.settings`, `accounting.fiscal-year-close`, `accounting.recurring-entries` |
+| Contabilidad | `accounting.accounts`, `accounting.entries`, `accounting.reports`, `accounting.settings`, `accounting.fiscal-year-close`, `accounting.recurring-entries`, `accounting.concepts` (TSK-791) |
+
+**`accounting.concepts` (TSK-791):** administra el catálogo de Conceptos. Gestión **no** lo necesita para elegir conceptos en sus formularios: los lee con su propio permiso (movimientos de fondo, cuentas bancarias). `checkPermission.server.ts` se lo da siempre a Propietario y Desarrollador; el rol **Administrador** y los roles personalizados de empresas existentes no lo tienen (`initializeCompanyRbac` solo materializa la matriz al crear la empresa): otorgarlo desde Roles tras deployar. Las empresas nuevas lo reciben por `MODULE_GROUPS`. Está mapeado al módulo activable `accounting` en `PERMISSION_MODULE_MAP`.
 
 ### Acciones
 

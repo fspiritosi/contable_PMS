@@ -30,7 +30,7 @@ interface FundMovementTypeFieldProps {
 
 /** Selector del tipo de movimiento de fondos. */
 export function _FundMovementTypeField({ disabled }: FundMovementTypeFieldProps) {
-  const { control } = useFormContext<FundMovementFormInput>();
+  const { control, setValue } = useFormContext<FundMovementFormInput>();
 
   return (
     <FormField
@@ -39,7 +39,15 @@ export function _FundMovementTypeField({ disabled }: FundMovementTypeFieldProps)
       render={({ field }) => (
         <FormItem>
           <FormLabel>Tipo de movimiento *</FormLabel>
-          <Select onValueChange={field.onChange} value={field.value} disabled={disabled}>
+          <Select
+            onValueChange={(value) => {
+              field.onChange(value);
+              // TSK-791: el concepto de un aporte no vale para un retiro (ni al revés).
+              setValue('conceptId', '');
+            }}
+            value={field.value}
+            disabled={disabled}
+          >
             <FormControl>
               <SelectTrigger>
                 <SelectValue />

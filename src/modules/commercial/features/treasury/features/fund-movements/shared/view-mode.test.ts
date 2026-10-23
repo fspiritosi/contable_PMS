@@ -5,6 +5,7 @@ import type { FundMovementStatus } from '@/generated/prisma/enums';
 
 import {
   buildFundOptions,
+  clearInactiveConcepts,
   emptyFundMovementFormValues,
   formResetKey,
   formValuesFromMovement,
@@ -29,8 +30,8 @@ import {
 const BANK_ID = '11111111-1111-4111-8111-111111111111';
 const CASH_ID = '22222222-2222-4222-8222-222222222222';
 const PARTNER_ID = '33333333-3333-4333-8333-333333333333';
-const ACCOUNT_A = '44444444-4444-4444-8444-444444444444';
-const ACCOUNT_B = '55555555-5555-4555-8555-555555555555';
+const CONCEPT_A = '44444444-4444-4444-8444-444444444444';
+const CONCEPT_B = '55555555-5555-4555-8555-555555555555';
 
 const ALL: RowActionPermissions = { canView: true, canUpdate: true, canDelete: true };
 const NONE: RowActionPermissions = { canView: false, canUpdate: false, canDelete: false };
@@ -49,17 +50,40 @@ function movementSource(overrides: Partial<FundMovementFormSource> = {}): FundMo
     fundInKind: 'BANK',
     fundInId: BANK_ID,
     partnerId: PARTNER_ID,
+    conceptId: null,
     ...overrides,
   } satisfies FundMovementFormSource;
 }
 
 describe('getRowActions', () => {
   it('borrador con todos los permisos → las cuatro acciones', () => {
-    expect(getRowActions('DRAFT', ALL)).toEqual({ view: true, confirm: true, edit: true, delete: true });
+    expect(getRowActions('DRAFT', ALL)).toEqual({
+      view: true,
+      confirm: true,
+      edit: true,
+      delete: true,
+      cancel: false,
+    });
   });
 
-  it.each<FundMovementStatus>(['CONFIRMED', 'CANCELLED'])('%s con todos los permisos → solo ver', (status) => {
-    expect(getRowActions(status, ALL)).toEqual({ view: true, confirm: false, edit: false, delete: false });
+  it('confirmado con todos los permisos → ver, editar, eliminar y anular (corrección)', () => {
+    expect(getRowActions('CONFIRMED', ALL)).toEqual({
+      view: true,
+      confirm: false,
+      edit: true,
+      delete: true,
+      cancel: true,
+    });
+  });
+
+  it('anulado con todos los permisos → solo ver', () => {
+    expect(getRowActions('CANCELLED', ALL)).toEqual({
+      view: true,
+      confirm: false,
+      edit: false,
+      delete: false,
+      cancel: false,
+    });
   });
 
   it('borrador solo con view → solo ver', () => {
@@ -68,6 +92,7 @@ describe('getRowActions', () => {
       confirm: false,
       edit: false,
       delete: false,
+      cancel: false,
     });
   });
 
@@ -77,6 +102,7 @@ describe('getRowActions', () => {
       confirm: false,
       edit: false,
       delete: true,
+      cancel: false,
     });
   });
 
@@ -86,6 +112,7 @@ describe('getRowActions', () => {
       confirm: true,
       edit: true,
       delete: false,
+      cancel: false,
     });
   });
 
@@ -95,6 +122,7 @@ describe('getRowActions', () => {
       confirm: false,
       edit: false,
       delete: false,
+      cancel: false,
     });
   });
 });
@@ -104,13 +132,22 @@ describe('hasAnyRowAction', () => {
     expect(hasAnyRowAction(NONE)).toBe(false);
   });
 
-  it.each<keyof RowActionPermissions>(['canView', 'canUpdate', 'canDelete'])('solo %s → true', (perm) => {
-    expect(hasAnyRowAction({ ...NONE, [perm]: true })).toBe(true);
-  });
+  it.each<keyof RowActionPermissions>(['canView', 'canUpdate', 'canDelete'])(
+    'solo %s → true',
+    (perm) => {
+      expect(hasAnyRowAction({ ...NONE, [perm]: true })).toBe(true);
+    }
+  );
 });
 
 describe('hasDraftActions', () => {
-  const base: FundMovementRowActions = { view: true, confirm: false, edit: false, delete: false };
+  const base: FundMovementRowActions = {
+    view: true,
+    confirm: false,
+    edit: false,
+    delete: false,
+    cancel: false,
+  };
 
   it('solo ver → false', () => {
     expect(hasDraftActions(base)).toBe(false);
@@ -166,12 +203,18 @@ describe('withSnapshotOption', () => {
   it('valor fuera del catálogo con rótulo → copia con la opción snapshot al final', () => {
     const result = withSnapshotOption(options, 'CASH:otra', 'Caja cerrada');
     expect(result).not.toBe(options);
-    expect(result).toEqual([...options, { value: 'CASH:otra', label: 'Caja cerrada', isSnapshot: true }]);
+    expect(result).toEqual([
+      ...options,
+      { value: 'CASH:otra', label: 'Caja cerrada', isSnapshot: true },
+    ]);
   });
 
-  it.each([null, '', undefined])('valor fuera del catálogo con rótulo %s → misma referencia', (label) => {
-    expect(withSnapshotOption(options, 'CASH:otra', label)).toBe(options);
-  });
+  it.each([null, '', undefined])(
+    'valor fuera del catálogo con rótulo %s → misma referencia',
+    (label) => {
+      expect(withSnapshotOption(options, 'CASH:otra', label)).toBe(options);
+    }
+  );
 
   it.each([null, '', undefined])('valor %s → misma referencia', (value) => {
     expect(withSnapshotOption(options, value, 'Caja cerrada')).toBe(options);
@@ -214,6 +257,7 @@ describe('emptyFundMovementFormValues', () => {
       sourceFund: '',
       destinationFund: '',
       partnerId: '',
+      conceptId: '',
       lines: [],
     });
   });
@@ -239,8 +283,19 @@ describe('formValuesFromMovement', () => {
       sourceFund: '',
       destinationFund: `BANK:${BANK_ID}`,
       partnerId: PARTNER_ID,
+      conceptId: '',
       lines: [],
     });
+  });
+
+  it('aporte con concepto: lo carga; en otros tipos lo ignora', () => {
+    expect(formValuesFromMovement(movementSource({ conceptId: CONCEPT_A }), null).conceptId).toBe(
+      CONCEPT_A
+    );
+    expect(
+      formValuesFromMovement(movementSource({ type: 'BANK_CHARGES', conceptId: CONCEPT_A }), null)
+        .conceptId
+    ).toBe('');
   });
 
   it('retiro: origen desde fundOut y socio', () => {
@@ -278,32 +333,57 @@ describe('formValuesFromMovement', () => {
 
   it('gastos bancarios: mapea los conceptos en orden, con importes a string', () => {
     const lines: FundMovementLineSource[] = [
-      { accountId: ACCOUNT_A, description: 'Comisión', amount: 1234.5 },
-      { accountId: ACCOUNT_B, description: 'IVA', amount: 259.25 },
+      { conceptId: CONCEPT_A, description: 'Comisión', amount: 1234.5 },
+      { conceptId: CONCEPT_B, description: 'IVA', amount: 259.25 },
     ];
     const values = formValuesFromMovement(
-      movementSource({ type: 'BANK_CHARGES', fundOutKind: 'BANK', fundOutId: BANK_ID, partnerId: null }),
+      movementSource({
+        type: 'BANK_CHARGES',
+        fundOutKind: 'BANK',
+        fundOutId: BANK_ID,
+        partnerId: null,
+      }),
       lines
     );
     expect(values.lines).toEqual([
-      { accountId: ACCOUNT_A, description: 'Comisión', amount: '1234.5' },
-      { accountId: ACCOUNT_B, description: 'IVA', amount: '259.25' },
+      { conceptId: CONCEPT_A, description: 'Comisión', amount: '1234.5' },
+      { conceptId: CONCEPT_B, description: 'IVA', amount: '259.25' },
     ]);
   });
 
+  it('gastos bancarios: una línea vieja sin concepto llega vacía y conserva el detalle (TSK-791)', () => {
+    const lines: FundMovementLineSource[] = [
+      { conceptId: null, description: 'Sircreb', amount: 10 },
+    ];
+    const values = formValuesFromMovement(
+      movementSource({
+        type: 'BANK_CHARGES',
+        fundOutKind: 'BANK',
+        fundOutId: BANK_ID,
+        partnerId: null,
+      }),
+      lines
+    );
+    expect(values.lines).toEqual([{ conceptId: '', description: 'Sircreb', amount: '10' }]);
+  });
+
   it('gastos bancarios sin conceptos cargados → []', () => {
-    expect(formValuesFromMovement(movementSource({ type: 'BANK_CHARGES' }), null).lines).toEqual([]);
+    expect(formValuesFromMovement(movementSource({ type: 'BANK_CHARGES' }), null).lines).toEqual(
+      []
+    );
   });
 
   it('otro tipo con conceptos pasados → []', () => {
-    const lines: FundMovementLineSource[] = [{ accountId: ACCOUNT_A, description: 'X', amount: 10 }];
+    const lines: FundMovementLineSource[] = [
+      { conceptId: CONCEPT_A, description: 'X', amount: 10 },
+    ];
     expect(formValuesFromMovement(movementSource(), lines).lines).toEqual([]);
   });
 
   it('la fecha anclada a mediodía UTC no se corre un día (TSK-483)', () => {
-    expect(formValuesFromMovement(movementSource({ date: new Date('2026-03-01T12:00:00Z') }), null).date).toBe(
-      '2026-03-01'
-    );
+    expect(
+      formValuesFromMovement(movementSource({ date: new Date('2026-03-01T12:00:00Z') }), null).date
+    ).toBe('2026-03-01');
   });
 
   it('el monto pasa a string', () => {
@@ -313,7 +393,10 @@ describe('formValuesFromMovement', () => {
 
 describe('getModalCopy', () => {
   it('create y edit: títulos distintos, misma descripción', () => {
-    expect(getModalCopy('create')).toEqual({ title: 'Nuevo Movimiento de Fondos', description: EDIT_DESCRIPTION });
+    expect(getModalCopy('create')).toEqual({
+      title: 'Nuevo Movimiento de Fondos',
+      description: EDIT_DESCRIPTION,
+    });
     expect(getModalCopy('edit', 'DRAFT')).toEqual({
       title: 'Editar Movimiento de Fondos',
       description: EDIT_DESCRIPTION,
@@ -376,13 +459,56 @@ describe('getViewSummaryFacts', () => {
   it('confirmado → fecha de confirmación y número de asiento', () => {
     const confirmedAt = new Date('2026-03-02T15:30:00Z');
     expect(getViewSummaryFacts({ confirmedAt, journalEntryNumber: 123 })).toEqual([
-      { key: 'confirmedAt', label: 'Confirmado el', value: moment(confirmedAt).format('DD/MM/YYYY HH:mm') },
+      {
+        key: 'confirmedAt',
+        label: 'Confirmado el',
+        value: moment(confirmedAt).format('DD/MM/YYYY HH:mm'),
+      },
       { key: 'journalEntry', label: 'Asiento N°', value: '123' },
     ]);
   });
 
   it('confirmado sin número de asiento → solo la fecha', () => {
-    const facts = getViewSummaryFacts({ confirmedAt: new Date('2026-03-02T15:30:00Z'), journalEntryNumber: null });
+    const facts = getViewSummaryFacts({
+      confirmedAt: new Date('2026-03-02T15:30:00Z'),
+      journalEntryNumber: null,
+    });
     expect(facts.map((f) => f.key)).toEqual(['confirmedAt']);
+  });
+});
+
+describe('clearInactiveConcepts', () => {
+  const catalog = {
+    BANK_CHARGES: [{ id: CONCEPT_A }],
+    PARTNER_CONTRIBUTION: [{ id: CONCEPT_B }],
+    PARTNER_WITHDRAWAL: [],
+  };
+  const base = emptyFundMovementFormValues('2026-10-06');
+
+  it('conserva el concepto activo del movimiento y blanquea el que ya no lo está', () => {
+    expect(clearInactiveConcepts({ ...base, conceptId: CONCEPT_B }, catalog).conceptId).toBe(
+      CONCEPT_B
+    );
+    expect(clearInactiveConcepts({ ...base, conceptId: CONCEPT_A }, catalog).conceptId).toBe('');
+  });
+
+  it('sin conceptos activos para el tipo (campo oculto) manda conceptId vacío', () => {
+    const values = { ...base, type: 'PARTNER_WITHDRAWAL' as const, conceptId: CONCEPT_B };
+    expect(clearInactiveConcepts(values, catalog).conceptId).toBe('');
+  });
+
+  it('en líneas blanquea los conceptos inactivos y conserva el detalle', () => {
+    const values = {
+      ...base,
+      type: 'BANK_CHARGES' as const,
+      lines: [
+        { conceptId: CONCEPT_A, description: 'ok', amount: '1' },
+        { conceptId: CONCEPT_B, description: 'viejo', amount: '2' },
+      ],
+    };
+    expect(clearInactiveConcepts(values, catalog).lines).toEqual([
+      { conceptId: CONCEPT_A, description: 'ok', amount: '1' },
+      { conceptId: '', description: 'viejo', amount: '2' },
+    ]);
   });
 });

@@ -97,6 +97,26 @@ Creados como `isAutomatic = true`, `createdBy = 'system'`.
 la empresa activa sin documento y no `'system'`. No valida periodo: su fin es destrabar el cierre
 de un mes con un borrador imposible de registrar. El numero queda como hueco.
 
+### Volver a borrador y reescritura de asientos (TSK-792)
+
+- **Volver a borrador** (`revertJournalEntryToDraftTx`, action `revertJournalEntryToDraft` en `features/entries`): un asiento
+  POSTED pasa a DRAFT conservando número, fecha y líneas, y deja de contar en mayor y balances hasta que se
+  registre de nuevo. Se hace desde el menú de cada asiento en Contabilidad › Asientos (diálogo
+  `_RevertEntryToDraftDialog`, que avisa a qué comprobante pertenece). Exige `accounting.entries`/`approve`,
+  período abierto y rechaza el cierre/apertura de ejercicio y los contraasientos. Guarda `revertedToDraftAt` y
+  `revertedToDraftBy`.
+- **Trigger** `prevent_posted_entry_modification` (migración `20261023100100_tsk_792_trigger_and_backfill`): además de
+  POSTED → REVERSED, permite POSTED → DRAFT solo si no cambian número, fecha, descripción, empresa ni los vínculos
+  de reversión. Las líneas siguen bloqueadas mientras el asiento esté POSTED (se editan recién en DRAFT).
+- **`JournalEntry.process`** (`JournalEntryProcess`: `VAT_SETTLEMENT`, `INFLATION_ADJUSTMENT`,
+  `EXCHANGE_DIFFERENCE`): marca los asientos de procesos mensuales. La corrección en cadena lo usa para detectar que
+  ya se generó la liquidación de IVA (u otro proceso) del mes del comprobante y pedir que se anule primero.
+  El backfill lo completa por el prefijo de la descripción.
+- **`rewriteDraftJournalEntryTx`**: reescribe el asiento DRAFT de un comprobante corregido conservando id y número;
+  reemplaza fecha, descripción, líneas, `fiscalYearId` y `periodId`, valida como al crear (balance, cuentas, período
+  de la fecha nueva con el lock de la empresa) y no avanza la numeración. Solo DRAFT.
+- Anular un comprobante con asiento POSTED genera el contraasiento **con la fecha del comprobante**.
+
 ### Numeracion
 
 Secuencial por empresa, gestionada por `AccountingSettings.lastEntryNumber`. Solo la asigna
@@ -116,7 +136,7 @@ Archivos en `src/modules/accounting/shared/utils/` (los `server-only` se reexpor
 | Archivo | Funciones | Notas |
 |---|---|---|
 | `period-lock.ts` (`server-only`) | `lockAccountingSettingsTx`, `assertPeriodOpen`, `ensureFiscalYearTx`, `createFiscalYearWithPeriodsTx`, `ensurePeriodsTx`, `listMonthlyPeriodsTx`, `syncLockedUntilDateTx` | Una sola definicion de periodo cerrado |
-| `journal-entry-tx.ts` (`server-only`) | `nextEntryNumberTx`, `createJournalEntryTx`, `postJournalEntryTx`, `reverseJournalEntryTx`, `assertAccountsUsableTx` | Sin `checkPermission` ni `$transaction` propios: reciben el `tx` del llamador |
+| `journal-entry-tx.ts` (`server-only`) | `nextEntryNumberTx`, `createJournalEntryTx`, `postJournalEntryTx`, `reverseJournalEntryTx`, `revertJournalEntryToDraftTx` (POSTED → DRAFT, TSK-792; rechaza cierre de ejercicio y contraasientos), `assertAccountsUsableTx` | Sin `checkPermission` ni `$transaction` propios: reciben el `tx` del llamador |
 | `journal-entry-lines.ts` (puro) | `validateEntryLines`, `invertLines` | Decimal; sin lineas 0/0, balance ±0,01 |
 | `period-closure.ts` (puro) | `evaluatePeriodClosure`, `buildPeriodClosedMessage` | Textos de la tabla de abajo |
 | `utc-month.ts` (puro) | `monthKeyUtc`, `startOfMonthUtc`, `endOfMonthUtc`, `toUtcDay`, `formatDayUtc`, `todayBusinessDay(Utc)`, `BUSINESS_TIME_ZONE` | Convencion de dias, ver abajo |
@@ -322,6 +342,29 @@ incluir borradores a pedido (switch apagado por defecto) y avisa cuantos excluye
 
 ---
 
+## Conceptos (TSK-791)
+
+**Ruta:** `/dashboard/company/accounting/concepts` · **Archivos:** `features/concepts/` · **Permiso:** `accounting.concepts`
+
+Catálogo que Contabilidad arma para que Gestión (Comercial/Tesorería) elija **conceptos** en vez de
+cuentas en Gastos e impuestos bancarios, Aporte/Retiro de socio y el movimiento bancario manual.
+Modelo y campos en `docs/architecture/data-model.md` (`MovementConcept`).
+
+- **ABM** (`actions.server.ts`, todas con `checkPermission('accounting.concepts', …)` y `ActionResult`):
+  alta, edición, activar/desactivar y borrado. El nombre es único entre los **activos** sin distinguir
+  mayúsculas ni espacios en los bordes; reactivar uno cuyo nombre ya ocupa un activo se rechaza.
+  Borrar solo si no se usó en líneas ni movimientos; si se usó, solo desactivar.
+- **Validación** (`shared/validators.ts` + `validateConceptConfig` de `shared/lib/concepts`): cuenta
+  propia obligatoria si algún uso no es Aporte/Retiro; `PARTNER_ACCOUNT` solo si todos los usos son
+  Aporte/Retiro; la cuenta debe ser imputable y de un tipo admitido por **todos** los usos
+  (intersección: Gastos bancarios `EXPENSE`/`ASSET`; Aporte/Retiro y `BANK_*` `ASSET`/`LIABILITY`/`EQUITY`).
+- **UI**: DataTable con usos como badges; formulario con usos agrupados por familia (Movimientos de
+  fondo / Movimientos bancarios) y el campo de cuenta, que solo ofrece "cuenta del socio" cuando
+  corresponde.
+- **Consumo desde Comercial** sin importar de este módulo: `src/shared/lib/concepts/`.
+- **Confirmación**: un borrador con concepto inactivo, sin el uso o con cuenta ya no imputable se
+  rechaza al confirmar con un mensaje que nombra el concepto; un concepto desactivado no mueve saldos.
+
 ## Configuracion
 
 **Ruta:** `/company/accounting/settings`
@@ -383,7 +426,7 @@ Cuentas contables asignadas a funciones del sistema:
 | `vatCreditAccountId` | IVA Credito Fiscal |
 | `defaultCashAccountId` | Caja **por defecto**: respaldo cuando la caja de un pago no tiene `CashRegister.accountId` (TSK-728) |
 | `defaultBankAccountId` | Banco **por defecto**: respaldo cuando la cuenta bancaria de un pago no tiene `BankAccount.accountId` (TSK-728) |
-| `bankChargesAccountId` | Gastos bancarios **por defecto** (TSK-718): preseleccion de la cuenta de cada concepto nuevo de un movimiento de fondos `BANK_CHARGES`. Es solo UI: el asiento usa `FundMovementLine.accountId`, no esta cuenta |
+| `bankChargesAccountId` | **Sin uso desde TSK-791** (antes preseleccionaba la cuenta de cada linea de `BANK_CHARGES`, TSK-718): se sacó de la pantalla; la columna se conserva. La cuenta la define el Concepto |
 | `expensesAccountId` | Egresos **por defecto** (TSK-757): Debe del asiento de los egresos cuya `ExpenseCategory` no tiene `accountId`. Requerida mientras alguna categoria usada no tenga cuenta (antes "Gastos Operativos", obligatoria siempre, TSK-728) |
 | `resultAccountId` | Resultado del Ejercicio |
 
@@ -395,7 +438,7 @@ Cuentas contables asignadas a funciones del sistema:
 Configuración»); un test de `settings/validators.test.ts` verifica que cada `*AccountId` del
 schema tenga label (TSK-728). Ejemplos: "Cuenta de ventas por defecto", "Cuenta de compras por
 defecto" (seccion Cuentas de Resultado), "Cuentas por Cobrar", "Cuentas por Pagar", "Caja por
-Defecto", "Banco por Defecto", "Gastos bancarios por defecto" (seccion Cuentas de Tesoreria),
+Defecto", "Banco por Defecto", "Gastos bancarios por defecto" (ya no se muestra en pantalla desde TSK-791; el label queda en el modulo de labels),
 "Cuenta de egresos por defecto", "Ret. IVA Sufrida". Las ayudas dicen cuando se usa cada una; la de
 compras avisa que tiene que estar asignada si se cargan compras sin item, y la de egresos, si alguna
 categoria de egreso no tiene cuenta propia (TSK-757).

@@ -20,6 +20,8 @@ import type {
   ProjectionForLinking,
 } from '../../shared/types';
 import { checkPermission } from '@/shared/lib/permissions';
+import { removeProjectionLinkTx } from '@/modules/commercial/shared/projection-links.server';
+import { projectionStatusFor } from '@/modules/commercial/shared/projection-status';
 
 // ============================================
 // CONSULTAS
@@ -280,8 +282,7 @@ export async function linkDocumentToProjection(data: LinkDocumentFormData) {
     }
 
     const newConfirmedAmount = Number(projection.confirmedAmount) + linkAmount;
-    const newStatus =
-      newConfirmedAmount >= Number(projection.amount) ? 'CONFIRMED' : newConfirmedAmount > 0 ? 'PARTIAL' : 'PENDING';
+    const newStatus = projectionStatusFor(newConfirmedAmount, Number(projection.amount));
 
     await prisma.$transaction(async (tx) => {
       await tx.projectionDocumentLink.create({
@@ -324,32 +325,9 @@ export async function unlinkDocumentFromProjection(linkId: string) {
   if (!companyId) throw new Error('No hay empresa activa');
 
   try {
-    const link = await prisma.projectionDocumentLink.findFirst({
-      where: { id: linkId, companyId },
-      include: { projection: true },
-    });
-
-    if (!link) throw new Error('Vínculo no encontrado');
-
-    const newConfirmedAmount = Number(link.projection.confirmedAmount) - Number(link.amount);
-    const newStatus =
-      newConfirmedAmount >= Number(link.projection.amount)
-        ? 'CONFIRMED'
-        : newConfirmedAmount > 0
-          ? 'PARTIAL'
-          : 'PENDING';
-
-    await prisma.$transaction(async (tx) => {
-      await tx.projectionDocumentLink.delete({ where: { id: linkId } });
-
-      await tx.cashflowProjection.update({
-        where: { id: link.projectionId },
-        data: {
-          confirmedAmount: Math.max(0, newConfirmedAmount),
-          status: newStatus,
-        },
-      });
-    });
+    // Descuenta lo confirmado de la proyección y recalcula su estado (TSK-792: mismo
+    // cálculo que usa el motor de corrección).
+    await prisma.$transaction((tx) => removeProjectionLinkTx(tx, companyId, linkId));
 
     revalidatePath('/dashboard/commercial/treasury/projections');
     revalidatePath('/dashboard/commercial/treasury/cashflow');

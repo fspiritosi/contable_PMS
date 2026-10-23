@@ -128,12 +128,6 @@ const SECTIONS: SectionDef[] = [
         types: ['ASSET'],
         help: 'Se usa si la cuenta bancaria no tiene cuenta específica asignada',
       },
-      {
-        name: 'bankChargesAccountId',
-        label: ACCOUNTING_SETTINGS_ACCOUNT_LABELS.bankChargesAccountId,
-        types: ['EXPENSE'],
-        help: 'Se preselecciona en cada concepto de un movimiento "Gastos e impuestos bancarios". Podés cambiarla concepto por concepto; los conceptos que son activo (Sircreb) se eligen a mano.',
-      },
     ],
   },
   {

@@ -18,6 +18,8 @@ import { _LinkPurchaseInvoiceToProjection } from './components/_LinkPurchaseInvo
 import { _PurchaseInvoicePDFButton } from './components/_PurchaseInvoicePDFButton';
 import { _PayPurchaseInvoiceButton } from './components/_PayPurchaseInvoiceButton';
 import { calculatePurchaseInvoiceBalance } from '@/modules/commercial/shared/purchase-invoice-balance';
+import { _DocumentCorrectionButtons } from '@/modules/commercial/shared/components/_DocumentCorrectionButtons';
+import { isCorrectableStatus } from '@/modules/commercial/shared/correctable-status';
 import { formatCurrency } from '@/shared/utils/formatters';
 import { perceptionLabel } from '@/modules/commercial/shared/perceptions';
 import { formatCostCenterAllocations } from '@/modules/commercial/shared/cost-center';
@@ -111,6 +113,15 @@ export async function PurchaseInvoiceDetail({ invoiceId }: Props) {
             </Button>
           </PermissionGuard>
           <_PurchaseInvoicePDFButton invoice={invoice} />
+          {/* Editar, Eliminar y Anular una factura confirmada: propuesta de corrección (TSK-792) */}
+          <_DocumentCorrectionButtons
+            kind="PURCHASE_INVOICE"
+            id={invoice.id}
+            listHref="/dashboard/commercial/purchases"
+            editHref={`/dashboard/commercial/purchases/${invoice.id}/edit`}
+            canEdit={invoice.status === 'DRAFT' || isCorrectableStatus(invoice.status)}
+            canCorrect={isCorrectableStatus(invoice.status)}
+          />
           {(invoice.status === 'CONFIRMED' || invoice.status === 'PARTIAL_PAID') && (
             <_LinkPurchaseInvoiceToProjection
               invoiceId={invoice.id}

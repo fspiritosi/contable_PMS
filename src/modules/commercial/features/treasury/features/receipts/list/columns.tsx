@@ -1,7 +1,7 @@
 'use client';
 
 import { ColumnDef } from '@tanstack/react-table';
-import { MoreHorizontal, CheckCircle, Eye, Download, Edit, Trash2 } from 'lucide-react';
+import { MoreHorizontal, CheckCircle, Eye, Download, Edit, Trash2, Ban } from 'lucide-react';
 import moment from 'moment';
 
 import { Badge } from '@/shared/components/ui/badge';
@@ -21,12 +21,13 @@ interface ColumnsProps {
   onEdit: (receipt: ReceiptListItem) => void;
   onConfirm: (receipt: ReceiptListItem) => void;
   onDelete: (receipt: ReceiptListItem) => void;
+  onCorrect: (receipt: ReceiptListItem, mode: 'DELETE' | 'CANCEL') => void;
   canEdit?: boolean;
   canApprove?: boolean;
   canDelete?: boolean;
 }
 
-export function getColumns({ onViewDetail, onEdit, onConfirm, onDelete, canEdit = true, canApprove = true, canDelete = true }: ColumnsProps): ColumnDef<ReceiptListItem>[] {
+export function getColumns({ onViewDetail, onEdit, onConfirm, onDelete, onCorrect, canEdit = true, canApprove = true, canDelete = true }: ColumnsProps): ColumnDef<ReceiptListItem>[] {
   return [
     {
       accessorKey: 'fullNumber',
@@ -126,6 +127,35 @@ export function getColumns({ onViewDetail, onEdit, onConfirm, onDelete, canEdit 
                       <Trash2 className="mr-2 h-4 w-4" />
                       Eliminar
                     </DropdownMenuItem>
+                  )}
+                </>
+              )}
+
+              {receipt.status === 'CONFIRMED' && (
+                <>
+                  {canEdit && (
+                    <DropdownMenuItem onClick={() => onEdit(receipt)}>
+                      <Edit className="mr-2 h-4 w-4" />
+                      Editar
+                    </DropdownMenuItem>
+                  )}
+                  {canDelete && (
+                    <>
+                      <DropdownMenuItem
+                        onClick={() => onCorrect(receipt, 'DELETE')}
+                        className="text-destructive"
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Eliminar
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => onCorrect(receipt, 'CANCEL')}
+                        className="text-destructive"
+                      >
+                        <Ban className="mr-2 h-4 w-4" />
+                        Anular
+                      </DropdownMenuItem>
+                    </>
                   )}
                 </>
               )}

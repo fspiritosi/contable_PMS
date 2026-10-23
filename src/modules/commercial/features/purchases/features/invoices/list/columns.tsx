@@ -1,7 +1,7 @@
 'use client';
 
 import { ColumnDef } from '@tanstack/react-table';
-import { MoreHorizontal, Eye, CheckCircle, XCircle, Pencil, PackageSearch, PackageCheck, PackageMinus } from 'lucide-react';
+import { MoreHorizontal, Eye, CheckCircle, XCircle, Trash2, Pencil, PackageSearch, PackageCheck, PackageMinus } from 'lucide-react';
 import { Badge } from '@/shared/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/shared/components/ui/tooltip';
 import { Button } from '@/shared/components/ui/button';
@@ -19,16 +19,18 @@ import { formatCurrency } from '@/shared/utils/formatters';
 import type { PurchaseInvoiceListItem } from './actions.server';
 import { PURCHASE_INVOICE_STATUS_LABELS, VOUCHER_TYPE_LABELS } from '../shared/validators';
 import type { PurchaseInvoiceStatus } from '@/generated/prisma/enums';
+import { isCorrectableStatus } from '@/modules/commercial/shared/correctable-status';
 
 interface ColumnsProps {
   onView: (invoice: PurchaseInvoiceListItem) => void;
   onEdit?: (invoice: PurchaseInvoiceListItem) => void;
   onConfirm?: (invoice: PurchaseInvoiceListItem) => void;
   onCancel?: (invoice: PurchaseInvoiceListItem) => void;
+  onDelete?: (invoice: PurchaseInvoiceListItem) => void;
   loading: string | null;
 }
 
-export function getColumns({ onView, onEdit, onConfirm, onCancel, loading }: ColumnsProps): ColumnDef<PurchaseInvoiceListItem>[] {
+export function getColumns({ onView, onEdit, onConfirm, onCancel, onDelete, loading }: ColumnsProps): ColumnDef<PurchaseInvoiceListItem>[] {
   return [
     {
       accessorKey: 'fullNumber',
@@ -144,10 +146,11 @@ export function getColumns({ onView, onEdit, onConfirm, onCancel, loading }: Col
       cell: ({ row }) => {
         const invoice = row.original;
         const isLoading = loading === invoice.id;
-        const canEdit = invoice.status === 'DRAFT';
+        // Confirmada (o con pagos): se corrige con la propuesta en cadena (TSK-792).
+        const isCorrectable = isCorrectableStatus(invoice.status);
+        const canEdit = invoice.status === 'DRAFT' || isCorrectable;
         const canConfirm = invoice.status === 'DRAFT';
-        const canCancel =
-          invoice.status === 'DRAFT' || invoice.status === 'CONFIRMED';
+        const canCancel = invoice.status === 'DRAFT' || isCorrectable;
 
         return (
           <DropdownMenu>
@@ -181,6 +184,19 @@ export function getColumns({ onView, onEdit, onConfirm, onCancel, loading }: Col
                   </DropdownMenuItem>
                 </>
               )}
+              {isCorrectable && onDelete && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => onDelete(invoice)}
+                    disabled={isLoading}
+                    className="text-destructive"
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Eliminar factura
+                  </DropdownMenuItem>
+                </>
+              )}
               {canCancel && onCancel && (
                 <>
                   <DropdownMenuSeparator />
@@ -190,7 +206,7 @@ export function getColumns({ onView, onEdit, onConfirm, onCancel, loading }: Col
                     className="text-destructive"
                   >
                     <XCircle className="mr-2 h-4 w-4" />
-                    Cancelar factura
+                    Anular factura
                   </DropdownMenuItem>
                 </>
               )}

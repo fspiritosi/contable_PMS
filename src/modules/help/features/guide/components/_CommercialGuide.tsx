@@ -436,8 +436,11 @@ export function _CommercialGuide() {
               <strong>Borrador</strong>: se puede editar y modificar
             </li>
             <li>
-              <strong>Confirmada</strong>: ya no se puede editar, genera asiento
-              contable automático. Cada línea se imputa a la Cuenta de
+              <strong>Confirmada</strong>: genera asiento contable automático.
+              Se puede corregir con <strong>Editar</strong>, <strong>Eliminar</strong>{' '}
+              o <strong>Anular</strong> (ver &quot;Corregir una factura
+              confirmada&quot; en Facturas de Compra), salvo si tiene CAE.
+              Cada línea se imputa a la Cuenta de
               Ingresos de su ítem o, si no la tiene, a la Cuenta de ventas por
               defecto; si no hay ninguna de las dos, no se confirma y el
               mensaje nombra la línea (ver &quot;Qué revisa el sistema al
@@ -448,7 +451,9 @@ export function _CommercialGuide() {
               aplicados
             </li>
             <li>
-              Se puede <strong>cancelar</strong> una factura confirmada
+              Una factura de venta con <strong>CAE</strong> (o de un punto de
+              venta habilitado para AFIP) no se edita, elimina ni anula desde
+              acá: se corrige con una nota de crédito
             </li>
           </ul>
 
@@ -588,6 +593,61 @@ export function _CommercialGuide() {
             en borrador; si alguna no se puede confirmar, las demás siguen
             adelante y al final se listan las que quedaron pendientes con el
             motivo.
+          </p>
+          <p className="font-medium mt-3">Corregir una factura confirmada</p>
+          <p className="text-muted-foreground">
+            Una factura confirmada (de compra o de venta) se puede{' '}
+            <strong>editar</strong>, <strong>eliminar</strong> o{' '}
+            <strong>anular</strong>, mientras el período contable esté abierto.
+            Los botones están en el detalle de la factura y en el menú de cada
+            fila del listado.
+          </p>
+          <ul className="list-disc pl-6 space-y-1 text-muted-foreground">
+            <li>
+              <strong>Editar</strong>: abre el mismo formulario de la carga. Al
+              guardar (botón <strong>Revisar cambios</strong>) el sistema no
+              guarda todavía: te muestra una <strong>propuesta de corrección</strong>.
+            </li>
+            <li>
+              <strong>Eliminar</strong>: borra la factura sin dejar rastro.
+            </li>
+            <li>
+              <strong>Anular</strong>: deja la factura anulada y genera el
+              contraasiento con la fecha de la factura.
+            </li>
+          </ul>
+          <p className="text-muted-foreground">
+            La propuesta muestra, en tarjetas, todo lo que cambia en la cadena:
+            la factura, su asiento (que conserva su número), las órdenes de pago
+            o recibos que la cancelan, sus movimientos de banco o caja y los
+            saldos. Cada tarjeta indica la acción: <em>Se modifica</em>,{' '}
+            <em>Se reescribe</em>, <em>Se elimina</em>, <em>Se anula</em>,{' '}
+            <em>Contraasiento</em>, <em>Vuelve a cartera</em>, <em>Se desvincula</em>{' '}
+            o <em>Se recalcula</em>. Se aplica todo junto al tocar{' '}
+            <strong>Confirmar corrección</strong>; si algo cambió mientras
+            revisabas, no se aplica y te muestra la propuesta actualizada.
+          </p>
+          <p className="text-muted-foreground">
+            Si el monto baja, el pago o cobro baja con él; si sube, el pago no
+            se toca y la factura queda <strong>Parcialmente pagada</strong>. Si
+            la factura estaba pagada junto con otras, solo cambia su parte. Si
+            hay que elegir en qué medio de pago se descuenta la diferencia, el
+            sistema te lo pregunta (solo entre los medios que la cubren).
+          </p>
+          <p className="font-medium mt-3">Cuando no se puede aplicar</p>
+          <p className="text-muted-foreground">
+            Si hay algún impedimento no se aplica nada. Hay dos tipos:{' '}
+            <strong>&quot;Podés resolverlo&quot;</strong> (por ejemplo, un
+            asiento Registrado: usá el enlace para volverlo a borrador desde
+            Contabilidad → Asientos y reintentá) y{' '}
+            <strong>&quot;No se puede&quot;</strong> (por ejemplo, un período
+            cerrado o una caja ya cerrada). Una factura de venta con{' '}
+            <strong>CAE</strong> o de un punto de venta AFIP no se toca: se
+            corrige con una nota de crédito. En una factura de venta no se
+            pueden cambiar el punto de venta, el tipo de comprobante ni el número.
+            Una factura de compra con pagos o notas de crédito aplicadas no puede
+            pasar a ser nota de crédito (ni al revés): anulala y cargala de nuevo
+            con el tipo correcto.
           </p>
           <p className="text-sm text-muted-foreground mt-2">
             Los pagos se registran desde <strong>Tesorería → Órdenes de

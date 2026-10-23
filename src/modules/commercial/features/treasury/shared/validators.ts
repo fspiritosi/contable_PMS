@@ -190,7 +190,8 @@ export const bankMovementSchema = z.object({
     .max(50, 'El número de extracto no puede exceder 50 caracteres')
     .optional()
     .nullable(),
-  accountId: z.string().uuid('Cuenta contable inválida'),
+  // TSK-791: la contrapartida sale del concepto (el servidor resuelve la cuenta).
+  conceptId: z.string().uuid('Elegí el concepto'),
 });
 
 // Schema para conciliación bancaria
@@ -507,7 +508,7 @@ export const PAYMENT_METHOD_LABELS = {
 export const RECEIPT_STATUS_LABELS = {
   DRAFT: 'Borrador',
   CONFIRMED: 'Confirmado',
-  CANCELLED: 'Cancelado',
+  CANCELLED: 'Anulado',
 } as const;
 
 export const RECEIPT_STATUS_BADGES = {
@@ -614,7 +615,7 @@ export type CreatePaymentOrderFormData = z.infer<typeof createPaymentOrderSchema
 export const PAYMENT_ORDER_STATUS_LABELS = {
   DRAFT: 'Borrador',
   CONFIRMED: 'Confirmado',
-  CANCELLED: 'Cancelado',
+  CANCELLED: 'Anulada',
 } as const;
 
 export const PAYMENT_ORDER_STATUS_BADGES = {
