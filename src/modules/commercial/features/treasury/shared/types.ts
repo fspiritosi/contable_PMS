@@ -359,6 +359,12 @@ export interface PaymentOrderWithDetails extends Record<string, unknown> {
     cardId: string | null;
     installmentsCount: number | null;
     reference: string | null;
+    checkBankName: string | null;
+    checkIssueDate: Date | null;
+    checkDueDate: Date | null;
+    checkDrawerName: string | null;
+    checkDrawerTaxId: string | null;
+    endorsedCheckId: string | null;
   }>;
   withholdings: Array<{
     id: string;

@@ -1095,6 +1095,23 @@ corrección en cadena (`shared/hooks/useDocumentCorrection`, motor en `shared/co
   Quedan `discardDraftInvoice` / `discardDraftPurchaseInvoice`, que solo descartan **borradores** y rechazan
   cualquier otro estado.
 
+### OP, recibos y movimientos de fondos confirmados (TSK-792)
+
+Misma mecánica para `PAYMENT_ORDER`, `RECEIPT` y `FUND_MOVEMENT` (permisos `commercial.treasury.payment-orders`,
+`receipts` y `fund-movements`: Editar `update`, Eliminar y Anular `delete`):
+
+- **Editar**: `_EditPaymentOrderModal` / `_EditReceiptModal` / modo `edit` de `_CreateFundMovementModal` admiten
+  confirmados. El formulario recibe `isCorrection` (OP, RC) o lo deriva de `movement.status === 'CONFIRMED'`
+  (MF) y el submit va por `useDocumentCorrection().open({ mode: 'EDIT', ref, data })`; el botón dice
+  "Revisar cambios". `data` se valida en el motor con el mismo schema del borrador.
+- Los valores iniciales cargan todos los vínculos persistidos (`getPaymentOrder` ahora devuelve los datos del
+  cheque y `endorsedCheckId` de cada pago) y el "máximo/pendiente" de cada factura suma de vuelta el importe de
+  la propia OP/RC (`itemInfo` en la OP, `ownAmounts` en el RC).
+- **Eliminar / Anular**: ítems del menú de cada fila (`columns.tsx`) que abren la propuesta (`DELETE` / `CANCEL`).
+  En borradores, Eliminar sigue siendo `deletePaymentOrder` / `deleteReceipt` / `deleteFundMovement`.
+  `getRowActions` (MF) suma `cancel` y habilita `edit`/`delete` en CONFIRMED.
+- Los estados CANCELLED se rotulan "Anulada" (OP) y "Anulado" (RC, MF).
+
 ## Tabla Resumen de Efectos
 
 | Evento | Stock | Factura Status | OC Status | OC InvoicingStatus | Banco/Caja | Asiento |

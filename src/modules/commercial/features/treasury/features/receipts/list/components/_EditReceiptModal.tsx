@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/shared/compo
 import { Skeleton } from '@/shared/components/ui/skeleton';
 
 import { RECEIPT_STATUS_LABELS } from '../../../../shared/validators';
+import { isCorrectableStatus } from '@/modules/commercial/shared/correctable-status';
 import { getReceipt } from '../../actions.server';
 import { CreateReceiptModal } from './_CreateReceiptModal';
 import { receiptToFormValues } from './receipt-form-utils';
@@ -69,8 +70,9 @@ export function EditReceiptModal({
     );
   }
 
-  // Solo se editan borradores; los confirmados se corrigen con la corrección en cadena
-  if (data.status !== 'DRAFT') {
+  // Borradores: edición directa. Confirmados: corrección en cadena (TSK-792).
+  const isCorrection = isCorrectableStatus(data.status);
+  if (data.status !== 'DRAFT' && !isCorrection) {
     return shell(
       `Editar Recibo ${data.fullNumber}`,
       <Alert>
@@ -78,7 +80,7 @@ export function EditReceiptModal({
         <AlertDescription>
           Este recibo no se puede editar porque está{' '}
           <strong>{RECEIPT_STATUS_LABELS[data.status]}</strong>. Solo se pueden editar recibos en
-          Borrador.
+          Borrador o Confirmados.
         </AlertDescription>
       </Alert>
     );
@@ -92,6 +94,7 @@ export function EditReceiptModal({
       onSuccess={() => onSuccess?.()}
       editReceiptId={data.id}
       editReceiptNumber={data.fullNumber}
+      isCorrection={isCorrection}
       initialValues={receiptToFormValues(data)}
       initialInvoiceLabels={Object.fromEntries(
         data.items.map((item) => [item.invoice.id, item.invoice.fullNumber])

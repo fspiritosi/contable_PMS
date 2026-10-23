@@ -70,6 +70,8 @@ export function _CreateFundMovementModal({
   onSuccess,
 }: Props) {
   const isView = mode === 'view';
+  // Editar un movimiento confirmado: el guardado abre la propuesta de corrección (TSK-792).
+  const isCorrection = mode === 'edit' && movement?.status === 'CONFIRMED';
   const copy = getModalCopy(mode, movement?.status);
   const {
     form,
@@ -81,6 +83,7 @@ export function _CreateFundMovementModal({
     isPartnerMovement,
     isSubmitting,
     submit,
+    correctionDialog,
   } = useFundMovementForm({ open, mode, movement, concepts, onOpenChange, onSuccess });
 
   const noFundAccounts = banks.length === 0 && cashRegisters.length === 0;
@@ -97,7 +100,11 @@ export function _CreateFundMovementModal({
       <DialogContent className="sm:max-w-[560px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{copy.title}</DialogTitle>
-          <DialogDescription>{copy.description}</DialogDescription>
+          <DialogDescription>
+            {isCorrection
+              ? 'Al revisar los cambios verás todo lo que se corrige (saldos, asiento y conciliación) antes de aplicarlo.'
+              : copy.description}
+          </DialogDescription>
         </DialogHeader>
 
         <Form {...form}>
@@ -184,6 +191,7 @@ export function _CreateFundMovementModal({
 
             <_FundMovementFormFooter
               mode={mode}
+              isCorrection={isCorrection}
               isSubmitting={isSubmitting}
               submitDisabled={noBankChargesConcepts}
               onCancel={() => onOpenChange(false)}
@@ -191,6 +199,7 @@ export function _CreateFundMovementModal({
             />
           </form>
         </Form>
+        {correctionDialog}
       </DialogContent>
     </Dialog>
   );

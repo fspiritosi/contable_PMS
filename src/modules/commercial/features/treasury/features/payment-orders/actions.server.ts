@@ -755,6 +755,12 @@ export async function getPaymentOrder(id: string): Promise<PaymentOrderWithDetai
             cardId: true,
             installmentsCount: true,
             reference: true,
+            checkBankName: true,
+            checkIssueDate: true,
+            checkDueDate: true,
+            checkDrawerName: true,
+            checkDrawerTaxId: true,
+            endorsedCheckId: true,
           },
         },
         withholdings: {

@@ -17,6 +17,7 @@ import {
   DialogTrigger,
 } from '@/shared/components/ui/dialog';
 import { Form } from '@/shared/components/ui/form';
+import { useDocumentCorrection } from '@/modules/commercial/shared/hooks/useDocumentCorrection';
 import { businessToday } from '@/shared/utils/date-input';
 
 import { createReceiptSchema, type CreateReceiptFormData } from '../../../../shared/validators';
@@ -45,6 +46,8 @@ interface CreateReceiptModalProps {
   initialValues?: CreateReceiptFormData;
   /** Número de cada factura ya imputada, por si dejó de figurar como pendiente. */
   initialInvoiceLabels?: Record<string, string>;
+  /** Edición de un recibo confirmado: el guardado abre la propuesta de corrección (TSK-792). */
+  isCorrection?: boolean;
 }
 
 export function CreateReceiptModal({
@@ -55,6 +58,7 @@ export function CreateReceiptModal({
   editReceiptNumber,
   initialValues,
   initialInvoiceLabels = {},
+  isCorrection = false,
 }: CreateReceiptModalProps) {
   const [internalOpen, setInternalOpen] = useState(false);
   const isControlled = controlledOpen !== undefined;
@@ -66,6 +70,14 @@ export function CreateReceiptModal({
     initialValues?.customerId ?? null
   );
   const queryClient = useQueryClient();
+  const correction = useDocumentCorrection({
+    onApplied: () => {
+      queryClient.removeQueries({ queryKey: ['receipt', editReceiptId] });
+      void queryClient.invalidateQueries({ queryKey: ['pendingInvoices'] });
+      setOpen(false);
+      onSuccess();
+    },
+  });
 
   const form = useForm<ReceiptFormInput, unknown, CreateReceiptFormData>({
     resolver: zodResolver(createReceiptSchema),
@@ -105,6 +117,10 @@ export function CreateReceiptModal({
   };
 
   const onSubmit = async (data: CreateReceiptFormData) => {
+    if (isCorrection && editReceiptId) {
+      correction.open({ mode: 'EDIT', ref: { kind: 'RECEIPT', id: editReceiptId }, data });
+      return;
+    }
     try {
       if (editReceiptId) {
         const result = await updateReceipt(editReceiptId, data);
@@ -184,13 +200,16 @@ export function CreateReceiptModal({
               </Button>
               <Button
                 type="submit"
-                disabled={form.formState.isSubmitting || (hasFunds && difference !== 0)}
+                disabled={
+                  form.formState.isSubmitting || correction.isPending || (hasFunds && difference !== 0)
+                }
               >
-                {isEdit ? 'Guardar Cambios' : 'Crear Recibo'}
+                {isCorrection ? 'Revisar cambios' : isEdit ? 'Guardar Cambios' : 'Crear Recibo'}
               </Button>
             </div>
           </form>
         </Form>
+        {correction.dialog}
       </DialogContent>
     </Dialog>
   );

@@ -363,6 +363,50 @@ export function _TreasuryGuide() {
             elegir la caja y <strong>Transferencia</strong> (o tarjeta de
             débito) la cuenta bancaria.
           </p>
+
+          <p className="font-medium mt-3">Corregir un recibo confirmado</p>
+          <p className="text-muted-foreground">
+            Un recibo confirmado se puede <strong>editar</strong>,{' '}
+            <strong>eliminar</strong> o <strong>anular</strong> desde el menú de
+            su fila, mientras el período contable esté abierto. Antes de aplicar
+            nada, el sistema te muestra una <strong>propuesta de corrección</strong>{' '}
+            con todo lo que cambia: facturas, cheques, movimientos de banco o caja, asiento y saldos. Se aplica todo junto al tocar{' '}
+            <strong>Confirmar corrección</strong>; si algo cambió mientras
+            revisabas, no se aplica y te muestra la propuesta actualizada.
+          </p>
+          <ul className="list-disc pl-6 space-y-1 text-muted-foreground">
+            <li>
+              <strong>Editar</strong>: abre el mismo formulario de la carga. El
+              botón es <strong>Revisar cambios</strong>; el asiento se reescribe y
+              conserva su número.
+            </li>
+            <li>
+              <strong>Eliminar</strong>: borra el recibo sin dejar rastro.
+            </li>
+            <li>
+              <strong>Anular</strong>: lo deja anulado y genera el
+              contraasiento con la fecha del comprobante.
+            </li>
+            <li>
+              Si el recibo tiene <strong>más de un medio de cobro</strong>, la
+              propuesta te pregunta de cuál se descuenta la diferencia. Un cheque
+              recibido que sigue en cartera se elimina junto con el recibo; si ya
+              se depositó o endosó, no se puede.
+            </li>
+            <li>
+              Al anular o eliminar un recibo, las facturas que cancelaba vuelven a
+              quedar pendientes de cobro.
+            </li>
+          </ul>
+          <p className="text-muted-foreground">
+            Cuando aparece <strong>&quot;No se puede&quot;</strong>, no se toca
+            nada. Los impedimentos típicos son: período contable cerrado, caja
+            cuya sesión ya se cerró, cheque ya depositado o endosado en otra
+            orden, cuota de tarjeta ya pagada o movimiento bancario ya
+            conciliado. Los marcados <strong>&quot;Podés resolverlo&quot;</strong>{' '}
+            (por ejemplo, un asiento Registrado) se destraban desde el enlace
+            que acompaña al aviso, y se reintenta.
+          </p>
         </CardContent>
       </Card>
 
@@ -444,6 +488,51 @@ export function _TreasuryGuide() {
             <strong>Transferencia</strong> la cuenta bancaria. Antes, una orden
             con una cuenta faltante podía quedar confirmada sin asiento y sin
             aviso; eso ya no pasa.
+          </p>
+
+          <p className="font-medium mt-3">Corregir una orden de pago confirmada</p>
+          <p className="text-muted-foreground">
+            Una orden de pago confirmada se puede <strong>editar</strong>,{' '}
+            <strong>eliminar</strong> o <strong>anular</strong> desde el menú de
+            su fila, mientras el período contable esté abierto. Antes de aplicar
+            nada, el sistema te muestra una <strong>propuesta de corrección</strong>{' '}
+            con todo lo que cambia: facturas o gastos, cheques, tarjetas, movimientos de banco o caja, asiento y saldos. Se aplica todo junto al tocar{' '}
+            <strong>Confirmar corrección</strong>; si algo cambió mientras
+            revisabas, no se aplica y te muestra la propuesta actualizada.
+          </p>
+          <ul className="list-disc pl-6 space-y-1 text-muted-foreground">
+            <li>
+              <strong>Editar</strong>: abre el mismo formulario de la carga. El
+              botón es <strong>Revisar cambios</strong>; el asiento se reescribe y
+              conserva su número.
+            </li>
+            <li>
+              <strong>Eliminar</strong>: borra la orden sin dejar rastro.
+            </li>
+            <li>
+              <strong>Anular</strong>: la deja anulada y genera el
+              contraasiento con la fecha del comprobante.
+            </li>
+            <li>
+              Si la orden paga varias facturas y cambiás el monto, solo cambia la
+              imputación de la factura afectada. Al anular una orden, sus facturas
+              vuelven a <strong>Confirmada</strong>.
+            </li>
+            <li>
+              Si la orden tiene <strong>más de un medio de pago</strong> y la
+              diferencia hay que descontarla de alguno, la propuesta te pregunta
+              &quot;¿De qué medio de pago se descuenta?&quot; y se recalcula al
+              elegir.
+            </li>
+          </ul>
+          <p className="text-muted-foreground">
+            Cuando aparece <strong>&quot;No se puede&quot;</strong>, no se toca
+            nada. Los impedimentos típicos son: período contable cerrado, caja
+            cuya sesión ya se cerró, cheque ya depositado o endosado en otra
+            orden, cuota de tarjeta ya pagada o movimiento bancario ya
+            conciliado. Los marcados <strong>&quot;Podés resolverlo&quot;</strong>{' '}
+            (por ejemplo, un asiento Registrado) se destraban desde el enlace
+            que acompaña al aviso, y se reintenta.
           </p>
         </CardContent>
       </Card>
@@ -1137,6 +1226,46 @@ export function _TreasuryGuide() {
               compra.
             </AlertDescription>
           </Alert>
+
+          <p className="font-medium mt-3">Corregir un movimiento de fondos confirmado</p>
+          <p className="text-muted-foreground">
+            Un movimiento de fondos confirmado se puede <strong>editar</strong>,{' '}
+            <strong>eliminar</strong> o <strong>anular</strong> desde el menú de
+            su fila, mientras el período contable esté abierto. Antes de aplicar
+            nada, el sistema te muestra una <strong>propuesta de corrección</strong>{' '}
+            con todo lo que cambia: saldos de banco o caja, asiento y vínculos con el extracto. Se aplica todo junto al tocar{' '}
+            <strong>Confirmar corrección</strong>; si algo cambió mientras
+            revisabas, no se aplica y te muestra la propuesta actualizada.
+          </p>
+          <ul className="list-disc pl-6 space-y-1 text-muted-foreground">
+            <li>
+              <strong>Editar</strong>: abre el mismo formulario de la carga. El
+              botón es <strong>Revisar cambios</strong>; el asiento se reescribe y
+              conserva su número.
+            </li>
+            <li>
+              <strong>Eliminar</strong>: borra el movimiento sin dejar rastro.
+            </li>
+            <li>
+              <strong>Anular</strong>: lo deja anulado y genera el
+              contraasiento con la fecha del comprobante.
+            </li>
+            <li>
+              Vale para aportes, retiros, transferencias y gastos bancarios: se
+              revierte el efecto sobre el saldo del banco o la caja. Si el
+              movimiento bancario ya está <strong>conciliado</strong> con el
+              extracto, no se puede corregir.
+            </li>
+          </ul>
+          <p className="text-muted-foreground">
+            Cuando aparece <strong>&quot;No se puede&quot;</strong>, no se toca
+            nada. Los impedimentos típicos son: período contable cerrado, caja
+            cuya sesión ya se cerró, cheque ya depositado o endosado en otra
+            orden, cuota de tarjeta ya pagada o movimiento bancario ya
+            conciliado. Los marcados <strong>&quot;Podés resolverlo&quot;</strong>{' '}
+            (por ejemplo, un asiento Registrado) se destraban desde el enlace
+            que acompaña al aviso, y se reintenta.
+          </p>
         </CardContent>
       </Card>
     </div>

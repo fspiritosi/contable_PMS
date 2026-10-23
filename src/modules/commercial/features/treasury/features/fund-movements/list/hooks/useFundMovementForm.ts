@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { useForm, type UseFormReturn } from 'react-hook-form';
 
 import {
@@ -47,6 +47,7 @@ export interface UseFundMovementFormResult {
   isPartnerMovement: boolean;
   isSubmitting: boolean;
   submit: (confirm: boolean) => Promise<void>;
+  correctionDialog: ReactNode;
 }
 
 /** Estado del modal de Movimientos de Fondos: formulario, queries, precarga y limpieza por tipo. */
@@ -169,7 +170,7 @@ export function useFundMovementForm({
     }
   }, [mode, type, form]);
 
-  const { isSubmitting, submit } = useFundMovementSubmit({
+  const { isSubmitting, submit, correctionDialog } = useFundMovementSubmit({
     form,
     mode,
     movement,
@@ -189,5 +190,6 @@ export function useFundMovementForm({
     isPartnerMovement,
     isSubmitting,
     submit,
+    correctionDialog,
   };
 }

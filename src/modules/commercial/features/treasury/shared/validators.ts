@@ -508,7 +508,7 @@ export const PAYMENT_METHOD_LABELS = {
 export const RECEIPT_STATUS_LABELS = {
   DRAFT: 'Borrador',
   CONFIRMED: 'Confirmado',
-  CANCELLED: 'Cancelado',
+  CANCELLED: 'Anulado',
 } as const;
 
 export const RECEIPT_STATUS_BADGES = {
@@ -615,7 +615,7 @@ export type CreatePaymentOrderFormData = z.infer<typeof createPaymentOrderSchema
 export const PAYMENT_ORDER_STATUS_LABELS = {
   DRAFT: 'Borrador',
   CONFIRMED: 'Confirmado',
-  CANCELLED: 'Cancelado',
+  CANCELLED: 'Anulada',
 } as const;
 
 export const PAYMENT_ORDER_STATUS_BADGES = {

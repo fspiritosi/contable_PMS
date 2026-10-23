@@ -1,7 +1,7 @@
 'use client';
 
 import { ColumnDef } from '@tanstack/react-table';
-import { CheckCircle2, Eye, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import { Ban, CheckCircle2, Eye, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 
 import { Badge } from '@/shared/components/ui/badge';
 import { Button } from '@/shared/components/ui/button';
@@ -43,10 +43,12 @@ interface ColumnsProps {
   onEdit: (m: FundMovementListItem) => void;
   onConfirm: (m: FundMovementListItem) => void;
   onDelete: (m: FundMovementListItem) => void;
+  /** Anular un movimiento confirmado (TSK-792). */
+  onCancel: (m: FundMovementListItem) => void;
   permissions: ModulePermissions;
 }
 
-export function getColumns({ onView, onEdit, onConfirm, onDelete, permissions }: ColumnsProps): ColumnDef<FundMovementListItem>[] {
+export function getColumns({ onView, onEdit, onConfirm, onDelete, onCancel, permissions }: ColumnsProps): ColumnDef<FundMovementListItem>[] {
   const columns: ColumnDef<FundMovementListItem>[] = [
     {
       accessorKey: 'date',
@@ -163,6 +165,12 @@ export function getColumns({ onView, onEdit, onConfirm, onDelete, permissions }:
                     Eliminar
                   </DropdownMenuItem>
                 </>
+              )}
+              {actions.cancel && (
+                <DropdownMenuItem onClick={() => onCancel(m)} className="text-destructive">
+                  <Ban className="mr-2 h-4 w-4" />
+                  Anular
+                </DropdownMenuItem>
               )}
             </DropdownMenuContent>
           </DropdownMenu>
