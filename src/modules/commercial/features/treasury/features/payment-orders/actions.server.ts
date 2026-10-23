@@ -20,6 +20,7 @@ import {
   type EntryPreflight,
 } from '../../shared/entry-preflight';
 import { applyPaymentOrderEffectsTx } from '@/modules/commercial/shared/effects/payment-order.server';
+import { writePaymentOrderDataTx } from '@/modules/commercial/shared/effects/payment-order-data.server';
 import { calculatePendingAmount, hasPendingBalance } from './shared/pending-invoices';
 
 /**
@@ -899,74 +900,10 @@ export async function updatePaymentOrder(
     // Recalcular total
     const totalAmount = data.items.reduce((sum, item) => sum + parseFloat(item.amount), 0);
 
-    // Reemplazar items/pagos/retenciones en transacción
+    // Reemplazar items/pagos/retenciones en transacción, validando que todo sea de la
+    // empresa (TSK-792)
     await prisma.$transaction(async (tx) => {
-      // 1. Actualizar la OP (mantener number, fullNumber, createdBy)
-      await tx.paymentOrder.update({
-        where: { id: paymentOrderId },
-        data: {
-          supplierId: data.supplierId || null,
-          date: data.date,
-          totalAmount: new Prisma.Decimal(totalAmount),
-          notes: data.notes || null,
-        },
-      });
-
-      // 2. Eliminar items, pagos y retenciones viejos
-      await tx.paymentOrderItem.deleteMany({ where: { paymentOrderId } });
-      await tx.paymentOrderPayment.deleteMany({ where: { paymentOrderId } });
-      await tx.paymentOrderWithholding.deleteMany({ where: { paymentOrderId } });
-
-      // 3. Crear nuevos items
-      if (data.items.length > 0) {
-        await tx.paymentOrderItem.createMany({
-          data: data.items.map((item) => ({
-            paymentOrderId,
-            invoiceId: item.invoiceId || null,
-            expenseId: item.expenseId || null,
-            amount: new Prisma.Decimal(item.amount),
-          })),
-        });
-      }
-
-      // 4. Crear nuevos pagos
-      if (data.payments.length > 0) {
-        await tx.paymentOrderPayment.createMany({
-          data: data.payments.map((payment) => ({
-            paymentOrderId,
-            paymentMethod: payment.paymentMethod,
-            amount: new Prisma.Decimal(payment.amount),
-            cashRegisterId: payment.cashRegisterId || null,
-            bankAccountId: payment.bankAccountId || null,
-            checkNumber: payment.checkNumber || null,
-            cardLast4: payment.cardLast4 || null,
-            cardId: payment.cardId || null,
-            installmentsCount:
-              payment.paymentMethod === 'CREDIT_CARD' ? payment.installmentsCount ?? null : null,
-            reference: payment.reference || null,
-            checkBankName: payment.checkBankName || null,
-            checkIssueDate: payment.checkIssueDate || null,
-            checkDueDate: payment.checkDueDate || null,
-            checkDrawerName: payment.checkDrawerName || null,
-            checkDrawerTaxId: payment.checkDrawerTaxId || null,
-            endorsedCheckId:
-              payment.checkOwnership === 'THIRD_PARTY' ? payment.endorsedCheckId || null : null,
-          })),
-        });
-      }
-
-      // 5. Crear nuevas retenciones
-      if (data.withholdings && data.withholdings.length > 0) {
-        await tx.paymentOrderWithholding.createMany({
-          data: data.withholdings.map((w) => ({
-            paymentOrderId,
-            taxType: w.taxType,
-            rate: new Prisma.Decimal(w.rate),
-            amount: new Prisma.Decimal(w.amount),
-            certificateNumber: w.certificateNumber || null,
-          })),
-        });
-      }
+      await writePaymentOrderDataTx(tx, companyId, paymentOrderId, data);
     });
 
     logger.info('Orden de pago actualizada', {

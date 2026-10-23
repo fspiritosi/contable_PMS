@@ -71,22 +71,11 @@ async function assertPurchaseInvoiceReferencesTx(
 }
 
 /**
- * Escribe los datos editables de la factura dentro de la transacción del llamador:
- * cabecera y totales, y reemplaza líneas (con su reparto por centro de costo) y
- * percepciones. Mantiene estado, asiento, factura original y createdBy. No mira el
- * estado ni aplica efectos: lo usan `updatePurchaseInvoice` (borrador) y el motor de
- * corrección, que revierte y reaplica los efectos alrededor de esta escritura.
- * Rechaza referencias ajenas a la empresa y un número repetido del proveedor.
+ * Totales, líneas y percepciones de la factura a partir del form ya validado. Puro: lo
+ * usan la escritura y el motor de corrección, que necesita el total nuevo para
+ * planificar la cadena antes de escribir nada.
  */
-export async function writePurchaseInvoiceDataTx(
-  tx: Tx,
-  companyId: string,
-  invoiceId: string,
-  input: PurchaseInvoiceFormInput
-): Promise<void> {
-  await assertPurchaseInvoiceReferencesTx(tx, companyId, invoiceId, input);
-
-  // Calcular totales
+export function buildPurchaseInvoiceAmounts(input: PurchaseInvoiceFormInput) {
   let subtotal = 0;
   let vatAmount = 0;
 
@@ -127,6 +116,28 @@ export async function writePurchaseInvoiceDataTx(
   const otherTaxes = calculateOtherTaxes(perceptionsData, internalTaxes);
 
   const total = subtotal + vatAmount + otherTaxes;
+
+  return { linesData, perceptionsData, subtotal, vatAmount, internalTaxes, otherTaxes, total };
+}
+
+/**
+ * Escribe los datos editables de la factura dentro de la transacción del llamador:
+ * cabecera y totales, y reemplaza líneas (con su reparto por centro de costo) y
+ * percepciones. Mantiene estado, asiento, factura original y createdBy. No mira el
+ * estado ni aplica efectos: lo usan `updatePurchaseInvoice` (borrador) y el motor de
+ * corrección, que revierte y reaplica los efectos alrededor de esta escritura.
+ * Rechaza referencias ajenas a la empresa y un número repetido del proveedor.
+ */
+export async function writePurchaseInvoiceDataTx(
+  tx: Tx,
+  companyId: string,
+  invoiceId: string,
+  input: PurchaseInvoiceFormInput
+): Promise<void> {
+  await assertPurchaseInvoiceReferencesTx(tx, companyId, invoiceId, input);
+
+  const { linesData, perceptionsData, subtotal, vatAmount, internalTaxes, otherTaxes, total } =
+    buildPurchaseInvoiceAmounts(input);
 
   // Verificar que no exista otra factura con el mismo número
   const fullNumber = `${input.pointOfSale}-${input.number}`;
