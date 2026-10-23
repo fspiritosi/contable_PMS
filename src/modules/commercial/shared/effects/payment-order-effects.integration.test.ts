@@ -29,6 +29,7 @@ import { readLastEntryNumber } from '@/modules/accounting/shared/test-utils/peri
 import { getActiveCompanyId } from '@/shared/lib/company';
 import { getCurrentUserId } from '@/shared/lib/current-user';
 
+import { unlinkBankMovementFromDocument } from '@/modules/commercial/features/treasury/features/bank-movements/actions.server';
 import {
   confirmPaymentOrder,
   createPartnerRepaymentOrder,
@@ -601,11 +602,33 @@ describe.skipIf(!dbAvailable)('integración: efectos de la orden de pago (TSK-79
 
     it('movimiento bancario vinculado a mano → bankMovementManualLink', async () => {
       const { id } = await confirmedOrder([transfer('500'), cash('500')]);
-      await prisma.bankMovement.updateMany({
-        where: { paymentOrderId: id },
-        data: { documentLink: 'MANUAL_LINK' },
+      // Un movimiento ya existente que el usuario vinculó a la OP (linkBankMovementToDocument);
+      // el que creó la OP al confirmarse sigue en su lugar.
+      await prisma.bankMovement.create({
+        data: {
+          companyId,
+          bankAccountId,
+          type: 'WITHDRAWAL',
+          amount: 50,
+          date: ORDER_DATE,
+          description: `${PREFIX}vinculado a mano`,
+          paymentOrderId: id,
+          documentLink: 'MANUAL_LINK',
+          createdBy: 'test',
+        },
       });
       expect(await impedimentCodes(id)).toEqual(['BANK_MOVEMENT_MANUAL_LINK']);
+
+      // Si además el movimiento propio de la OP es el que quedó marcado a mano, falta el
+      // creado por el comprobante: también es intrazable.
+      await prisma.bankMovement.updateMany({
+        where: { paymentOrderId: id, documentLink: 'CREATED_BY_DOCUMENT' },
+        data: { documentLink: 'MANUAL_LINK' },
+      });
+      expect(await impedimentCodes(id)).toEqual([
+        'BANK_MOVEMENT_MANUAL_LINK',
+        'UNTRACEABLE_EFFECT',
+      ]);
     });
 
     it('movimiento bancario sin documentLink → untraceable', async () => {
@@ -614,6 +637,22 @@ describe.skipIf(!dbAvailable)('integración: efectos de la orden de pago (TSK-79
         where: { paymentOrderId: id },
         data: { documentLink: null },
       });
+      expect(await impedimentCodes(id)).toEqual(['UNTRACEABLE_EFFECT']);
+    });
+
+    it('transferencia cuyo movimiento bancario se desvinculó → untraceable', async () => {
+      const { id } = await confirmedOrder([transfer('500'), cash('500')]);
+      const movement = await prisma.bankMovement.findFirstOrThrow({
+        where: { paymentOrderId: id },
+        select: { id: true },
+      });
+      await unlinkBankMovementFromDocument(movement.id);
+      expect(
+        await prisma.bankMovement.findUniqueOrThrow({
+          where: { id: movement.id },
+          select: { paymentOrderId: true, documentLink: true },
+        })
+      ).toEqual({ paymentOrderId: null, documentLink: null });
       expect(await impedimentCodes(id)).toEqual(['UNTRACEABLE_EFFECT']);
     });
 

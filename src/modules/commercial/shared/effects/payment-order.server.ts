@@ -35,6 +35,24 @@ import type { EffectsCtx, EffectsResult } from './types';
 const isPartnerCardPayment = (payment: { card: { ownerType: string } | null }) =>
   payment.card?.ownerType === 'PARTNER';
 
+interface PaymentMovementShape {
+  paymentMethod: string;
+  cashRegisterId: string | null;
+  bankAccountId: string | null;
+  card: { ownerType: string } | null;
+}
+
+/** El pago crea un `CashMovement` al confirmar la OP. */
+const createsCashMovement = (payment: PaymentMovementShape) =>
+  !isPartnerCardPayment(payment) && Boolean(payment.cashRegisterId);
+
+/** El pago crea un `BankMovement` al confirmar la OP. El e-cheq NO debita el saldo hasta que el cheque se debita/cobra. */
+const createsBankMovement = (payment: PaymentMovementShape) =>
+  !isPartnerCardPayment(payment) &&
+  !payment.cashRegisterId &&
+  Boolean(payment.bankAccountId) &&
+  payment.paymentMethod !== 'ECHEQ';
+
 /** Recalcula el estado de cada factura y gasto imputado por la OP (solo cuentan las OP CONFIRMED). */
 async function recomputeImputedDocumentsTx(
   tx: Tx,
@@ -95,7 +113,7 @@ export async function applyPaymentOrderEffectsTx(
       continue;
     }
 
-    if (payment.cashRegisterId) {
+    if (createsCashMovement(payment) && payment.cashRegisterId) {
       // Obtener sesión activa de la caja
       const activeSession = await tx.cashRegisterSession.findFirst({
         where: {
@@ -136,8 +154,8 @@ export async function applyPaymentOrderEffectsTx(
           },
         },
       });
-    } else if (payment.bankAccountId && payment.paymentMethod !== 'ECHEQ') {
-      // Movimiento bancario (WITHDRAWAL). El e-cheq NO debita el saldo hasta que el cheque se debita/cobra.
+    } else if (createsBankMovement(payment) && payment.bankAccountId) {
+      // Movimiento bancario (WITHDRAWAL).
       const bankAccount = await tx.bankAccount.findUnique({
         where: { id: payment.bankAccountId },
         select: { balance: true },
@@ -464,7 +482,13 @@ export async function paymentOrderEffectImpedimentsTx(
     select: {
       status: true,
       payments: {
-        select: { id: true, cashRegisterId: true, card: { select: { ownerType: true } } },
+        select: {
+          id: true,
+          paymentMethod: true,
+          cashRegisterId: true,
+          bankAccountId: true,
+          card: { select: { ownerType: true } },
+        },
       },
     },
   });
@@ -524,14 +548,20 @@ export async function paymentOrderEffectImpedimentsTx(
   if (bankMovements.some((m) => m.documentLink === 'MANUAL_LINK')) {
     found.push(impediments.bankMovementManualLink(docLabel));
   }
-  const bankUntraceable = bankMovements.some((m) => m.documentLink === null);
-
-  // Pago de caja de una OP confirmada sin su movimiento vinculado: anterior a la trazabilidad.
-  const cashPayments = paymentOrder.payments.filter(
-    (p) => p.cashRegisterId && p.card?.ownerType !== 'PARTNER'
+  // Movimiento que no se puede ubicar con certeza (§4.5): banco sin marca de origen, o una
+  // OP confirmada con menos movimientos vinculados que pagos que los crean (anterior a la
+  // trazabilidad o desvinculado a mano con `unlinkBankMovementFromDocument`, que borra el
+  // vínculo). Revertir no los encontraría y reaplicar duplicaría el efecto.
+  const isConfirmed = paymentOrder.status === 'CONFIRMED';
+  const bankPayments = paymentOrder.payments.filter(createsBankMovement).length;
+  const bankByDocument = bankMovements.filter(
+    (m) => m.documentLink === 'CREATED_BY_DOCUMENT'
   ).length;
-  const cashUntraceable =
-    paymentOrder.status === 'CONFIRMED' && cashMovements.length < cashPayments;
+  const bankUntraceable =
+    bankMovements.some((m) => m.documentLink === null) ||
+    (isConfirmed && bankByDocument < bankPayments);
+  const cashPayments = paymentOrder.payments.filter(createsCashMovement).length;
+  const cashUntraceable = isConfirmed && cashMovements.length < cashPayments;
 
   if (bankUntraceable || cashUntraceable) found.push(impediments.untraceable(docLabel));
 
