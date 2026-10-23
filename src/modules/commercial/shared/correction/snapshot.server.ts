@@ -1,6 +1,6 @@
 import 'server-only';
 
-import type { JournalEntryStatus } from '@/generated/prisma/enums';
+import type { JournalEntryStatus, VoucherType } from '@/generated/prisma/enums';
 import type { Tx } from '@/modules/accounting/features/integrations/core';
 import { PURCHASE_INVOICE_STATUS_LABELS } from '@/modules/commercial/features/purchases/features/invoices/shared/validators';
 import { INVOICE_STATUS_LABELS } from '@/modules/commercial/features/sales/features/invoices/shared/validators';
@@ -9,7 +9,6 @@ import {
   BANK_MOVEMENT_TYPE_LABELS,
   CASH_MOVEMENT_TYPE_LABELS,
   CHECK_STATUS_LABELS,
-  PAYMENT_METHOD_LABELS,
   WITHHOLDING_TAX_TYPE_LABELS,
 } from '@/modules/commercial/features/treasury/shared/validators';
 import { formatCurrency, formatDateUtc } from '@/shared/utils/formatters';
@@ -25,6 +24,7 @@ import {
   type ChainSnapshot,
   type SnapshotEntity,
 } from './describe-changes';
+import { paymentDetail, paymentLabel, type PaymentLabelInput } from './labels';
 import { voucherShortLabel } from './registry.server';
 import type { DocRef } from './types';
 
@@ -40,17 +40,43 @@ import type { DocRef } from './types';
  * orden. Montos en moneda AR, fechas DD/MM/YYYY y estados en castellano.
  */
 
-/** Lo que una foto arrastra a la siguiente: cheques que hay que seguir viendo aunque se desvinculen. */
-export interface SnapshotScope {
-  checkIds: string[];
-  /** Facturas y gastos que imputaba una OP/RC (siguen en la foto aunque la OP/RC se borre). */
-  imputed: ImputedRef[];
-}
+/**
+ * Registros que no son de la cadena pero cambian con ella: facturas y gastos que se
+ * recalculan, y los vinculados que se desvinculan (remitos, cuotas de OC o de socio,
+ * proyecciones). Se identifican por id y siguen en la foto de después aunque el
+ * comprobante que los traía se borre o los suelte.
+ */
+export type TrackedKind =
+  | 'PURCHASE_INVOICE'
+  | 'SALES_INVOICE'
+  | 'EXPENSE'
+  | 'DELIVERY_NOTE'
+  | 'RECEIVING_NOTE'
+  | 'PO_INSTALLMENT'
+  | 'PARTNER_INSTALLMENT'
+  | 'PROJECTION';
 
-interface ImputedRef {
-  kind: 'PURCHASE_INVOICE' | 'SALES_INVOICE' | 'EXPENSE';
+interface TrackedRef {
+  kind: TrackedKind;
   id: string;
   order: number;
+}
+
+/** Registros vinculados a un comprobante: si pierden el vínculo, su tarjeta es "Se desvincula". */
+export const LINK_KINDS: readonly TrackedKind[] = [
+  'DELIVERY_NOTE',
+  'RECEIVING_NOTE',
+  'PO_INSTALLMENT',
+  'PARTNER_INSTALLMENT',
+  'PROJECTION',
+];
+/** Fila con el comprobante al que está vinculado el registro ('—' si no lo está). */
+export const LINK_ROW_LABEL = 'Vinculado a';
+
+/** Lo que una foto arrastra a la siguiente para seguir viéndolo aunque se desvincule. */
+export interface SnapshotScope {
+  checkIds: string[];
+  tracked: TrackedRef[];
 }
 
 export interface LoadedChainSnapshot extends ChainSnapshot {
@@ -77,6 +103,14 @@ const EXPENSE_STATUS = {
   PAID: 'Pagado',
   CANCELLED: STATUS_REVERSED,
 };
+const DELIVERY_NOTE_STATUS = {
+  PENDING_DELIVERY: 'Pendiente de entrega',
+  ACCEPTED: 'Pendiente de facturar',
+  INVOICED: 'Facturado',
+  CANCELLED: 'Anulado',
+};
+const PO_INSTALLMENT_STATUS = { PENDING: 'Sin facturar', INVOICED: 'Facturada', PAID: 'Pagada' };
+const PROJECTION_STATUS = { PENDING: 'Pendiente', PARTIAL: 'Parcial', CONFIRMED: 'Confirmada' };
 const PO_INVOICING_STATUS = {
   NOT_INVOICED: 'Sin facturar',
   PARTIALLY_INVOICED: 'Facturada parcialmente',
@@ -100,6 +134,7 @@ const SLOT = {
   stock: 50,
   purchaseOrder: 60,
   imputed: 70,
+  links: 80,
 } as const;
 const DOC_STRIDE = 100;
 const BALANCE_ORDER = 1_000_000;
@@ -107,7 +142,7 @@ const BALANCE_ORDER = 1_000_000;
 class SnapshotBuilder {
   readonly entities: SnapshotEntity[] = [];
   readonly checkIds = new Set<string>();
-  readonly imputed: ImputedRef[] = [];
+  readonly tracked: TrackedRef[] = [];
   readonly sessionIds = new Set<string>();
   private readonly keys = new Set<string>();
 
@@ -333,11 +368,12 @@ async function addPurchaseInvoice(b: SnapshotBuilder, id: string, base: number):
       purchaseOrderId: true,
       supplier: { select: { businessName: true } },
       lines: { select: { description: true, quantity: true, unitCost: true } },
-      receivingNotes: { select: { fullNumber: true } },
-      purchaseOrderInstallments: {
-        select: { number: true, order: { select: { fullNumber: true } } },
+      receivingNotes: { select: { id: true } },
+      purchaseOrderInstallments: { select: { id: true } },
+      projectionLinks: { select: { projectionId: true } },
+      creditNoteApplicationsGiven: {
+        select: { amount: true, invoiceId: true, invoice: INVOICE_REF },
       },
-      projectionLinks: { select: { projection: { select: { description: true } } } },
     },
   });
   if (!invoice) return;
@@ -359,14 +395,34 @@ async function addPurchaseInvoice(b: SnapshotBuilder, id: string, base: number):
       'Otros tributos': money(invoice.otherTaxes),
       Total: money(invoice.total),
       ...Object.fromEntries(lines.map((line, i) => [`Ítem ${i + 1}`, line])),
-      'Remitos de recepción': list(invoice.receivingNotes.map((r) => r.fullNumber)),
-      'Cuotas de OC': list(
-        invoice.purchaseOrderInstallments.map((c) => `${c.order.fullNumber} cuota ${c.number}`)
+      ...applicationFields(
+        invoice.creditNoteApplicationsGiven.map((a) => [purchaseName(a.invoice), a.amount])
       ),
-      Proyecciones: list(invoice.projectionLinks.map((p) => p.projection.description)),
     },
     status: PURCHASE_INVOICE_STATUS_LABELS[invoice.status],
   });
+  await addTracked(b, [
+    ...track(
+      'PURCHASE_INVOICE',
+      invoice.creditNoteApplicationsGiven.map((a) => a.invoiceId),
+      base + SLOT.imputed
+    ),
+    ...track(
+      'RECEIVING_NOTE',
+      invoice.receivingNotes.map((r) => r.id),
+      base + SLOT.links
+    ),
+    ...track(
+      'PO_INSTALLMENT',
+      invoice.purchaseOrderInstallments.map((c) => c.id),
+      base + SLOT.links
+    ),
+    ...track(
+      'PROJECTION',
+      invoice.projectionLinks.map((p) => p.projectionId),
+      base + SLOT.links
+    ),
+  ]);
   await addEntry(b, invoice.journalEntryId, base + SLOT.entry);
   await addStockMovements(b, docKey, 'purchase_invoice', id, base + SLOT.stock);
 
@@ -411,8 +467,11 @@ async function addSalesInvoice(b: SnapshotBuilder, id: string, base: number): Pr
       journalEntryId: true,
       customer: { select: { name: true } },
       lines: { select: { description: true, quantity: true, unitPrice: true } },
-      deliveryNotes: { select: { fullNumber: true } },
-      projectionLinks: { select: { projection: { select: { description: true } } } },
+      deliveryNotes: { select: { id: true } },
+      projectionLinks: { select: { projectionId: true } },
+      creditNoteApplicationsGiven: {
+        select: { amount: true, invoiceId: true, invoice: INVOICE_REF },
+      },
     },
   });
   if (!invoice) return;
@@ -434,101 +493,255 @@ async function addSalesInvoice(b: SnapshotBuilder, id: string, base: number): Pr
       'Otros tributos': money(invoice.otherTaxes),
       Total: money(invoice.total),
       ...Object.fromEntries(lines.map((line, i) => [`Ítem ${i + 1}`, line])),
-      'Remitos de entrega': list(invoice.deliveryNotes.map((r) => r.fullNumber)),
-      Proyecciones: list(invoice.projectionLinks.map((p) => p.projection.description)),
+      ...applicationFields(
+        invoice.creditNoteApplicationsGiven.map((a) => [salesName(a.invoice), a.amount])
+      ),
     },
     status: INVOICE_STATUS_LABELS[invoice.status],
   });
+  await addTracked(b, [
+    ...track(
+      'SALES_INVOICE',
+      invoice.creditNoteApplicationsGiven.map((a) => a.invoiceId),
+      base + SLOT.imputed
+    ),
+    ...track(
+      'DELIVERY_NOTE',
+      invoice.deliveryNotes.map((r) => r.id),
+      base + SLOT.links
+    ),
+    ...track(
+      'PROJECTION',
+      invoice.projectionLinks.map((p) => p.projectionId),
+      base + SLOT.links
+    ),
+  ]);
   await addEntry(b, invoice.journalEntryId, base + SLOT.entry);
   await addStockMovements(b, docKey, 'sales_invoice', id, base + SLOT.stock);
 }
 
-/** Facturas o gastos imputados por una OP/RC: solo su estado (se recalcula). */
-async function addImputedDocuments(b: SnapshotBuilder, refs: ImputedRef[]): Promise<void> {
-  const idsOf = (kind: ImputedRef['kind']) => refs.filter((r) => r.kind === kind).map((r) => r.id);
-  const orderOf = (key: string) => refs.find((r) => `${r.kind}:${r.id}` === key)?.order ?? 0;
-  const add = (ref: Omit<ImputedRef, 'order'>, title: string, status: string) => {
-    const key = `${ref.kind}:${ref.id}`;
-    const order = orderOf(key);
-    b.imputed.push({ ...ref, order });
-    b.add({ key, order, title, fields: {}, status });
-  };
+// ============================================================================
+// REGISTROS SEGUIDOS (recalculados o desvinculados)
+// ============================================================================
 
-  const [purchases, sales, expenses] = await Promise.all([
-    b.tx.purchaseInvoice.findMany({
-      orderBy: { id: 'asc' },
-      where: { id: { in: idsOf('PURCHASE_INVOICE') }, companyId: b.companyId },
-      select: {
-        id: true,
-        voucherType: true,
-        fullNumber: true,
-        status: true,
-        supplier: { select: { businessName: true } },
+interface TrackedRow {
+  id: string;
+  title: string;
+  fields: Record<string, string>;
+  status?: string;
+}
+
+const purchaseName = (inv: { voucherType: VoucherType; fullNumber: string }) =>
+  `${voucherShortLabel(inv.voucherType, 'PURCHASE')} ${inv.fullNumber}`;
+const salesName = (inv: { voucherType: VoucherType; fullNumber: string }) =>
+  `${voucherShortLabel(inv.voucherType, 'SALES')} ${inv.fullNumber}`;
+const INVOICE_REF = { select: { voucherType: true, fullNumber: true } } as const;
+
+type TrackedLoader = (b: SnapshotBuilder, ids: string[]) => Promise<TrackedRow[]>;
+
+const TRACKED_LOADERS: Record<TrackedKind, TrackedLoader> = {
+  // Facturas y gastos: solo su estado, que se recalcula.
+  PURCHASE_INVOICE: async (b, ids) =>
+    (
+      await b.tx.purchaseInvoice.findMany({
+        where: { id: { in: ids }, companyId: b.companyId },
+        select: {
+          id: true,
+          voucherType: true,
+          fullNumber: true,
+          status: true,
+          supplier: { select: { businessName: true } },
+        },
+        orderBy: { id: 'asc' },
+      })
+    ).map((inv) => ({
+      id: inv.id,
+      title: `${purchaseName(inv)} · ${inv.supplier.businessName}`,
+      fields: {},
+      status: PURCHASE_INVOICE_STATUS_LABELS[inv.status],
+    })),
+  SALES_INVOICE: async (b, ids) =>
+    (
+      await b.tx.salesInvoice.findMany({
+        where: { id: { in: ids }, companyId: b.companyId },
+        select: {
+          id: true,
+          voucherType: true,
+          fullNumber: true,
+          status: true,
+          customer: { select: { name: true } },
+        },
+        orderBy: { id: 'asc' },
+      })
+    ).map((inv) => ({
+      id: inv.id,
+      title: `${salesName(inv)} · ${inv.customer.name}`,
+      fields: {},
+      status: INVOICE_STATUS_LABELS[inv.status],
+    })),
+  EXPENSE: async (b, ids) =>
+    (
+      await b.tx.expense.findMany({
+        where: { id: { in: ids }, companyId: b.companyId },
+        select: { id: true, fullNumber: true, description: true, status: true },
+        orderBy: { id: 'asc' },
+      })
+    ).map((expense) => ({
+      id: expense.id,
+      title: `Gasto ${expense.fullNumber} · ${expense.description}`,
+      fields: {},
+      status: EXPENSE_STATUS[expense.status],
+    })),
+  // Vinculados: el comprobante al que apuntan y su estado.
+  DELIVERY_NOTE: async (b, ids) =>
+    (
+      await b.tx.deliveryNote.findMany({
+        where: { id: { in: ids }, companyId: b.companyId },
+        select: { id: true, fullNumber: true, status: true, salesInvoice: INVOICE_REF },
+        orderBy: { id: 'asc' },
+      })
+    ).map((note) => ({
+      id: note.id,
+      title: `Remito de entrega ${note.fullNumber}`,
+      fields: { [LINK_ROW_LABEL]: note.salesInvoice ? salesName(note.salesInvoice) : '—' },
+      status: DELIVERY_NOTE_STATUS[note.status],
+    })),
+  RECEIVING_NOTE: async (b, ids) =>
+    (
+      await b.tx.receivingNote.findMany({
+        where: { id: { in: ids }, companyId: b.companyId },
+        select: { id: true, fullNumber: true, purchaseInvoice: INVOICE_REF },
+        orderBy: { id: 'asc' },
+      })
+    ).map((note) => ({
+      id: note.id,
+      title: `Remito de recepción ${note.fullNumber}`,
+      fields: {
+        [LINK_ROW_LABEL]: note.purchaseInvoice ? purchaseName(note.purchaseInvoice) : '—',
       },
-    }),
-    b.tx.salesInvoice.findMany({
-      orderBy: { id: 'asc' },
-      where: { id: { in: idsOf('SALES_INVOICE') }, companyId: b.companyId },
-      select: {
-        id: true,
-        voucherType: true,
-        fullNumber: true,
-        status: true,
-        customer: { select: { name: true } },
+    })),
+  PO_INSTALLMENT: async (b, ids) =>
+    (
+      await b.tx.purchaseOrderInstallment.findMany({
+        where: { id: { in: ids }, companyId: b.companyId },
+        select: {
+          id: true,
+          number: true,
+          amount: true,
+          status: true,
+          order: { select: { fullNumber: true } },
+          purchaseInvoice: INVOICE_REF,
+        },
+        orderBy: { id: 'asc' },
+      })
+    ).map((inst) => ({
+      id: inst.id,
+      title: `Cuota ${inst.number} de la ${inst.order.fullNumber}`,
+      fields: {
+        Importe: money(inst.amount),
+        [LINK_ROW_LABEL]: inst.purchaseInvoice ? purchaseName(inst.purchaseInvoice) : '—',
       },
-    }),
-    b.tx.expense.findMany({
-      orderBy: { id: 'asc' },
-      where: { id: { in: idsOf('EXPENSE') }, companyId: b.companyId },
-      select: { id: true, fullNumber: true, description: true, status: true },
-    }),
-  ]);
-  for (const inv of purchases) {
-    add(
-      { kind: 'PURCHASE_INVOICE', id: inv.id },
-      `${voucherShortLabel(inv.voucherType, 'PURCHASE')} ${inv.fullNumber} · ${inv.supplier.businessName}`,
-      PURCHASE_INVOICE_STATUS_LABELS[inv.status]
-    );
-  }
-  for (const inv of sales) {
-    add(
-      { kind: 'SALES_INVOICE', id: inv.id },
-      `${voucherShortLabel(inv.voucherType, 'SALES')} ${inv.fullNumber} · ${inv.customer.name}`,
-      INVOICE_STATUS_LABELS[inv.status]
-    );
-  }
-  for (const expense of expenses) {
-    add(
-      { kind: 'EXPENSE', id: expense.id },
-      `Gasto ${expense.fullNumber} · ${expense.description}`,
-      EXPENSE_STATUS[expense.status]
-    );
+      status: PO_INSTALLMENT_STATUS[inst.status],
+    })),
+  PARTNER_INSTALLMENT: async (b, ids) =>
+    (
+      await b.tx.paymentOrderInstallment.findMany({
+        where: { id: { in: ids }, companyId: b.companyId },
+        select: {
+          id: true,
+          number: true,
+          amount: true,
+          dueDate: true,
+          status: true,
+          paymentOrder: { select: { fullNumber: true } },
+          settledBy: { select: { fullNumber: true } },
+          partner: { select: { name: true } },
+        },
+        orderBy: { id: 'asc' },
+      })
+    ).map((inst) => ({
+      id: inst.id,
+      title: `Cuota ${inst.number} de la ${inst.paymentOrder.fullNumber} · ${inst.partner?.name ?? 'socio'}`,
+      fields: {
+        Vencimiento: day(inst.dueDate),
+        Importe: money(inst.amount),
+        [LINK_ROW_LABEL]: inst.settledBy?.fullNumber ?? '—',
+      },
+      status: inst.status === 'PAID' ? 'Pagada' : 'Pendiente',
+    })),
+  PROJECTION: async (b, ids) =>
+    (
+      await b.tx.cashflowProjection.findMany({
+        where: { id: { in: ids }, companyId: b.companyId },
+        select: {
+          id: true,
+          description: true,
+          amount: true,
+          confirmedAmount: true,
+          status: true,
+          documentLinks: {
+            select: {
+              salesInvoice: INVOICE_REF,
+              purchaseInvoice: INVOICE_REF,
+              expense: { select: { fullNumber: true } },
+              purchaseOrder: { select: { fullNumber: true } },
+            },
+          },
+        },
+        orderBy: { id: 'asc' },
+      })
+    ).map((projection) => ({
+      id: projection.id,
+      title: `Proyección · ${projection.description}`,
+      fields: {
+        Importe: money(projection.amount),
+        Confirmado: money(projection.confirmedAmount),
+        [LINK_ROW_LABEL]: list(
+          projection.documentLinks.map((link) =>
+            link.salesInvoice
+              ? salesName(link.salesInvoice)
+              : link.purchaseInvoice
+                ? purchaseName(link.purchaseInvoice)
+                : link.expense
+                  ? `Gasto ${link.expense.fullNumber}`
+                  : `OC ${link.purchaseOrder?.fullNumber ?? ''}`
+          )
+        ),
+      },
+      status: PROJECTION_STATUS[projection.status],
+    })),
+};
+
+/** Agrega los registros seguidos; quedan en el `scope` de la foto para la siguiente. */
+async function addTracked(b: SnapshotBuilder, refs: TrackedRef[]): Promise<void> {
+  const kinds = [...new Set(refs.map((r) => r.kind))];
+  for (const kind of kinds) {
+    const ofKind = refs.filter((r) => r.kind === kind);
+    const rows = await TRACKED_LOADERS[kind](b, [...new Set(ofKind.map((r) => r.id))]);
+    for (const row of rows) {
+      const order = ofKind.find((r) => r.id === row.id)?.order ?? 0;
+      b.tracked.push({ kind, id: row.id, order });
+      b.add({ key: `${kind}:${row.id}`, order, ...row });
+    }
   }
 }
 
-interface PaymentShape {
-  paymentMethod: keyof typeof PAYMENT_METHOD_LABELS;
-  amount: { toString(): string };
-  checkNumber: string | null;
-  bankAccount: { bankName: string } | null;
-  cashRegister: { name: string } | null;
-}
+const track = (kind: TrackedKind, ids: (string | null)[], order: number): TrackedRef[] =>
+  ids.filter((id): id is string => Boolean(id)).map((id) => ({ kind, id, order }));
 
 /** "Medio 1" → "Transferencia · Banco Nación · $ 800.000,00", en orden estable. */
-function paymentFields(payments: (PaymentShape & { detail?: string | null })[]) {
-  const labels = payments
-    .map((p) =>
-      [
-        PAYMENT_METHOD_LABELS[p.paymentMethod],
-        p.detail ?? p.bankAccount?.bankName ?? p.cashRegister?.name ?? null,
-        p.checkNumber ? `N° ${p.checkNumber}` : null,
-        money(p.amount),
-      ]
-        .filter(Boolean)
-        .join(' · ')
-    )
-    .sort();
+function paymentFields(payments: PaymentLabelInput[]) {
+  const labels = payments.map(paymentLabel).sort();
   return Object.fromEntries(labels.map((label, i) => [`Medio ${i + 1}`, label]));
+}
+
+/** "Aplicación FC A 0001-…" → importe que una NC compensa de esa factura. */
+function applicationFields(applications: [string, { toString(): string }][]) {
+  return Object.fromEntries(
+    applications
+      .map(([name, amount]) => [`Aplicación ${name}`, money(amount)])
+      .sort(([a], [c]) => a.localeCompare(c))
+  );
 }
 
 function withholdingFields(
@@ -600,14 +813,7 @@ async function addPaymentOrder(b: SnapshotBuilder, id: string, base: number): Pr
       [order.partner ? 'Socio' : 'Proveedor']: party,
       Total: money(order.totalAmount),
       ...Object.fromEntries(imputations),
-      ...paymentFields(
-        order.payments.map((p) => ({
-          ...p,
-          detail: p.card
-            ? `${p.card.name}${p.installmentsCount ? ` en ${p.installmentsCount} cuotas` : ''}`
-            : null,
-        }))
-      ),
+      ...paymentFields(order.payments.map((p) => ({ ...p, detail: paymentDetail(p) }))),
       ...withholdingFields(order.withholdings),
     },
     status: ORDER_STATUS[order.status],
@@ -643,14 +849,25 @@ async function addPaymentOrder(b: SnapshotBuilder, id: string, base: number): Pr
       status: inst.status === 'PAID' ? 'Pagada' : 'Pendiente',
     });
   }
-  await addImputedDocuments(b, [
-    ...order.items.flatMap((i) =>
-      i.invoiceId
-        ? [{ kind: 'PURCHASE_INVOICE' as const, id: i.invoiceId, order: base + SLOT.imputed }]
-        : []
+  const settled = await b.tx.paymentOrderInstallment.findMany({
+    where: { settledByPaymentOrderId: id, companyId: b.companyId },
+    select: { id: true },
+  });
+  await addTracked(b, [
+    ...track(
+      'PURCHASE_INVOICE',
+      order.items.map((i) => i.invoiceId),
+      base + SLOT.imputed
     ),
-    ...order.items.flatMap((i) =>
-      i.expenseId ? [{ kind: 'EXPENSE' as const, id: i.expenseId, order: base + SLOT.imputed }] : []
+    ...track(
+      'EXPENSE',
+      order.items.map((i) => i.expenseId),
+      base + SLOT.imputed
+    ),
+    ...track(
+      'PARTNER_INSTALLMENT',
+      settled.map((i) => i.id),
+      base + SLOT.links
     ),
   ]);
 }
@@ -703,7 +920,7 @@ async function addReceipt(b: SnapshotBuilder, id: string, base: number): Promise
       Cliente: receipt.customer.name,
       Total: money(receipt.totalAmount),
       ...Object.fromEntries(imputations),
-      ...paymentFields(receipt.payments),
+      ...paymentFields(receipt.payments.map((p) => ({ ...p, detail: paymentDetail(p) }))),
       ...withholdingFields(receipt.withholdings),
     },
     status: RECEIPT_STATUS[receipt.status],
@@ -716,13 +933,13 @@ async function addReceipt(b: SnapshotBuilder, id: string, base: number): Promise
     { receiptPaymentId: { in: receipt.payments.map((p) => p.id) } },
     base + SLOT.check
   );
-  await addImputedDocuments(
+  await addTracked(
     b,
-    receipt.items.map((i) => ({
-      kind: 'SALES_INVOICE' as const,
-      id: i.invoiceId,
-      order: base + SLOT.imputed,
-    }))
+    track(
+      'SALES_INVOICE',
+      receipt.items.map((i) => i.invoiceId),
+      base + SLOT.imputed
+    )
   );
 }
 
@@ -832,15 +1049,15 @@ const LOADERS = {
 
 /**
  * Foto de los comprobantes `refs` (en el orden de la cadena: el origen primero) y de
- * lo que mueven. `scope` trae los cheques y las facturas imputadas que ya estaban en la
+ * lo que mueven. `scope` trae los cheques y los registros seguidos que ya estaban en la
  * foto anterior, para seguirlos aunque la corrección los desvincule (un endosado que
- * vuelve a cartera, la factura de una OP que se elimina).
+ * vuelve a cartera, la factura de una OP que se elimina, un remito que se suelta).
  */
 export async function loadChainSnapshotTx(
   tx: Tx,
   companyId: string,
   refs: readonly DocRef[],
-  scope: SnapshotScope = { checkIds: [], imputed: [] }
+  scope: SnapshotScope = { checkIds: [], tracked: [] }
 ): Promise<LoadedChainSnapshot> {
   const b = new SnapshotBuilder(tx, companyId);
   for (const [index, ref] of refs.entries()) {
@@ -850,9 +1067,9 @@ export async function loadChainSnapshotTx(
   if (pending.length > 0) {
     await addChecks(b, { id: { in: pending } }, SLOT.check);
   }
-  const imputedKeys = new Set(b.imputed.map((r) => `${r.kind}:${r.id}`));
-  const missingImputed = scope.imputed.filter((r) => !imputedKeys.has(`${r.kind}:${r.id}`));
-  if (missingImputed.length > 0) await addImputedDocuments(b, missingImputed);
+  const trackedKeys = new Set(b.tracked.map((r) => `${r.kind}:${r.id}`));
+  const missing = scope.tracked.filter((r) => !trackedKeys.has(`${r.kind}:${r.id}`));
+  if (missing.length > 0) await addTracked(b, missing);
   await addBalances(b);
-  return { entities: b.entities, scope: { checkIds: [...b.checkIds], imputed: b.imputed } };
+  return { entities: b.entities, scope: { checkIds: [...b.checkIds], tracked: b.tracked } };
 }

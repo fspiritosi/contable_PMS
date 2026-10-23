@@ -40,6 +40,7 @@ import {
 import { createFundMovement } from '@/modules/commercial/features/treasury/features/fund-movements/list/actions.server';
 import {
   confirmPaymentOrder,
+  createPartnerRepaymentOrder,
   createPaymentOrder,
 } from '@/modules/commercial/features/treasury/features/payment-orders/actions.server';
 import {
@@ -78,6 +79,9 @@ describe.skipIf(!dbAvailable)('integración: motor de corrección en cadena (TSK
   let closingCashId: string;
   let closingSessionId: string;
   let chargeConceptId: string;
+  let warehouseId: string;
+  let partnerId: string;
+  let partnerCardId: string;
   let accounts: { ivaDf: string; ivaCf: string };
   let seq = 1;
 
@@ -455,6 +459,33 @@ describe.skipIf(!dbAvailable)('integración: motor de corrección en cadena (TSK
       })
     ).id;
 
+    // La NC de compra exige un depósito principal; los remitos, uno cualquiera.
+    warehouseId = (
+      await prisma.warehouse.create({
+        data: { companyId, code: 'T792E-MAIN', name: `${PREFIX}Depósito`, type: 'MAIN' },
+        select: { id: true },
+      })
+    ).id;
+    partnerId = (
+      await prisma.partner.create({
+        data: { companyId, name: `${PREFIX}Socia`, createdBy: 'test' },
+        select: { id: true },
+      })
+    ).id;
+    partnerCardId = (
+      await prisma.card.create({
+        data: {
+          companyId,
+          name: `${PREFIX}Débito Socia`,
+          cardType: 'DEBIT',
+          ownerType: 'PARTNER',
+          partnerId,
+          createdBy: 'test',
+        },
+        select: { id: true },
+      })
+    ).id;
+
     vi.mocked(getActiveCompanyId).mockResolvedValue(companyId);
     vi.mocked(getCurrentUserId).mockResolvedValue('test-user');
   });
@@ -462,6 +493,10 @@ describe.skipIf(!dbAvailable)('integración: motor de corrección en cadena (TSK
   afterAll(async () => {
     // Guarda: sin `companyId` Prisma omite el filtro y borraría tablas enteras.
     if (companyId) {
+      await prisma.projectionDocumentLink.deleteMany({ where: { companyId } });
+      await prisma.cashflowProjection.deleteMany({ where: { companyId } });
+      await prisma.paymentOrderInstallment.deleteMany({ where: { companyId } });
+      await prisma.deliveryNote.deleteMany({ where: { companyId } });
       await prisma.check.deleteMany({ where: { companyId } });
       await prisma.cashMovement.deleteMany({ where: { companyId } });
       await prisma.bankMovement.deleteMany({ where: { companyId } });
@@ -469,6 +504,8 @@ describe.skipIf(!dbAvailable)('integración: motor de corrección en cadena (TSK
       await prisma.paymentOrder.deleteMany({ where: { companyId } });
       await prisma.receipt.deleteMany({ where: { companyId } });
       await prisma.fundMovement.deleteMany({ where: { companyId } });
+      await prisma.card.deleteMany({ where: { companyId } });
+      await prisma.partner.deleteMany({ where: { companyId } });
       await prisma.purchaseCreditNoteApplication.deleteMany({ where: { companyId } });
       await prisma.salesCreditNoteApplication.deleteMany({ where: { companyId } });
       await prisma.purchaseInvoice.deleteMany({ where: { companyId } });
@@ -689,6 +726,7 @@ describe.skipIf(!dbAvailable)('integración: motor de corrección en cadena (TSK
     expect(result.applied).toBe(false);
     if (result.applied) return;
     expect(result.stale).toBe(true);
+    expect(result.reason).toBe('STALE');
     expect(result.proposal.fingerprint).not.toBe('');
     expect(result.proposal.fingerprint).not.toBe(seen.fingerprint);
     expect(Number((await fcRow(fc.id)).total)).toBe(2000);
@@ -742,7 +780,7 @@ describe.skipIf(!dbAvailable)('integración: motor de corrección en cadena (TSK
     expect(proposal.fingerprint).toBe('');
 
     const result = await applyCorrection(ctx, request, proposal.fingerprint);
-    expect(result.applied).toBe(false);
+    expect(result).toMatchObject({ applied: false, stale: true, reason: 'IMPEDIMENTS' });
     expect(await companyState()).toEqual(stateBefore);
   });
 
@@ -766,6 +804,7 @@ describe.skipIf(!dbAvailable)('integración: motor de corrección en cadena (TSK
     expect(pending.cards.length).toBeGreaterThan(0);
     expect(await applyCorrection(ctx, editFC(fc.id, withTotal(fc.input, 800)), '')).toMatchObject({
       applied: false,
+      reason: 'PENDING_CHOICES',
     });
 
     await previewAndApply(editFC(fc.id, withTotal(fc.input, 800), { [opId]: cashPaymentId }));
@@ -955,10 +994,6 @@ describe.skipIf(!dbAvailable)('integración: motor de corrección en cadena (TSK
         select: { id: true },
       })
     ).id;
-    // La NC de compra exige un depósito principal (devolución de stock).
-    await prisma.warehouse.create({
-      data: { companyId, code: 'T792E-MAIN', name: `${PREFIX}Depósito`, type: 'MAIN' },
-    });
     const fc = await confirmedFC(1000, { supplierId: ownSupplierId });
     const nc = await confirmedFC(300, { supplierId: ownSupplierId, voucherType: 'NOTA_CREDITO_A' });
     const application = await prisma.purchaseCreditNoteApplication.findFirstOrThrow({
@@ -971,9 +1006,12 @@ describe.skipIf(!dbAvailable)('integración: motor de corrección en cadena (TSK
     ]);
 
     const proposal = await previewAndApply(editFC(fc.id, withTotal(fc.input, 200)));
-    expect(proposal.cards.find((c) => c.key === `PURCHASE_INVOICE:${nc.id}`)?.action).toBe(
-      'RECALCULATE'
-    );
+    const ncCard = proposal.cards.find((c) => c.key === `PURCHASE_INVOICE:${nc.id}`);
+    expect(ncCard?.action).toBe('MODIFY');
+    expect(ncCard?.rows.map((r) => r.label)).toEqual([
+      `Aplicación FC A ${(await fcRow(fc.id)).fullNumber}`,
+      'Estado',
+    ]);
 
     const after = await prisma.purchaseCreditNoteApplication.findUniqueOrThrow({
       where: { id: application.id },
@@ -983,5 +1021,259 @@ describe.skipIf(!dbAvailable)('integración: motor de corrección en cadena (TSK
       'PAID',
       'PARTIAL_PAID',
     ]);
+  });
+
+  // --- Ronda de revisión 1: visibilidad, NC de origen, motivos y concurrencia ----
+
+  it('anular OP de devolución a socio: las cuotas vuelven a pendientes y se ven en la propuesta', async () => {
+    const fc = await confirmedFC(1000);
+    const originId = await confirmedOP(
+      [{ invoiceId: fc.id, amount: 1000 }],
+      [
+        {
+          paymentMethod: 'DEBIT_CARD',
+          amount: '400.00',
+          cardId: partnerCardId,
+          bankAccountId: bankAId,
+        },
+        cash(600),
+      ]
+    );
+    const installment = await prisma.paymentOrderInstallment.findFirstOrThrow({
+      where: { paymentOrderId: originId },
+      select: { id: true },
+    });
+    const repayment = await createPartnerRepaymentOrder({
+      partnerId,
+      date: DATE,
+      notes: `${PREFIX}devolución`,
+      installmentIds: [installment.id],
+      payments: [cash(400)],
+    });
+    expect((await confirmPaymentOrder(repayment.id)).success).toBe(true);
+    const { fullNumber } = await prisma.paymentOrder.findUniqueOrThrow({
+      where: { id: repayment.id },
+      select: { fullNumber: true },
+    });
+
+    const proposal = await previewAndApply({
+      mode: 'CANCEL',
+      ref: ref('PAYMENT_ORDER', repayment.id),
+    });
+    const card = proposal.cards.find((c) => c.key === `PARTNER_INSTALLMENT:${installment.id}`);
+    expect(card?.action).toBe('UNLINK');
+    expect(card?.rows).toEqual(
+      expect.arrayContaining([
+        { label: 'Vinculado a', before: fullNumber, after: '—' },
+        { label: 'Estado', before: 'Pagada', after: 'Pendiente' },
+      ])
+    );
+    expect(
+      await prisma.paymentOrderInstallment.findUniqueOrThrow({
+        where: { id: installment.id },
+        select: { status: true, settledByPaymentOrderId: true },
+      })
+    ).toEqual({ status: 'PENDING', settledByPaymentOrderId: null });
+  });
+
+  it('eliminar FV con remito y proyección: el remito vuelve a pendiente de facturar y la proyección se desvincula, con tarjetas', async () => {
+    const fvId = await confirmedFV(600);
+    const number = 9500 + seq++;
+    const note = await prisma.deliveryNote.create({
+      data: {
+        companyId,
+        customerId,
+        warehouseId,
+        number,
+        fullNumber: `RE-${number}`,
+        deliveryDate: DATE,
+        status: 'INVOICED',
+        salesInvoiceId: fvId,
+        createdBy: 'test',
+      },
+      select: { id: true },
+    });
+    const projection = await prisma.cashflowProjection.create({
+      data: {
+        companyId,
+        type: 'INCOME',
+        category: 'SALES',
+        description: `${PREFIX}Cobro esperado`,
+        amount: 600,
+        date: DATE,
+        status: 'CONFIRMED',
+        confirmedAmount: 600,
+        createdBy: 'test',
+      },
+      select: { id: true },
+    });
+    await prisma.projectionDocumentLink.create({
+      data: {
+        companyId,
+        projectionId: projection.id,
+        amount: 600,
+        salesInvoiceId: fvId,
+        createdBy: 'test',
+      },
+    });
+
+    const proposal = await previewAndApply({ mode: 'DELETE', ref: ref('SALES_INVOICE', fvId) });
+    const noteCard = proposal.cards.find((c) => c.key === `DELIVERY_NOTE:${note.id}`);
+    expect(noteCard?.action).toBe('UNLINK');
+    expect(noteCard?.rows).toEqual(
+      expect.arrayContaining([
+        { label: 'Estado', before: 'Facturado', after: 'Pendiente de facturar' },
+        expect.objectContaining({ label: 'Vinculado a', after: '—' }),
+      ])
+    );
+    const projectionCard = proposal.cards.find((c) => c.key === `PROJECTION:${projection.id}`);
+    expect(projectionCard?.action).toBe('UNLINK');
+    expect(projectionCard?.rows.map((r) => r.label)).toEqual([
+      'Confirmado',
+      'Vinculado a',
+      'Estado',
+    ]);
+
+    expect(
+      await prisma.deliveryNote.findUniqueOrThrow({
+        where: { id: note.id },
+        select: { status: true, salesInvoiceId: true },
+      })
+    ).toEqual({ status: 'ACCEPTED', salesInvoiceId: null });
+    const after = await prisma.cashflowProjection.findUniqueOrThrow({
+      where: { id: projection.id },
+      select: { status: true, confirmedAmount: true },
+    });
+    expect([after.status, Number(after.confirmedAmount)]).toEqual(['PENDING', 0]);
+    expect(await prisma.salesInvoice.count({ where: { id: fvId } })).toBe(0);
+  });
+
+  it('NC de compra como origen: al bajarla se reaplica contra la factura que compensaba', async () => {
+    const ownSupplierId = (
+      await prisma.supplier.create({
+        data: {
+          companyId,
+          code: `${PREFIX}NC2`,
+          businessName: `${PREFIX}Proveedor NC2`,
+          taxId: '30500000005',
+          taxCondition: 'RESPONSABLE_INSCRIPTO',
+          createdBy: 'test',
+        },
+        select: { id: true },
+      })
+    ).id;
+    const fc = await confirmedFC(300, { supplierId: ownSupplierId });
+    const nc = await confirmedFC(300, { supplierId: ownSupplierId, voucherType: 'NOTA_CREDITO_A' });
+    expect([(await fcRow(fc.id)).status, (await fcRow(nc.id)).status]).toEqual(['PAID', 'PAID']);
+    const fcNumber = (await fcRow(fc.id)).fullNumber;
+
+    const proposal = await previewAndApply(editFC(nc.id, withTotal(nc.input, 200)));
+    const ncCard = proposal.cards.find((c) => c.key === `PURCHASE_INVOICE:${nc.id}`);
+    expect(ncCard?.rows).toEqual(
+      expect.arrayContaining([
+        {
+          label: `Aplicación FC A ${fcNumber}`,
+          before: expect.stringContaining('300,00'),
+          after: expect.stringContaining('200,00'),
+        },
+      ])
+    );
+    const fcCard = proposal.cards.find((c) => c.key === `PURCHASE_INVOICE:${fc.id}`);
+    expect(fcCard).toMatchObject({
+      action: 'RECALCULATE',
+      rows: [{ label: 'Estado', before: 'Pagada', after: 'Parcialmente pagada' }],
+    });
+
+    const applications = await prisma.purchaseCreditNoteApplication.findMany({
+      where: { creditNoteId: nc.id },
+      select: { invoiceId: true, amount: true },
+    });
+    expect(applications.map((a) => [a.invoiceId, Number(a.amount)])).toEqual([[fc.id, 200]]);
+    expect([(await fcRow(fc.id)).status, (await fcRow(nc.id)).status]).toEqual([
+      'PARTIAL_PAID',
+      'PAID',
+    ]);
+  });
+
+  it('eliminar factura referenciada por una NC anulada → REFERENCED_BY_NOTE BLOCKED', async () => {
+    const fc = await confirmedFC(500);
+    const number = String(seq++).padStart(8, '0');
+    await prisma.purchaseInvoice.create({
+      data: {
+        companyId,
+        supplierId,
+        voucherType: 'NOTA_CREDITO_A',
+        pointOfSale: '0002',
+        number,
+        fullNumber: `0002-${number}`,
+        issueDate: DATE,
+        total: 100,
+        status: 'CANCELLED',
+        originalInvoiceId: fc.id,
+        createdBy: 'test',
+      },
+    });
+    const found = await impedimentsOf({ mode: 'DELETE', ref: ref('PURCHASE_INVOICE', fc.id) });
+    expect(found.map((i) => [i.code, i.severity])).toEqual([['REFERENCED_BY_NOTE', 'BLOCKED']]);
+    // Anularla sí se puede.
+    expect(await impedimentsOf({ mode: 'CANCEL', ref: ref('PURCHASE_INVOICE', fc.id) })).toEqual(
+      []
+    );
+  });
+
+  it('un error de la simulación no aplica nada y lo informa como SIMULATION_ERROR', async () => {
+    const first = await confirmedFC(100);
+    const second = await confirmedFC(100);
+    // Número repetido del mismo proveedor: la escritura lo rechaza.
+    const request = editFC(second.id, { ...second.input, number: first.input.number });
+    const proposal = await previewCorrection(ctx, request);
+    expect(proposal.impediments.map((i) => i.code)).toEqual(['SIMULATION_ERROR']);
+    expect(await applyCorrection(ctx, request, '')).toMatchObject({
+      applied: false,
+      stale: true,
+      reason: 'SIMULATION_ERROR',
+    });
+  });
+
+  it('dos aplicaciones simultáneas del mismo origen: los efectos se aplican una sola vez', async () => {
+    const fc = await confirmedFC(2500);
+    const opId = await confirmedOP([{ invoiceId: fc.id, amount: 2500 }], [transfer(2500)]);
+    const bankBefore = await bankBalance(bankAId);
+    const request = editFC(fc.id, withTotal(fc.input, 2000));
+    const { fingerprint } = await previewCorrection(ctx, request);
+
+    const results = await Promise.all([
+      applyCorrection(ctx, request, fingerprint),
+      applyCorrection(ctx, request, fingerprint),
+    ]);
+    expect(results.filter((r) => r.applied)).toHaveLength(1);
+    expect(results.find((r) => !r.applied)).toMatchObject({ reason: 'STALE' });
+
+    expect(await bankBalance(bankAId)).toBe(bankBefore + 500);
+    const op = await opRow(opId);
+    expect(Number(op.totalAmount)).toBe(2000);
+    expect(op.payments.map((p) => Number(p.amount))).toEqual([2000]);
+    const movements = await prisma.bankMovement.findMany({
+      where: { paymentOrderId: opId },
+      select: { amount: true },
+    });
+    expect(movements.map((m) => Number(m.amount))).toEqual([2000]);
+
+    // Anular dos veces a la vez: la segunda espera el bloqueo del origen y lo ve anulado.
+    const bankBeforeCancel = await bankBalance(bankAId);
+    const cancel: CorrectionRequest = { mode: 'CANCEL', ref: ref('PAYMENT_ORDER', opId) };
+    const cancelPreview = await previewCorrection(ctx, cancel);
+    const cancels = await Promise.all([
+      applyCorrection(ctx, cancel, cancelPreview.fingerprint),
+      applyCorrection(ctx, cancel, cancelPreview.fingerprint),
+    ]);
+    expect(cancels.filter((r) => r.applied)).toHaveLength(1);
+    const rejected = cancels.find((r) => !r.applied);
+    expect(rejected).toMatchObject({ reason: 'IMPEDIMENTS' });
+    if (rejected && !rejected.applied) {
+      expect(rejected.proposal.impediments.map((i) => i.code)).toEqual(['INVALID_STATE']);
+    }
+    expect(await bankBalance(bankAId)).toBe(bankBeforeCancel + 2000);
+    expect((await opRow(opId)).status).toBe('CANCELLED');
   });
 });

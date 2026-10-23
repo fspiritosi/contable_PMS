@@ -7,9 +7,7 @@ import {
   findMonthlyProcessEntriesTx,
   type Tx,
 } from '@/modules/accounting/features/integrations/core';
-import { PAYMENT_METHOD_LABELS } from '@/modules/commercial/features/treasury/shared/validators';
 import { BusinessError } from '@/shared/lib/action-result';
-import { formatCurrency } from '@/shared/utils/formatters';
 
 import type { EffectsCtx } from '../effects/types';
 import {
@@ -19,6 +17,7 @@ import {
   type PaymentLine,
 } from './allocation';
 import { dedupeImpediments, impediments } from './impediments';
+import { paymentDetail, paymentLabel } from './labels';
 import { CORRECTION_HANDLERS, voucherShortLabel, type DocHead } from './registry.server';
 import type { CorrectionRequest, DocRef, Impediment, PaymentChoice, PaymentChoices } from './types';
 
@@ -194,15 +193,6 @@ interface SettlementDoc {
   hasWithholdings: boolean;
 }
 
-const paymentLabel = (p: {
-  paymentMethod: keyof typeof PAYMENT_METHOD_LABELS;
-  amount: number;
-  detail: string | null;
-}) =>
-  [PAYMENT_METHOD_LABELS[p.paymentMethod], p.detail, formatCurrency(p.amount)]
-    .filter(Boolean)
-    .join(' · ');
-
 async function loadSettlementDocTx(tx: Tx, ref: DocRef): Promise<SettlementDoc> {
   if (ref.kind === 'PAYMENT_ORDER') {
     const order = await tx.paymentOrder.findUniqueOrThrow({
@@ -218,6 +208,7 @@ async function loadSettlementDocTx(tx: Tx, ref: DocRef): Promise<SettlementDoc> 
             checkNumber: true,
             bankAccount: { select: { bankName: true } },
             cashRegister: { select: { name: true } },
+            installmentsCount: true,
             card: { select: { name: true } },
           },
           orderBy: { id: 'asc' },
@@ -231,15 +222,7 @@ async function loadSettlementDocTx(tx: Tx, ref: DocRef): Promise<SettlementDoc> 
         id: p.id,
         amount: Number(p.amount),
         endorsed: Boolean(p.endorsedCheckId),
-        label: paymentLabel({
-          paymentMethod: p.paymentMethod,
-          amount: Number(p.amount),
-          detail:
-            p.bankAccount?.bankName ??
-            p.cashRegister?.name ??
-            p.card?.name ??
-            (p.checkNumber ? `N° ${p.checkNumber}` : null),
-        }),
+        label: paymentLabel({ ...p, detail: paymentDetail(p) }),
       })),
       hasWithholdings: order._count.withholdings > 0,
     };
@@ -268,14 +251,7 @@ async function loadSettlementDocTx(tx: Tx, ref: DocRef): Promise<SettlementDoc> 
       id: p.id,
       amount: Number(p.amount),
       endorsed: false,
-      label: paymentLabel({
-        paymentMethod: p.paymentMethod,
-        amount: Number(p.amount),
-        detail:
-          p.bankAccount?.bankName ??
-          p.cashRegister?.name ??
-          (p.checkNumber ? `N° ${p.checkNumber}` : null),
-      }),
+      label: paymentLabel({ ...p, detail: paymentDetail(p) }),
     })),
     hasWithholdings: receipt._count.withholdings > 0,
   };
@@ -369,19 +345,39 @@ async function planDependentTx(
 // IMPEDIMENTOS DEL PLAN
 // ============================================================================
 
-/** Notas de crédito/débito vigentes que referencian la factura: no se puede eliminar. */
-async function referencingNotesTx(tx: Tx, origin: DocRef): Promise<Impediment[]> {
-  const where = { originalInvoiceId: origin.id, status: { not: 'CANCELLED' as const } };
-  const select = { voucherType: true, fullNumber: true } as const;
+/**
+ * Notas de crédito/débito que referencian la factura (`originalInvoiceId`): no se puede
+ * eliminar, porque borrarla les quitaría la referencia sin mostrarlo. Una nota vigente
+ * se puede eliminar o anular primero (MANUAL); una ya anulada no se puede tocar, así
+ * que la factura solo se puede anular (BLOCKED).
+ */
+async function referencingNotesTx(
+  tx: Tx,
+  companyId: string,
+  origin: DocRef
+): Promise<Impediment[]> {
+  const where = { originalInvoiceId: origin.id, companyId };
+  const select = { voucherType: true, fullNumber: true, status: true } as const;
   const notes =
     origin.kind === 'PURCHASE_INVOICE'
-      ? (await tx.purchaseInvoice.findMany({ where, select })).map(
-          (n) => `la ${voucherShortLabel(n.voucherType, 'PURCHASE')} ${n.fullNumber}`
-        )
-      : (await tx.salesInvoice.findMany({ where, select })).map(
-          (n) => `la ${voucherShortLabel(n.voucherType, 'SALES')} ${n.fullNumber}`
-        );
-  return notes.map((label) => impediments.referencedByNote(label));
+      ? (await tx.purchaseInvoice.findMany({ where, select, orderBy: { id: 'asc' } })).map((n) => ({
+          label: `la ${voucherShortLabel(n.voucherType, 'PURCHASE')} ${n.fullNumber}`,
+          cancelled: n.status === 'CANCELLED',
+        }))
+      : (await tx.salesInvoice.findMany({ where, select, orderBy: { id: 'asc' } })).map((n) => ({
+          label: `la ${voucherShortLabel(n.voucherType, 'SALES')} ${n.fullNumber}`,
+          cancelled: n.status === 'CANCELLED',
+        }));
+  return notes.map((note) =>
+    note.cancelled
+      ? {
+          ...impediments.referencedByNote(note.label),
+          severity: 'BLOCKED' as const,
+          message: `El comprobante está referenciado por ${note.label}, que está anulada.`,
+          action: 'Anulá la factura en lugar de eliminarla.',
+        }
+      : impediments.referencedByNote(note.label)
+  );
 }
 
 /**
@@ -593,7 +589,7 @@ export async function planCorrectionTx(
     }
 
     if (request.mode === 'DELETE') {
-      found.push(...(await referencingNotesTx(tx, ref)));
+      found.push(...(await referencingNotesTx(tx, companyId, ref)));
       found.push(...(await nonConfirmedImputationsTx(tx, origin)));
     }
   }

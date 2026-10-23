@@ -21,7 +21,7 @@ import { describeChanges } from './describe-changes';
 import { fingerprintProposal } from './fingerprint';
 import { impediments } from './impediments';
 import { CORRECTION_HANDLERS } from './registry.server';
-import { loadChainSnapshotTx } from './snapshot.server';
+import { LINK_KINDS, LINK_ROW_LABEL, loadChainSnapshotTx } from './snapshot.server';
 import type { CorrectionProposal, CorrectionRequest, DocRef, ProposalCard } from './types';
 
 /**
@@ -49,9 +49,31 @@ const TX_OPTIONS = { maxWait: 10_000, timeout: 30_000 };
 const WITHHOLDINGS_WARNING =
   'Tiene retenciones: no se recalculan. Revisá el certificado de retención.';
 
+/** Por qué no se aplicó: la UI decide qué mostrar (impedimentos, elección o propuesta nueva). */
+export type ApplyRejectionReason = 'STALE' | 'IMPEDIMENTS' | 'PENDING_CHOICES' | 'SIMULATION_ERROR';
+
 export type ApplyResult =
   | { applied: true }
-  | { applied: false; stale: true; proposal: CorrectionProposal };
+  | { applied: false; stale: true; reason: ApplyRejectionReason; proposal: CorrectionProposal };
+
+/** Tabla de cada tipo, para bloquear la fila del origen (constantes: no vienen del usuario). */
+const ORIGIN_TABLES: Record<DocRef['kind'], string> = {
+  PURCHASE_INVOICE: 'purchase_invoices',
+  SALES_INVOICE: 'sales_invoices',
+  PAYMENT_ORDER: 'payment_orders',
+  RECEIPT: 'receipts',
+  FUND_MOVEMENT: 'fund_movements',
+};
+
+/**
+ * `SELECT … FOR UPDATE` sobre la fila del comprobante de origen (R15): dos
+ * correcciones del mismo comprobante se serializan, y la segunda planifica sobre lo
+ * que dejó la primera (su huella ya no coincide y vuelve como STALE).
+ */
+async function lockOriginTx(tx: Tx, companyId: string, ref: DocRef): Promise<void> {
+  const table = Prisma.raw(ORIGIN_TABLES[ref.kind]);
+  await tx.$queryRaw`SELECT id FROM ${table} WHERE id = ${ref.id}::uuid AND company_id = ${companyId}::uuid FOR UPDATE`;
+}
 
 // ============================================================================
 // FACTURAS Y GASTOS A RECALCULAR
@@ -246,7 +268,7 @@ async function executePlanTx(tx: Tx, ctx: EffectsCtx, plan: CorrectionPlan): Pro
   // 3-4. Origen y cadena
   if (request.mode === 'DELETE') {
     await settleChainTx(tx, ctx, plan);
-    await handler.releaseLinks?.(tx, id);
+    await handler.releaseLinks?.(tx, companyId, id);
     if (entry) await deleteDraftJournalEntryTx(tx, { companyId, entryId: entry.id });
     await handler.remove(tx, id);
   } else {
@@ -255,7 +277,7 @@ async function executePlanTx(tx: Tx, ctx: EffectsCtx, plan: CorrectionPlan): Pro
       await handler.validateForConfirmation?.(tx, id, companyId);
       await handler.apply(tx, ctx, id, entry ? { rewriteEntryId: entry.id } : undefined);
     } else {
-      await handler.releaseLinks?.(tx, id);
+      await handler.releaseLinks?.(tx, companyId, id);
       if (entry?.status === 'POSTED') {
         // §5.3: contraasiento con la fecha del comprobante, no la de hoy.
         await reverseJournalEntryTx(tx, {
@@ -286,18 +308,32 @@ interface Simulation {
   proposal: CorrectionProposal;
   /** Sin impedimentos ni elecciones pendientes, y la ejecución no falló: se puede confirmar. */
   ready: boolean;
+  /** Por qué no está lista (si no lo está). */
+  rejection?: Exclude<ApplyRejectionReason, 'STALE'>;
 }
 
-/** El aviso de retenciones va en la tarjeta de cada OP/RC que se ajusta (§4.3). */
-function withWarnings(cards: ProposalCard[], plan: CorrectionPlan): ProposalCard[] {
+/**
+ * Retoques de las tarjetas que `describeChanges` no conoce: el aviso de retenciones en
+ * cada OP/RC que se ajusta (§4.3) y "Se desvincula" para los registros vinculados
+ * (remitos, cuotas, proyecciones) que pierden su vínculo con el comprobante.
+ */
+function decorateCards(cards: ProposalCard[], plan: CorrectionPlan): ProposalCard[] {
   const warned = new Set(
     plan.dependents
       .filter((d) => d.mode === 'ADJUST' && d.hasWithholdings)
       .map((d) => `${d.ref.kind}:${d.ref.id}`)
   );
-  return cards.map((card) =>
-    warned.has(card.key) ? { ...card, warning: WITHHOLDINGS_WARNING } : card
-  );
+  return cards.map((card) => {
+    const unlinked =
+      card.action !== 'DELETE' &&
+      LINK_KINDS.some((kind) => card.key.startsWith(`${kind}:`)) &&
+      card.rows.some((row) => row.label === LINK_ROW_LABEL);
+    return {
+      ...card,
+      ...(unlinked ? { action: 'UNLINK' as const } : {}),
+      ...(warned.has(card.key) ? { warning: WITHHOLDINGS_WARNING } : {}),
+    };
+  });
 }
 
 /**
@@ -310,14 +346,19 @@ async function simulateTx(
   ctx: EffectsCtx,
   request: CorrectionRequest
 ): Promise<Simulation> {
+  await lockOriginTx(tx, ctx.companyId, request.ref);
   const plan = await planCorrectionTx(tx, ctx, request);
   const base = { mode: request.mode, origin: request.ref, pendingChoices: plan.pendingChoices };
-  const blocked = (found = plan.impediments): Simulation => ({
+  const blocked = (
+    rejection: NonNullable<Simulation['rejection']>,
+    found = plan.impediments
+  ): Simulation => ({
     ready: false,
+    rejection,
     proposal: { ...base, cards: [], impediments: found, fingerprint: '' },
   });
 
-  if (plan.impediments.length > 0) return blocked();
+  if (plan.impediments.length > 0) return blocked('IMPEDIMENTS');
 
   let executable = plan;
   if (plan.pendingChoices.length > 0) {
@@ -329,7 +370,7 @@ async function simulateTx(
       choices: { ...request.choices, ...defaults },
     });
     // El primer medio puede no alcanzar: no hay nada que mostrar hasta que el usuario elija.
-    if (executable.impediments.length > 0) return blocked([]);
+    if (executable.impediments.length > 0) return blocked('PENDING_CHOICES', []);
   }
 
   const refs: DocRef[] = [
@@ -342,14 +383,15 @@ async function simulateTx(
     await executePlanTx(tx, ctx, executable);
   } catch (error) {
     if (!(error instanceof BusinessError)) throw error;
-    return blocked([impediments.simulationError(error.message)]);
+    return blocked('SIMULATION_ERROR', [impediments.simulationError(error.message)]);
   }
   const after = await loadChainSnapshotTx(tx, ctx.companyId, refs, before.scope);
-  const cards = withWarnings(describeChanges(before, after), executable);
+  const cards = decorateCards(describeChanges(before, after), executable);
 
   const ready = plan.pendingChoices.length === 0;
   return {
     ready,
+    ...(ready ? {} : { rejection: 'PENDING_CHOICES' as const }),
     proposal: {
       ...base,
       cards,
@@ -413,7 +455,15 @@ export async function applyCorrection(
     const commit = simulation.ready && simulation.proposal.fingerprint === fingerprint;
     return commit
       ? { commit, result: { applied: true } }
-      : { commit, result: { applied: false, stale: true, proposal: simulation.proposal } };
+      : {
+          commit,
+          result: {
+            applied: false,
+            stale: true,
+            reason: simulation.rejection ?? 'STALE',
+            proposal: simulation.proposal,
+          },
+        };
   });
 
   logger.info('Corrección en cadena', {
@@ -423,6 +473,7 @@ export async function applyCorrection(
       mode: request.mode,
       origin: request.ref,
       applied: result.applied,
+      reason: result.applied ? undefined : result.reason,
     },
   });
   return result;

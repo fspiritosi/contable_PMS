@@ -53,6 +53,7 @@ import {
   validateSalesInvoiceForConfirmation,
 } from '../effects/sales-invoice.server';
 import type { EffectsCtx } from '../effects/types';
+import { removeProjectionLinkTx } from '../projection-links.server';
 import type { CorrectableKind, DocRef, Impediment } from './types';
 
 /**
@@ -91,7 +92,7 @@ export interface KindHandler {
   permissionModule: Module;
   /** Schema del formulario de edición de ese tipo (el mismo del alta). */
   editSchema: ZodType;
-  label(tx: Tx, id: string): Promise<string>;
+  label(tx: Tx, companyId: string, id: string): Promise<string>;
   head(tx: Tx, companyId: string, id: string): Promise<DocHead | null>;
   /** Fecha, contraparte y total de los datos editados, ya válidos según `editSchema`. */
   summarizeEdit(input: unknown): EditSummary;
@@ -103,7 +104,7 @@ export interface KindHandler {
   /** Pre-validación de la confirmación, sobre lo recién escrito en la tx. */
   validateForConfirmation?: (tx: Tx, id: string, companyId: string) => Promise<void>;
   /** Desvincula lo que no es efecto (remitos, cuotas de OC, proyecciones) al eliminar o anular. */
-  releaseLinks?: (tx: Tx, id: string) => Promise<void>;
+  releaseLinks?: (tx: Tx, companyId: string, id: string) => Promise<void>;
   /** Estado anulado; `clearEntry` si su asiento en borrador se eliminó. */
   markCancelled: (tx: Tx, id: string, clearEntry: boolean) => Promise<void>;
   /** Borra el comprobante (sus hijos caen en cascada). */
@@ -135,9 +136,6 @@ const entryOf = (entry: { id: string; number: number; status: JournalEntryStatus
 
 const ENTRY_SELECT = { select: { id: true, number: true, status: true } } as const;
 
-/** Filtro por id, y por empresa cuando se conoce. */
-const byCompany = (id: string, companyId?: string) => (companyId ? { id, companyId } : { id });
-
 async function entryById(tx: Tx, id: string | null) {
   if (!id) return null;
   return tx.journalEntry.findUnique({ where: { id }, select: ENTRY_SELECT.select });
@@ -147,13 +145,9 @@ async function entryById(tx: Tx, id: string | null) {
 // FACTURA DE COMPRA
 // ============================================================================
 
-async function purchaseInvoiceHead(
-  tx: Tx,
-  id: string,
-  companyId?: string
-): Promise<DocHead | null> {
+async function purchaseInvoiceHead(tx: Tx, companyId: string, id: string): Promise<DocHead | null> {
   const invoice = await tx.purchaseInvoice.findFirst({
-    where: byCompany(id, companyId),
+    where: { id, companyId },
     select: {
       voucherType: true,
       fullNumber: true,
@@ -180,16 +174,16 @@ async function purchaseInvoiceHead(
   };
 }
 
-async function releasePurchaseInvoiceLinksTx(tx: Tx, id: string): Promise<void> {
+async function releasePurchaseInvoiceLinksTx(tx: Tx, companyId: string, id: string): Promise<void> {
   await tx.receivingNote.updateMany({
-    where: { purchaseInvoiceId: id },
+    where: { purchaseInvoiceId: id, companyId },
     data: { purchaseInvoiceId: null },
   });
   await tx.purchaseOrderInstallment.updateMany({
-    where: { purchaseInvoiceId: id, status: 'INVOICED' },
+    where: { purchaseInvoiceId: id, companyId, status: 'INVOICED' },
     data: { purchaseInvoiceId: null, status: 'PENDING' },
   });
-  await releaseProjectionLinksTx(tx, { purchaseInvoiceId: id });
+  await releaseProjectionLinksTx(tx, companyId, { purchaseInvoiceId: id });
 }
 
 // ============================================================================
@@ -201,9 +195,9 @@ const salesInvoiceEditSchema = createInvoiceSchema.extend({
   number: z.coerce.number().int().optional(),
 });
 
-async function salesInvoiceHead(tx: Tx, id: string, companyId?: string): Promise<DocHead | null> {
+async function salesInvoiceHead(tx: Tx, companyId: string, id: string): Promise<DocHead | null> {
   const invoice = await tx.salesInvoice.findFirst({
-    where: byCompany(id, companyId),
+    where: { id, companyId },
     select: {
       voucherType: true,
       fullNumber: true,
@@ -231,39 +225,26 @@ async function salesInvoiceHead(tx: Tx, id: string, companyId?: string): Promise
 }
 
 /** Los remitos facturados vuelven a "pendiente de facturar" (spec §4.4). */
-async function releaseSalesInvoiceLinksTx(tx: Tx, id: string): Promise<void> {
+async function releaseSalesInvoiceLinksTx(tx: Tx, companyId: string, id: string): Promise<void> {
   await tx.deliveryNote.updateMany({
-    where: { salesInvoiceId: id, status: 'INVOICED' },
+    where: { salesInvoiceId: id, companyId, status: 'INVOICED' },
     data: { salesInvoiceId: null, status: 'ACCEPTED' },
   });
-  await releaseProjectionLinksTx(tx, { salesInvoiceId: id });
+  await releaseProjectionLinksTx(tx, companyId, { salesInvoiceId: id });
 }
 
 /** Quita los vínculos de proyección del comprobante y recalcula lo confirmado de cada proyección. */
 async function releaseProjectionLinksTx(
   tx: Tx,
+  companyId: string,
   where: { purchaseInvoiceId: string } | { salesInvoiceId: string }
 ): Promise<void> {
   const links = await tx.projectionDocumentLink.findMany({
-    where,
-    select: {
-      id: true,
-      amount: true,
-      projection: { select: { id: true, amount: true, confirmedAmount: true } },
-    },
+    where: { ...where, companyId },
+    select: { id: true },
+    orderBy: { id: 'asc' },
   });
-  for (const link of links) {
-    const confirmed = Math.max(0, Number(link.projection.confirmedAmount) - Number(link.amount));
-    const amount = Number(link.projection.amount);
-    await tx.projectionDocumentLink.delete({ where: { id: link.id } });
-    await tx.cashflowProjection.update({
-      where: { id: link.projection.id },
-      data: {
-        confirmedAmount: confirmed,
-        status: confirmed >= amount ? 'CONFIRMED' : confirmed > 0 ? 'PARTIAL' : 'PENDING',
-      },
-    });
-  }
+  for (const link of links) await removeProjectionLinkTx(tx, companyId, link.id);
 }
 
 // ============================================================================
@@ -274,16 +255,16 @@ async function releaseProjectionLinksTx(
  * Una devolución a socio anulada deja de reservar las cuotas que iba a saldar (el
  * revert ya las devolvió a pendientes): vuelven a estar disponibles para otra OP.
  */
-async function releasePaymentOrderLinksTx(tx: Tx, id: string): Promise<void> {
+async function releasePaymentOrderLinksTx(tx: Tx, companyId: string, id: string): Promise<void> {
   await tx.paymentOrderInstallment.updateMany({
-    where: { settledByPaymentOrderId: id, status: 'PENDING' },
+    where: { settledByPaymentOrderId: id, companyId, status: 'PENDING' },
     data: { settledByPaymentOrderId: null },
   });
 }
 
-async function paymentOrderHead(tx: Tx, id: string, companyId?: string): Promise<DocHead | null> {
+async function paymentOrderHead(tx: Tx, companyId: string, id: string): Promise<DocHead | null> {
   const order = await tx.paymentOrder.findFirst({
-    where: byCompany(id, companyId),
+    where: { id, companyId },
     select: {
       fullNumber: true,
       status: true,
@@ -314,9 +295,9 @@ async function paymentOrderHead(tx: Tx, id: string, companyId?: string): Promise
   };
 }
 
-async function receiptHead(tx: Tx, id: string, companyId?: string): Promise<DocHead | null> {
+async function receiptHead(tx: Tx, companyId: string, id: string): Promise<DocHead | null> {
   const receipt = await tx.receipt.findFirst({
-    where: byCompany(id, companyId),
+    where: { id, companyId },
     select: {
       fullNumber: true,
       status: true,
@@ -341,9 +322,9 @@ async function receiptHead(tx: Tx, id: string, companyId?: string): Promise<DocH
   };
 }
 
-async function fundMovementHead(tx: Tx, id: string, companyId?: string): Promise<DocHead | null> {
+async function fundMovementHead(tx: Tx, companyId: string, id: string): Promise<DocHead | null> {
   const movement = await tx.fundMovement.findFirst({
-    where: byCompany(id, companyId),
+    where: { id, companyId },
     select: {
       status: true,
       date: true,
@@ -367,19 +348,11 @@ async function fundMovementHead(tx: Tx, id: string, companyId?: string): Promise
   };
 }
 
-type HeadFn = (tx: Tx, id: string, companyId?: string) => Promise<DocHead | null>;
-
-/** Nombre del comprobante con artículo; si no existe, uno genérico. */
+/** Nombre del comprobante de la empresa con artículo; si no existe, uno genérico. */
 const labelOf =
-  (head: HeadFn, fallback: string) =>
-  async (tx: Tx, id: string): Promise<string> =>
-    (await head(tx, id))?.label ?? fallback;
-
-/** El motor siempre lee dentro de la empresa; solo la etiqueta busca por id. */
-const headIn =
-  (head: HeadFn): KindHandler['head'] =>
-  (tx, companyId, id) =>
-    head(tx, id, companyId);
+  (head: KindHandler['head'], fallback: string): KindHandler['label'] =>
+  async (tx, companyId, id) =>
+    (await head(tx, companyId, id))?.label ?? fallback;
 
 // ============================================================================
 // REGISTRO
@@ -390,7 +363,7 @@ export const CORRECTION_HANDLERS: Record<CorrectableKind, KindHandler> = {
     permissionModule: 'commercial.purchases',
     editSchema: purchaseInvoiceFormSchema,
     label: labelOf(purchaseInvoiceHead, 'la factura de compra'),
-    head: headIn(purchaseInvoiceHead),
+    head: purchaseInvoiceHead,
     summarizeEdit(input) {
       const data = purchaseInvoiceFormSchema.parse(input);
       return {
@@ -421,7 +394,7 @@ export const CORRECTION_HANDLERS: Record<CorrectableKind, KindHandler> = {
     permissionModule: 'commercial.invoices',
     editSchema: salesInvoiceEditSchema,
     label: labelOf(salesInvoiceHead, 'la factura de venta'),
-    head: headIn(salesInvoiceHead),
+    head: salesInvoiceHead,
     summarizeEdit(input) {
       const data = salesInvoiceEditSchema.parse(input);
       return {
@@ -452,7 +425,7 @@ export const CORRECTION_HANDLERS: Record<CorrectableKind, KindHandler> = {
     permissionModule: 'commercial.treasury.payment-orders',
     editSchema: createPaymentOrderSchema,
     label: labelOf(paymentOrderHead, 'la orden de pago'),
-    head: headIn(paymentOrderHead),
+    head: paymentOrderHead,
     summarizeEdit(input) {
       const data = createPaymentOrderSchema.parse(input);
       return { date: data.date, partyId: data.supplierId ?? null, total: null };
@@ -477,7 +450,7 @@ export const CORRECTION_HANDLERS: Record<CorrectableKind, KindHandler> = {
     permissionModule: 'commercial.treasury.receipts',
     editSchema: createReceiptSchema,
     label: labelOf(receiptHead, 'el recibo'),
-    head: headIn(receiptHead),
+    head: receiptHead,
     summarizeEdit(input) {
       const data = createReceiptSchema.parse(input);
       return { date: data.date, partyId: data.customerId, total: null };
@@ -501,7 +474,7 @@ export const CORRECTION_HANDLERS: Record<CorrectableKind, KindHandler> = {
     permissionModule: 'commercial.treasury.fund-movements',
     editSchema: fundMovementSchema,
     label: labelOf(fundMovementHead, 'el movimiento de fondos'),
-    head: headIn(fundMovementHead),
+    head: fundMovementHead,
     summarizeEdit(input) {
       const data = fundMovementSchema.parse(input);
       return {
