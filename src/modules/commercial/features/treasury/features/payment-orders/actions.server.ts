@@ -9,11 +9,9 @@ import { Prisma } from '@/generated/prisma/client';
 import type { DataTableSearchParams } from '@/shared/components/common/DataTable';
 import { buildFiltersWhere, buildDateRangeFiltersWhere, parseSearchParams, stateToPrismaParams } from '@/shared/components/common/DataTable/helpers';
 import { CREDIT_NOTE_TYPES, isCreditNote } from '@/modules/commercial/shared/voucher-utils';
-import moment from 'moment';
 import type { CreatePaymentOrderFormData, PartnerRepaymentFormData } from '../../shared/validators';
 import { partnerRepaymentSchema } from '../../shared/validators';
 import type { PendingPurchaseInvoice, PaymentOrderListItem, PaymentOrderWithDetails } from '../../shared/types';
-import { createJournalEntryForPaymentOrder } from '@/modules/accounting/features/integrations/commercial';
 import { checkPermission } from '@/shared/lib/permissions';
 import { BusinessError, toActionResult, type ActionResult } from '@/shared/lib/action-result';
 import {
@@ -21,7 +19,7 @@ import {
   loadPaymentOrderEntryPreflight,
   type EntryPreflight,
 } from '../../shared/entry-preflight';
-import { recomputeExpenseStatusTx, recomputePurchaseInvoiceStatusTx } from '@/modules/commercial/shared/effects/document-status.server';
+import { applyPaymentOrderEffectsTx } from '@/modules/commercial/shared/effects/payment-order.server';
 import { calculatePendingAmount, hasPendingBalance } from './shared/pending-invoices';
 
 /**
@@ -457,27 +455,14 @@ export async function confirmPaymentOrder(
   if (!companyId) throw new Error('No hay empresa activa');
 
   try {
-    // Obtener orden de pago con todos sus datos
+    // Guarda: solo se confirma un borrador de la empresa activa
     const paymentOrder = await prisma.paymentOrder.findFirst({
       where: {
         id: paymentOrderId,
         companyId,
         status: 'DRAFT',
       },
-      include: {
-        items: {
-          include: {
-            invoice: true,
-            expense: true,
-          },
-        },
-        // El nombre de la caja es para el error de sesión (TSK-728)
-        payments: {
-          include: { card: { include: { partner: true } }, cashRegister: { select: { name: true } } },
-        },
-        withholdings: true,
-        supplier: { select: { businessName: true, taxId: true } },
-      },
+      select: { fullNumber: true },
     });
 
     if (!paymentOrder) {
@@ -487,7 +472,6 @@ export async function confirmPaymentOrder(
     // TSK-728: pre-validación fuera de la transacción: nada se mueve si va a fallar por configuración
     const warnings = assertEntryPreflight(await loadPaymentOrderEntryPreflight(companyId, paymentOrderId));
 
-    // Confirmar orden de pago y procesar en transacción
     await prisma.$transaction(async (tx) => {
       // 1. Confirmar orden de pago
       await tx.paymentOrder.update({
@@ -499,247 +483,8 @@ export async function confirmPaymentOrder(
         },
       });
 
-      // 2. Actualizar estado de facturas y gastos
-      for (const item of paymentOrder.items) {
-        if (item.invoiceId) {
-          await recomputePurchaseInvoiceStatusTx(tx, item.invoiceId);
-        } else if (item.expenseId) {
-          await recomputeExpenseStatusTx(tx, item.expenseId);
-        }
-      }
-
-      // 3. Crear movimientos de caja/banco según formas de pago
-      for (const payment of paymentOrder.payments) {
-        // Si se pagó con la tarjeta de un socio, la empresa NO mueve plata ahora:
-        // el socio adelantó el pago. El egreso ocurre al devolverle (OP de devolución).
-        if (payment.card && payment.card.ownerType === 'PARTNER') {
-          continue;
-        }
-
-        if (payment.cashRegisterId) {
-          // Obtener sesión activa de la caja
-          const activeSession = await tx.cashRegisterSession.findFirst({
-            where: {
-              cashRegisterId: payment.cashRegisterId,
-              status: 'OPEN',
-            },
-            select: { id: true },
-          });
-
-          if (!activeSession) {
-            throw new BusinessError(
-              `No hay sesión abierta para la caja "${payment.cashRegister?.name ?? 'seleccionada'}"`
-            );
-          }
-
-          // Movimiento de caja (EXPENSE)
-          await tx.cashMovement.create({
-            data: {
-              companyId,
-              cashRegisterId: payment.cashRegisterId,
-              sessionId: activeSession.id,
-              paymentOrderId,
-              type: 'EXPENSE',
-              amount: payment.amount,
-              date: paymentOrder.date,
-              description: `Pago de ${paymentOrder.fullNumber}`,
-              reference: paymentOrder.fullNumber,
-              createdBy: userId,
-            },
-          });
-
-          // Actualizar saldo esperado de la sesión (restar)
-          await tx.cashRegisterSession.update({
-            where: { id: activeSession.id },
-            data: {
-              expectedBalance: {
-                decrement: payment.amount,
-              },
-            },
-          });
-        } else if (payment.bankAccountId && payment.paymentMethod !== 'ECHEQ') {
-          // Movimiento bancario (WITHDRAWAL). El e-cheq NO debita el saldo hasta que el cheque se debita/cobra.
-          const bankAccount = await tx.bankAccount.findUnique({
-            where: { id: payment.bankAccountId },
-            select: { balance: true },
-          });
-
-          if (bankAccount) {
-            await tx.bankMovement.create({
-              data: {
-                companyId,
-                bankAccountId: payment.bankAccountId,
-                type: 'WITHDRAWAL',
-                amount: payment.amount,
-                date: paymentOrder.date,
-                description: `Pago de ${paymentOrder.fullNumber}`,
-                reference: paymentOrder.fullNumber,
-                paymentOrderId,
-                documentLink: 'CREATED_BY_DOCUMENT',
-                reconciled: true,
-                reconciledAt: new Date(),
-                reconciledBy: userId,
-                createdBy: userId,
-              },
-            });
-
-            // Actualizar saldo (restar)
-            await tx.bankAccount.update({
-              where: { id: payment.bankAccountId },
-              data: {
-                balance: bankAccount.balance.sub(payment.amount),
-              },
-            });
-          }
-        }
-
-        // 3b. Cheque o e-cheq como medio de pago
-        if (payment.paymentMethod === 'CHECK' || payment.paymentMethod === 'ECHEQ') {
-          if (payment.endorsedCheckId) {
-            // Cheque/e-cheq DE TERCEROS: se endosa un cheque en cartera al proveedor
-            const endorsed = await tx.check.findFirst({
-              where: { id: payment.endorsedCheckId, companyId, type: 'THIRD_PARTY', status: 'PORTFOLIO' },
-              select: { id: true },
-            });
-            if (!endorsed) {
-              throw new BusinessError('El cheque de tercero seleccionado ya no está disponible en cartera');
-            }
-            await tx.check.update({
-              where: { id: endorsed.id },
-              data: {
-                status: 'ENDORSED',
-                endorsedToName: paymentOrder.supplier?.businessName || 'Proveedor',
-                endorsedToTaxId: paymentOrder.supplier?.taxId || null,
-                endorsedAt: paymentOrder.date,
-                supplierId: paymentOrder.supplierId,
-                paymentOrderPaymentId: payment.id,
-              },
-            });
-          } else if (payment.checkNumber) {
-            // Cheque/e-cheq PROPIO: se emite un cheque nuevo
-            const isEcheq = payment.paymentMethod === 'ECHEQ';
-            await tx.check.create({
-              data: {
-                companyId,
-                type: 'OWN',
-                status: 'DELIVERED',
-                isElectronic: isEcheq,
-                checkNumber: payment.checkNumber,
-                bankName: payment.checkBankName || payment.reference || 'Sin especificar',
-                amount: payment.amount,
-                issueDate: payment.checkIssueDate ?? paymentOrder.date,
-                dueDate: payment.checkDueDate ?? paymentOrder.date,
-                drawerName: payment.checkDrawerName || 'Empresa',
-                drawerTaxId: payment.checkDrawerTaxId || null,
-                supplierId: paymentOrder.supplierId,
-                // e-cheq propio: cuenta bancaria desde la que se emite
-                bankAccountId: isEcheq ? payment.bankAccountId : null,
-                paymentOrderPaymentId: payment.id,
-                createdBy: userId,
-              },
-            });
-          }
-        }
-      }
-
-      // 3c. Tarjetas: generar el cronograma de cuotas (la deuda).
-      //  - Crédito (empresa o socio): N cuotas mensuales.
-      //  - Débito de un socio: 1 cuota (la empresa le debe el total al socio).
-      //  - Débito de empresa: nada (el dinero ya salió del banco en el paso 3).
-      // Si la tarjeta es de un socio, la cuota queda asociada a él (partnerId) y representa
-      // lo que la empresa le debe; se salda con una OP de devolución.
-      for (const payment of paymentOrder.payments) {
-        if (!payment.card) continue;
-        const card = payment.card;
-        const isPartnerCard = card.ownerType === 'PARTNER' && Boolean(card.partnerId);
-        const paymentAmount = Number(payment.amount);
-
-        let installmentsCount = 0;
-        if (payment.paymentMethod === 'CREDIT_CARD') {
-          installmentsCount = Math.max(1, payment.installmentsCount ?? 1);
-        } else if (payment.paymentMethod === 'DEBIT_CARD' && isPartnerCard) {
-          installmentsCount = 1;
-        }
-        if (installmentsCount === 0) continue;
-
-        // Reparto en centavos para que la suma cuadre exactamente con el total
-        const totalCents = Math.round(paymentAmount * 100);
-        const baseCents = Math.floor(totalCents / installmentsCount);
-        const remainderCents = totalCents - baseCents * installmentsCount;
-
-        for (let i = 1; i <= installmentsCount; i++) {
-          const cents = baseCents + (i <= remainderCents ? 1 : 0);
-          const amount = new Prisma.Decimal((cents / 100).toFixed(2));
-
-          // Vencimiento: cuotas de crédito vencen i meses después; la cuota única de débito
-          // de socio vence en la fecha de la OP (se le debe ya). Si la tarjeta tiene día de
-          // vencimiento configurado, se ajusta a ese día del mes correspondiente.
-          let dueDate =
-            payment.paymentMethod === 'CREDIT_CARD'
-              ? moment(paymentOrder.date).add(i, 'months')
-              : moment(paymentOrder.date);
-          if (card.dueDay) {
-            dueDate = dueDate.date(Math.min(card.dueDay, dueDate.daysInMonth()));
-          }
-
-          const installment = await tx.paymentOrderInstallment.create({
-            data: {
-              companyId,
-              paymentOrderId,
-              cardId: card.id,
-              partnerId: isPartnerCard ? card.partnerId : null,
-              number: i,
-              dueDate: dueDate.toDate(),
-              amount,
-              status: 'PENDING',
-            },
-          });
-
-          // Proyección de cashflow (egreso futuro: pago a la tarjeta o devolución al socio)
-          await tx.cashflowProjection.create({
-            data: {
-              companyId,
-              type: 'EXPENSE',
-              category: 'OTHER',
-              description:
-                installmentsCount > 1
-                  ? `Cuota ${i}/${installmentsCount} ${paymentOrder.fullNumber} — ${card.name}`
-                  : `${paymentOrder.fullNumber} — ${card.name}`,
-              amount,
-              date: dueDate.toDate(),
-              status: 'PENDING',
-              paymentOrderInstallmentId: installment.id,
-              createdBy: userId,
-            },
-          });
-        }
-      }
-
-      // 3d. OP de devolución a un socio: saldar las cuotas reservadas por esta OP.
-      // La cuota pasa a PAID (deja de contar en el saldo del socio); el egreso real de
-      // caja/banco ya se registró en el paso 3.
-      if (paymentOrder.partnerId) {
-        await tx.paymentOrderInstallment.updateMany({
-          where: { settledByPaymentOrderId: paymentOrderId, status: 'PENDING' },
-          data: { status: 'PAID', paidAt: paymentOrder.date },
-        });
-      }
-
-      // Crear asiento contable (solo OP a proveedor; las de devolución a socio no
-      // generan asiento de compra: seguimiento del plan 728, 2.4-4). Si falla, la
-      // transacción entera se revierte. TSK-728: antes solo se relanzaba "período
-      // cerrado" y cualquier otro fallo dejaba la OP confirmada sin asiento.
-      if (!paymentOrder.partnerId) {
-        const journalEntryId = await createJournalEntryForPaymentOrder(paymentOrderId, companyId, tx);
-        await tx.paymentOrder.update({
-          where: { id: paymentOrderId },
-          data: { journalEntryId },
-        });
-
-        logger.info('Asiento contable generado para orden de pago', {
-          data: { paymentOrderId, journalEntryId },
-        });
-      }
+      // 2. Efectos: facturas/gastos, caja, banco, cheques, cuotas y asiento (TSK-792)
+      await applyPaymentOrderEffectsTx(tx, { companyId, userId }, paymentOrderId);
     });
 
     logger.info('Orden de pago confirmada', {
