@@ -80,6 +80,10 @@ type OpPayment = CreatePaymentOrderFormData['payments'][number];
 type RcPayment = CreateReceiptFormData['payments'][number];
 type FvInput = z.input<typeof createInvoiceSchema>;
 
+// Cada caso corre varias transacciones (vista previa + aplicación, a veces en paralelo): con la
+// suite completa en paralelo superan los 5 s por defecto de Vitest aunque solos tarden < 2 s.
+vi.setConfig({ testTimeout: 30_000 });
+
 describe.skipIf(!dbAvailable)('integración: motor de corrección en cadena (TSK-792)', () => {
   let companyId: string;
   let ctx: EffectsCtx;
