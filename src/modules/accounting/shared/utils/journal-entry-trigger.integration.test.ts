@@ -249,4 +249,28 @@ describe.skipIf(!dbAvailable)('trigger de inmutabilidad de asientos (TSK-792)', 
       prisma.journalEntryLine.deleteMany({ where: { entryId: posted.id } })
     ).rejects.toThrow(LINES_LOCKED);
   });
+
+  it('createJournalEntryTx persiste el proceso mensual que genera el asiento (TSK-792)', async () => {
+    const entry = await prisma.$transaction(
+      (tx) =>
+        createJournalEntryTx(tx, {
+          companyId,
+          date: MARCH_10,
+          description: `${PREFIX}liquidación`,
+          status: 'POSTED',
+          createdBy: 'system',
+          process: 'VAT_SETTLEMENT',
+          lines: [
+            { accountId: cajaId, debit: 50, credit: 0 },
+            { accountId: ventasId, debit: 0, credit: 50 },
+          ],
+        }),
+      TX_OPTS
+    );
+    const row = await prisma.journalEntry.findUniqueOrThrow({
+      where: { id: entry.id },
+      select: { process: true },
+    });
+    expect(row.process).toBe('VAT_SETTLEMENT');
+  });
 });

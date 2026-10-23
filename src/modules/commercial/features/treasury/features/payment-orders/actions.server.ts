@@ -570,6 +570,7 @@ export async function confirmPaymentOrder(
               companyId,
               cashRegisterId: payment.cashRegisterId,
               sessionId: activeSession.id,
+              paymentOrderId,
               type: 'EXPENSE',
               amount: payment.amount,
               date: paymentOrder.date,
@@ -606,6 +607,7 @@ export async function confirmPaymentOrder(
                 description: `Pago de ${paymentOrder.fullNumber}`,
                 reference: paymentOrder.fullNumber,
                 paymentOrderId,
+                documentLink: 'CREATED_BY_DOCUMENT',
                 reconciled: true,
                 reconciledAt: new Date(),
                 reconciledBy: userId,
@@ -712,7 +714,7 @@ export async function confirmPaymentOrder(
             dueDate = dueDate.date(Math.min(card.dueDay, dueDate.daysInMonth()));
           }
 
-          await tx.paymentOrderInstallment.create({
+          const installment = await tx.paymentOrderInstallment.create({
             data: {
               companyId,
               paymentOrderId,
@@ -738,6 +740,7 @@ export async function confirmPaymentOrder(
               amount,
               date: dueDate.toDate(),
               status: 'PENDING',
+              paymentOrderInstallmentId: installment.id,
               createdBy: userId,
             },
           });

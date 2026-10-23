@@ -471,9 +471,10 @@ async function applyFundSide(
     description: string;
     isTransfer: boolean;
     settings: FundSettings;
+    fundMovementId: string;
   }
 ): Promise<{ accountId: string }> {
-  const { companyId, userId, amount, date, description, isTransfer, settings } = ctx;
+  const { companyId, userId, amount, date, description, isTransfer, settings, fundMovementId } = ctx;
 
   if (ref.kind === 'BANK') {
     const bank = await tx.bankAccount.findFirst({
@@ -506,6 +507,7 @@ async function applyFundSide(
         amount,
         date,
         description,
+        fundMovementId,
         createdBy: userId,
       },
     });
@@ -547,6 +549,7 @@ async function applyFundSide(
       amount,
       date,
       description,
+      fundMovementId,
       createdBy: userId,
     },
   });
@@ -945,6 +948,7 @@ export async function confirmFundMovement(id: string): Promise<FundMovementActio
         description: movement.description,
         isTransfer,
         settings: fundSettings,
+        fundMovementId: id,
       };
 
       const amountNumber = Number(movement.amount);

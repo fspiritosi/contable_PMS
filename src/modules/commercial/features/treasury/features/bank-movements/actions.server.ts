@@ -904,6 +904,7 @@ export async function linkBankMovementToDocument(
       where: { id: movementId },
       data: {
         ...(documentType === 'RECEIPT' ? { receiptId: documentId } : { paymentOrderId: documentId }),
+        documentLink: 'MANUAL_LINK',
         reconciled: true,
         reconciledAt: new Date(),
         reconciledBy: userId,
@@ -951,6 +952,7 @@ export async function unlinkBankMovementFromDocument(movementId: string) {
       data: {
         receiptId: null,
         paymentOrderId: null,
+        documentLink: null,
         reconciled: false,
         reconciledAt: null,
         reconciledBy: null,

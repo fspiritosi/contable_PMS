@@ -11,6 +11,7 @@
  */
 import 'server-only';
 
+import type { JournalEntryProcess } from '@/generated/prisma/enums';
 import { BusinessError } from '@/shared/lib/action-result';
 import { logger } from '@/shared/lib/logger';
 
@@ -31,6 +32,8 @@ export interface CreateJournalEntryTxInput {
   originalEntryId?: string; // solo reversiones
   /** Etiqueta del origen para el log (p. ej. 'sales-invoice:<id>'); no se persiste. */
   source?: string;
+  /** Proceso mensual que generó el asiento (liquidación de IVA, RECPAM, diferencia de cambio). */
+  process?: JournalEntryProcess;
 }
 
 export interface CreatedJournalEntry {
@@ -161,6 +164,7 @@ export async function createJournalEntryTx(
       fiscalYearId: period.fiscalYearId,
       periodId: period.periodId,
       originalEntryId: input.originalEntryId ?? null,
+      process: input.process ?? null,
       createdBy: input.createdBy,
       lines: {
         create: lines.map((line) => ({
