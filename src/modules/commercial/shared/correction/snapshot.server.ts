@@ -42,8 +42,8 @@ import type { DocRef } from './types';
 
 /**
  * Registros que no son de la cadena pero cambian con ella: facturas y gastos que se
- * recalculan, y los vinculados que se desvinculan (remitos, cuotas de OC o de socio,
- * proyecciones). Se identifican por id y siguen en la foto de después aunque el
+ * recalculan, la OC que factura una FC, y los vinculados que se desvinculan (remitos,
+ * cuotas de OC o de socio, proyecciones). Se identifican por id y siguen en la foto de después aunque el
  * comprobante que los traía se borre o los suelte.
  */
 export type TrackedKind =
@@ -54,7 +54,8 @@ export type TrackedKind =
   | 'RECEIVING_NOTE'
   | 'PO_INSTALLMENT'
   | 'PARTNER_INSTALLMENT'
-  | 'PROJECTION';
+  | 'PROJECTION'
+  | 'PURCHASE_ORDER';
 
 interface TrackedRef {
   kind: TrackedKind;
@@ -171,6 +172,7 @@ async function addEntry(b: SnapshotBuilder, entryId: string | null, order: numbe
       date: true,
       description: true,
       status: true,
+      originalEntryId: true,
       reversalEntryId: true,
       lines: {
         select: {
@@ -200,6 +202,7 @@ async function addEntry(b: SnapshotBuilder, entryId: string | null, order: numbe
       ...Object.fromEntries(lines.map((line, i) => [`${ENTRY_LINE_PREFIX}${i + 1}`, line])),
     },
     status: ENTRY_STATUS[entry.status],
+    reversal: entry.originalEntryId !== null,
   });
   await addEntry(b, entry.reversalEntryId, order + 0.5);
 }
@@ -422,34 +425,11 @@ async function addPurchaseInvoice(b: SnapshotBuilder, id: string, base: number):
       invoice.projectionLinks.map((p) => p.projectionId),
       base + SLOT.links
     ),
+    // La OC por id: si la edición la cambia o la quita, la vieja sigue en la foto (se modifica).
+    ...track('PURCHASE_ORDER', [invoice.purchaseOrderId], base + SLOT.purchaseOrder),
   ]);
   await addEntry(b, invoice.journalEntryId, base + SLOT.entry);
   await addStockMovements(b, docKey, 'purchase_invoice', id, base + SLOT.stock);
-
-  if (invoice.purchaseOrderId) {
-    const order = await b.tx.purchaseOrder.findFirst({
-      where: { id: invoice.purchaseOrderId, companyId: b.companyId },
-      select: {
-        fullNumber: true,
-        invoicingStatus: true,
-        lines: { select: { description: true, quantity: true, invoicedQty: true } },
-      },
-    });
-    if (order) {
-      const orderLines = order.lines
-        .map((l) => `${l.description}: ${qty(l.invoicedQty)} de ${qty(l.quantity)}`)
-        .sort();
-      b.add({
-        key: `PURCHASE_ORDER:${invoice.purchaseOrderId}`,
-        order: base + SLOT.purchaseOrder,
-        title: `Orden de compra ${order.fullNumber}`,
-        fields: {
-          'Estado de facturación': PO_INVOICING_STATUS[order.invoicingStatus],
-          ...Object.fromEntries(orderLines.map((line, i) => [`Facturado ítem ${i + 1}`, line])),
-        },
-      });
-    }
-  }
 }
 
 async function addSalesInvoice(b: SnapshotBuilder, id: string, base: number): Promise<void> {
@@ -709,6 +689,31 @@ const TRACKED_LOADERS: Record<TrackedKind, TrackedLoader> = {
         ),
       },
       status: PROJECTION_STATUS[projection.status],
+    })),
+  PURCHASE_ORDER: async (b, ids) =>
+    (
+      await b.tx.purchaseOrder.findMany({
+        where: { id: { in: ids }, companyId: b.companyId },
+        select: {
+          id: true,
+          fullNumber: true,
+          invoicingStatus: true,
+          lines: { select: { description: true, quantity: true, invoicedQty: true } },
+        },
+        orderBy: { id: 'asc' },
+      })
+    ).map((order) => ({
+      id: order.id,
+      title: `Orden de compra ${order.fullNumber}`,
+      fields: {
+        'Estado de facturación': PO_INVOICING_STATUS[order.invoicingStatus],
+        ...Object.fromEntries(
+          order.lines
+            .map((l) => `${l.description}: ${qty(l.invoicedQty)} de ${qty(l.quantity)}`)
+            .sort()
+            .map((line, i) => [`Facturado ítem ${i + 1}`, line])
+        ),
+      },
     })),
 };
 

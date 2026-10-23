@@ -8,6 +8,8 @@
 // - Anulación: un asiento que pasa a STATUS_REVERSED ('Anulado') es REVERSE; cualquier otra entidad
 //   que pase a 'Anulada' o 'Anulado' (el género varía: factura/OP vs recibo/movimiento) es CANCEL.
 // - `status` lleva el estado en castellano, con las constantes STATUS_* de este archivo.
+// - Un asiento nuevo (solo en la foto de después) es REVERSE si es un contraasiento
+//   (`reversal`); si no (el origen no tenía asiento), es MODIFY con `before` null.
 
 import type { CardAction, CardRow, ProposalCard } from './types';
 
@@ -22,6 +24,8 @@ export interface SnapshotEntity {
   fields: Record<string, string>;
   /** Para distinguir CANCEL/REVERSE/BACK_TO_PORTFOLIO. */
   status?: string;
+  /** Asiento que es el contraasiento de otro (tiene asiento original): nuevo → REVERSE. */
+  reversal?: boolean;
 }
 
 export interface ChainSnapshot {
@@ -119,7 +123,8 @@ export function describeChanges(before: ChainSnapshot, after: ChainSnapshot): Pr
     });
   }
 
-  // Entidades nuevas: un asiento nuevo es un contraasiento; cualquier otra se informa como modificación.
+  // Entidades nuevas: un contraasiento nuevo es REVERSE; cualquier otra (incluido un asiento
+  // nuevo que no anula a otro) se informa como modificación.
   for (const a of after.entities) {
     if (beforeByKey.has(a.key)) continue;
     cards.push({
@@ -127,7 +132,7 @@ export function describeChanges(before: ChainSnapshot, after: ChainSnapshot): Pr
       card: {
         key: a.key,
         title: a.title,
-        action: isEntry(a.key) ? 'REVERSE' : 'MODIFY',
+        action: isEntry(a.key) && a.reversal ? 'REVERSE' : 'MODIFY',
         rows: Object.entries(a.fields).map(([label, value]) => ({
           label,
           before: null,

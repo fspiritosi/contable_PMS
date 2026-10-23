@@ -126,10 +126,22 @@ describe('describeChanges', () => {
       ...entry({ 'Línea 1': 'a' }),
       key: 'ENTRY:16',
       title: 'Asiento N° 16',
+      reversal: true,
     };
     const cards = describeChanges({ entities: [] }, { entities: [counter] });
     expect(cards[0].action).toBe('REVERSE');
     expect(cards[0].rows[0].before).toBeNull();
+  });
+
+  it('asiento nuevo que no anula a otro (el origen no tenía) → MODIFY con before null', () => {
+    const created: SnapshotEntity = {
+      ...entry({ 'Línea 1': 'a' }, 'Borrador'),
+      key: 'ENTRY:17',
+      title: 'Asiento N° 17',
+    };
+    const cards = describeChanges({ entities: [] }, { entities: [created] });
+    expect(cards[0].action).toBe('MODIFY');
+    expect(cards[0].rows.every((row) => row.before === null)).toBe(true);
   });
 
   it('cheque ENDOSADO→EN CARTERA → BACK_TO_PORTFOLIO', () => {

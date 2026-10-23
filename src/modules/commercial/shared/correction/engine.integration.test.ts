@@ -8,6 +8,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import {
   createJournalEntryTx,
+  deleteDraftJournalEntryTx,
   postJournalEntryTx,
 } from '@/modules/accounting/features/integrations/core';
 import { prisma } from '@/shared/lib/prisma';
@@ -511,6 +512,7 @@ describe.skipIf(!dbAvailable)('integración: motor de corrección en cadena (TSK
       await prisma.purchaseCreditNoteApplication.deleteMany({ where: { companyId } });
       await prisma.salesCreditNoteApplication.deleteMany({ where: { companyId } });
       await prisma.purchaseInvoice.deleteMany({ where: { companyId } });
+      await prisma.purchaseOrder.deleteMany({ where: { companyId } });
       await prisma.salesInvoice.deleteMany({ where: { companyId } });
       await prisma.warehouse.deleteMany({ where: { companyId } });
       await prisma.cashRegisterSession.deleteMany({ where: { companyId } });
@@ -1435,5 +1437,113 @@ describe.skipIf(!dbAvailable)('integración: motor de corrección en cadena (TSK
     const toInvoice = await impedimentsOf(editFC(nc.id, { ...nc.input, voucherType: 'FACTURA_A' }));
     expect(toInvoice.map((i) => i.code)).toEqual(['VOUCHER_CLASS_CHANGED']);
     expect(toInvoice[0].message).toContain('de nota de crédito a factura o nota de débito');
+  });
+
+  it('I5a: editar solo el número de la FC no "desvincula" su proyección: se modifica', async () => {
+    const fc = await confirmedFC(1250);
+    const projection = await prisma.cashflowProjection.create({
+      data: {
+        companyId,
+        type: 'EXPENSE',
+        category: 'OTHER',
+        description: `${PREFIX}Pago esperado`,
+        amount: 1250,
+        date: DATE,
+        status: 'PENDING',
+        createdBy: 'test',
+      },
+      select: { id: true },
+    });
+    await prisma.projectionDocumentLink.create({
+      data: {
+        companyId,
+        projectionId: projection.id,
+        amount: 1250,
+        purchaseInvoiceId: fc.id,
+        createdBy: 'test',
+      },
+    });
+    const { fullNumber } = await fcRow(fc.id);
+
+    const proposal = await previewAndApply(editFC(fc.id, { ...fc.input, number: '00088888' }));
+    const card = proposal.cards.find((c) => c.key === `PROJECTION:${projection.id}`);
+    expect(card).toMatchObject({
+      action: 'MODIFY',
+      rows: [{ label: 'Vinculado a', before: `FC A ${fullNumber}`, after: 'FC A 0001-00088888' }],
+    });
+  });
+
+  it('I5b: quitar la OC de la FC o eliminar la FC muestra la OC vieja como modificada, no eliminada', async () => {
+    const number = 9700 + seq++;
+    const order = await prisma.purchaseOrder.create({
+      data: {
+        companyId,
+        supplierId,
+        number,
+        fullNumber: `OC-${number}`,
+        issueDate: DATE,
+        status: 'APPROVED',
+        createdBy: 'test',
+        lines: {
+          create: [
+            {
+              description: `${PREFIX}línea OC`,
+              quantity: 2,
+              unitCost: 500,
+              vatRate: 0,
+              vatAmount: 0,
+              subtotal: 1000,
+              total: 1000,
+            },
+          ],
+        },
+      },
+      select: { id: true, lines: { select: { id: true } } },
+    });
+    const withOrder = (input: PurchaseInvoiceFormInput, orderId: string, lineId: string) => ({
+      ...input,
+      purchaseOrderId: orderId,
+      lines: input.lines.map((line) => ({ ...line, quantity: '2', purchaseOrderLineId: lineId })),
+    });
+    // La confirmación factura las 2 unidades de la OC.
+    const linked = await confirmedFC(500, withOrder(fcInput(500), order.id, order.lines[0].id));
+    const orderKey = `PURCHASE_ORDER:${order.id}`;
+
+    const unlinked = await previewCorrection(
+      ctx,
+      editFC(linked.id, {
+        ...linked.input,
+        purchaseOrderId: '',
+        lines: linked.input.lines.map((line) => ({ ...line, purchaseOrderLineId: '' })),
+      })
+    );
+    expect(unlinked.impediments).toEqual([]);
+    expect(unlinked.cards.find((c) => c.key === orderKey)).toMatchObject({
+      action: 'MODIFY',
+      rows: expect.arrayContaining([
+        { label: 'Estado de facturación', before: 'Facturada totalmente', after: 'Sin facturar' },
+      ]),
+    });
+
+    const deleted = await previewCorrection(ctx, {
+      mode: 'DELETE',
+      ref: ref('PURCHASE_INVOICE', linked.id),
+    });
+    expect(deleted.cards.find((c) => c.key === orderKey)?.action).toBe('MODIFY');
+  });
+
+  it('I5c: si el origen no tenía asiento, el asiento nuevo se muestra como modificación, no como contraasiento', async () => {
+    const fc = await confirmedFC(330);
+    const entryId = (await fcRow(fc.id)).journalEntryId!;
+    await prisma.$transaction(async (tx) => {
+      await tx.purchaseInvoice.update({ where: { id: fc.id }, data: { journalEntryId: null } });
+      await deleteDraftJournalEntryTx(tx, { companyId, entryId });
+    });
+
+    const proposal = await previewCorrection(ctx, editFC(fc.id, withTotal(fc.input, 300)));
+    const entryCards = proposal.cards.filter((c) => c.key.startsWith('ENTRY:'));
+    expect(entryCards).toHaveLength(1);
+    expect(entryCards[0].action).toBe('MODIFY');
+    expect(entryCards[0].rows.every((row) => row.before === null)).toBe(true);
   });
 });

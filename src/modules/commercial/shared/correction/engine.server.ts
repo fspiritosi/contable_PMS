@@ -391,10 +391,16 @@ interface Simulation {
   rejection?: Exclude<ApplyRejectionReason, 'STALE'>;
 }
 
+/** Comprobantes de la fila "Vinculado a" ('—' o vacía: ninguno). */
+const linkedItems = (value: string | null) =>
+  value === null || value === '—' ? [] : value.split(', ');
+
 /**
  * Retoques de las tarjetas que `describeChanges` no conoce: el aviso de retenciones en
  * cada OP/RC que se ajusta (§4.3) y "Se desvincula" para los registros vinculados
- * (remitos, cuotas, proyecciones) que pierden su vínculo con el comprobante.
+ * (remitos, cuotas, proyecciones) que pierden un vínculo con el comprobante: quedan
+ * vinculados a menos comprobantes que antes. Si solo cambia el nombre del vinculado
+ * (p. ej. el número de la FC), es una modificación.
  */
 function decorateCards(cards: ProposalCard[], plan: CorrectionPlan): ProposalCard[] {
   const warned = new Set(
@@ -406,7 +412,11 @@ function decorateCards(cards: ProposalCard[], plan: CorrectionPlan): ProposalCar
     const unlinked =
       card.action !== 'DELETE' &&
       LINK_KINDS.some((kind) => card.key.startsWith(`${kind}:`)) &&
-      card.rows.some((row) => row.label === LINK_ROW_LABEL);
+      card.rows.some(
+        (row) =>
+          row.label === LINK_ROW_LABEL &&
+          linkedItems(row.after).length < linkedItems(row.before).length
+      );
     return {
       ...card,
       ...(unlinked ? { action: 'UNLINK' as const } : {}),
