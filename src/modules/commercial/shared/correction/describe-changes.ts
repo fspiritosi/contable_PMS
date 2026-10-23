@@ -5,6 +5,8 @@
 // - Las líneas de un asiento van en `fields`, una entrada por línea, con la etiqueta
 //   que empieza con ENTRY_LINE_PREFIX (p. ej. 'Línea 1' → '1.1.01 Caja · Debe $ 100,00').
 //   Si hay líneas distintas (alta, baja o cambio) entre las fotos, el asiento es REWRITE.
+// - Anulación: un asiento que pasa a STATUS_REVERSED ('Anulado') es REVERSE; cualquier otra entidad
+//   que pase a 'Anulada' o 'Anulado' (el género varía: factura/OP vs recibo/movimiento) es CANCEL.
 // - `status` lleva el estado en castellano, con las constantes STATUS_* de este archivo.
 
 import type { CardAction, CardRow, ProposalCard } from './types';
@@ -69,8 +71,9 @@ function actionForChange(
 ): CardAction {
   const statusChanged = (before.status ?? null) !== (after.status ?? null);
   if (statusChanged) {
-    if (after.status === STATUS_CANCELLED) return 'CANCEL';
-    if (after.status === STATUS_REVERSED) return 'REVERSE';
+    // REVERSE solo para asientos; cualquier otra entidad anulada (Anulada/Anulado según género) es CANCEL.
+    if (isEntry(after.key) && after.status === STATUS_REVERSED) return 'REVERSE';
+    if (after.status === STATUS_CANCELLED || after.status === STATUS_REVERSED) return 'CANCEL';
     if (
       isCheck(after.key) &&
       before.status === STATUS_CHECK_ENDORSED &&

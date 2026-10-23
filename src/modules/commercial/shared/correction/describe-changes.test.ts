@@ -97,6 +97,30 @@ describe('describeChanges', () => {
     expect(reverse[0].action).toBe('REVERSE');
   });
 
+  it('recibo (masculino) que pasa a Anulado → CANCEL, no REVERSE', () => {
+    const rc = (status: string): SnapshotEntity => ({
+      key: 'RECEIPT:5',
+      order: 0,
+      title: 'RC 1',
+      fields: {},
+      status,
+    });
+    const cards = describeChanges(
+      { entities: [rc('Confirmado')] },
+      { entities: [rc(STATUS_REVERSED)] }
+    );
+    expect(cards[0].action).toBe('CANCEL');
+  });
+
+  it('asiento que pasa a Anulado → REVERSE', () => {
+    const e = (status: string) => entry({ 'Línea 1': 'a' }, status);
+    const cards = describeChanges(
+      { entities: [e('Registrado')] },
+      { entities: [e(STATUS_REVERSED)] }
+    );
+    expect(cards[0].action).toBe('REVERSE');
+  });
+
   it('asiento nuevo (contraasiento) → REVERSE', () => {
     const counter: SnapshotEntity = {
       ...entry({ 'Línea 1': 'a' }),
