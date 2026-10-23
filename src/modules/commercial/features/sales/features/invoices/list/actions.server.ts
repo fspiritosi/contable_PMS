@@ -61,6 +61,7 @@ export async function getInvoices() {
             id: true,
             number: true,
             name: true,
+            afipEnabled: true,
           },
         },
         cae: true,
@@ -152,6 +153,7 @@ export async function getInvoicesPaginated(searchParams: DataTableSearchParams) 
               id: true,
               number: true,
               name: true,
+              afipEnabled: true,
             },
           },
           cae: true,
@@ -849,114 +851,33 @@ export async function updateInvoice(id: string, data: unknown) {
   }
 }
 
-// Anular factura (con devolución de stock si estaba confirmada)
-export async function cancelInvoice(id: string) {
+/**
+ * Descarta una factura de venta en BORRADOR (la pasa a Anulada). Un borrador no aplicó
+ * stock, saldo ni asiento, así que no hay nada que revertir.
+ *
+ * Un comprobante confirmado NO pasa por acá: se anula o elimina con la corrección en cadena
+ * (`useDocumentCorrection`, TSK-792), que revierte stock, asiento y cobros. Este camino no
+ * puede dejar un asiento vivo porque rechaza todo lo que no sea borrador.
+ */
+export async function discardDraftInvoice(id: string): Promise<ActionResult<{ id: string }>> {
   await checkPermission('commercial.invoices', 'delete', { redirect: true });
-  const authUserId = await getCurrentUserId();
-  if (!authUserId) throw new Error('No autenticado');
-  const userId = authUserId;
-
   const companyId = await getActiveCompanyId();
-  if (!companyId) throw new Error('No hay empresa activa');
-
   try {
-    const invoice = await prisma.salesInvoice.findFirst({
-      where: { id, companyId, status: { not: 'CANCELLED' } },
-      include: {
-        lines: {
-          include: {
-            product: {
-              select: { id: true, trackStock: true },
-            },
-          },
-        },
-      },
+    if (!companyId) throw new BusinessError('No hay empresa activa');
+    const { count } = await prisma.salesInvoice.updateMany({
+      where: { id, companyId, status: 'DRAFT' },
+      data: { status: 'CANCELLED' },
     });
-
-    if (!invoice) {
-      throw new Error('Factura no encontrada o ya está anulada');
+    if (count === 0) {
+      throw new BusinessError(
+        'Solo se puede descartar una factura en borrador. Las confirmadas se anulan desde la propuesta de corrección.'
+      );
     }
-
-    const wasConfirmed = invoice.status !== 'DRAFT';
-
-    const result = await prisma.$transaction(async (tx) => {
-      const updatedInvoice = await tx.salesInvoice.update({
-        where: { id },
-        data: { status: 'CANCELLED' },
-      });
-
-      // Revertir stock si fue confirmada
-      if (wasConfirmed) {
-        for (const line of invoice.lines) {
-          if (line.product.trackStock) {
-            const stockMovement = await tx.stockMovement.findFirst({
-              where: {
-                referenceId: invoice.id,
-                referenceType: 'sales_invoice',
-                productId: line.productId,
-              },
-            });
-
-            if (stockMovement) {
-              await tx.warehouseStock.upsert({
-                where: {
-                  warehouseId_productId: {
-                    warehouseId: stockMovement.warehouseId,
-                    productId: line.productId,
-                  },
-                },
-                update: {
-                  quantity: { increment: line.quantity },
-                  availableQty: { increment: line.quantity },
-                },
-                create: {
-                  warehouseId: stockMovement.warehouseId,
-                  productId: line.productId,
-                  quantity: line.quantity,
-                  reservedQty: 0,
-                  availableQty: line.quantity,
-                },
-              });
-
-              await tx.stockMovement.create({
-                data: {
-                  companyId,
-                  productId: line.productId,
-                  warehouseId: stockMovement.warehouseId,
-                  type: 'ADJUSTMENT',
-                  quantity: line.quantity,
-                  referenceType: 'sales_invoice_cancel',
-                  referenceId: invoice.id,
-                  notes: `Anulación de factura ${invoice.fullNumber}`,
-                  date: new Date(),
-                  createdBy: userId,
-                },
-              });
-            }
-          }
-        }
-      }
-
-      return updatedInvoice;
-    });
-
-    logger.info('Factura anulada', {
-      data: {
-        invoiceId: id,
-        fullNumber: invoice.fullNumber,
-        stockRestored: wasConfirmed,
-        companyId,
-        userId,
-      },
-    });
-
+    logger.info('Factura en borrador descartada', { data: { invoiceId: id, companyId } });
     revalidatePath('/dashboard/commercial/invoices');
     revalidatePath(`/dashboard/commercial/invoices/${id}`);
-    revalidatePath('/dashboard/commercial/stock');
-    return { success: true, id: result.id };
+    return { success: true, id };
   } catch (error) {
-    logger.error('Error al anular factura', { data: { id, companyId, error } });
-    if (error instanceof Error) throw error;
-    throw new Error('Error al anular la factura');
+    return toActionResult(error, 'Error al descartar la factura');
   }
 }

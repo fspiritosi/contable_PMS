@@ -56,7 +56,7 @@ export { isAfipLocked };
 const STOCK_REFERENCE = 'sales_invoice';
 const STOCK_TYPES: ('SALE' | 'RETURN')[] = ['SALE', 'RETURN'];
 
-/** Una FV en borrador no aplicó efectos y una anulada ya los deshizo (`cancelInvoice`). */
+/** Una FV en borrador no aplicó efectos y una anulada ya los deshizo (corrección, TSK-792). */
 const hasAppliedEffects = (status: SalesInvoiceStatus) =>
   status !== 'DRAFT' && status !== 'CANCELLED';
 

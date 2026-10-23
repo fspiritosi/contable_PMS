@@ -12,6 +12,9 @@ import { _DocumentAttachment } from '@/modules/commercial/shared/components/_Doc
 import { _InvoiceLinkedDocuments } from './components/_InvoiceLinkedDocuments';
 import { _LinkInvoiceToProjection } from './components/_LinkInvoiceToProjection';
 import { _InvoicePDFButton } from './components/_InvoicePDFButton';
+import { _DocumentCorrectionButtons } from '@/modules/commercial/shared/components/_DocumentCorrectionButtons';
+import { isAfipLocked } from '@/modules/commercial/shared/afip-lock';
+import { isCorrectableStatus } from '@/modules/commercial/shared/correctable-status';
 import { formatCurrency } from '@/shared/utils/formatters';
 import { perceptionLabel } from '@/modules/commercial/shared/perceptions';
 import { formatCostCenterAllocations } from '@/modules/commercial/shared/cost-center';
@@ -62,13 +65,15 @@ export async function InvoiceDetail({ id }: InvoiceDetailProps) {
 
         <div className="flex gap-2">
           <_InvoicePDFButton invoice={invoice} />
-          {invoice.status === 'DRAFT' && (
-            <Button variant="outline" asChild>
-              <Link href={`/dashboard/commercial/invoices/${invoice.id}/edit`}>
-                Editar
-              </Link>
-            </Button>
-          )}
+          {/* Editar (también confirmada), Eliminar y Anular: una FV con CAE no se toca (TSK-792). */}
+          <_DocumentCorrectionButtons
+            kind="SALES_INVOICE"
+            id={invoice.id}
+            listHref="/dashboard/commercial/invoices"
+            editHref={`/dashboard/commercial/invoices/${invoice.id}/edit`}
+            canEdit={invoice.status === 'DRAFT' || (isCorrectableStatus(invoice.status) && !isAfipLocked(invoice))}
+            canCorrect={isCorrectableStatus(invoice.status) && !isAfipLocked(invoice)}
+          />
           {(invoice.status === 'CONFIRMED' || invoice.status === 'PARTIAL_PAID') && (
             <_LinkInvoiceToProjection
               invoiceId={invoice.id}

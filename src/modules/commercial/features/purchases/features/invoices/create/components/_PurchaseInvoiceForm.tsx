@@ -52,6 +52,7 @@ import {
 } from '../../shared/validators';
 import moment from 'moment';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useDocumentCorrection } from '@/modules/commercial/shared/hooks/useDocumentCorrection';
 import { useQuery } from '@tanstack/react-query';
 import { Card } from '@/shared/components/ui/card';
 import { Separator } from '@/shared/components/ui/separator';
@@ -173,6 +174,8 @@ interface PurchaseInvoiceFormProps {
   mode?: 'create' | 'edit';
   invoiceId?: string;
   defaultValues?: Partial<PurchaseInvoiceFormInput>;
+  /** Edición de una factura confirmada: el guardado abre la propuesta de corrección (TSK-792). */
+  isCorrection?: boolean;
 }
 
 export function _PurchaseInvoiceForm({
@@ -184,8 +187,15 @@ export function _PurchaseInvoiceForm({
   mode = 'create',
   invoiceId,
   defaultValues: initialValues,
+  isCorrection = false,
 }: PurchaseInvoiceFormProps) {
   const router = useRouter();
+  const documentCorrection = useDocumentCorrection({
+    onApplied: () => {
+      router.push(`/dashboard/commercial/purchases/${invoiceId}`);
+      router.refresh();
+    },
+  });
   const [totals, setTotals] = useState({
     subtotal: 0,
     vatAmount: 0,
@@ -384,6 +394,15 @@ export function _PurchaseInvoiceForm({
     }
 
     try {
+      if (mode === 'edit' && invoiceId && isCorrection) {
+        documentCorrection.open({
+          mode: 'EDIT',
+          ref: { kind: 'PURCHASE_INVOICE', id: invoiceId },
+          data,
+        });
+        return;
+      }
+
       if (mode === 'edit' && invoiceId) {
         // Modo edición
         const result = await updatePurchaseInvoice(invoiceId, data);
@@ -959,11 +978,16 @@ export function _PurchaseInvoiceForm({
           >
             Cancelar
           </Button>
-          <Button type="submit" disabled={form.formState.isSubmitting}>
-            {form.formState.isSubmitting ? 'Guardando...' : 'Guardar Factura'}
+          <Button type="submit" disabled={form.formState.isSubmitting || documentCorrection.isPending}>
+            {form.formState.isSubmitting
+              ? 'Guardando...'
+              : isCorrection
+                ? 'Revisar cambios'
+                : 'Guardar Factura'}
           </Button>
         </div>
       </form>
+      {documentCorrection.dialog}
     </Form>
   );
 }

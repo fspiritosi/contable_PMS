@@ -22,7 +22,6 @@ import { BusinessError, toActionResult, type ActionResult } from '@/shared/lib/a
 import { isCreditNote, isDebitNote } from '@/modules/commercial/shared/voucher-utils';
 import {
   applyPurchaseInvoiceEffectsTx,
-  updatePurchaseOrderInvoicingStatus,
   validatePurchaseInvoiceForConfirmation,
 } from '@/modules/commercial/shared/effects/purchase-invoice.server';
 import { writePurchaseInvoiceDataTx } from '@/modules/commercial/shared/effects/purchase-invoice-data.server';
@@ -1283,170 +1282,33 @@ export async function bulkConfirmPurchaseInvoices(ids: string[]) {
 }
 
 /**
- * Cancela una factura de compra.
- * Solo revierte stock si es una NC (nota de crédito) que había decrementado stock.
- * Las FC normales no generan stock, por lo que no hay nada que revertir.
+ * Descarta una factura de compra en BORRADOR (la pasa a Anulada). Un borrador no aplicó
+ * stock, saldo ni asiento, así que no hay nada que revertir.
+ *
+ * Una factura confirmada NO pasa por acá: se anula o elimina con la corrección en cadena
+ * (`useDocumentCorrection`, TSK-792), que revierte stock, OC, asiento y pagos. Este camino no
+ * puede dejar un asiento vivo porque rechaza todo lo que no sea borrador.
  */
-export async function cancelPurchaseInvoice(id: string) {
+export async function discardDraftPurchaseInvoice(id: string): Promise<ActionResult<{ id: string }>> {
   await checkPermission('commercial.purchases', 'delete', { redirect: true });
-  const userId = await getCurrentUserId();
-  if (!userId) throw new Error('No autenticado');
-
   const companyId = await getActiveCompanyId();
-  if (!companyId) throw new Error('No hay empresa activa');
-
   try {
-    const invoice = await prisma.purchaseInvoice.findUnique({
-      where: { id },
-      include: {
-        lines: {
-          include: {
-            product: true,
-          },
-        },
-      },
+    if (!companyId) throw new BusinessError('No hay empresa activa');
+    const { count } = await prisma.purchaseInvoice.updateMany({
+      where: { id, companyId, status: 'DRAFT' },
+      data: { status: 'CANCELLED' },
     });
-
-    if (!invoice) {
-      throw new Error('Factura de compra no encontrada');
+    if (count === 0) {
+      throw new BusinessError(
+        'Solo se puede descartar una factura en borrador. Las confirmadas se anulan desde la propuesta de corrección.'
+      );
     }
-
-    if (invoice.companyId !== companyId) {
-      throw new Error('No tienes permiso para cancelar esta factura');
-    }
-
-    if (invoice.status === 'CANCELLED') {
-      throw new Error('La factura ya está cancelada');
-    }
-
-    if (invoice.status === 'PAID' || invoice.status === 'PARTIAL_PAID') {
-      throw new Error('No se puede cancelar una factura pagada o parcialmente pagada');
-    }
-
-    // Solo las NC afectan stock (devoluciones), las FC normales no
-    const isNC = isCreditNote(invoice.voucherType);
-
-    // Obtener almacén principal solo si es NC (necesitamos revertir stock)
-    let mainWarehouse: { id: string } | null = null;
-    if (isNC) {
-      mainWarehouse = await prisma.warehouse.findFirst({
-        where: {
-          companyId,
-          type: 'MAIN',
-          isActive: true,
-        },
-        select: { id: true },
-      });
-    }
-
-    // Cancelar factura y revertir stock si era NC confirmada
-    const result = await prisma.$transaction(async (tx) => {
-      // Si era NC confirmada, revertir el decremento de stock (devolver stock)
-      if (invoice.status === 'CONFIRMED' && isNC && mainWarehouse) {
-        for (const line of invoice.lines) {
-          if (!line.productId || !line.product || !line.product.trackStock) {
-            continue;
-          }
-
-          const quantity = Number(line.quantity);
-
-          // Incrementar stock (revertir la devolución)
-          await tx.warehouseStock.upsert({
-            where: {
-              warehouseId_productId: {
-                warehouseId: mainWarehouse.id,
-                productId: line.productId,
-              },
-            },
-            create: {
-              warehouseId: mainWarehouse.id,
-              productId: line.productId,
-              quantity,
-              reservedQty: 0,
-              availableQty: quantity,
-            },
-            update: {
-              quantity: {
-                increment: quantity,
-              },
-              availableQty: {
-                increment: quantity,
-              },
-            },
-          });
-
-          // Registrar movimiento de reversión
-          await tx.stockMovement.create({
-            data: {
-              companyId,
-              warehouseId: mainWarehouse.id,
-              productId: line.productId,
-              type: 'ADJUSTMENT',
-              quantity,
-              referenceType: 'purchase_invoice_cancel',
-              referenceId: invoice.id,
-              notes: `Cancelación NC Compra ${invoice.fullNumber} - ${line.product.name}`,
-              date: new Date(),
-              createdBy: userId,
-            },
-          });
-        }
-      }
-
-      // Decrementar invoicedQty en líneas de OC vinculadas
-      if (invoice.purchaseOrderId && invoice.status === 'CONFIRMED') {
-        for (const line of invoice.lines) {
-          if (line.purchaseOrderLineId) {
-            await tx.purchaseOrderLine.update({
-              where: { id: line.purchaseOrderLineId },
-              data: {
-                invoicedQty: { decrement: line.quantity },
-              },
-            });
-          }
-        }
-        await updatePurchaseOrderInvoicingStatus(tx, invoice.purchaseOrderId);
-      }
-
-      // Actualizar estado de la factura
-      return await tx.purchaseInvoice.update({
-        where: { id },
-        data: {
-          status: 'CANCELLED',
-        },
-        include: {
-          supplier: true,
-          lines: {
-            include: {
-              product: true,
-            },
-          },
-        },
-      });
-    });
-
-    logger.info('Factura de compra cancelada', {
-      data: {
-        invoiceId: id,
-        fullNumber: invoice.fullNumber,
-        wasConfirmed: invoice.status === 'CONFIRMED',
-        companyId,
-        userId,
-      },
-    });
-
+    logger.info('Factura de compra en borrador descartada', { data: { invoiceId: id, companyId } });
     revalidatePath('/dashboard/commercial/purchases');
     revalidatePath(`/dashboard/commercial/purchases/${id}`);
-    revalidatePath('/dashboard/commercial/stock');
-    if (invoice.purchaseOrderId) {
-      revalidatePath(`/dashboard/commercial/purchase-orders/${invoice.purchaseOrderId}`);
-    }
-    return { success: true, id: result.id };
+    return { success: true, id };
   } catch (error) {
-    logger.error('Error al cancelar factura de compra', {
-      data: { error, id, companyId, userId },
-    });
-    throw error;
+    return toActionResult(error, 'Error al descartar la factura');
   }
 }
 

@@ -1078,6 +1078,23 @@ Tanto Recibos como Órdenes de Pago soportan retenciones impositivas:
 
 ---
 
+## Editar, eliminar y anular facturas confirmadas (TSK-792)
+
+Una FC o FV confirmada (CONFIRMED, PARTIAL_PAID, PAID) se edita, elimina o anula desde la UI con la
+corrección en cadena (`shared/hooks/useDocumentCorrection`, motor en `shared/correction/`):
+
+- **Editar**: el formulario de edición de borrador también admite confirmadas. Si el comprobante no
+  es DRAFT, el submit llama a `open({ mode: 'EDIT', ref, data })` en vez de `updatePurchaseInvoice` /
+  `updateInvoice` (la FV agrega `number` para la regla de campos fijos). Aplicada la propuesta, navega al detalle.
+- **Eliminar / Anular**: botones en el detalle (`shared/components/_DocumentCorrectionButtons`) y en el
+  menú de cada fila del listado; abren el diálogo de propuesta (modos `DELETE` / `CANCEL`).
+- Permisos: Editar `update`, Eliminar y Anular `delete` (`commercial.purchases` / `commercial.invoices`).
+- Una FV con CAE o de un punto de venta con `afipEnabled` (`isAfipLocked`) no muestra los botones y la
+  página de edición redirige al detalle.
+- Los viejos `cancelInvoice` / `cancelPurchaseInvoice` (anulaban dejando el asiento vivo) se eliminaron.
+  Quedan `discardDraftInvoice` / `discardDraftPurchaseInvoice`, que solo descartan **borradores** y rechazan
+  cualquier otro estado.
+
 ## Tabla Resumen de Efectos
 
 | Evento | Stock | Factura Status | OC Status | OC InvoicingStatus | Banco/Caja | Asiento |

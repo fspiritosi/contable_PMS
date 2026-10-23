@@ -51,7 +51,7 @@ import type { EffectsCtx, EffectsResult } from './types';
 /** Movimiento de stock de la devolución de una NC de compra. */
 const NC_STOCK_REFERENCE = 'purchase_invoice';
 
-/** Una FC en borrador no aplicó efectos y una anulada ya los deshizo (`cancelPurchaseInvoice`). */
+/** Una FC en borrador no aplicó efectos y una anulada ya los deshizo (corrección, TSK-792). */
 const hasAppliedEffects = (status: PurchaseInvoiceStatus) =>
   status !== 'DRAFT' && status !== 'CANCELLED';
 

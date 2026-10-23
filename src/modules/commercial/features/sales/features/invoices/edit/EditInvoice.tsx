@@ -11,6 +11,8 @@ import {
 } from '../create/helpers.server';
 import { InvoiceForm } from '../create/components/_InvoiceForm';
 import { redirect } from 'next/navigation';
+import { isAfipLocked } from '@/modules/commercial/shared/afip-lock';
+import { isCorrectableStatus } from '@/modules/commercial/shared/correctable-status';
 
 interface EditInvoiceProps {
   id: string;
@@ -27,8 +29,10 @@ export async function EditInvoice({ id }: EditInvoiceProps) {
       getSalesDefaultAccountType(),
     ]);
 
-  // Solo se pueden editar facturas en borrador
-  if (invoice.status !== 'DRAFT') {
+  // Borrador: se edita directo. Confirmada (o con cobros): se edita con la propuesta de
+  // corrección en cadena (TSK-792), salvo con CAE / punto de venta AFIP (nota de crédito).
+  const isDraft = invoice.status === 'DRAFT';
+  if (!isDraft && (!isCorrectableStatus(invoice.status) || isAfipLocked(invoice))) {
     redirect(`/dashboard/commercial/invoices/${id}`);
   }
 
@@ -74,7 +78,9 @@ export async function EditInvoice({ id }: EditInvoiceProps) {
             Editar Factura {invoice.fullNumber}
           </h2>
           <p className="text-muted-foreground">
-            Modifica los datos de la factura en borrador
+            {isDraft
+              ? 'Modifica los datos de la factura en borrador'
+              : 'Al guardar vas a ver una propuesta con todo lo que cambia antes de confirmar'}
           </p>
         </div>
 
@@ -86,6 +92,7 @@ export async function EditInvoice({ id }: EditInvoiceProps) {
           defaultAccountType={defaultAccountType}
           mode="edit"
           invoiceId={id}
+          correction={isDraft ? undefined : { currentNumber: invoice.number }}
           initialData={initialData}
         />
       </div>

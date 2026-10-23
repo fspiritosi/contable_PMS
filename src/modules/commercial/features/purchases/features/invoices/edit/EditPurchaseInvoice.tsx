@@ -6,8 +6,8 @@ import {
   getPurchasesDefaultAccount,
 } from '../list/actions.server';
 import { _PurchaseInvoiceForm } from '../create/components/_PurchaseInvoiceForm';
-import { redirect } from 'next/navigation';
 import { Alert, AlertDescription } from '@/shared/components/ui/alert';
+import { isCorrectableStatus } from '@/modules/commercial/shared/correctable-status';
 import { AlertCircle } from 'lucide-react';
 import { PermissionGuard } from '@/shared/components/common/PermissionGuard';
 
@@ -25,8 +25,10 @@ export async function EditPurchaseInvoice({ invoiceId }: EditPurchaseInvoiceProp
     getPurchasesDefaultAccount(),
   ]);
 
-  // Validar que la factura esté en estado DRAFT
-  if (invoice.status !== 'DRAFT') {
+  // Borrador: se edita directo. Confirmada (o con pagos): con la propuesta de corrección
+  // en cadena (TSK-792). Anulada: no se edita.
+  const isDraft = invoice.status === 'DRAFT';
+  if (!isDraft && !isCorrectableStatus(invoice.status)) {
     return (
       <PermissionGuard module="commercial.purchases" action="update" redirect>
         <div className="space-y-6">
@@ -38,9 +40,7 @@ export async function EditPurchaseInvoice({ invoiceId }: EditPurchaseInvoiceProp
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
-              No se puede editar una factura confirmada. Solo las facturas en estado borrador
-              pueden ser modificadas. Si necesitas realizar cambios, cancela esta factura y crea
-              una nueva.
+              No se puede editar una factura anulada.
             </AlertDescription>
           </Alert>
         </div>
@@ -86,15 +86,16 @@ export async function EditPurchaseInvoice({ invoiceId }: EditPurchaseInvoiceProp
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Editar Factura de Compra</h1>
           <p className="text-muted-foreground">
-            Modificar factura {invoice.fullNumber} - Estado: Borrador
+            Modificar factura {invoice.fullNumber} - Estado: {isDraft ? 'Borrador' : 'Confirmada'}
           </p>
         </div>
 
         <Alert>
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
-            Estás editando una factura en estado borrador. Una vez confirmada, no podrá ser
-            modificada.
+            {isDraft
+              ? 'Estás editando una factura en estado borrador.'
+              : 'Al guardar vas a ver una propuesta con todo lo que cambia (asiento, pagos y saldos) antes de confirmar.'}
           </AlertDescription>
         </Alert>
 
@@ -106,6 +107,7 @@ export async function EditPurchaseInvoice({ invoiceId }: EditPurchaseInvoiceProp
           defaultAccountIsFixedAsset={defaultAccount.isFixedAsset}
           mode="edit"
           invoiceId={invoiceId}
+          isCorrection={!isDraft}
           defaultValues={defaultValues}
         />
       </div>

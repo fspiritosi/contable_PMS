@@ -1,7 +1,7 @@
 'use client';
 
 import { ColumnDef } from '@tanstack/react-table';
-import { MoreHorizontal, Eye, Pencil, CheckCircle, XCircle, FileText, Download, Paperclip } from 'lucide-react';
+import { MoreHorizontal, Eye, Pencil, CheckCircle, XCircle, Trash2, FileText, Download, Paperclip } from 'lucide-react';
 import moment from 'moment';
 
 import { Badge } from '@/shared/components/ui/badge';
@@ -17,6 +17,8 @@ import {
 import { DataTableColumnHeader } from '@/shared/components/common/DataTable';
 import { VOUCHER_TYPE_LABELS, INVOICE_STATUS_LABELS } from '../shared/validators';
 import type { getInvoices } from './actions.server';
+import { isAfipLocked } from '@/modules/commercial/shared/afip-lock';
+import { isCorrectableStatus } from '@/modules/commercial/shared/correctable-status';
 
 type Invoice = Awaited<ReturnType<typeof getInvoices>>[number];
 
@@ -67,10 +69,11 @@ interface ColumnsProps {
   onEdit?: (invoice: Invoice) => void;
   onConfirm?: (invoice: Invoice) => void;
   onCancel?: (invoice: Invoice) => void;
+  onDelete?: (invoice: Invoice) => void;
   onAttach: (invoice: Invoice) => void;
 }
 
-export function getColumns({ onView, onEdit, onConfirm, onCancel, onAttach }: ColumnsProps): ColumnDef<Invoice>[] {
+export function getColumns({ onView, onEdit, onConfirm, onCancel, onDelete, onAttach }: ColumnsProps): ColumnDef<Invoice>[] {
   return [
     {
       accessorKey: 'fullNumber',
@@ -147,6 +150,10 @@ export function getColumns({ onView, onEdit, onConfirm, onCancel, onAttach }: Co
         const invoice = row.original;
         const isDraft = invoice.status === 'DRAFT';
         const isCancelled = invoice.status === 'CANCELLED';
+        // Confirmada (o con cobros): se corrige con la propuesta en cadena, salvo FV con CAE o de
+        // un punto de venta AFIP, que se corrige con una nota de crédito (TSK-792).
+        const isCorrectable = isCorrectableStatus(invoice.status) && !isAfipLocked(invoice);
+        const showEdit = isDraft || isCorrectable;
 
         return (
           <DropdownMenu>
@@ -163,7 +170,7 @@ export function getColumns({ onView, onEdit, onConfirm, onCancel, onAttach }: Co
                 <Eye className="mr-2 h-4 w-4" />
                 Ver Detalle
               </DropdownMenuItem>
-              {isDraft && onEdit && (
+              {showEdit && onEdit && (
                 <DropdownMenuItem onClick={() => onEdit(invoice)}>
                   <Pencil className="mr-2 h-4 w-4" />
                   Editar
@@ -180,7 +187,13 @@ export function getColumns({ onView, onEdit, onConfirm, onCancel, onAttach }: Co
                 <Paperclip className="mr-2 h-4 w-4" />
                 {invoice.documentUrl ? 'Ver Adjunto' : 'Adjuntar Documento'}
               </DropdownMenuItem>
-              {!isCancelled && onCancel && (
+              {isCorrectable && onDelete && (
+                <DropdownMenuItem onClick={() => onDelete(invoice)} className="text-destructive">
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Eliminar
+                </DropdownMenuItem>
+              )}
+              {!isCancelled && (isDraft || isCorrectable) && onCancel && (
                 <>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => onCancel(invoice)} className="text-destructive">
