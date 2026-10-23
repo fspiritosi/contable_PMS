@@ -1132,7 +1132,7 @@ Misma mecánica para `PAYMENT_ORDER`, `RECEIPT` y `FUND_MOVEMENT` (permisos `com
   recalculan. Profundidad: origen → OP/RC/NC → sus efectos.
 - **Impedimentos**: con al menos uno no se aplica nada. `MANUAL` ("Podés resolverlo": asiento Registrado,
   liquidación de IVA del mes generada, cambio de tercero con pagos, movimiento bancario vinculado a mano) o
-  `BLOCKED` ("No se puede": período cerrado, CAE de AFIP, caja cerrada, movimiento anterior a la trazabilidad).
+  `BLOCKED` ("No se puede": período cerrado, CAE de AFIP, caja cerrada, movimiento anterior a la trazabilidad, cuota de tarjeta pendiente sin su proyección vinculada).
 - **Eliminar** exige el asiento en DRAFT; **Anular** con asiento POSTED genera el contraasiento.
 - **Saldos vigentes** (`shared/lib/effective-settlements.ts`): una OP o un RC **anulado conserva sus
   imputaciones como histórico, pero no cuenta en ningún saldo** (tampoco los borradores, TSK-797). Todo cálculo

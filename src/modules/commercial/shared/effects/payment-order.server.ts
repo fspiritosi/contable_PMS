@@ -469,7 +469,8 @@ export async function revertPaymentOrderEffectsTx(
 /**
  * Impedimentos propios de los efectos de la OP, sin mirar el asiento ni el período:
  * efectos que ya se usaron (caja cerrada, cheque usado, cuota pagada), vínculos
- * hechos a mano o efectos anteriores a la trazabilidad. Cada impedimento aparece
+ * hechos a mano o efectos anteriores a la trazabilidad (movimientos sin vínculo,
+ * cuotas sin su proyección). Cada impedimento aparece
  * una sola vez aunque lo causen varios registros.
  */
 export async function paymentOrderEffectImpedimentsTx(
@@ -562,8 +563,14 @@ export async function paymentOrderEffectImpedimentsTx(
     (isConfirmed && bankByDocument < bankPayments);
   const cashPayments = paymentOrder.payments.filter(createsCashMovement).length;
   const cashUntraceable = isConfirmed && cashMovements.length < cashPayments;
+  // Cuota pendiente sin su proyección vinculada (§4.5): el revert solo borra las
+  // proyecciones vinculadas y el reaplicar crearía otras, dejando la vieja huérfana.
+  const installmentUntraceable =
+    isConfirmed && installments.some((i) => i.status === 'PENDING' && i.projection === null);
 
-  if (bankUntraceable || cashUntraceable) found.push(impediments.untraceable(docLabel));
+  if (bankUntraceable || cashUntraceable || installmentUntraceable) {
+    found.push(impediments.untraceable(docLabel));
+  }
 
   return dedupeImpediments(found);
 }

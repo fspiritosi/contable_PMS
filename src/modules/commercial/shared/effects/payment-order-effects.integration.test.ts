@@ -664,5 +664,16 @@ describe.skipIf(!dbAvailable)('integración: efectos de la orden de pago (TSK-79
       });
       expect(await impedimentCodes(id)).toEqual(['UNTRACEABLE_EFFECT']);
     });
+
+    it('cuota pendiente sin proyección vinculada → untraceable (revert + apply la duplicaría)', async () => {
+      const { id } = await confirmedOrder([transfer('400'), creditCard('600', 2)]);
+      expect(await impedimentCodes(id)).toEqual([]);
+      // Proyección anterior a la trazabilidad: existe, pero sin FK a la cuota.
+      await prisma.cashflowProjection.updateMany({
+        where: { paymentOrderInstallment: { paymentOrderId: id, number: 1 } },
+        data: { paymentOrderInstallmentId: null },
+      });
+      expect(await impedimentCodes(id)).toEqual(['UNTRACEABLE_EFFECT']);
+    });
   });
 });
