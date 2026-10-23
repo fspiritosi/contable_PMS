@@ -5,6 +5,7 @@
  */
 import 'dotenv/config';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import type { z } from 'zod';
 
 import {
   createJournalEntryTx,
@@ -14,6 +15,7 @@ import {
 import { prisma } from '@/shared/lib/prisma';
 
 import type { PurchaseInvoiceFormInput } from '@/modules/commercial/features/purchases/features/invoices/shared/validators';
+import type { createInvoiceSchema } from '@/modules/commercial/features/sales/features/invoices/shared/validators';
 import type { FundMovementFormInput } from '@/modules/commercial/features/treasury/features/fund-movements/shared/validators';
 import type {
   CreatePaymentOrderFormData,
@@ -30,7 +32,10 @@ vi.mock('@/shared/lib/permissions', async (importOriginal) => ({
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 
 import { cleanupAccountingCompany } from '@/modules/accounting/shared/test-utils/cleanup-accounting-company';
-import { readLastEntryNumber } from '@/modules/accounting/shared/test-utils/period-test-helpers';
+import {
+  closeMonthForTest,
+  readLastEntryNumber,
+} from '@/modules/accounting/shared/test-utils/period-test-helpers';
 import { getActiveCompanyId } from '@/shared/lib/company';
 import { getCurrentUserId } from '@/shared/lib/current-user';
 
@@ -38,6 +43,10 @@ import {
   confirmPurchaseInvoice,
   createPurchaseInvoice,
 } from '@/modules/commercial/features/purchases/features/invoices/list/actions.server';
+import {
+  confirmInvoice,
+  createInvoice,
+} from '@/modules/commercial/features/sales/features/invoices/list/actions.server';
 import { createFundMovement } from '@/modules/commercial/features/treasury/features/fund-movements/list/actions.server';
 import {
   confirmPaymentOrder,
@@ -51,6 +60,7 @@ import {
   getPendingInvoices,
 } from '@/modules/commercial/features/treasury/features/receipts/actions.server';
 import type { EffectsCtx } from '../effects/types';
+import { changesWithoutCard, loadCompanyState } from './company-state.test-utils';
 import { applyCorrection, previewCorrection } from './engine.server';
 import type { CorrectableKind, CorrectionRequest, PaymentChoices } from './types';
 
@@ -67,6 +77,7 @@ try {
 
 type OpPayment = CreatePaymentOrderFormData['payments'][number];
 type RcPayment = CreateReceiptFormData['payments'][number];
+type FvInput = z.input<typeof createInvoiceSchema>;
 
 describe.skipIf(!dbAvailable)('integración: motor de corrección en cadena (TSK-792)', () => {
   let companyId: string;
@@ -85,6 +96,8 @@ describe.skipIf(!dbAvailable)('integración: motor de corrección en cadena (TSK
   let warehouseId: string;
   let partnerId: string;
   let partnerCardId: string;
+  let stockProductId: string;
+  let serviceProductId: string;
   let accounts: { ivaDf: string; ivaCf: string };
   let seq = 1;
 
@@ -135,11 +148,12 @@ describe.skipIf(!dbAvailable)('integración: motor de corrección en cadena (TSK
 
   async function confirmedOP(
     items: { invoiceId: string; amount: number }[],
-    payments: OpPayment[]
+    payments: OpPayment[],
+    date = DATE
   ) {
     const created = await createPaymentOrder({
       supplierId,
-      date: DATE,
+      date,
       notes: `${PREFIX}orden`,
       items: items.map((i) => ({ invoiceId: i.invoiceId, amount: i.amount.toFixed(2) })),
       payments,
@@ -174,6 +188,37 @@ describe.skipIf(!dbAvailable)('integración: motor de corrección en cadena (TSK
       })
     ).id;
   }
+
+  /** FV por el alta real (con asiento y, con el producto de stock, movimiento de stock). */
+  const fvInput = (total: number, overrides: Partial<FvInput> = {}): FvInput => ({
+    customerId,
+    pointOfSaleId,
+    voucherType: 'FACTURA_A',
+    issueDate: DATE,
+    lines: [
+      {
+        productId: serviceProductId,
+        description: `${PREFIX}venta`,
+        quantity: '1',
+        unitPrice: total.toFixed(2),
+        vatRate: '0',
+      },
+    ],
+    internalTaxes: '',
+    ...overrides,
+  });
+
+  async function realFV(input: FvInput) {
+    const { id } = await createInvoice(input);
+    const result = await confirmInvoice(id);
+    if (!result.success) throw new Error(`No se pudo confirmar la FV: ${result.error}`);
+    return { id, input };
+  }
+
+  const fvWithTotal = (input: FvInput, total: number): FvInput => ({
+    ...input,
+    lines: input.lines.map((line) => ({ ...line, unitPrice: total.toFixed(2) })),
+  });
 
   const rcCheck = (amount: number, checkNumber: string): RcPayment => ({
     paymentMethod: 'CHECK',
@@ -299,42 +344,13 @@ describe.skipIf(!dbAvailable)('integración: motor de corrección en cadena (TSK
     entry.lines.reduce((sum, line) => sum + Number(line.debit), 0);
 
   /** Foto completa de lo que la corrección puede tocar en la empresa. */
-  async function companyState() {
-    const where = { companyId };
-    const state = await Promise.all([
-      prisma.purchaseInvoice.findMany({ where, orderBy: { id: 'asc' } }),
-      prisma.salesInvoice.findMany({ where, orderBy: { id: 'asc' } }),
-      prisma.paymentOrder.findMany({
-        where,
-        orderBy: { id: 'asc' },
-        include: { items: { orderBy: { id: 'asc' } }, payments: { orderBy: { id: 'asc' } } },
-      }),
-      prisma.receipt.findMany({
-        where,
-        orderBy: { id: 'asc' },
-        include: { items: { orderBy: { id: 'asc' } }, payments: { orderBy: { id: 'asc' } } },
-      }),
-      prisma.fundMovement.findMany({ where, orderBy: { id: 'asc' } }),
-      prisma.bankAccount.findMany({ where, orderBy: { id: 'asc' } }),
-      prisma.bankMovement.findMany({ where, orderBy: { id: 'asc' } }),
-      prisma.cashRegisterSession.findMany({ where, orderBy: { id: 'asc' } }),
-      prisma.cashMovement.findMany({ where, orderBy: { id: 'asc' } }),
-      prisma.check.findMany({ where, orderBy: { id: 'asc' } }),
-      prisma.journalEntry.findMany({
-        where,
-        orderBy: { id: 'asc' },
-        include: { lines: { orderBy: { id: 'asc' } } },
-      }),
-      prisma.accountingSettings.findUniqueOrThrow({ where: { companyId } }),
-    ]);
-    return JSON.parse(JSON.stringify(state)) as unknown;
-  }
+  const companyState = () => loadCompanyState(companyId);
 
   // --- Empresa ---------------------------------------------------------------
 
   beforeAll(async () => {
     const company = await prisma.company.create({
-      data: { name: `${PREFIX}Empresa`, isActive: true },
+      data: { name: `${PREFIX}Empresa`, isActive: true, taxStatus: 'RESPONSABLE_INSCRIPTO' },
     });
     companyId = company.id;
     ctx = { companyId, userId: 'test-user' };
@@ -393,7 +409,7 @@ describe.skipIf(!dbAvailable)('integración: motor de corrección en cadena (TSK
 
     customerId = (
       await prisma.contractor.create({
-        data: { companyId, name: `${PREFIX}Cliente` },
+        data: { companyId, name: `${PREFIX}Cliente`, taxCondition: 'RESPONSABLE_INSCRIPTO' },
         select: { id: true },
       })
     ).id;
@@ -489,6 +505,32 @@ describe.skipIf(!dbAvailable)('integración: motor de corrección en cadena (TSK
       })
     ).id;
 
+    const mkProduct = (code: string, trackStock: boolean) =>
+      prisma.product
+        .create({
+          data: {
+            companyId,
+            code: `${PREFIX}${code}`,
+            name: `${PREFIX}${code}`,
+            usage: 'SALE',
+            trackStock,
+            createdBy: 'test',
+          },
+          select: { id: true },
+        })
+        .then((p) => p.id);
+    stockProductId = await mkProduct('STOCK', true);
+    serviceProductId = await mkProduct('SERV', false);
+    await prisma.warehouseStock.create({
+      data: {
+        warehouseId,
+        productId: stockProductId,
+        quantity: 100,
+        reservedQty: 0,
+        availableQty: 100,
+      },
+    });
+
     vi.mocked(getActiveCompanyId).mockResolvedValue(companyId);
     vi.mocked(getCurrentUserId).mockResolvedValue('test-user');
   });
@@ -514,6 +556,9 @@ describe.skipIf(!dbAvailable)('integración: motor de corrección en cadena (TSK
       await prisma.purchaseInvoice.deleteMany({ where: { companyId } });
       await prisma.purchaseOrder.deleteMany({ where: { companyId } });
       await prisma.salesInvoice.deleteMany({ where: { companyId } });
+      await prisma.stockMovement.deleteMany({ where: { companyId } });
+      await prisma.warehouseStock.deleteMany({ where: { warehouse: { companyId } } });
+      await prisma.product.deleteMany({ where: { companyId } });
       await prisma.warehouse.deleteMany({ where: { companyId } });
       await prisma.cashRegisterSession.deleteMany({ where: { companyId } });
       await prisma.cashRegister.deleteMany({ where: { companyId } });
@@ -1545,5 +1590,239 @@ describe.skipIf(!dbAvailable)('integración: motor de corrección en cadena (TSK
     expect(entryCards).toHaveLength(1);
     expect(entryCards[0].action).toBe('MODIFY');
     expect(entryCards[0].rows.every((row) => row.before === null)).toBe(true);
+  });
+
+  // --- I6: caminos de riesgo ----------------------------------------------------
+
+  const fvRow = (id: string) =>
+    prisma.salesInvoice.findUniqueOrThrow({
+      where: { id },
+      select: { status: true, total: true, journalEntryId: true },
+    });
+  const rcRow = (id: string) =>
+    prisma.receipt.findUniqueOrThrow({
+      where: { id },
+      select: {
+        status: true,
+        totalAmount: true,
+        items: { select: { amount: true } },
+        payments: { select: { paymentMethod: true, amount: true } },
+      },
+    });
+  const editFV = (id: string, data: FvInput): CorrectionRequest => ({
+    mode: 'EDIT',
+    ref: ref('SALES_INVOICE', id),
+    data,
+  });
+
+  it('I6: FV de origen con recibo en efectivo: el recibo y la caja bajan (ADJUST)', async () => {
+    const fv = await realFV(fvInput(1000));
+    const cashBefore = await cashExpected(sessionId);
+    const rcId = await confirmedRC(fv.id, [
+      { paymentMethod: 'CASH', amount: '1000.00', cashRegisterId: cashId },
+    ]);
+    expect(await cashExpected(sessionId)).toBe(cashBefore + 1000);
+
+    const proposal = await previewAndApply(editFV(fv.id, fvWithTotal(fv.input, 600)));
+    const actions = Object.fromEntries(proposal.cards.map((c) => [c.key, c.action]));
+    expect(actions[`RECEIPT:${rcId}`]).toBe('MODIFY');
+    expect(actions[`CASH:RECEIPT:${rcId}:1`]).toBe('MODIFY');
+    expect(actions[`CASH_SESSION:${sessionId}`]).toBe('MODIFY');
+
+    const rc = await rcRow(rcId);
+    expect(Number(rc.totalAmount)).toBe(600);
+    expect(rc.payments.map((p) => Number(p.amount))).toEqual([600]);
+    expect(await cashExpected(sessionId)).toBe(cashBefore + 600);
+    const fvAfter = await fvRow(fv.id);
+    expect([Number(fvAfter.total), fvAfter.status]).toEqual([600, 'PAID']);
+  });
+
+  it('I6: recibo con cheque de tercero: el cheque elegido baja con el recibo', async () => {
+    const fv = await realFV(fvInput(900));
+    // Un cheque solo no genera asiento sin cuenta de valores: va con un pago en efectivo.
+    const rcId = await confirmedRC(fv.id, [
+      { paymentMethod: 'CASH', amount: '100.00', cashRegisterId: cashId },
+      rcCheck(800, 'T792E-CH-RED'),
+    ]);
+    const checkPaymentId = (
+      await prisma.receiptPayment.findFirstOrThrow({
+        where: { receiptId: rcId, paymentMethod: 'CHECK' },
+        select: { id: true },
+      })
+    ).id;
+    const checkKey = `CHECK:${PREFIX}Banco Emisor:T792E-CH-RED`;
+
+    const proposal = await previewAndApply({
+      ...editFV(fv.id, fvWithTotal(fv.input, 400)),
+      choices: { [rcId]: checkPaymentId },
+    });
+    expect(proposal.cards.find((c) => c.key === checkKey)).toMatchObject({
+      action: 'MODIFY',
+      rows: [expect.objectContaining({ label: 'Importe' })],
+    });
+    const check = await prisma.check.findFirstOrThrow({
+      where: { companyId, checkNumber: 'T792E-CH-RED' },
+      select: { amount: true, status: true },
+    });
+    expect([Number(check.amount), check.status]).toEqual([300, 'PORTFOLIO']);
+    const rc = await rcRow(rcId);
+    expect(Number(rc.totalAmount)).toBe(400);
+    expect(rc.payments.map((p) => [p.paymentMethod, Number(p.amount)]).sort()).toEqual([
+      ['CASH', 100],
+      ['CHECK', 300],
+    ]);
+  });
+
+  it('I6: OP en efectivo ajustada: el movimiento y el saldo esperado de la sesión bajan', async () => {
+    const fc = await confirmedFC(500);
+    const cashBefore = await cashExpected(sessionId);
+    const opId = await confirmedOP([{ invoiceId: fc.id, amount: 500 }], [cash(500)]);
+    expect(await cashExpected(sessionId)).toBe(cashBefore - 500);
+
+    const proposal = await previewAndApply(editFC(fc.id, withTotal(fc.input, 350)));
+    const session = proposal.cards.find((c) => c.key === `CASH_SESSION:${sessionId}`);
+    expect(session?.rows).toEqual([expect.objectContaining({ label: 'Saldo esperado' })]);
+    expect(proposal.cards.find((c) => c.key === `CASH:PAYMENT_ORDER:${opId}:1`)?.action).toBe(
+      'MODIFY'
+    );
+    expect(await cashExpected(sessionId)).toBe(cashBefore - 350);
+    const movements = await prisma.cashMovement.findMany({
+      where: { paymentOrderId: opId },
+      select: { amount: true, sessionId: true },
+    });
+    expect(movements.map((m) => [Number(m.amount), m.sessionId])).toEqual([[350, sessionId]]);
+  });
+
+  it('I6: cambiar la fecha a otro mes: con ambos períodos abiertos aplica; con el viejo cerrado → PERIOD_CLOSED', async () => {
+    const fc = await confirmedFC(410, { issueDate: new Date('2026-07-10') });
+    await previewAndApply(editFC(fc.id, { ...fc.input, issueDate: new Date('2026-08-10') }));
+    const moved = await fcRow(fc.id);
+    expect((await entryRow(moved.journalEntryId!)).date.toISOString().slice(0, 10)).toBe(
+      '2026-08-10'
+    );
+
+    const other = await confirmedFC(420, { issueDate: new Date('2026-07-12') });
+    const reopen = await closeMonthForTest(companyId, new Date('2026-07-15'));
+    try {
+      const found = await impedimentsOf(
+        editFC(other.id, { ...other.input, issueDate: new Date('2026-08-12') })
+      );
+      expect(found.map((i) => [i.code, i.severity])).toEqual([['PERIOD_CLOSED', 'BLOCKED']]);
+    } finally {
+      await reopen();
+    }
+  });
+
+  it('I6: OP dependiente en un período cerrado → PERIOD_CLOSED aunque la FC esté en uno abierto', async () => {
+    const fc = await confirmedFC(610, { issueDate: new Date('2026-09-05') });
+    await confirmedOP([{ invoiceId: fc.id, amount: 610 }], [transfer(610)], new Date('2026-10-02'));
+    const reopen = await closeMonthForTest(companyId, new Date('2026-10-15'));
+    try {
+      const found = await impedimentsOf(editFC(fc.id, withTotal(fc.input, 500)));
+      expect(found.map((i) => [i.code, i.severity])).toEqual([['PERIOD_CLOSED', 'BLOCKED']]);
+    } finally {
+      await reopen();
+    }
+  });
+
+  it('I6: anular FV con asiento POSTED: contraasiento con la fecha de la FV', async () => {
+    const fv = await realFV(fvInput(780, { issueDate: new Date('2026-03-07') }));
+    const entryId = (await fvRow(fv.id)).journalEntryId!;
+    await prisma.$transaction((tx) =>
+      postJournalEntryTx(tx, { companyId, entryId, userId: 'test' })
+    );
+
+    const proposal = await previewAndApply({ mode: 'CANCEL', ref: ref('SALES_INVOICE', fv.id) });
+    expect(proposal.cards.find((c) => c.key === `SALES_INVOICE:${fv.id}`)?.action).toBe('CANCEL');
+    const original = await entryRow(entryId);
+    expect(original.status).toBe('REVERSED');
+    const reversal = await entryRow(original.reversalEntryId!);
+    expect(reversal.date.toISOString().slice(0, 10)).toBe('2026-03-07');
+    expect(proposal.cards.find((c) => c.key === `ENTRY:${reversal.number}`)?.action).toBe(
+      'REVERSE'
+    );
+    expect((await fvRow(fv.id)).status).toBe('CANCELLED');
+  });
+
+  // --- I6: invariante "toda fila que cambia tiene su tarjeta" -------------------
+
+  /** Aplica la corrección y verifica que cada fila que cambió en la empresa se mostró. */
+  async function expectEveryChangeShown(request: CorrectionRequest) {
+    const before = await companyState();
+    const proposal = await previewAndApply(request);
+    const after = await companyState();
+    // No es vacuo: sin tarjetas, los cambios quedarían sin mostrar.
+    expect(changesWithoutCard(before, after, []).length).toBeGreaterThan(0);
+    expect(changesWithoutCard(before, after, proposal.cards)).toEqual([]);
+    return proposal;
+  }
+
+  it('I6 invariante: editar FC pagada por OP de transferencia', async () => {
+    const fc = await confirmedFC(2200);
+    await confirmedOP([{ invoiceId: fc.id, amount: 2200 }], [transfer(2200)]);
+    await expectEveryChangeShown(editFC(fc.id, withTotal(fc.input, 1800)));
+  });
+
+  it('I6 invariante: eliminar FV con stock, recibo y remito', async () => {
+    const fv = await realFV({
+      ...fvInput(0),
+      lines: [
+        {
+          productId: stockProductId,
+          description: `${PREFIX}venta con stock`,
+          quantity: '3',
+          unitPrice: '100.00',
+          vatRate: '0',
+        },
+      ],
+    });
+    expect(
+      await prisma.stockMovement.count({
+        where: { companyId, referenceType: 'sales_invoice', referenceId: fv.id },
+      })
+    ).toBeGreaterThan(0);
+    await confirmedRC(fv.id, [{ paymentMethod: 'CASH', amount: '300.00', cashRegisterId: cashId }]);
+    const number = 9600 + seq++;
+    await prisma.deliveryNote.create({
+      data: {
+        companyId,
+        customerId,
+        warehouseId,
+        number,
+        fullNumber: `RE-${number}`,
+        deliveryDate: DATE,
+        status: 'INVOICED',
+        salesInvoiceId: fv.id,
+        createdBy: 'test',
+      },
+    });
+    await expectEveryChangeShown({ mode: 'DELETE', ref: ref('SALES_INVOICE', fv.id) });
+  });
+
+  it('I6 invariante: anular OP con tarjeta de socio y efectivo', async () => {
+    const fc = await confirmedFC(900);
+    const opId = await confirmedOP(
+      [{ invoiceId: fc.id, amount: 900 }],
+      [
+        {
+          paymentMethod: 'DEBIT_CARD',
+          amount: '500.00',
+          cardId: partnerCardId,
+          bankAccountId: bankAId,
+        },
+        cash(400),
+      ]
+    );
+    expect(await prisma.paymentOrderInstallment.count({ where: { paymentOrderId: opId } })).toBe(1);
+    await expectEveryChangeShown({ mode: 'CANCEL', ref: ref('PAYMENT_ORDER', opId) });
+  });
+
+  it('I6 invariante: editar MF de gastos bancarios', async () => {
+    const mfId = await confirmedMF(bankCharges(['75.00', '25.00']));
+    await expectEveryChangeShown({
+      mode: 'EDIT',
+      ref: ref('FUND_MOVEMENT', mfId),
+      data: bankCharges(['130.00'], `BANK:${bankBId}`),
+    });
   });
 });
