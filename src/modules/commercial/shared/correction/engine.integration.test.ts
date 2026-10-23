@@ -1402,4 +1402,38 @@ describe.skipIf(!dbAvailable)('integración: motor de corrección en cadena (TSK
       }
     }
   });
+
+  it('I4: cambiar la clase (FC ↔ NC) con pagos o aplicaciones → VOUCHER_CLASS_CHANGED', async () => {
+    const fc = await confirmedFC(1400);
+    await confirmedOP([{ invoiceId: fc.id, amount: 1400 }], [transfer(1400)]);
+    const toCredit = await impedimentsOf(
+      editFC(fc.id, { ...fc.input, voucherType: 'NOTA_CREDITO_A' })
+    );
+    expect(toCredit.map((i) => [i.code, i.severity])).toEqual([
+      ['VOUCHER_CLASS_CHANGED', 'MANUAL'],
+    ]);
+    // FC ↔ ND es la misma clase: no es impedimento.
+    expect(
+      await impedimentsOf(editFC(fc.id, { ...fc.input, voucherType: 'NOTA_DEBITO_A' }))
+    ).toEqual([]);
+
+    const ownSupplierId = (
+      await prisma.supplier.create({
+        data: {
+          companyId,
+          code: `${PREFIX}NC3`,
+          businessName: `${PREFIX}Proveedor NC3`,
+          taxId: '30500000006',
+          taxCondition: 'RESPONSABLE_INSCRIPTO',
+          createdBy: 'test',
+        },
+        select: { id: true },
+      })
+    ).id;
+    await confirmedFC(500, { supplierId: ownSupplierId });
+    const nc = await confirmedFC(200, { supplierId: ownSupplierId, voucherType: 'NOTA_CREDITO_A' });
+    const toInvoice = await impedimentsOf(editFC(nc.id, { ...nc.input, voucherType: 'FACTURA_A' }));
+    expect(toInvoice.map((i) => i.code)).toEqual(['VOUCHER_CLASS_CHANGED']);
+    expect(toInvoice[0].message).toContain('de nota de crédito a factura o nota de débito');
+  });
 });

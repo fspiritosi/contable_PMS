@@ -52,6 +52,14 @@ export const impediments = {
       action: 'Corregí las retenciones de ese comprobante a mano y reintentá.',
     };
   },
+  voucherClassChanged(docLabel: string, from: string, to: string): Impediment {
+    return {
+      code: 'VOUCHER_CLASS_CHANGED',
+      severity: 'MANUAL',
+      message: `${docLabel} no puede pasar de ${from} a ${to}: tiene pagos, cobros o notas de crédito aplicadas.`,
+      action: 'Anulá o eliminá el comprobante y cargalo de nuevo con el tipo correcto.',
+    };
+  },
   noPaymentCoversReduction(docLabel: string, reduction: number): Impediment {
     return {
       code: 'NO_PAYMENT_COVERS_REDUCTION',

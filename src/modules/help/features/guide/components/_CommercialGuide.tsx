@@ -645,6 +645,9 @@ export function _CommercialGuide() {
             <strong>CAE</strong> o de un punto de venta AFIP no se toca: se
             corrige con una nota de crédito. En una factura de venta no se
             pueden cambiar el punto de venta, el tipo de comprobante ni el número.
+            Una factura de compra con pagos o notas de crédito aplicadas no puede
+            pasar a ser nota de crédito (ni al revés): anulala y cargala de nuevo
+            con el tipo correcto.
           </p>
           <p className="text-sm text-muted-foreground mt-2">
             Los pagos se registran desde <strong>Tesorería → Órdenes de

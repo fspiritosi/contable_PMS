@@ -16,6 +16,7 @@ import {
 } from '@/shared/lib/effective-settlements';
 
 import type { EffectsCtx } from '../effects/types';
+import { isCreditNote } from '../voucher-utils';
 import {
   allocateReduction,
   paymentsCovering,
@@ -468,6 +469,38 @@ function distinctDays(dates: Date[]): Date[] {
   return [...byDay.values()];
 }
 
+const voucherClass = (voucherType: string) =>
+  isCreditNote(voucherType) ? 'nota de crédito' : 'factura o nota de débito';
+
+/**
+ * Pasar de NC a FC/ND (o al revés) invierte el sentido del comprobante: sus pagos,
+ * cobros o las NC que lo cancelan, o las aplicaciones que da como NC, quedarían con el
+ * signo equivocado. Con alguno de ellos, la clase no se cambia desde la corrección.
+ */
+async function voucherClassChangeTx(
+  tx: Tx,
+  companyId: string,
+  origin: DocHead,
+  newVoucherType: string | undefined,
+  cancellations: number
+): Promise<Impediment[]> {
+  if (!origin.voucherType || !newVoucherType) return [];
+  if (isCreditNote(origin.voucherType) === isCreditNote(newVoucherType)) return [];
+  const where = { creditNoteId: origin.ref.id, companyId };
+  const given =
+    origin.ref.kind === 'PURCHASE_INVOICE'
+      ? await tx.purchaseCreditNoteApplication.count({ where })
+      : await tx.salesCreditNoteApplication.count({ where });
+  if (cancellations === 0 && given === 0) return [];
+  return [
+    impediments.voucherClassChanged(
+      capitalize(origin.label),
+      voucherClass(origin.voucherType),
+      voucherClass(newVoucherType)
+    ),
+  ];
+}
+
 // ============================================================================
 // PLAN
 // ============================================================================
@@ -574,6 +607,17 @@ export async function planCorrectionTx(
 
     if (edited && edited.partyId !== origin.partyId && chain.cancellations.length > 0) {
       found.push(impediments.partyChanged([...heads.values()].map((h) => h.label)));
+    }
+    if (edited) {
+      found.push(
+        ...(await voucherClassChangeTx(
+          tx,
+          companyId,
+          origin,
+          edited.voucherType,
+          chain.cancellations.length
+        ))
+      );
     }
 
     const cancelledCents = chain.cancellations.reduce((sum, c) => sum + toCents(c.amount), 0);

@@ -1135,7 +1135,8 @@ Misma mecánica para `PAYMENT_ORDER`, `RECEIPT` y `FUND_MOVEMENT` (permisos `com
   solo cancelaba ese comprobante se elimina y, si cancelaba varios, pierde la imputación. Las retenciones no se
   recalculan. Profundidad: origen → OP/RC/NC → sus efectos.
 - **Impedimentos**: con al menos uno no se aplica nada. `MANUAL` ("Podés resolverlo": asiento Registrado,
-  liquidación de IVA del mes generada, cambio de tercero con pagos, movimiento bancario vinculado a mano) o
+  liquidación de IVA del mes generada, cambio de tercero con pagos, cambio de clase FC/ND ↔ NC con pagos,
+  cobros o NC aplicadas, movimiento bancario vinculado a mano) o
   `BLOCKED` ("No se puede": período cerrado, CAE de AFIP, caja cerrada, movimiento anterior a la trazabilidad, cuota de tarjeta pendiente sin su proyección vinculada).
 - **Eliminar** exige el asiento en DRAFT; **Anular** con asiento POSTED genera el contraasiento.
 - **Saldos vigentes** (`shared/lib/effective-settlements.ts`): una OP o un RC **anulado conserva sus

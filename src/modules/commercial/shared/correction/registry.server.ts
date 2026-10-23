@@ -75,6 +75,8 @@ export interface DocHead {
   date: Date;
   partyId: string | null;
   total: number;
+  /** Tipo de comprobante de una factura (FC/FV, NC, ND); sin valor en OP/RC/MF. */
+  voucherType?: string;
   journalEntry: { id: string; number: number; status: JournalEntryStatus } | null;
   /** Motivo por el que este comprobante no se puede editar (sí eliminar o anular). */
   editBlockedReason?: string;
@@ -86,6 +88,8 @@ export interface EditSummary {
   partyId: string | null;
   /** Total nuevo de una factura (para propagar la diferencia); null en OP/RC/MF. */
   total: number | null;
+  /** Tipo de comprobante nuevo de una factura; sin valor en OP/RC/MF. */
+  voucherType?: string;
 }
 
 export interface KindHandler {
@@ -170,6 +174,7 @@ async function purchaseInvoiceHead(tx: Tx, companyId: string, id: string): Promi
     date: invoice.issueDate,
     partyId: invoice.supplierId,
     total: Number(invoice.total),
+    voucherType: invoice.voucherType,
     journalEntry: entryOf(invoice.journalEntry),
   };
 }
@@ -220,6 +225,7 @@ async function salesInvoiceHead(tx: Tx, companyId: string, id: string): Promise<
     date: invoice.issueDate,
     partyId: invoice.customerId,
     total: Number(invoice.total),
+    voucherType: invoice.voucherType,
     journalEntry: entryOf(invoice.journalEntry),
   };
 }
@@ -370,6 +376,7 @@ export const CORRECTION_HANDLERS: Record<CorrectableKind, KindHandler> = {
         date: data.issueDate,
         partyId: data.supplierId,
         total: buildPurchaseInvoiceAmounts(data).total,
+        voucherType: data.voucherType,
       };
     },
     apply: applyPurchaseInvoiceEffectsTx,
@@ -401,6 +408,7 @@ export const CORRECTION_HANDLERS: Record<CorrectableKind, KindHandler> = {
         date: data.issueDate,
         partyId: data.customerId,
         total: Number(buildSalesInvoiceAmounts(data).amounts.total),
+        voucherType: data.voucherType,
       };
     },
     apply: applySalesInvoiceEffectsTx,
