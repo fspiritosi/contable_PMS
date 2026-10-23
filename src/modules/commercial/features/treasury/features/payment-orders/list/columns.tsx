@@ -136,7 +136,8 @@ export function getColumns({ onViewDetail, onEdit, onConfirm, onDelete, onCorrec
 
               {paymentOrder.status === 'CONFIRMED' && (
                 <>
-                  {canEdit && (
+                  {/* Una devolución a socio confirmada no se edita: se anula o elimina. */}
+                  {canEdit && !paymentOrder.partnerId && (
                     <DropdownMenuItem onClick={() => onEdit(paymentOrder)}>
                       <Edit className="mr-2 h-4 w-4" />
                       Editar

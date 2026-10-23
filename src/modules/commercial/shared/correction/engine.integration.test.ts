@@ -53,6 +53,7 @@ import {
   createPartnerRepaymentOrder,
   createPaymentOrder,
   getPendingPurchaseInvoices,
+  updatePaymentOrder,
 } from '@/modules/commercial/features/treasury/features/payment-orders/actions.server';
 import {
   confirmReceipt,
@@ -1823,6 +1824,32 @@ describe.skipIf(!dbAvailable)('integración: motor de corrección en cadena (TSK
       mode: 'EDIT',
       ref: ref('FUND_MOVEMENT', mfId),
       data: bankCharges(['130.00'], `BANK:${bankBId}`),
+    });
+  });
+
+  it('updatePaymentOrder devuelve los errores de negocio (R10) como dato, sin lanzar', async () => {
+    const fc = await confirmedFC(150);
+    const draft = await createPaymentOrder({
+      supplierId,
+      date: DATE,
+      notes: `${PREFIX}borrador`,
+      items: [{ invoiceId: fc.id, amount: '150.00' }],
+      payments: [transfer(150)],
+      withholdings: [],
+    });
+    const foreignBank = transfer(150, '00000000-0000-4000-8000-000000000000');
+    expect(
+      await updatePaymentOrder(draft.id, {
+        supplierId,
+        date: DATE,
+        notes: null,
+        items: [{ invoiceId: fc.id, amount: '150.00', expenseId: null }],
+        payments: [foreignBank],
+        withholdings: [],
+      })
+    ).toEqual({
+      success: false,
+      error: 'Alguna de las cuentas bancarias no existe en la empresa',
     });
   });
 });

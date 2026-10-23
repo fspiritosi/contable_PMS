@@ -62,7 +62,7 @@ export function _CorrectionProposalDialog({
         </DialogHeader>
 
         <div className="flex-1 space-y-3 overflow-y-auto">
-          <_CorrectionImpediments impediments={impediments} />
+          <_CorrectionImpediments impediments={impediments} mode={proposal.mode} />
           {orphanChoices.map((choice) => (
             <div key={choice.documentId} className="space-y-2 rounded-lg border p-3 sm:p-4">
               <p className="text-sm font-medium first-letter:uppercase">{choice.documentLabel}</p>

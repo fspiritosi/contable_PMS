@@ -4,20 +4,27 @@ import Link from 'next/link';
 
 import { Badge } from '@/shared/components/ui/badge';
 
-import type { Impediment } from '../correction/types';
+import type { CorrectionMode, Impediment } from '../correction/types';
 
 const SEVERITY_LABELS: Record<Impediment['severity'], string> = {
   MANUAL: 'Podés resolverlo',
   BLOCKED: 'No se puede',
 };
 
-export function _CorrectionImpediments({ impediments }: { impediments: Impediment[] }) {
+interface Props {
+  impediments: Impediment[];
+  /** Solo al editar hay datos que conservar en el formulario. */
+  mode: CorrectionMode;
+}
+
+export function _CorrectionImpediments({ impediments, mode }: Props) {
   if (impediments.length === 0) return null;
   return (
     <div className="space-y-2 rounded-lg border border-destructive/40 bg-destructive/5 p-3 sm:p-4">
       <p className="text-sm font-medium">
         Hay {impediments.length} {impediments.length === 1 ? 'impedimento' : 'impedimentos'}. Hasta
-        resolverlos no se aplica ningún cambio. Tus datos editados quedan en el formulario.
+        resolverlos no se aplica ningún cambio.
+        {mode === 'EDIT' && ' Tus datos editados quedan en el formulario.'}
       </p>
       <ul className="space-y-2">
         {impediments.map((impediment, index) => (

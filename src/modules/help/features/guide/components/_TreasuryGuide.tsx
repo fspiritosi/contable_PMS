@@ -504,7 +504,8 @@ export function _TreasuryGuide() {
             <li>
               <strong>Editar</strong>: abre el mismo formulario de la carga. El
               botón es <strong>Revisar cambios</strong>; el asiento se reescribe y
-              conserva su número.
+              conserva su número. Una devolución a socio confirmada no se edita:
+              anulala o eliminala y cargala de nuevo.
             </li>
             <li>
               <strong>Eliminar</strong>: borra la orden sin dejar rastro.

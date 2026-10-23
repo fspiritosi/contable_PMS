@@ -394,6 +394,8 @@ export interface PaymentOrderListItem extends Record<string, unknown> {
   totalAmount: number;
   status: PaymentOrderStatus;
   createdAt: Date;
+  /** Devolución a socio: no se edita confirmada (se anula o elimina y se carga de nuevo). */
+  partnerId: string | null;
   supplier: {
     id: string;
     businessName: string;

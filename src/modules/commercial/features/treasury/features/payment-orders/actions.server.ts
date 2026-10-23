@@ -557,6 +557,7 @@ export async function getPaymentOrders(params: { supplierId?: string; status?: s
         totalAmount: true,
         status: true,
         createdAt: true,
+        partnerId: true,
         supplier: {
           select: {
             id: true,
@@ -650,6 +651,7 @@ export async function getPaymentOrdersPaginated(searchParams: DataTableSearchPar
           totalAmount: true,
           status: true,
           createdAt: true,
+          partnerId: true,
           supplier: {
             select: {
               id: true,
@@ -890,7 +892,7 @@ export async function deletePaymentOrder(paymentOrderId: string) {
 export async function updatePaymentOrder(
   paymentOrderId: string,
   data: CreatePaymentOrderFormData
-) {
+): Promise<ActionResult<{ id: string }>> {
   await checkPermission('commercial.treasury.payment-orders', 'update', { redirect: true });
   const companyId = await getActiveCompanyId();
   if (!companyId) throw new Error('No hay empresa activa');
@@ -903,10 +905,10 @@ export async function updatePaymentOrder(
     });
 
     if (!existing) {
-      throw new Error('Orden de pago no encontrada');
+      throw new BusinessError('Orden de pago no encontrada');
     }
     if (existing.status !== 'DRAFT') {
-      throw new Error('Solo se pueden editar órdenes de pago en estado borrador');
+      throw new BusinessError('Solo se pueden editar órdenes de pago en estado borrador');
     }
 
     // Recalcular total
@@ -932,12 +934,8 @@ export async function updatePaymentOrder(
 
     return { success: true, id: paymentOrderId };
   } catch (error) {
-    logger.error('Error al actualizar orden de pago', {
-      data: { error, paymentOrderId },
-    });
-    if (error instanceof Error) {
-      throw error;
-    }
-    throw new Error('Error al actualizar orden de pago');
+    // Los BusinessError de la validación de pertenencia (R10) viajan como dato: un
+    // `throw` desde el Server Action se redacta en producción.
+    return toActionResult(error, 'Error al actualizar orden de pago');
   }
 }

@@ -331,7 +331,11 @@ export function CreatePaymentOrderModal({
     }
     try {
       if (isEdit && editPaymentOrderId) {
-        await updatePaymentOrder(editPaymentOrderId, data);
+        const result = await updatePaymentOrder(editPaymentOrderId, data);
+        if (!result.success) {
+          toast.error(result.error);
+          return;
+        }
         toast.success('Orden de pago actualizada correctamente');
       } else {
         await createPaymentOrder(data);
