@@ -338,8 +338,9 @@ function decorateCards(cards: ProposalCard[], plan: CorrectionPlan): ProposalCar
 
 /**
  * Planifica y, si se puede, ejecuta dentro de `tx` comparando las fotos de antes y
- * después. Con impedimentos no ejecuta. Si solo faltan elecciones de medio de pago,
- * ejecuta con el primer medio de cada una para mostrar las tarjetas, sin huella.
+ * después. Con impedimentos no ejecuta. Si faltan elecciones de medio de pago, ejecuta
+ * con la primera opción de cada una (todas cubren la reducción) para mostrar las
+ * tarjetas, sin huella.
  */
 async function simulateTx(
   tx: Tx,
@@ -348,7 +349,7 @@ async function simulateTx(
 ): Promise<Simulation> {
   await lockOriginTx(tx, ctx.companyId, request.ref);
   const plan = await planCorrectionTx(tx, ctx, request);
-  const base = { mode: request.mode, origin: request.ref, pendingChoices: plan.pendingChoices };
+  const base = { mode: request.mode, origin: request.ref, paymentChoices: plan.paymentChoices };
   const blocked = (
     rejection: NonNullable<Simulation['rejection']>,
     found = plan.impediments
@@ -360,17 +361,18 @@ async function simulateTx(
 
   if (plan.impediments.length > 0) return blocked('IMPEDIMENTS');
 
+  const unresolved = plan.paymentChoices.filter((c) => c.selected === null);
   let executable = plan;
-  if (plan.pendingChoices.length > 0) {
+  if (unresolved.length > 0) {
     const defaults = Object.fromEntries(
-      plan.pendingChoices.map((c) => [c.documentId, c.options[0]?.paymentId ?? ''])
+      unresolved.map((c) => [c.documentId, c.options[0]?.paymentId ?? ''])
     );
     executable = await planCorrectionTx(tx, ctx, {
       ...request,
       choices: { ...request.choices, ...defaults },
     });
-    // El primer medio puede no alcanzar: no hay nada que mostrar hasta que el usuario elija.
-    if (executable.impediments.length > 0) return blocked('PENDING_CHOICES', []);
+    // Las opciones cubren la reducción: replanificar con ellas no debería trabarse.
+    if (executable.impediments.length > 0) return blocked('IMPEDIMENTS', executable.impediments);
   }
 
   const refs: DocRef[] = [
@@ -388,7 +390,7 @@ async function simulateTx(
   const after = await loadChainSnapshotTx(tx, ctx.companyId, refs, before.scope);
   const cards = decorateCards(describeChanges(before, after), executable);
 
-  const ready = plan.pendingChoices.length === 0;
+  const ready = unresolved.length === 0;
   return {
     ready,
     ...(ready ? {} : { rejection: 'PENDING_CHOICES' as const }),

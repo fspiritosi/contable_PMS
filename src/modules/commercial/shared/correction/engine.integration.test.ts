@@ -238,7 +238,7 @@ describe.skipIf(!dbAvailable)('integración: motor de corrección en cadena (TSK
   async function previewAndApply(request: CorrectionRequest) {
     const proposal = await previewCorrection(ctx, request);
     expect(proposal.impediments).toEqual([]);
-    expect(proposal.pendingChoices).toEqual([]);
+    expect(proposal.paymentChoices.filter((c) => c.selected === null)).toEqual([]);
     expect(proposal.fingerprint).not.toBe('');
     expect(await applyCorrection(ctx, request, proposal.fingerprint)).toEqual({ applied: true });
     return proposal;
@@ -800,16 +800,22 @@ describe.skipIf(!dbAvailable)('integración: motor de corrección en cadena (TSK
     const pending = await previewCorrection(ctx, editFC(fc.id, withTotal(fc.input, 800)));
     expect(pending.impediments).toEqual([]);
     expect(pending.fingerprint).toBe('');
-    expect(pending.pendingChoices).toHaveLength(1);
-    expect(pending.pendingChoices[0].documentId).toBe(opId);
-    expect(pending.pendingChoices[0].options.map((o) => o.paymentId)).toContain(cashPaymentId);
+    expect(pending.paymentChoices).toHaveLength(1);
+    expect(pending.paymentChoices[0]).toMatchObject({ documentId: opId, selected: null });
+    expect(pending.paymentChoices[0].options.map((o) => o.paymentId)).toContain(cashPaymentId);
     expect(pending.cards.length).toBeGreaterThan(0);
     expect(await applyCorrection(ctx, editFC(fc.id, withTotal(fc.input, 800)), '')).toMatchObject({
       applied: false,
       reason: 'PENDING_CHOICES',
     });
 
-    await previewAndApply(editFC(fc.id, withTotal(fc.input, 800), { [opId]: cashPaymentId }));
+    const chosen = await previewAndApply(
+      editFC(fc.id, withTotal(fc.input, 800), { [opId]: cashPaymentId })
+    );
+    // La elección hecha sigue visible en la propuesta.
+    expect(chosen.paymentChoices).toEqual([
+      expect.objectContaining({ documentId: opId, selected: cashPaymentId }),
+    ]);
     const op = await opRow(opId);
     expect(op.payments.map((p) => [p.paymentMethod, Number(p.amount)])).toEqual([
       ['TRANSFER', 600],
@@ -1311,5 +1317,52 @@ describe.skipIf(!dbAvailable)('integración: motor de corrección en cadena (TSK
       paidAmount: 0,
       pendingAmount: 650,
     });
+  });
+
+  it('I1: con varios medios solo se ofrecen (y se simula con) los que cubren la reducción', async () => {
+    const fc = await confirmedFC(1000);
+    const opId = await confirmedOP(
+      [{ invoiceId: fc.id, amount: 1000 }],
+      [cash(100), transfer(900)]
+    );
+    const transferId = (await opRow(opId)).payments.find((p) => p.paymentMethod === 'TRANSFER')!.id;
+    const request = editFC(fc.id, withTotal(fc.input, 500));
+
+    const pending = await previewCorrection(ctx, request);
+    expect(pending.impediments).toEqual([]);
+    expect(pending.paymentChoices).toEqual([
+      expect.objectContaining({ documentId: opId, selected: null }),
+    ]);
+    expect(pending.paymentChoices[0].options.map((o) => o.paymentId)).toEqual([transferId]);
+    // Se simula con la transferencia: la propuesta muestra la cadena aunque falte elegir.
+    expect(pending.cards.find((c) => c.key === `PAYMENT_ORDER:${opId}`)?.action).toBe('MODIFY');
+    expect(pending.fingerprint).toBe('');
+
+    // Elegir el efectivo (que no alcanza) no se acepta: sigue pidiendo la elección.
+    const cashId_ = (await opRow(opId)).payments.find((p) => p.paymentMethod === 'CASH')!.id;
+    const wrong = await previewCorrection(
+      ctx,
+      editFC(fc.id, withTotal(fc.input, 500), {
+        [opId]: cashId_,
+      })
+    );
+    expect(wrong.paymentChoices[0].selected).toBeNull();
+
+    await previewAndApply(editFC(fc.id, withTotal(fc.input, 500), { [opId]: transferId }));
+    const op = await opRow(opId);
+    expect(op.payments.map((p) => [p.paymentMethod, Number(p.amount)])).toEqual([
+      ['TRANSFER', 400],
+      ['CASH', 100],
+    ]);
+  });
+
+  it('I1: si ningún medio cubre la reducción el impedimento lo dice (no habla de retenciones)', async () => {
+    const fc = await confirmedFC(600);
+    await confirmedOP([{ invoiceId: fc.id, amount: 600 }], [cash(300), transfer(300)]);
+    const found = await impedimentsOf(editFC(fc.id, withTotal(fc.input, 100)));
+    expect(found.map((i) => [i.code, i.severity])).toEqual([
+      ['NO_PAYMENT_COVERS_REDUCTION', 'MANUAL'],
+    ]);
+    expect(found[0].message).toContain('500,00');
   });
 });

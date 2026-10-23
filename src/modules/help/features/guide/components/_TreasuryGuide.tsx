@@ -522,7 +522,9 @@ export function _TreasuryGuide() {
               Si la orden tiene <strong>más de un medio de pago</strong> y la
               diferencia hay que descontarla de alguno, la propuesta te pregunta
               &quot;¿De qué medio de pago se descuenta?&quot; y se recalcula al
-              elegir.
+              elegir. Solo se ofrecen los medios que cubren la diferencia por sí
+              solos; si ninguno alcanza, la propuesta te avisa para que ajustes
+              los medios a mano.
             </li>
           </ul>
           <p className="text-muted-foreground">

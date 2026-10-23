@@ -1,3 +1,5 @@
+import { formatCurrency } from '@/shared/utils/formatters';
+
 import type { Impediment } from './types';
 
 const ENTRIES_HREF = '/dashboard/company/accounting/entries';
@@ -48,6 +50,14 @@ export const impediments = {
       severity: 'MANUAL',
       message: `La reducción no se puede cubrir en ${docLabel} sin tocar sus retenciones, que no se recalculan automáticamente.`,
       action: 'Corregí las retenciones de ese comprobante a mano y reintentá.',
+    };
+  },
+  noPaymentCoversReduction(docLabel: string, reduction: number): Impediment {
+    return {
+      code: 'NO_PAYMENT_COVERS_REDUCTION',
+      severity: 'MANUAL',
+      message: `Ningún medio de pago de ${docLabel} cubre por sí solo la diferencia de ${formatCurrency(reduction)}.`,
+      action: 'Ajustá los medios de pago de ese comprobante a mano y reintentá.',
     };
   },
   cashSessionClosed(registerName: string, docLabel: string): Impediment {

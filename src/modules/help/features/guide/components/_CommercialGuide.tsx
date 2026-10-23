@@ -632,7 +632,7 @@ export function _CommercialGuide() {
             se toca y la factura queda <strong>Parcialmente pagada</strong>. Si
             la factura estaba pagada junto con otras, solo cambia su parte. Si
             hay que elegir en qué medio de pago se descuenta la diferencia, el
-            sistema te lo pregunta.
+            sistema te lo pregunta (solo entre los medios que la cubren).
           </p>
           <p className="font-medium mt-3">Cuando no se puede aplicar</p>
           <p className="text-muted-foreground">

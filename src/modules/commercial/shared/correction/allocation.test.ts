@@ -69,8 +69,18 @@ describe('planPaymentReduction', () => {
     expect(planPaymentReduction([cash], 100)).toEqual({ kind: 'OK', paymentId: 'p1', after: 200 });
   });
 
-  it('varios sin choice → NEEDS_CHOICE', () => {
-    expect(planPaymentReduction([cash, bank], 100)).toEqual({ kind: 'NEEDS_CHOICE' });
+  it('varios sin choice → NEEDS_CHOICE con los medios que alcanzan', () => {
+    expect(planPaymentReduction([cash, bank], 100)).toEqual({
+      kind: 'NEEDS_CHOICE',
+      options: [cash, bank],
+    });
+  });
+
+  it('solo se ofrecen los medios que cubren la reducción', () => {
+    expect(planPaymentReduction([cash, bank], 500)).toEqual({
+      kind: 'NEEDS_CHOICE',
+      options: [bank],
+    });
   });
 
   it('varios con choice OK', () => {
@@ -82,12 +92,22 @@ describe('planPaymentReduction', () => {
   });
 
   it('choice inexistente → NEEDS_CHOICE', () => {
-    expect(planPaymentReduction([cash, bank], 100, 'zzz')).toEqual({ kind: 'NEEDS_CHOICE' });
+    expect(planPaymentReduction([cash, bank], 100, 'zzz')).toEqual({
+      kind: 'NEEDS_CHOICE',
+      options: [cash, bank],
+    });
   });
 
-  it('medio insuficiente → INSUFFICIENT', () => {
+  it('choice de un medio que no alcanza no se acepta: vuelve a pedir entre los que alcanzan', () => {
+    expect(planPaymentReduction([cash, bank], 400, 'p1')).toEqual({
+      kind: 'NEEDS_CHOICE',
+      options: [bank],
+    });
+  });
+
+  it('ningún medio alcanza → INSUFFICIENT', () => {
     expect(planPaymentReduction([cash], 300.01)).toEqual({ kind: 'INSUFFICIENT' });
-    expect(planPaymentReduction([cash, bank], 400, 'p1')).toEqual({ kind: 'INSUFFICIENT' });
+    expect(planPaymentReduction([cash, bank], 700.01, 'p2')).toEqual({ kind: 'INSUFFICIENT' });
   });
 
   it('reducción exacta deja el medio en 0', () => {

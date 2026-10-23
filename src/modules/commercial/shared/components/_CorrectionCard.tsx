@@ -1,15 +1,9 @@
 'use client';
 
 import { Badge } from '@/shared/components/ui/badge';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/shared/components/ui/select';
 
 import type { CardAction, PaymentChoice, ProposalCard } from '../correction/types';
+import { _PaymentChoiceSelect } from './_PaymentChoiceSelect';
 
 export const CARD_ACTION_LABELS: Record<CardAction, string> = {
   MODIFY: 'Se modifica',
@@ -26,7 +20,7 @@ const DESTRUCTIVE_ACTIONS: CardAction[] = ['DELETE', 'CANCEL', 'UNLINK'];
 
 interface Props {
   card: ProposalCard;
-  /** Elección pendiente de la OP o RC de esta tarjeta, si la hay. */
+  /** Elección de medio de pago de la OP o RC de esta tarjeta, si la hay. */
   choice?: PaymentChoice;
   disabled?: boolean;
   onChoose: (documentId: string, paymentId: string) => void;
@@ -61,24 +55,8 @@ export function _CorrectionCard({ card, choice, disabled, onChoose }: Props) {
       {card.warning && <p className="mt-2 text-xs text-amber-600">{card.warning}</p>}
 
       {choice && (
-        <div className="mt-3 space-y-1.5">
-          <p className="text-sm font-medium">¿De qué medio de pago se descuenta?</p>
-          <Select
-            value={choice.selected ?? undefined}
-            onValueChange={(paymentId) => onChoose(choice.documentId, paymentId)}
-            disabled={disabled}
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Elegí un medio de pago" />
-            </SelectTrigger>
-            <SelectContent>
-              {choice.options.map((option) => (
-                <SelectItem key={option.paymentId} value={option.paymentId}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div className="mt-3">
+          <_PaymentChoiceSelect choice={choice} disabled={disabled} onChoose={onChoose} />
         </div>
       )}
     </div>

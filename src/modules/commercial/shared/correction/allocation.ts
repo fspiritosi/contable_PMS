@@ -59,26 +59,41 @@ export interface PaymentLine {
 
 export type PaymentReduction =
   | { kind: 'OK'; paymentId: string; after: number }
-  | { kind: 'NEEDS_CHOICE' }
+  | { kind: 'NEEDS_CHOICE'; options: PaymentLine[] }
   | { kind: 'INSUFFICIENT' };
 
-/** Un solo medio: ese. Varios: el de `choice` (si no hay → NEEDS_CHOICE). Si el medio no alcanza → INSUFFICIENT. */
+/** Medios que cubren solos la reducción: los únicos que se pueden ofrecer para descontarla. */
+export function paymentsCovering(
+  payments: readonly PaymentLine[],
+  reduction: number
+): PaymentLine[] {
+  const cents = toCents(reduction);
+  return payments.filter((p) => toCents(p.amount) >= cents);
+}
+
+/**
+ * Un solo medio: ese. Varios: solo los que cubren la reducción son opciones, y se usa
+ * el de `choice` si es una de ellas (si no → NEEDS_CHOICE con las opciones). Si ningún
+ * medio alcanza → INSUFFICIENT.
+ */
 export function planPaymentReduction(
   payments: readonly PaymentLine[],
   reduction: number,
   choice?: string
 ): PaymentReduction {
-  if (payments.length === 0) return { kind: 'INSUFFICIENT' };
+  const options = paymentsCovering(payments, reduction);
+  if (options.length === 0) return { kind: 'INSUFFICIENT' };
 
   let target: PaymentLine | undefined;
   if (payments.length === 1) {
-    target = payments[0];
+    target = options[0];
   } else {
-    target = choice ? payments.find((p) => p.id === choice) : undefined;
-    if (!target) return { kind: 'NEEDS_CHOICE' };
+    target = choice ? options.find((p) => p.id === choice) : undefined;
+    if (!target) return { kind: 'NEEDS_CHOICE', options };
   }
-
-  const afterCents = toCents(target.amount) - toCents(reduction);
-  if (afterCents < 0) return { kind: 'INSUFFICIENT' };
-  return { kind: 'OK', paymentId: target.id, after: fromCents(afterCents) };
+  return {
+    kind: 'OK',
+    paymentId: target.id,
+    after: fromCents(toCents(target.amount) - toCents(reduction)),
+  };
 }

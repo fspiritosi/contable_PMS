@@ -13,6 +13,7 @@ import {
 import type { CorrectionMode, CorrectionProposal } from '../correction/types';
 import { _CorrectionCard } from './_CorrectionCard';
 import { _CorrectionImpediments } from './_CorrectionImpediments';
+import { _PaymentChoiceSelect } from './_PaymentChoiceSelect';
 
 const TITLES: Record<CorrectionMode, string> = {
   EDIT: 'Revisá los cambios antes de guardar',
@@ -42,8 +43,12 @@ export function _CorrectionProposalDialog({
   onConfirm,
 }: Props) {
   if (!proposal) return null;
-  const { cards, impediments, pendingChoices } = proposal;
-  const blocked = impediments.length > 0 || pendingChoices.some((c) => !c.selected);
+  const { cards, impediments, paymentChoices } = proposal;
+  const blocked = impediments.length > 0 || paymentChoices.some((c) => !c.selected);
+  // Una elección sin tarjeta de su OP/RC (p. ej. sin cambios que mostrar) va arriba, sola.
+  const orphanChoices = paymentChoices.filter(
+    (c) => !cards.some((card) => isDocumentCard(card.key, c.documentId))
+  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -58,11 +63,17 @@ export function _CorrectionProposalDialog({
 
         <div className="flex-1 space-y-3 overflow-y-auto">
           <_CorrectionImpediments impediments={impediments} />
+          {orphanChoices.map((choice) => (
+            <div key={choice.documentId} className="space-y-2 rounded-lg border p-3 sm:p-4">
+              <p className="text-sm font-medium first-letter:uppercase">{choice.documentLabel}</p>
+              <_PaymentChoiceSelect choice={choice} disabled={busy} onChoose={onChoose} />
+            </div>
+          ))}
           {cards.map((card) => (
             <_CorrectionCard
               key={card.key}
               card={card}
-              choice={pendingChoices.find((c) => isDocumentCard(card.key, c.documentId))}
+              choice={paymentChoices.find((c) => isDocumentCard(card.key, c.documentId))}
               disabled={busy}
               onChoose={onChoose}
             />

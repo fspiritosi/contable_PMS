@@ -37,10 +37,13 @@ export interface CardRow {
   after: string | null;
 }
 
+/** Elección del medio de pago del que se descuenta la reducción de una OP/RC (§4.3). */
 export interface PaymentChoice {
   documentId: string;
   documentLabel: string;
+  /** Solo los medios que cubren la reducción por sí solos. */
   options: { paymentId: string; label: string }[];
+  /** null: falta elegir (no se puede confirmar). */
   selected: string | null;
 }
 
@@ -61,6 +64,7 @@ export type ImpedimentCode =
   | 'MONTHLY_PROCESS'
   | 'PARTY_CHANGED_WITH_PAYMENTS'
   | 'WITHHOLDINGS_INSUFFICIENT'
+  | 'NO_PAYMENT_COVERS_REDUCTION'
   | 'CASH_SESSION_CLOSED'
   | 'CHECK_USED'
   | 'CHECK_ENDORSED_IN_OTHER_OP'
@@ -85,6 +89,7 @@ export interface CorrectionProposal {
   origin: DocRef;
   cards: ProposalCard[];
   impediments: Impediment[];
-  pendingChoices: PaymentChoice[];
+  /** Elecciones de medio de pago, pendientes (`selected` null) o ya hechas: siguen visibles. */
+  paymentChoices: PaymentChoice[];
   fingerprint: string;
 }

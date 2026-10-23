@@ -1126,7 +1126,8 @@ Misma mecánica para `PAYMENT_ORDER`, `RECEIPT` y `FUND_MOVEMENT` (permisos `com
   `applyDocumentCorrection`. UI: `shared/hooks/useDocumentCorrection.ts`, `_CorrectionProposalDialog`,
   `_CorrectionCard`, `_CorrectionImpediments` y `_DocumentCorrectionButtons`.
 - **Propagación**: si el monto baja, baja el pago/cobro (de la cancelación más reciente a la más antigua; con varios
-  medios de pago elige el usuario); si sube no se toca y queda "Pago parcial"; si se elimina o anula, el pago que
+  medios de pago elige el usuario, solo entre los que cubren la diferencia por sí solos; si ninguno alcanza →
+  impedimento `NO_PAYMENT_COVERS_REDUCTION`, o `WITHHOLDINGS_INSUFFICIENT` si sin las retenciones no alcanzan); si sube no se toca y queda "Pago parcial"; si se elimina o anula, el pago que
   solo cancelaba ese comprobante se elimina y, si cancelaba varios, pierde la imputación. Las retenciones no se
   recalculan. Profundidad: origen → OP/RC/NC → sus efectos.
 - **Impedimentos**: con al menos uno no se aplica nada. `MANUAL` ("Podés resolverlo": asiento Registrado,

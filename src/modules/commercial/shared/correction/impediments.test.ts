@@ -22,6 +22,12 @@ describe('impediments', () => {
       'MANUAL',
     ],
     [
+      'noPaymentCoversReduction',
+      impediments.noPaymentCoversReduction('la OP 1', 500),
+      'NO_PAYMENT_COVERS_REDUCTION',
+      'MANUAL',
+    ],
+    [
       'cashSessionClosed',
       impediments.cashSessionClosed('Caja 1', 'OP 1'),
       'CASH_SESSION_CLOSED',
@@ -53,8 +59,8 @@ describe('impediments', () => {
     ['simulationError', impediments.simulationError('Falló'), 'SIMULATION_ERROR', 'BLOCKED'],
   ];
 
-  it('cubre los 16 constructores', () => {
-    expect(table).toHaveLength(16);
+  it('cubre los 17 constructores', () => {
+    expect(table).toHaveLength(17);
     expect(Object.keys(impediments).sort()).toEqual(table.map(([name]) => name).sort());
   });
 

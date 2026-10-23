@@ -18,6 +18,7 @@ import {
 import type { EffectsCtx } from '../effects/types';
 import {
   allocateReduction,
+  paymentsCovering,
   planPaymentReduction,
   type Cancellation,
   type PaymentLine,
@@ -62,7 +63,8 @@ export interface CorrectionPlan {
   dependents: DependentChange[];
   creditNoteChanges: CreditNoteChange[];
   impediments: Impediment[];
-  pendingChoices: PaymentChoice[];
+  /** Elecciones de medio de pago de las OP/RC con varios medios (pendientes o hechas). */
+  paymentChoices: PaymentChoice[];
   /** Fechas viejas y nuevas del origen y de los dependientes (períodos y procesos del mes). */
   datesToCheck: Date[];
 }
@@ -88,7 +90,10 @@ async function loadPurchaseInvoiceChainTx(
 ): Promise<InvoiceChain> {
   const [items, applications] = await Promise.all([
     tx.paymentOrderItem.findMany({
-      where: { invoiceId, paymentOrder: { companyId, ...EFFECTIVE_PAYMENT_ORDER_ITEM.paymentOrder } },
+      where: {
+        invoiceId,
+        paymentOrder: { companyId, ...EFFECTIVE_PAYMENT_ORDER_ITEM.paymentOrder },
+      },
       select: {
         id: true,
         amount: true,
@@ -266,14 +271,17 @@ async function loadSettlementDocTx(tx: Tx, ref: DocRef): Promise<SettlementDoc> 
 interface DependentPlan {
   change: DependentChange;
   impediments: Impediment[];
-  pendingChoice?: PaymentChoice;
+  /** Con varios medios: la elección (hecha o pendiente) entre los que cubren la reducción. */
+  choice?: PaymentChoice;
 }
 
 /**
  * Qué le pasa a una OP/RC cuyas imputaciones bajan: si todas quedan en 0 se elimina;
  * si no, baja esas imputaciones y la reducción sale de un solo medio de pago (el
- * único, o el que eligió el usuario). Un cheque de tercero endosado no se puede
- * achicar: no es una opción.
+ * único, o el que eligió el usuario entre los que la cubren). Un cheque de tercero
+ * endosado no se puede achicar: no es una opción. Si ningún medio la cubre, el
+ * impedimento dice por qué: las retenciones (si sin ellas no alcanzan los medios) o
+ * que hay que repartirla a mano entre varios medios.
  */
 async function planDependentTx(
   tx: Tx,
@@ -326,25 +334,39 @@ async function planDependentTx(
   }
 
   const result = planPaymentReduction(reducible, reduction, choices[head.ref.id]);
+  if (result.kind === 'INSUFFICIENT') {
+    const reducibleCents = reducible.reduce((sum, p) => sum + toCents(p.amount), 0);
+    const withholdingsShort = doc.hasWithholdings && reducibleCents < toCents(reduction);
+    return {
+      change: base,
+      impediments: [
+        withholdingsShort
+          ? impediments.withholdingsInsufficient(head.label)
+          : impediments.noPaymentCoversReduction(head.label, reduction),
+      ],
+    };
+  }
+
+  const choice = (selected: string | null): PaymentChoice | undefined =>
+    reducible.length > 1
+      ? {
+          documentId: head.ref.id,
+          documentLabel: head.label,
+          options: paymentsCovering(reducible, reduction).map((p) => ({
+            paymentId: p.id,
+            label: p.label,
+          })),
+          selected,
+        }
+      : undefined;
   if (result.kind === 'OK') {
     return {
       change: { ...base, payment: { paymentId: result.paymentId, after: result.after } },
       impediments: [],
+      choice: choice(result.paymentId),
     };
   }
-  if (result.kind === 'INSUFFICIENT') {
-    return { change: base, impediments: [impediments.withholdingsInsufficient(head.label)] };
-  }
-  return {
-    change: base,
-    impediments: [],
-    pendingChoice: {
-      documentId: head.ref.id,
-      documentLabel: head.label,
-      options: reducible.map((p) => ({ paymentId: p.id, label: p.label })),
-      selected: null,
-    },
-  };
+  return { change: base, impediments: [], choice: choice(null) };
 }
 
 // ============================================================================
@@ -462,7 +484,7 @@ function emptyPlan(
     dependents: [],
     creditNoteChanges: [],
     impediments: found,
-    pendingChoices: [],
+    paymentChoices: [],
     datesToCheck: origin ? [origin.date] : [],
   };
 }
@@ -534,7 +556,7 @@ export async function planCorrectionTx(
   // Cadena de una factura
   const dependents: DependentChange[] = [];
   const creditNoteChanges: CreditNoteChange[] = [];
-  const pendingChoices: PaymentChoice[] = [];
+  const paymentChoices: PaymentChoice[] = [];
   const isInvoice = ref.kind === 'PURCHASE_INVOICE' || ref.kind === 'SALES_INVOICE';
 
   if (isInvoice) {
@@ -583,7 +605,7 @@ export async function planCorrectionTx(
       const planned = await planDependentTx(tx, head, itemAfter, request.choices ?? {});
       dependents.push(planned.change);
       found.push(...planned.impediments);
-      if (planned.pendingChoice) pendingChoices.push(planned.pendingChoice);
+      if (planned.choice) paymentChoices.push(planned.choice);
 
       if (head.journalEntry?.status === 'POSTED') {
         found.push(impediments.entryPosted(head.journalEntry.number, head.label));
@@ -616,7 +638,7 @@ export async function planCorrectionTx(
     dependents,
     creditNoteChanges,
     impediments: dedupeImpediments(found),
-    pendingChoices,
+    paymentChoices,
     datesToCheck,
   };
 }
