@@ -50,6 +50,8 @@ export interface FundMovementRowActions {
   confirm: boolean;
   edit: boolean;
   delete: boolean;
+  /** Anular un movimiento confirmado (corrección en cadena, TSK-792). */
+  cancel: boolean;
 }
 
 export function getRowActions(
@@ -57,11 +59,14 @@ export function getRowActions(
   permissions: RowActionPermissions
 ): FundMovementRowActions {
   const isDraft = status === 'DRAFT';
+  // Confirmado: editar, eliminar y anular pasan por la corrección en cadena (TSK-792).
+  const isConfirmed = status === 'CONFIRMED';
   return {
     view: permissions.canView,
     confirm: isDraft && permissions.canUpdate,
-    edit: isDraft && permissions.canUpdate,
-    delete: isDraft && permissions.canDelete,
+    edit: (isDraft || isConfirmed) && permissions.canUpdate,
+    delete: (isDraft || isConfirmed) && permissions.canDelete,
+    cancel: isConfirmed && permissions.canDelete,
   };
 }
 
@@ -70,9 +75,9 @@ export function hasAnyRowAction(permissions: RowActionPermissions): boolean {
   return permissions.canView || permissions.canUpdate || permissions.canDelete;
 }
 
-/** confirm || edit || delete — decide el separador después de "Ver". */
+/** confirm || edit || delete || cancel — decide el separador después de "Ver". */
 export function hasDraftActions(actions: FundMovementRowActions): boolean {
-  return actions.confirm || actions.edit || actions.delete;
+  return actions.confirm || actions.edit || actions.delete || actions.cancel;
 }
 
 // ---------------------------------------------------------------- opciones con snapshot (D4)

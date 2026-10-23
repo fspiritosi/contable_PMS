@@ -198,6 +198,7 @@ src/shared/
 │   ├── excel-export.ts            # Exportacion a Excel
 │   ├── permissions/               # Sistema RBAC completo
 │   ├── concepts/                  # Conceptos de movimientos: reglas puras + resolucion concepto→cuenta (TSK-791)
+│   ├── effective-settlements.ts   # Filtros de imputaciones vigentes (OP/RC confirmadas, NC no anuladas) para saldos (TSK-792)
 │   ├── documentConditions.ts      # Evaluacion de condiciones de documentos
 │   ├── employeeStatus.ts          # Computacion de estado de empleado
 │   └── vehicleStatus.ts           # Computacion de estado de vehiculo
@@ -239,3 +240,24 @@ Importar enums:
 ```typescript
 import { Gender, VoucherType } from '@/generated/prisma/enums';
 ```
+
+---
+
+## Corrección en cadena de comprobantes (TSK-792)
+
+Vive en `src/modules/commercial/shared/` (lo usan compras, ventas y tesorería):
+
+```
+commercial/shared/
+├── effects/                       # apply…EffectsTx / revert…EffectsTx por comprobante (FC, FV, OP, RC, MF)
+│                                  # y document-status.server.ts (recalculo de estado)
+├── correction/                    # Motor: chain (arma el plan), engine (ejecuta), snapshot, fingerprint,
+│                                  # impediments, allocation, labels, describe-changes
+├── actions/document-correction.server.ts   # previewDocumentCorrection / applyDocumentCorrection
+├── hooks/useDocumentCorrection.ts          # Abre la propuesta y aplica
+└── components/                    # _CorrectionProposalDialog, _CorrectionCard, _CorrectionImpediments,
+                                   # _DocumentCorrectionButtons
+```
+
+Contabilidad aporta `revertJournalEntryToDraftTx` y `rewriteDraftJournalEntryTx` (`accounting/shared/utils/journal-entry-tx.ts`),
+reexportadas por `accounting/features/integrations/core`. Detalle en `docs/modules/commercial.md`.

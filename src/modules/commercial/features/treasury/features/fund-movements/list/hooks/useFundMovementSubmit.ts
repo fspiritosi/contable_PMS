@@ -1,8 +1,10 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import type { UseFormReturn } from 'react-hook-form';
 import { toast } from 'sonner';
+
+import { useDocumentCorrection } from '@/modules/commercial/shared/hooks/useDocumentCorrection';
 
 import type { FundMovementFormInput } from '../../shared/validators';
 import { clearInactiveConcepts, type FundMovementModalMode } from '../../shared/view-mode';
@@ -27,6 +29,8 @@ export interface UseFundMovementSubmitParams {
 export interface UseFundMovementSubmitResult {
   isSubmitting: boolean;
   submit: (confirm: boolean) => Promise<void>;
+  /** Propuesta de corrección (solo al editar un movimiento confirmado, TSK-792). */
+  correctionDialog: ReactNode;
 }
 
 /** Guardar / Guardar y Confirmar del modal de Movimientos de Fondos. */
@@ -42,6 +46,14 @@ export function useFundMovementSubmit({
   const isEdit = mode === 'edit' && Boolean(movement);
   const queryClient = useQueryClient();
   const router = useRouter();
+  const isCorrection = isEdit && movement?.status === 'CONFIRMED';
+  const correction = useDocumentCorrection({
+    onApplied: () => {
+      if (movement) void queryClient.invalidateQueries({ queryKey: ['fund-movement-detail', movement.id] });
+      onOpenChange(false);
+      onSuccess();
+    },
+  });
 
   const persist = async (formData: FundMovementFormInput, confirm: boolean) => {
     // Defensivo: la vista no ofrece guardar (TSK-720a).
@@ -49,6 +61,10 @@ export function useFundMovementSubmit({
     // TSK-791: si el campo Concepto está oculto (el tipo no tiene conceptos activos)
     // se manda vacío, para que un borrador con un concepto desactivado se pueda guardar.
     const data = clearInactiveConcepts(formData, concepts);
+    if (isCorrection && movement) {
+      correction.open({ mode: 'EDIT', ref: { kind: 'FUND_MOVEMENT', id: movement.id }, data });
+      return;
+    }
     setIsSubmitting(true);
     try {
       let result: FundMovementActionResult;
@@ -98,5 +114,9 @@ export function useFundMovementSubmit({
 
   const submit = (confirm: boolean) => form.handleSubmit((data) => persist(data, confirm))();
 
-  return { isSubmitting, submit };
+  return {
+    isSubmitting: isSubmitting || correction.isPending,
+    submit,
+    correctionDialog: correction.dialog,
+  };
 }

@@ -512,6 +512,31 @@ describe.skipIf(!dbAvailable)('integración: conceptos del movimiento de fondos 
     });
   });
 
+  describe('TSK-792: los movimientos de banco del MF guardan fundMovementId', () => {
+    it('la transferencia entre bancos vincula el movimiento de cada lado al MF', async () => {
+      const result = await createFundMovement(
+        {
+          type: 'ACCOUNT_TRANSFER',
+          date: '2026-01-23',
+          amount: '1000',
+          description: `${PREFIX}Vínculo fundMovementId`,
+          sourceFund: `BANK:${bankSourceId}`,
+          destinationFund: `BANK:${bankDestId}`,
+          partnerId: '',
+        },
+        true
+      );
+      expect(result.success).toBe(true);
+      if (!result.success) throw new Error(result.error);
+
+      const movements = await prisma.bankMovement.findMany({
+        where: { fundMovementId: result.id! },
+        select: { type: true },
+      });
+      expect(movements.map((m) => m.type).sort()).toEqual(['TRANSFER_IN', 'TRANSFER_OUT']);
+    });
+  });
+
   describe('caso 3: el total se calcula en el servidor, no lo que manda el cliente', () => {
     // `createFundMovement` real, con un `amount` deliberadamente distinto de
     // la suma de las líneas. `sumLines` (función real, importada) se usa acá

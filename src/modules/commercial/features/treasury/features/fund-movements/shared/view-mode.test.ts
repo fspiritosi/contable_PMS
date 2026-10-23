@@ -62,20 +62,29 @@ describe('getRowActions', () => {
       confirm: true,
       edit: true,
       delete: true,
+      cancel: false,
     });
   });
 
-  it.each<FundMovementStatus>(['CONFIRMED', 'CANCELLED'])(
-    '%s con todos los permisos → solo ver',
-    (status) => {
-      expect(getRowActions(status, ALL)).toEqual({
-        view: true,
-        confirm: false,
-        edit: false,
-        delete: false,
-      });
-    }
-  );
+  it('confirmado con todos los permisos → ver, editar, eliminar y anular (corrección)', () => {
+    expect(getRowActions('CONFIRMED', ALL)).toEqual({
+      view: true,
+      confirm: false,
+      edit: true,
+      delete: true,
+      cancel: true,
+    });
+  });
+
+  it('anulado con todos los permisos → solo ver', () => {
+    expect(getRowActions('CANCELLED', ALL)).toEqual({
+      view: true,
+      confirm: false,
+      edit: false,
+      delete: false,
+      cancel: false,
+    });
+  });
 
   it('borrador solo con view → solo ver', () => {
     expect(getRowActions('DRAFT', { ...NONE, canView: true })).toEqual({
@@ -83,6 +92,7 @@ describe('getRowActions', () => {
       confirm: false,
       edit: false,
       delete: false,
+      cancel: false,
     });
   });
 
@@ -92,6 +102,7 @@ describe('getRowActions', () => {
       confirm: false,
       edit: false,
       delete: true,
+      cancel: false,
     });
   });
 
@@ -101,6 +112,7 @@ describe('getRowActions', () => {
       confirm: true,
       edit: true,
       delete: false,
+      cancel: false,
     });
   });
 
@@ -110,6 +122,7 @@ describe('getRowActions', () => {
       confirm: false,
       edit: false,
       delete: false,
+      cancel: false,
     });
   });
 });
@@ -128,7 +141,13 @@ describe('hasAnyRowAction', () => {
 });
 
 describe('hasDraftActions', () => {
-  const base: FundMovementRowActions = { view: true, confirm: false, edit: false, delete: false };
+  const base: FundMovementRowActions = {
+    view: true,
+    confirm: false,
+    edit: false,
+    delete: false,
+    cancel: false,
+  };
 
   it('solo ver → false', () => {
     expect(hasDraftActions(base)).toBe(false);

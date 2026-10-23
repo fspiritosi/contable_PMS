@@ -5,6 +5,12 @@ import { prisma } from '@/shared/lib/prisma';
 import { logger } from '@/shared/lib/logger';
 import { getActiveCompanyId } from '@/shared/lib/company';
 import { checkPermission } from '@/shared/lib/permissions';
+import {
+  EFFECTIVE_PAYMENT_ORDER_ITEM,
+  EFFECTIVE_PURCHASE_CREDIT_NOTE_APPLICATION,
+  EFFECTIVE_RECEIPT_ITEM,
+  EFFECTIVE_SALES_CREDIT_NOTE_APPLICATION,
+} from '@/shared/lib/effective-settlements';
 import { CREDIT_NOTE_TYPES } from '@/modules/commercial/shared/voucher-utils';
 import moment from 'moment';
 import 'moment/locale/es';
@@ -72,10 +78,11 @@ export async function getAccountsReceivable(startDate?: Date, endDate?: Date, ov
           select: { name: true, taxId: true },
         },
         receiptItems: {
-          where: { receipt: { status: 'CONFIRMED' } },
+          where: EFFECTIVE_RECEIPT_ITEM,
           select: { amount: true },
         },
         creditNoteApplicationsReceived: {
+          where: EFFECTIVE_SALES_CREDIT_NOTE_APPLICATION,
           select: { amount: true, creditNoteId: true },
         },
         creditDebitNotes: {
@@ -234,10 +241,11 @@ export async function getAccountsPayable(startDate?: Date, endDate?: Date, overd
           select: { businessName: true, taxId: true },
         },
         paymentOrderItems: {
-          where: { paymentOrder: { status: 'CONFIRMED' } },
+          where: EFFECTIVE_PAYMENT_ORDER_ITEM,
           select: { amount: true },
         },
         creditNoteApplicationsReceived: {
+          where: EFFECTIVE_PURCHASE_CREDIT_NOTE_APPLICATION,
           select: { amount: true, creditNoteId: true },
         },
         creditDebitNotes: {

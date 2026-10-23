@@ -51,7 +51,8 @@ import {
   type PurchaseInvoiceFormInput,
 } from '../../shared/validators';
 import moment from 'moment';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useDocumentCorrection } from '@/modules/commercial/shared/hooks/useDocumentCorrection';
 import { useQuery } from '@tanstack/react-query';
 import { Card } from '@/shared/components/ui/card';
 import { Separator } from '@/shared/components/ui/separator';
@@ -173,6 +174,8 @@ interface PurchaseInvoiceFormProps {
   mode?: 'create' | 'edit';
   invoiceId?: string;
   defaultValues?: Partial<PurchaseInvoiceFormInput>;
+  /** Edición de una factura confirmada: el guardado abre la propuesta de corrección (TSK-792). */
+  isCorrection?: boolean;
 }
 
 export function _PurchaseInvoiceForm({
@@ -184,8 +187,15 @@ export function _PurchaseInvoiceForm({
   mode = 'create',
   invoiceId,
   defaultValues: initialValues,
+  isCorrection = false,
 }: PurchaseInvoiceFormProps) {
   const router = useRouter();
+  const documentCorrection = useDocumentCorrection({
+    onApplied: () => {
+      router.push(`/dashboard/commercial/purchases/${invoiceId}`);
+      router.refresh();
+    },
+  });
   const [totals, setTotals] = useState({
     subtotal: 0,
     vatAmount: 0,
@@ -333,6 +343,9 @@ export function _PurchaseInvoiceForm({
   // Auto-poblar líneas cuando se selecciona una OC
   useEffect(() => {
     if (!watchedPurchaseOrderId || watchedPurchaseOrderId === '' || loadingPOLines) return;
+    // Al editar, las líneas y la OC vinculada ya vienen cargadas: solo se reemplazan si el
+    // usuario elige otra OC (si no, se pisarían con las pendientes y se perdería lo facturado).
+    if (mode === 'edit' && watchedPurchaseOrderId === initialValues?.purchaseOrderId) return;
 
     if (poLines.length > 0) {
       replace(
@@ -349,8 +362,11 @@ export function _PurchaseInvoiceForm({
     }
   }, [poLines, loadingPOLines, watchedPurchaseOrderId, replace]);
 
-  // Limpiar OC al cambiar proveedor
+  // Limpiar OC al cambiar proveedor (no en el montaje: al editar la OC viene vinculada)
+  const lastSupplier = useRef(watchedSupplierId);
   useEffect(() => {
+    if (lastSupplier.current === watchedSupplierId) return;
+    lastSupplier.current = watchedSupplierId;
     if (watchedPurchaseOrderId) {
       form.setValue('purchaseOrderId', '');
     }
@@ -358,7 +374,10 @@ export function _PurchaseInvoiceForm({
   }, [watchedSupplierId]);
 
   // Limpiar OC al cambiar a NC/ND
+  const lastRegular = useRef(isRegularInvoice);
   useEffect(() => {
+    if (lastRegular.current === isRegularInvoice) return;
+    lastRegular.current = isRegularInvoice;
     if (!isRegularInvoice && watchedPurchaseOrderId) {
       form.setValue('purchaseOrderId', '');
       replace([]);
@@ -372,10 +391,15 @@ export function _PurchaseInvoiceForm({
       let hasError = false;
       data.lines.forEach((line, index) => {
         const poLine = poLines.find((pl) => pl.id === line.purchaseOrderLineId);
-        if (poLine && parseFloat(line.quantity) > poLine.pendingQty) {
+        // En una corrección, `pendingQty` ya descuenta lo que esta factura facturó: se suma de vuelta.
+        const ownQty = isCorrection
+          ? Number(initialValues?.lines?.find((l) => l.purchaseOrderLineId === line.purchaseOrderLineId)?.quantity ?? 0)
+          : 0;
+        const maxQty = poLine ? poLine.pendingQty + ownQty : 0;
+        if (poLine && parseFloat(line.quantity) > maxQty) {
           form.setError(`lines.${index}.quantity`, {
             type: 'manual',
-            message: `Máximo permitido: ${poLine.pendingQty}`,
+            message: `Máximo permitido: ${maxQty}`,
           });
           hasError = true;
         }
@@ -384,6 +408,15 @@ export function _PurchaseInvoiceForm({
     }
 
     try {
+      if (mode === 'edit' && invoiceId && isCorrection) {
+        documentCorrection.open({
+          mode: 'EDIT',
+          ref: { kind: 'PURCHASE_INVOICE', id: invoiceId },
+          data,
+        });
+        return;
+      }
+
       if (mode === 'edit' && invoiceId) {
         // Modo edición
         const result = await updatePurchaseInvoice(invoiceId, data);
@@ -959,11 +992,16 @@ export function _PurchaseInvoiceForm({
           >
             Cancelar
           </Button>
-          <Button type="submit" disabled={form.formState.isSubmitting}>
-            {form.formState.isSubmitting ? 'Guardando...' : 'Guardar Factura'}
+          <Button type="submit" disabled={form.formState.isSubmitting || documentCorrection.isPending}>
+            {form.formState.isSubmitting
+              ? 'Guardando...'
+              : isCorrection
+                ? 'Revisar cambios'
+                : 'Guardar Factura'}
           </Button>
         </div>
       </form>
+      {documentCorrection.dialog}
     </Form>
   );
 }

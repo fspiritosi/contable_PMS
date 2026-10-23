@@ -30,11 +30,12 @@ import moment from 'moment';
 import type { PurchaseInvoiceListItem } from '../actions.server';
 import {
   confirmPurchaseInvoice,
-  cancelPurchaseInvoice,
+  discardDraftPurchaseInvoice,
   bulkConfirmPurchaseInvoices,
   getAllPurchaseInvoicesForExport,
 } from '../actions.server';
 import { getColumns } from '../columns';
+import { useDocumentCorrection } from '@/modules/commercial/shared/hooks/useDocumentCorrection';
 import { PURCHASE_INVOICE_STATUS_LABELS, VOUCHER_TYPE_LABELS } from '../../shared/validators';
 import {
   buildBulkConfirmMessage,
@@ -144,17 +145,24 @@ export function _PurchaseInvoicesTable({ data, totalRows, searchParams, facetCou
 
     try {
       setLoading(invoice.id);
-      await cancelPurchaseInvoice(invoice.id);
-      toast.success('Factura cancelada correctamente');
+      const result = await discardDraftPurchaseInvoice(invoice.id);
+      if (!result.success) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success('Factura anulada correctamente');
       router.refresh();
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : 'Error al cancelar la factura'
-      );
     } finally {
       setLoading(null);
     }
   };
+
+  // Confirmadas: editar, eliminar y anular pasan por la propuesta de corrección (TSK-792).
+  const correction = useDocumentCorrection({ onApplied: () => router.refresh() });
+  const purchaseRef = (invoice: PurchaseInvoiceListItem) => ({
+    kind: 'PURCHASE_INVOICE' as const,
+    id: invoice.id,
+  });
 
   const canUpdate = hasPermission('commercial.purchases', 'update');
   const canApprove = hasPermission('commercial.purchases', 'approve');
@@ -212,11 +220,18 @@ export function _PurchaseInvoicesTable({ data, totalRows, searchParams, facetCou
           ? (invoice) => setAlertAction({ type: 'confirm', invoice })
           : undefined,
         onCancel: canDelete
-          ? (invoice) => setAlertAction({ type: 'cancel', invoice })
+          ? (invoice) =>
+              invoice.status === 'DRAFT'
+                ? setAlertAction({ type: 'cancel', invoice })
+                : correction.open({ mode: 'CANCEL', ref: purchaseRef(invoice) })
+          : undefined,
+        onDelete: canDelete
+          ? (invoice) => correction.open({ mode: 'DELETE', ref: purchaseRef(invoice) })
           : undefined,
         loading,
       }),
-    [loading, canUpdate, canApprove, canDelete]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [loading, canUpdate, canApprove, canDelete, router]
   );
 
   const exportConfig = useMemo(
@@ -241,11 +256,11 @@ export function _PurchaseInvoicesTable({ data, totalRows, searchParams, facetCou
     [searchParams]
   ) as unknown as DataTableExportConfig<PurchaseInvoiceListItem>;
 
-  const alertTitle = alertAction?.type === 'confirm' ? '¿Confirmar factura?' : '¿Cancelar factura?';
+  const alertTitle = alertAction?.type === 'confirm' ? '¿Confirmar factura?' : '¿Anular factura?';
   const alertDescription = alertAction?.type === 'confirm'
     ? `¿Desea confirmar la factura ${alertAction?.invoice.fullNumber}?`
-    : `¿Desea cancelar la factura ${alertAction?.invoice.fullNumber}?`;
-  const alertActionLabel = alertAction?.type === 'confirm' ? 'Confirmar' : 'Cancelar factura';
+    : `¿Desea anular la factura en borrador ${alertAction?.invoice.fullNumber}?`;
+  const alertActionLabel = alertAction?.type === 'confirm' ? 'Confirmar' : 'Anular factura';
 
   return (
     <>
@@ -383,6 +398,8 @@ export function _PurchaseInvoicesTable({ data, totalRows, searchParams, facetCou
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {correction.dialog}
     </>
   );
 }

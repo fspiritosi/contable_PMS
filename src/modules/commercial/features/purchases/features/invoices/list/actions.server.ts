@@ -18,33 +18,23 @@ import type { Prisma } from '@/generated/prisma/client';
 import { purchaseInvoiceFormSchema, type PurchaseInvoiceFormInput } from '../shared/validators';
 import type { VoucherType } from '@/generated/prisma/enums';
 import { checkPermission } from '@/shared/lib/permissions';
-import { buildImputableAccountsWhere } from '@/shared/lib/accounts/imputable-accounts';
+import {
+  EFFECTIVE_PAYMENT_ORDER_ITEM,
+  EFFECTIVE_PURCHASE_CREDIT_NOTE_APPLICATION,
+} from '@/shared/lib/effective-settlements';
 import { BusinessError, toActionResult, type ActionResult } from '@/shared/lib/action-result';
-import { createJournalEntryForPurchaseInvoice } from '@/modules/accounting/features/integrations/commercial';
 import { isCreditNote, isDebitNote } from '@/modules/commercial/shared/voucher-utils';
-import { applyPurchaseCreditNote } from '@/modules/commercial/shared/credit-note-compensation';
+import {
+  applyPurchaseInvoiceEffectsTx,
+  validatePurchaseInvoiceForConfirmation,
+} from '@/modules/commercial/shared/effects/purchase-invoice.server';
+import { writePurchaseInvoiceDataTx } from '@/modules/commercial/shared/effects/purchase-invoice-data.server';
 import { selectConfirmableInvoices, type BulkConfirmFailure } from '../shared/bulk-confirm';
 import {
-  buildMissingCostCenterMessage,
-  effectiveAccountType,
-  findLinesMissingCostCenter,
-} from '@/modules/commercial/shared/cost-center';
-import {
-  buildMissingTributeAccountsMessage,
   calculateOtherTaxes,
-  findMissingTributeAccounts,
   parseInternalTaxes,
-  perceptionAccountId,
   toPerceptionRecords,
 } from '@/modules/commercial/shared/perceptions';
-import {
-  buildMissingLineAccountsMessage,
-  buildUnavailableLineAccountsMessage,
-  findLinesMissingAccount,
-  findLinesWithUnavailableAccount,
-  formatAccountLabel,
-  resolveLineAccount,
-} from '@/modules/commercial/shared/line-accounts';
 
 // ============================================
 // QUERIES
@@ -340,7 +330,9 @@ export async function getPurchaseInvoiceById(id: string) {
             voucherType: true,
           },
         },
+        // Solo pagos y NC vigentes: una OP anulada o en borrador no cuenta (TSK-792/797).
         paymentOrderItems: {
+          where: EFFECTIVE_PAYMENT_ORDER_ITEM,
           select: {
             amount: true,
             paymentOrder: {
@@ -355,6 +347,7 @@ export async function getPurchaseInvoiceById(id: string) {
           },
         },
         creditNoteApplicationsReceived: {
+          where: EFFECTIVE_PURCHASE_CREDIT_NOTE_APPLICATION,
           select: {
             amount: true,
             appliedAt: true,
@@ -1076,147 +1069,36 @@ export async function updatePurchaseInvoice(id: string, rawInput: PurchaseInvoic
     // vivía solo en el navegador (TSK-583, hallazgo de revisión final).
     const input = purchaseInvoiceFormSchema.parse(rawInput);
 
-    // Verificar que la factura existe
-    const existingInvoice = await prisma.purchaseInvoice.findUnique({
-      where: { id },
-      include: {
-        lines: true,
-      },
-    });
-
-    if (!existingInvoice) {
-      throw new Error('Factura de compra no encontrada');
-    }
-
-    if (existingInvoice.companyId !== companyId) {
-      throw new Error('No tienes permiso para editar esta factura');
-    }
-
-    // VALIDACIÓN CRÍTICA: Solo permitir edición si está en estado DRAFT
-    if (existingInvoice.status !== 'DRAFT') {
-      throw new Error(
-        'No se puede editar una factura confirmada. Solo se pueden editar facturas en estado borrador.'
-      );
-    }
-
-    // Calcular totales
-    let subtotal = 0;
-    let vatAmount = 0;
-
-    const linesData = input.lines.map((line) => {
-      const qty = parseFloat(line.quantity);
-      const cost = parseFloat(line.unitCost);
-      const vat = parseFloat(line.vatRate);
-
-      const lineSubtotal = qty * cost;
-      const lineVat = lineSubtotal * (vat / 100);
-      const lineTotal = lineSubtotal + lineVat;
-
-      subtotal += lineSubtotal;
-      vatAmount += lineVat;
-
-      return {
-        productId: line.productId || null,
-        description: line.description,
-        quantity: qty,
-        unitCost: cost,
-        vatRate: vat,
-        vatAmount: lineVat,
-        subtotal: lineSubtotal,
-        total: lineTotal,
-        purchaseOrderLineId: line.purchaseOrderLineId || null,
-        costCenterAllocations: {
-          create: (line.costCenterAllocations ?? []).map((a) => ({
-            costCenterId: a.costCenterId,
-            percentage: a.percentage,
-          })),
-        },
-      };
-    });
-
-    // Ver nota en createPurchaseInvoice sobre la semántica de `otherTaxes`.
-    const perceptionsData = toPerceptionRecords(input.perceptions ?? []);
-    const internalTaxes = parseInternalTaxes(input.internalTaxes);
-    const otherTaxes = calculateOtherTaxes(perceptionsData, internalTaxes);
-
-    const total = subtotal + vatAmount + otherTaxes;
-
-    // Verificar que no exista otra factura con el mismo número
-    const fullNumber = `${input.pointOfSale}-${input.number}`;
-    const duplicate = await prisma.purchaseInvoice.findFirst({
-      where: {
-        companyId,
-        supplierId: input.supplierId,
-        fullNumber,
-        id: { not: id }, // Excluir la factura actual
-      },
-    });
-
-    if (duplicate) {
-      throw new Error(
-        `Ya existe otra factura de este proveedor con el número ${fullNumber}`
-      );
-    }
-
-    // Actualizar factura y líneas en transacción
-    const invoice = await prisma.$transaction(async (tx) => {
-      // Eliminar líneas existentes
-      await tx.purchaseInvoiceLine.deleteMany({
-        where: { invoiceId: id },
-      });
-
-      // Ídem percepciones: se reemplazan enteras, no se intenta reconciliar
-      // fila por fila (TSK-644).
-      await tx.purchaseInvoicePerception.deleteMany({
-        where: { invoiceId: id },
-      });
-
-      // Actualizar factura con nuevas líneas
-      return await tx.purchaseInvoice.update({
+    await prisma.$transaction(async (tx) => {
+      const existingInvoice = await tx.purchaseInvoice.findUnique({
         where: { id },
-        data: {
-          supplierId: input.supplierId,
-          voucherType: input.voucherType as VoucherType,
-          pointOfSale: input.pointOfSale,
-          number: input.number,
-          fullNumber,
-          issueDate: input.issueDate,
-          dueDate: input.dueDate || null,
-          cae: input.cae || null,
-          purchaseOrderId: input.purchaseOrderId || null,
-          subtotal,
-          netTaxed: subtotal,
-          netNonTaxed: 0,
-          netExempt: 0,
-          vatAmount,
-          internalTaxes,
-          otherTaxes,
-          total,
-          notes: input.notes || null,
-          lines: {
-            create: linesData,
-          },
-          perceptions: {
-            create: perceptionsData,
-          },
-        },
-        include: {
-          supplier: true,
-          lines: {
-            include: {
-              product: true,
-            },
-          },
-        },
+        select: { companyId: true, status: true },
       });
+
+      if (!existingInvoice) {
+        throw new Error('Factura de compra no encontrada');
+      }
+
+      if (existingInvoice.companyId !== companyId) {
+        throw new Error('No tienes permiso para editar esta factura');
+      }
+
+      // VALIDACIÓN CRÍTICA: Solo permitir edición si está en estado DRAFT
+      if (existingInvoice.status !== 'DRAFT') {
+        throw new Error(
+          'No se puede editar una factura confirmada. Solo se pueden editar facturas en estado borrador.'
+        );
+      }
+
+      // Totales, número sin repetir, líneas y percepciones (TSK-792)
+      await writePurchaseInvoiceDataTx(tx, companyId, id, input);
     });
 
     logger.info('Factura de compra actualizada', {
       data: {
         invoiceId: id,
-        fullNumber: invoice.fullNumber,
+        fullNumber: `${input.pointOfSale}-${input.number}`,
         supplierId: input.supplierId,
-        total,
         companyId,
         userId,
       },
@@ -1224,7 +1106,7 @@ export async function updatePurchaseInvoice(id: string, rawInput: PurchaseInvoic
 
     revalidatePath('/dashboard/commercial/purchases');
     revalidatePath(`/dashboard/commercial/purchases/${id}`);
-    return { success: true, id: invoice.id };
+    return { success: true, id };
   } catch (error) {
     logger.error('Error al actualizar factura de compra', {
       data: { error, id, input: rawInput, companyId, userId },
@@ -1264,20 +1146,14 @@ export async function confirmPurchaseInvoice(
   try {
     const invoice = await prisma.purchaseInvoice.findUnique({
       where: { id },
-      include: {
-        lines: {
-          include: {
-            product: {
-              include: {
-                // El tipo decide si la línea exige centro de costo (TSK-583);
-                // id/code/name para pre-validar la cuenta y nombrarla (TSK-721).
-                defaultExpenseAccount: { select: { id: true, code: true, name: true, type: true } },
-              },
-            },
-            costCenterAllocations: true,
-          },
-        },
-        perceptions: { select: { type: true, amount: true } },
+      select: {
+        companyId: true,
+        status: true,
+        fullNumber: true,
+        supplierId: true,
+        purchaseOrderId: true,
+        voucherType: true,
+        lines: { select: { product: { select: { trackStock: true } } } },
       },
     });
 
@@ -1293,262 +1169,20 @@ export async function confirmPurchaseInvoice(
       throw new BusinessError('Solo se pueden confirmar facturas en estado borrador');
     }
 
-    const settings = await prisma.accountingSettings.findUnique({
-      where: { companyId },
-      select: {
-        requireCostCenter: true,
-        // Cuentas de los tributos del comprobante (TSK-644)
-        internalTaxesAccountId: true,
-        perceptionIvaSufferedAccountId: true,
-        perceptionIibbSufferedAccountId: true,
-        perceptionMunicipalSufferedAccountId: true,
-        // Cuenta de compras por defecto: la que usa el asiento si el ítem no
-        // tiene una propia o la línea no tiene ítem (TSK-583, hallazgo de
-        // revisión final): sin esto, un ítem sin cuenta propia nunca exigía
-        // reparto aunque el asiento lo imputara igual a `purchasesAccountId`,
-        // que es de resultado. id/code/name para la pre-validación de cuentas
-        // de línea (TSK-721).
-        purchasesAccount: { select: { id: true, code: true, name: true, type: true } },
-      },
-    });
+    // Cuentas de línea y de tributos, centros de costo y almacén principal (NC):
+    // ANTES de la transacción, para que el motivo llegue al usuario (TSK-583/644/721).
+    await validatePurchaseInvoiceForConfirmation(id, companyId);
 
-    // Cuentas de las líneas (TSK-721). La cuenta la define el ítem; la "Cuenta
-    // de compras por defecto" es el respaldo, y el único camino para las
-    // líneas sin ítem (gastos no inventariables, importación AFIP). Se
-    // comprueba ANTES de la transacción, como los tributos: así el error llega
-    // al usuario con el nombre de la línea en vez de quedar una factura
-    // confirmada sin asiento.
-    const defaultPurchasesAccount = settings?.purchasesAccount ?? null;
-    const lineChecks = invoice.lines.map((line) => ({
-      description: line.description,
-      productName: line.product?.name ?? null, // null = línea sin ítem
-      itemAccountId: line.product?.defaultExpenseAccount?.id ?? null,
-    }));
-
-    const missingLineAccounts = findLinesMissingAccount(lineChecks, defaultPurchasesAccount?.id);
-    if (missingLineAccounts.length > 0) {
-      throw new BusinessError(buildMissingLineAccountsMessage(missingLineAccounts, 'expense'));
-    }
-
-    // La cuenta efectiva tiene que ser imputable HOY (hoja, activa, sin corte
-    // de ejercicio vigente); nunca se cae a la global en silencio. Sin `types`:
-    // la cuenta de un ítem puede ser ASSET (bien de uso, TSK-579/618).
-    const effectiveAccountIds = [
-      ...new Set(
-        lineChecks
-          .map((l) => resolveLineAccount(l.itemAccountId, defaultPurchasesAccount?.id))
-          .filter((accountId): accountId is string => accountId !== null)
-      ),
-    ];
-    const imputableAccounts = await prisma.account.findMany({
-      where: { ...buildImputableAccountsWhere({ companyId }), id: { in: effectiveAccountIds } },
-      select: { id: true },
-    });
-    const unavailableLineAccounts = findLinesWithUnavailableAccount(
-      lineChecks,
-      defaultPurchasesAccount?.id,
-      new Set(imputableAccounts.map((a) => a.id))
-    );
-    if (unavailableLineAccounts.length > 0) {
-      const labels = new Map<string, string>();
-      for (const line of invoice.lines) {
-        const account = line.product?.defaultExpenseAccount;
-        if (account) labels.set(account.id, formatAccountLabel(account));
-      }
-      if (defaultPurchasesAccount) {
-        labels.set(defaultPurchasesAccount.id, formatAccountLabel(defaultPurchasesAccount));
-      }
-
-      throw new BusinessError(
-        buildUnavailableLineAccountsMessage(
-          unavailableLineAccounts.map((u) => ({
-            description: u.line.description,
-            accountLabel: labels.get(u.accountId) ?? u.accountId,
-            source: u.source,
-          })),
-          'expense'
-        )
-      );
-    }
-
-    // Tributos sin cuenta contable configurada (TSK-644).
-    //
-    // Se comprueba ANTES de abrir la transacción: si falta una cuenta, el
-    // asiento quedaría descuadrado y moriría dentro del `catch` que lo degrada
-    // a `logger.warn`, dejando la factura confirmada y sin asiento. Mejor no
-    // dejar confirmar y decir exactamente qué cuenta falta.
-    const missingTributeAccounts = findMissingTributeAccounts([
-      ...invoice.perceptions
-        .filter((p) => Number(p.amount) > 0)
-        .map((p) => ({
-          label: `percepción ${p.type} sufrida`,
-          accountId: perceptionAccountId(p.type, {
-            IVA: settings?.perceptionIvaSufferedAccountId,
-            IIBB: settings?.perceptionIibbSufferedAccountId,
-            MUNICIPAL: settings?.perceptionMunicipalSufferedAccountId,
-          }),
-        })),
-      ...(Number(invoice.internalTaxes) > 0
-        ? [
-            {
-              label: 'impuestos internos',
-              accountId: settings?.internalTaxesAccountId,
-            },
-          ]
-        : []),
-    ]);
-
-    if (missingTributeAccounts.length > 0) {
-      throw new BusinessError(buildMissingTributeAccountsMessage(missingTributeAccounts));
-    }
-
-    if (settings?.requireCostCenter) {
-      const missing = findLinesMissingCostCenter(
-        invoice.lines.map((line) => ({
-          description: line.description,
-          accountType: effectiveAccountType(
-            line.product?.defaultExpenseAccount?.type ?? null,
-            settings.purchasesAccount?.type
-          ),
-          allocations: line.costCenterAllocations.map((a) => ({
-            costCenterId: a.costCenterId,
-            percentage: Number(a.percentage),
-          })),
-        }))
-      );
-
-      if (missing.length > 0) {
-        throw new BusinessError(buildMissingCostCenterMessage(missing));
-      }
-    }
-
-    // Confirmar factura en transacción
     // NOTA: Las FC normales NO generan ingreso de stock. El stock solo ingresa vía Remitos de Recepción.
     // Las NC de compra SÍ decrementan stock (devoluciones al proveedor).
-    const isND = isDebitNote(invoice.voucherType);
-    const isNC = isCreditNote(invoice.voucherType);
-
-    // Almacén principal solo necesario para NC (decremento de stock por devolución)
-    let mainWarehouse: { id: string } | null = null;
-    if (isNC) {
-      mainWarehouse = await prisma.warehouse.findFirst({
-        where: {
-          companyId,
-          type: 'MAIN',
-          isActive: true,
-        },
-        select: { id: true },
-      });
-
-      if (!mainWarehouse) {
-        throw new BusinessError(
-          'No se encontró un almacén principal activo. Configura uno antes de confirmar notas de crédito.'
-        );
-      }
-    }
-
-    const result = await prisma.$transaction(async (tx) => {
-      // Actualizar estado de la factura
-      const updatedInvoice = await tx.purchaseInvoice.update({
+    await prisma.$transaction(async (tx) => {
+      await tx.purchaseInvoice.update({
         where: { id },
-        data: {
-          status: 'CONFIRMED',
-        },
-        include: {
-          supplier: true,
-          lines: {
-            include: {
-              product: true,
-            },
-          },
-        },
+        data: { status: 'CONFIRMED' },
       });
 
-      // NC de compra: devolvemos al proveedor → decrementar stock
-      if (isNC && mainWarehouse) {
-        for (const line of invoice.lines) {
-          if (!line.productId || !line.product) continue;
-          if (!line.product.trackStock) continue;
-
-          const quantity = Number(line.quantity);
-
-          await tx.warehouseStock.upsert({
-            where: {
-              warehouseId_productId: {
-                warehouseId: mainWarehouse.id,
-                productId: line.productId,
-              },
-            },
-            create: {
-              warehouseId: mainWarehouse.id,
-              productId: line.productId,
-              quantity: -quantity,
-              reservedQty: 0,
-              availableQty: -quantity,
-            },
-            update: {
-              quantity: {
-                decrement: quantity,
-              },
-              availableQty: {
-                decrement: quantity,
-              },
-            },
-          });
-
-          await tx.stockMovement.create({
-            data: {
-              companyId,
-              warehouseId: mainWarehouse.id,
-              productId: line.productId,
-              type: 'RETURN',
-              quantity,
-              referenceType: 'purchase_invoice',
-              referenceId: invoice.id,
-              notes: `NC Compra ${invoice.fullNumber} - ${line.product.name}`,
-              date: invoice.issueDate,
-              createdBy: userId,
-            },
-          });
-        }
-      }
-
-      // Incrementar invoicedQty en líneas de OC vinculadas (solo facturas regulares)
-      if (invoice.purchaseOrderId && !isND && !isNC) {
-        for (const line of invoice.lines) {
-          if (line.purchaseOrderLineId) {
-            await tx.purchaseOrderLine.update({
-              where: { id: line.purchaseOrderLineId },
-              data: {
-                invoicedQty: { increment: line.quantity },
-              },
-            });
-          }
-        }
-        await updatePurchaseOrderInvoicingStatus(tx, invoice.purchaseOrderId);
-      }
-
-      // Asiento contable. TSK-721: antes solo se relanzaba "período cerrado" y
-      // cualquier otro fallo del asiento se degradaba a warn, dejando la
-      // factura CONFIRMED sin asiento. Ahora cualquier error aborta la
-      // transacción y llega al usuario por el catch externo.
-      const journalEntryId = await createJournalEntryForPurchaseInvoice(id, companyId, tx);
-      await tx.purchaseInvoice.update({ where: { id }, data: { journalEntryId } });
-      logger.info('Asiento contable generado para factura de compra', {
-        data: { invoiceId: id, journalEntryId },
-      });
-
-      // Auto-compensar NC contra facturas/ND pendientes del mismo proveedor
-      if (isCreditNote(updatedInvoice.voucherType)) {
-        await applyPurchaseCreditNote(tx, {
-          id: updatedInvoice.id,
-          total: updatedInvoice.total,
-          supplierId: updatedInvoice.supplierId,
-          originalInvoiceId: updatedInvoice.originalInvoiceId,
-        }, companyId);
-      }
-
-      return updatedInvoice;
+      // Efectos: stock de NC, facturación de la OC, asiento y compensación de NC (TSK-792)
+      await applyPurchaseInvoiceEffectsTx(tx, { companyId, userId }, id);
     });
 
     logger.info('Factura de compra confirmada', {
@@ -1568,6 +1202,8 @@ export async function confirmPurchaseInvoice(
     }
 
     // Determinar si la FC necesita un remito de recepción
+    const isND = isDebitNote(invoice.voucherType);
+    const isNC = isCreditNote(invoice.voucherType);
     const hasTrackStockProducts = invoice.lines.some(
       (l) => l.product?.trackStock
     );
@@ -1581,7 +1217,7 @@ export async function confirmPurchaseInvoice(
 
     return {
       success: true,
-      id: result.id,
+      id,
       needsReceivingNote,
       supplierId: invoice.supplierId,
     };
@@ -1653,209 +1289,34 @@ export async function bulkConfirmPurchaseInvoices(ids: string[]) {
 }
 
 /**
- * Cancela una factura de compra.
- * Solo revierte stock si es una NC (nota de crédito) que había decrementado stock.
- * Las FC normales no generan stock, por lo que no hay nada que revertir.
+ * Descarta una factura de compra en BORRADOR (la pasa a Anulada). Un borrador no aplicó
+ * stock, saldo ni asiento, así que no hay nada que revertir.
+ *
+ * Una factura confirmada NO pasa por acá: se anula o elimina con la corrección en cadena
+ * (`useDocumentCorrection`, TSK-792), que revierte stock, OC, asiento y pagos. Este camino no
+ * puede dejar un asiento vivo porque rechaza todo lo que no sea borrador.
  */
-export async function cancelPurchaseInvoice(id: string) {
+export async function discardDraftPurchaseInvoice(id: string): Promise<ActionResult<{ id: string }>> {
   await checkPermission('commercial.purchases', 'delete', { redirect: true });
-  const userId = await getCurrentUserId();
-  if (!userId) throw new Error('No autenticado');
-
   const companyId = await getActiveCompanyId();
-  if (!companyId) throw new Error('No hay empresa activa');
-
   try {
-    const invoice = await prisma.purchaseInvoice.findUnique({
-      where: { id },
-      include: {
-        lines: {
-          include: {
-            product: true,
-          },
-        },
-      },
+    if (!companyId) throw new BusinessError('No hay empresa activa');
+    const { count } = await prisma.purchaseInvoice.updateMany({
+      where: { id, companyId, status: 'DRAFT' },
+      data: { status: 'CANCELLED' },
     });
-
-    if (!invoice) {
-      throw new Error('Factura de compra no encontrada');
+    if (count === 0) {
+      throw new BusinessError(
+        'Solo se puede descartar una factura en borrador. Las confirmadas se anulan desde la propuesta de corrección.'
+      );
     }
-
-    if (invoice.companyId !== companyId) {
-      throw new Error('No tienes permiso para cancelar esta factura');
-    }
-
-    if (invoice.status === 'CANCELLED') {
-      throw new Error('La factura ya está cancelada');
-    }
-
-    if (invoice.status === 'PAID' || invoice.status === 'PARTIAL_PAID') {
-      throw new Error('No se puede cancelar una factura pagada o parcialmente pagada');
-    }
-
-    // Solo las NC afectan stock (devoluciones), las FC normales no
-    const isNC = isCreditNote(invoice.voucherType);
-
-    // Obtener almacén principal solo si es NC (necesitamos revertir stock)
-    let mainWarehouse: { id: string } | null = null;
-    if (isNC) {
-      mainWarehouse = await prisma.warehouse.findFirst({
-        where: {
-          companyId,
-          type: 'MAIN',
-          isActive: true,
-        },
-        select: { id: true },
-      });
-    }
-
-    // Cancelar factura y revertir stock si era NC confirmada
-    const result = await prisma.$transaction(async (tx) => {
-      // Si era NC confirmada, revertir el decremento de stock (devolver stock)
-      if (invoice.status === 'CONFIRMED' && isNC && mainWarehouse) {
-        for (const line of invoice.lines) {
-          if (!line.productId || !line.product || !line.product.trackStock) {
-            continue;
-          }
-
-          const quantity = Number(line.quantity);
-
-          // Incrementar stock (revertir la devolución)
-          await tx.warehouseStock.upsert({
-            where: {
-              warehouseId_productId: {
-                warehouseId: mainWarehouse.id,
-                productId: line.productId,
-              },
-            },
-            create: {
-              warehouseId: mainWarehouse.id,
-              productId: line.productId,
-              quantity,
-              reservedQty: 0,
-              availableQty: quantity,
-            },
-            update: {
-              quantity: {
-                increment: quantity,
-              },
-              availableQty: {
-                increment: quantity,
-              },
-            },
-          });
-
-          // Registrar movimiento de reversión
-          await tx.stockMovement.create({
-            data: {
-              companyId,
-              warehouseId: mainWarehouse.id,
-              productId: line.productId,
-              type: 'ADJUSTMENT',
-              quantity,
-              referenceType: 'purchase_invoice_cancel',
-              referenceId: invoice.id,
-              notes: `Cancelación NC Compra ${invoice.fullNumber} - ${line.product.name}`,
-              date: new Date(),
-              createdBy: userId,
-            },
-          });
-        }
-      }
-
-      // Decrementar invoicedQty en líneas de OC vinculadas
-      if (invoice.purchaseOrderId && invoice.status === 'CONFIRMED') {
-        for (const line of invoice.lines) {
-          if (line.purchaseOrderLineId) {
-            await tx.purchaseOrderLine.update({
-              where: { id: line.purchaseOrderLineId },
-              data: {
-                invoicedQty: { decrement: line.quantity },
-              },
-            });
-          }
-        }
-        await updatePurchaseOrderInvoicingStatus(tx, invoice.purchaseOrderId);
-      }
-
-      // Actualizar estado de la factura
-      return await tx.purchaseInvoice.update({
-        where: { id },
-        data: {
-          status: 'CANCELLED',
-        },
-        include: {
-          supplier: true,
-          lines: {
-            include: {
-              product: true,
-            },
-          },
-        },
-      });
-    });
-
-    logger.info('Factura de compra cancelada', {
-      data: {
-        invoiceId: id,
-        fullNumber: invoice.fullNumber,
-        wasConfirmed: invoice.status === 'CONFIRMED',
-        companyId,
-        userId,
-      },
-    });
-
+    logger.info('Factura de compra en borrador descartada', { data: { invoiceId: id, companyId } });
     revalidatePath('/dashboard/commercial/purchases');
     revalidatePath(`/dashboard/commercial/purchases/${id}`);
-    revalidatePath('/dashboard/commercial/stock');
-    if (invoice.purchaseOrderId) {
-      revalidatePath(`/dashboard/commercial/purchase-orders/${invoice.purchaseOrderId}`);
-    }
-    return { success: true, id: result.id };
+    return { success: true, id };
   } catch (error) {
-    logger.error('Error al cancelar factura de compra', {
-      data: { error, id, companyId, userId },
-    });
-    throw error;
+    return toActionResult(error, 'Error al descartar la factura');
   }
-}
-
-// ============================================
-// HELPERS
-// ============================================
-
-/**
- * Recalcula el estado de facturación de una OC basado en las cantidades facturadas
- */
-async function updatePurchaseOrderInvoicingStatus(
-  tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
-  purchaseOrderId: string
-) {
-  const poLines = await tx.purchaseOrderLine.findMany({
-    where: { orderId: purchaseOrderId },
-    select: { quantity: true, invoicedQty: true },
-  });
-
-  const allFullyInvoiced = poLines.every(
-    (line) => Number(line.invoicedQty) >= Number(line.quantity)
-  );
-  const anyPartiallyInvoiced = poLines.some(
-    (line) => Number(line.invoicedQty) > 0
-  );
-
-  let newStatus: 'NOT_INVOICED' | 'PARTIALLY_INVOICED' | 'FULLY_INVOICED';
-  if (allFullyInvoiced) {
-    newStatus = 'FULLY_INVOICED';
-  } else if (anyPartiallyInvoiced) {
-    newStatus = 'PARTIALLY_INVOICED';
-  } else {
-    newStatus = 'NOT_INVOICED';
-  }
-
-  await tx.purchaseOrder.update({
-    where: { id: purchaseOrderId },
-    data: { invoicingStatus: newStatus },
-  });
 }
 
 // ============================================

@@ -3,6 +3,10 @@
 import { getActiveCompanyId } from '@/shared/lib/company';
 import { logger } from '@/shared/lib/logger';
 import { checkPermission } from '@/shared/lib/permissions';
+import {
+  EFFECTIVE_RECEIPT_ITEM,
+  EFFECTIVE_SALES_CREDIT_NOTE_APPLICATION,
+} from '@/shared/lib/effective-settlements';
 import { prisma } from '@/shared/lib/prisma';
 import { getPresignedDownloadUrl } from '@/shared/lib/storage';
 import { isCreditNote } from '@/modules/commercial/shared/voucher-utils';
@@ -353,11 +357,7 @@ export async function getClientAccountStatement(clientId: string) {
         total: true,
         status: true,
         receiptItems: {
-          where: {
-            receipt: {
-              status: 'CONFIRMED', // Solo cobros confirmados
-            },
-          },
+          where: EFFECTIVE_RECEIPT_ITEM,
           select: {
             amount: true,
             receipt: {
@@ -369,6 +369,7 @@ export async function getClientAccountStatement(clientId: string) {
           },
         },
         creditNoteApplicationsReceived: {
+          where: EFFECTIVE_SALES_CREDIT_NOTE_APPLICATION,
           select: {
             amount: true,
             creditNoteId: true,

@@ -10,6 +10,10 @@ import { prisma } from '@/shared/lib/prisma';
 import { getActiveCompanyId } from '@/shared/lib/company';
 import { logger } from '@/shared/lib/logger';
 import {
+  EFFECTIVE_RECEIPT_ITEM,
+  EFFECTIVE_SALES_CREDIT_NOTE_APPLICATION,
+} from '@/shared/lib/effective-settlements';
+import {
   generateReceiptPDF,
   getReceiptFileName,
   mapReceiptDataForPDF,
@@ -73,6 +77,13 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
                 issueDate: true,
                 total: true,
                 receiptItems: {
+                  where: EFFECTIVE_RECEIPT_ITEM,
+                  select: {
+                    amount: true,
+                  },
+                },
+                creditNoteApplicationsReceived: {
+                  where: EFFECTIVE_SALES_CREDIT_NOTE_APPLICATION,
                   select: {
                     amount: true,
                   },

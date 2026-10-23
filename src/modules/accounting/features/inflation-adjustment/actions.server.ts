@@ -327,6 +327,7 @@ export async function generateInflationAdjustmentEntry(
         status: 'POSTED',
         createdBy: 'system',
         source: `inflation-adjustment:${year}-${month}`,
+        process: 'INFLATION_ADJUSTMENT',
       })
     );
 

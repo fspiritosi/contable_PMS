@@ -610,5 +610,29 @@ describe.skipIf(!dbAvailable)(
       expect(entry.period).toMatchObject({ year: 2026, month: 3, type: 'MONTHLY' });
       expect(entry.period?.fiscalYearId).toBe(entry.fiscalYearId);
     });
+
+    it('vincula caja y banco al recibo (TSK-792)', async () => {
+      const { id } = await createDraft([
+        cashPayment('600', cajaPrincipalId),
+        transferPayment('400', bancoSinCuentaId),
+      ]);
+      await setSettings({ defaultBankAccountId: bancoId });
+      try {
+        expect((await confirmReceipt(id)).success).toBe(true);
+      } finally {
+        await setSettings({ defaultBankAccountId: null });
+      }
+
+      const cash = await prisma.cashMovement.findMany({
+        where: { receiptId: id },
+        select: { type: true },
+      });
+      expect(cash).toEqual([{ type: 'INCOME' }]);
+      const bank = await prisma.bankMovement.findMany({
+        where: { receiptId: id },
+        select: { documentLink: true },
+      });
+      expect(bank).toEqual([{ documentLink: 'CREATED_BY_DOCUMENT' }]);
+    });
   }
 );

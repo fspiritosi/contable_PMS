@@ -10,6 +10,10 @@ import { prisma } from '@/shared/lib/prisma';
 import { getActiveCompanyId } from '@/shared/lib/company';
 import { logger } from '@/shared/lib/logger';
 import {
+  EFFECTIVE_PAYMENT_ORDER_ITEM,
+  EFFECTIVE_PURCHASE_CREDIT_NOTE_APPLICATION,
+} from '@/shared/lib/effective-settlements';
+import {
   generatePaymentOrderPDF,
   getPaymentOrderFileName,
   mapPaymentOrderDataForPDF,
@@ -74,6 +78,13 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
                 issueDate: true,
                 total: true,
                 paymentOrderItems: {
+                  where: EFFECTIVE_PAYMENT_ORDER_ITEM,
+                  select: {
+                    amount: true,
+                  },
+                },
+                creditNoteApplicationsReceived: {
+                  where: EFFECTIVE_PURCHASE_CREDIT_NOTE_APPLICATION,
                   select: {
                     amount: true,
                   },

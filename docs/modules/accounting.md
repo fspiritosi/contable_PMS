@@ -97,6 +97,26 @@ Creados como `isAutomatic = true`, `createdBy = 'system'`.
 la empresa activa sin documento y no `'system'`. No valida periodo: su fin es destrabar el cierre
 de un mes con un borrador imposible de registrar. El numero queda como hueco.
 
+### Volver a borrador y reescritura de asientos (TSK-792)
+
+- **Volver a borrador** (`revertJournalEntryToDraftTx`, action `revertJournalEntryToDraft` en `features/entries`): un asiento
+  POSTED pasa a DRAFT conservando número, fecha y líneas, y deja de contar en mayor y balances hasta que se
+  registre de nuevo. Se hace desde el menú de cada asiento en Contabilidad › Asientos (diálogo
+  `_RevertEntryToDraftDialog`, que avisa a qué comprobante pertenece). Exige `accounting.entries`/`approve`,
+  período abierto y rechaza el cierre/apertura de ejercicio y los contraasientos. Guarda `revertedToDraftAt` y
+  `revertedToDraftBy`.
+- **Trigger** `prevent_posted_entry_modification` (migración `20261023100100_tsk_792_trigger_and_backfill`): además de
+  POSTED → REVERSED, permite POSTED → DRAFT solo si no cambian número, fecha, descripción, empresa ni los vínculos
+  de reversión. Las líneas siguen bloqueadas mientras el asiento esté POSTED (se editan recién en DRAFT).
+- **`JournalEntry.process`** (`JournalEntryProcess`: `VAT_SETTLEMENT`, `INFLATION_ADJUSTMENT`,
+  `EXCHANGE_DIFFERENCE`): marca los asientos de procesos mensuales. La corrección en cadena lo usa para detectar que
+  ya se generó la liquidación de IVA (u otro proceso) del mes del comprobante y pedir que se anule primero.
+  El backfill lo completa por el prefijo de la descripción.
+- **`rewriteDraftJournalEntryTx`**: reescribe el asiento DRAFT de un comprobante corregido conservando id y número;
+  reemplaza fecha, descripción, líneas, `fiscalYearId` y `periodId`, valida como al crear (balance, cuentas, período
+  de la fecha nueva con el lock de la empresa) y no avanza la numeración. Solo DRAFT.
+- Anular un comprobante con asiento POSTED genera el contraasiento **con la fecha del comprobante**.
+
 ### Numeracion
 
 Secuencial por empresa, gestionada por `AccountingSettings.lastEntryNumber`. Solo la asigna
@@ -116,7 +136,7 @@ Archivos en `src/modules/accounting/shared/utils/` (los `server-only` se reexpor
 | Archivo | Funciones | Notas |
 |---|---|---|
 | `period-lock.ts` (`server-only`) | `lockAccountingSettingsTx`, `assertPeriodOpen`, `ensureFiscalYearTx`, `createFiscalYearWithPeriodsTx`, `ensurePeriodsTx`, `listMonthlyPeriodsTx`, `syncLockedUntilDateTx` | Una sola definicion de periodo cerrado |
-| `journal-entry-tx.ts` (`server-only`) | `nextEntryNumberTx`, `createJournalEntryTx`, `postJournalEntryTx`, `reverseJournalEntryTx`, `assertAccountsUsableTx` | Sin `checkPermission` ni `$transaction` propios: reciben el `tx` del llamador |
+| `journal-entry-tx.ts` (`server-only`) | `nextEntryNumberTx`, `createJournalEntryTx`, `postJournalEntryTx`, `reverseJournalEntryTx`, `revertJournalEntryToDraftTx` (POSTED → DRAFT, TSK-792; rechaza cierre de ejercicio y contraasientos), `assertAccountsUsableTx` | Sin `checkPermission` ni `$transaction` propios: reciben el `tx` del llamador |
 | `journal-entry-lines.ts` (puro) | `validateEntryLines`, `invertLines` | Decimal; sin lineas 0/0, balance ±0,01 |
 | `period-closure.ts` (puro) | `evaluatePeriodClosure`, `buildPeriodClosedMessage` | Textos de la tabla de abajo |
 | `utc-month.ts` (puro) | `monthKeyUtc`, `startOfMonthUtc`, `endOfMonthUtc`, `toUtcDay`, `formatDayUtc`, `todayBusinessDay(Utc)`, `BUSINESS_TIME_ZONE` | Convencion de dias, ver abajo |

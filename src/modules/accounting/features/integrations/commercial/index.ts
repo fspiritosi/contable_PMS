@@ -46,7 +46,10 @@ import { BudgetStatus, AccountNature } from '@/generated/prisma/enums';
 import { prisma } from '@/shared/lib/prisma';
 import { logger } from '@/shared/lib/logger';
 import { BusinessError } from '@/shared/lib/action-result';
-import { createJournalEntryTx } from '@/modules/accounting/shared/utils/journal-entry-tx';
+import {
+  createJournalEntryTx,
+  rewriteDraftJournalEntryTx,
+} from '@/modules/accounting/shared/utils/journal-entry-tx';
 import { NOT_CLOSING_ENTRY_SQL } from '@/modules/accounting/shared/utils/closing-entries';
 import { reconcileDocumentEntryAmounts } from '@/modules/accounting/shared/utils/document-entry-rounding';
 import { isCreditNote } from '@/modules/commercial/shared/voucher-utils';
@@ -97,6 +100,15 @@ interface JournalEntryLineInput {
   currency?: string;
   originalAmount?: number;
   exchangeRate?: number;
+}
+
+/**
+ * Opciones del asiento de un comprobante (TSK-792). Con `rewriteEntryId`, en lugar de crear
+ * un asiento nuevo se reescribe ese asiento en borrador, conservando su id y su número
+ * (corrección de un comprobante confirmado).
+ */
+export interface DocumentEntryOptions {
+  rewriteEntryId?: string;
 }
 
 interface CreateJournalEntryInput {
@@ -201,9 +213,38 @@ function getWithholdingAccountId(
  */
 async function createJournalEntry(
   input: CreateJournalEntryInput,
-  tx: PrismaTransactionClient
+  tx: PrismaTransactionClient,
+  opts?: DocumentEntryOptions
 ): Promise<string> {
-  const { companyId, date, description, lines, source } = input;
+  const { companyId, date, description, source } = input;
+  const lines = input.lines.map((line) => ({
+    accountId: line.accountId,
+    debit: new Prisma.Decimal(line.debit),
+    credit: new Prisma.Decimal(line.credit),
+    description: line.description,
+    customerId: line.customerId ?? null,
+    supplierId: line.supplierId ?? null,
+    costCenterId: line.costCenterId ?? null,
+    currency: line.currency ?? 'ARS',
+    originalAmount: line.originalAmount != null ? new Prisma.Decimal(line.originalAmount) : null,
+    exchangeRate: line.exchangeRate != null ? new Prisma.Decimal(line.exchangeRate) : null,
+  }));
+
+  if (opts?.rewriteEntryId) {
+    // Corrección del comprobante (TSK-792): mismo asiento, mismo número, contenido nuevo.
+    const entry = await rewriteDraftJournalEntryTx(tx, {
+      companyId,
+      entryId: opts.rewriteEntryId,
+      date,
+      description,
+      lines,
+      source,
+    });
+    logger.info('Asiento contable reescrito automáticamente', {
+      data: { entryId: entry.id, number: entry.number, source },
+    });
+    return entry.id;
+  }
 
   const entry = await createJournalEntryTx(tx, {
     companyId,
@@ -212,18 +253,7 @@ async function createJournalEntry(
     status: 'DRAFT',
     createdBy: 'system',
     source,
-    lines: lines.map((line) => ({
-      accountId: line.accountId,
-      debit: new Prisma.Decimal(line.debit),
-      credit: new Prisma.Decimal(line.credit),
-      description: line.description,
-      customerId: line.customerId ?? null,
-      supplierId: line.supplierId ?? null,
-      costCenterId: line.costCenterId ?? null,
-      currency: line.currency ?? 'ARS',
-      originalAmount: line.originalAmount != null ? new Prisma.Decimal(line.originalAmount) : null,
-      exchangeRate: line.exchangeRate != null ? new Prisma.Decimal(line.exchangeRate) : null,
-    })),
+    lines,
   });
 
   logger.info('Asiento contable creado automáticamente', {
@@ -292,7 +322,8 @@ function reconcileInvoiceAmounts(
 export async function createJournalEntryForSalesInvoice(
   invoiceId: string,
   companyId: string,
-  tx: PrismaTransactionClient
+  tx: PrismaTransactionClient,
+  opts?: DocumentEntryOptions
 ): Promise<string> {
   try {
     const settings = await getAccountingSettings(companyId, tx);
@@ -469,7 +500,8 @@ export async function createJournalEntryForSalesInvoice(
         lines,
         source: `sales-invoice:${invoiceId}`,
       },
-      tx
+      tx,
+      opts
     );
 
     return entryId;
@@ -488,7 +520,8 @@ export async function createJournalEntryForSalesInvoice(
 export async function createJournalEntryForPurchaseInvoice(
   invoiceId: string,
   companyId: string,
-  tx: PrismaTransactionClient
+  tx: PrismaTransactionClient,
+  opts?: DocumentEntryOptions
 ): Promise<string> {
   try {
     const settings = await getAccountingSettings(companyId, tx);
@@ -664,7 +697,8 @@ export async function createJournalEntryForPurchaseInvoice(
         lines,
         source: `purchase-invoice:${invoiceId}`,
       },
-      tx
+      tx,
+      opts
     );
 
     return entryId;
@@ -683,7 +717,8 @@ export async function createJournalEntryForPurchaseInvoice(
 export async function createJournalEntryForReceipt(
   receiptId: string,
   companyId: string,
-  tx: PrismaTransactionClient
+  tx: PrismaTransactionClient,
+  opts?: DocumentEntryOptions
 ): Promise<string> {
   try {
     // Obtener recibo con sus pagos (caja/banco con su cuenta) y retenciones
@@ -799,7 +834,8 @@ export async function createJournalEntryForReceipt(
         lines,
         source: `receipt:${receiptId}`,
       },
-      tx
+      tx,
+      opts
     );
 
     return entryId;
@@ -818,7 +854,8 @@ export async function createJournalEntryForReceipt(
 export async function createJournalEntryForPaymentOrder(
   paymentOrderId: string,
   companyId: string,
-  tx: PrismaTransactionClient
+  tx: PrismaTransactionClient,
+  opts?: DocumentEntryOptions
 ): Promise<string> {
   try {
     // Obtener orden de pago con sus pagos (caja/banco/tarjeta con su cuenta) y retenciones
@@ -942,7 +979,8 @@ export async function createJournalEntryForPaymentOrder(
         lines,
         source: `payment-order:${paymentOrderId}`,
       },
-      tx
+      tx,
+      opts
     );
 
     return entryId;

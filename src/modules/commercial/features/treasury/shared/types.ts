@@ -233,6 +233,8 @@ export interface ReceiptWithDetails extends Record<string, unknown> {
     id: string;
     paymentMethod: PaymentMethod;
     amount: number;
+    cashRegisterId: string | null;
+    bankAccountId: string | null;
     cashRegister: {
       code: string;
       name: string;
@@ -244,6 +246,11 @@ export interface ReceiptWithDetails extends Record<string, unknown> {
     checkNumber: string | null;
     cardLast4: string | null;
     reference: string | null;
+    checkBankName: string | null;
+    checkIssueDate: Date | null;
+    checkDueDate: Date | null;
+    checkDrawerName: string | null;
+    checkDrawerTaxId: string | null;
   }>;
   withholdings: Array<{
     id: string;
@@ -352,6 +359,12 @@ export interface PaymentOrderWithDetails extends Record<string, unknown> {
     cardId: string | null;
     installmentsCount: number | null;
     reference: string | null;
+    checkBankName: string | null;
+    checkIssueDate: Date | null;
+    checkDueDate: Date | null;
+    checkDrawerName: string | null;
+    checkDrawerTaxId: string | null;
+    endorsedCheckId: string | null;
   }>;
   withholdings: Array<{
     id: string;
@@ -381,6 +394,8 @@ export interface PaymentOrderListItem extends Record<string, unknown> {
   totalAmount: number;
   status: PaymentOrderStatus;
   createdAt: Date;
+  /** Devolución a socio: no se edita confirmada (se anula o elimina y se carga de nuevo). */
+  partnerId: string | null;
   supplier: {
     id: string;
     businessName: string;

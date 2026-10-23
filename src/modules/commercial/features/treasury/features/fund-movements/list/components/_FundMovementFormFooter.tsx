@@ -9,6 +9,8 @@ import type { FundMovementModalMode } from '../../shared/view-mode';
 
 interface FundMovementFormFooterProps {
   mode: FundMovementModalMode;
+  /** Edición de un movimiento confirmado: un solo botón que abre la propuesta de corrección. */
+  isCorrection?: boolean;
   isSubmitting: boolean;
   /** Deshabilita Guardar y Confirmar (ej.: sin conceptos configurados, TSK-791). */
   submitDisabled?: boolean;
@@ -21,6 +23,7 @@ interface FundMovementFormFooterProps {
 /** Botones del modal de Movimientos de Fondos según el modo. */
 export function _FundMovementFormFooter({
   mode,
+  isCorrection = false,
   isSubmitting,
   submitDisabled = false,
   onCancel,
@@ -31,6 +34,24 @@ export function _FundMovementFormFooter({
       <DialogFooter>
         <Button type="button" variant="outline" onClick={onCancel}>
           Cerrar
+        </Button>
+      </DialogFooter>
+    );
+  }
+
+  if (isCorrection) {
+    return (
+      <DialogFooter className="gap-2 sm:gap-2">
+        <Button type="button" variant="outline" onClick={onCancel} disabled={isSubmitting}>
+          Cancelar
+        </Button>
+        <Button
+          type="button"
+          onClick={() => onSubmit(false)}
+          disabled={isSubmitting || submitDisabled}
+        >
+          {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          Revisar cambios
         </Button>
       </DialogFooter>
     );
