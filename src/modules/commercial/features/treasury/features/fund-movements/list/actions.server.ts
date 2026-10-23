@@ -4,7 +4,11 @@ import { revalidatePath } from 'next/cache';
 
 import { Prisma } from '@/generated/prisma/client';
 import type { FundMovementType } from '@/generated/prisma/enums';
-import { createJournalEntryTx } from '@/modules/accounting/features/integrations/core';
+import type { DocumentEntryOptions } from '@/modules/accounting/features/integrations/commercial';
+import {
+  createJournalEntryTx,
+  rewriteDraftJournalEntryTx,
+} from '@/modules/accounting/features/integrations/core';
 import type { DataTableSearchParams } from '@/shared/components/common/DataTable';
 import {
   parseSearchParams,
@@ -578,6 +582,9 @@ interface JournalLineInput {
  * Mientras armaba las dos líneas acá adentro, el balance estaba garantizado por
  * construcción. Al generalizarla pasó a depender de cada llamador, así que la
  * partida doble se comprueba explícitamente antes de escribir nada.
+ *
+ * Con `opts.rewriteEntryId` (corrección del movimiento, TSK-792) reescribe ese asiento en
+ * borrador conservando su id y su número, en lugar de crear uno nuevo.
  */
 async function createJournalEntryForFundMovement(
   input: {
@@ -589,8 +596,9 @@ async function createJournalEntryForFundMovement(
     /** Origen para el log del núcleo (`fund-movement:<id>`). */
     source: string;
   },
-  tx: PrismaTransactionClient
-) {
+  tx: PrismaTransactionClient,
+  opts?: DocumentEntryOptions
+): Promise<{ id: string; number: number }> {
   const { companyId, date, description, lines } = input;
 
   // Partida doble: se suma con Decimal y no con floats, para que un asiento
@@ -621,6 +629,22 @@ async function createJournalEntryForFundMovement(
   // Período, numeración atómica, ejercicio/período y validación de cuentas: el
   // núcleo contable (TSK-760). Un mes cerrado lanza `BusinessError` y la
   // transacción entera (saldos, movimientos de banco/caja) se deshace.
+  const entryLines = lines.map((line) => ({
+    accountId: line.accountId,
+    debit: new Prisma.Decimal(line.debit),
+    credit: new Prisma.Decimal(line.credit),
+    description: line.description,
+  }));
+  if (opts?.rewriteEntryId) {
+    return rewriteDraftJournalEntryTx(tx, {
+      companyId,
+      entryId: opts.rewriteEntryId,
+      date,
+      description,
+      lines: entryLines,
+      source: input.source,
+    });
+  }
   return createJournalEntryTx(tx, {
     companyId,
     date,
@@ -628,12 +652,7 @@ async function createJournalEntryForFundMovement(
     status: 'DRAFT',
     createdBy: 'system',
     source: input.source,
-    lines: lines.map((line) => ({
-      accountId: line.accountId,
-      debit: new Prisma.Decimal(line.debit),
-      credit: new Prisma.Decimal(line.credit),
-      description: line.description,
-    })),
+    lines: entryLines,
   });
 }
 

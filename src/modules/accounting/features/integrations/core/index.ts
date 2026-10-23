@@ -9,16 +9,24 @@
  */
 export {
   createJournalEntryTx,
+  deleteDraftJournalEntryTx,
   postJournalEntryTx,
   reverseJournalEntryTx,
   revertJournalEntryToDraftTx,
+  rewriteDraftJournalEntryTx,
   type CreateJournalEntryTxInput,
   type CreatedJournalEntry,
+  type DeleteDraftEntryTxInput,
   type PostJournalEntryTxInput,
   type ReverseJournalEntryTxInput,
   type ReversedJournalEntry,
   type RevertToDraftTxInput,
+  type RewriteDraftEntryTxInput,
 } from '@/modules/accounting/shared/utils/journal-entry-tx';
+export {
+  findMonthlyProcessEntriesTx,
+  type MonthlyProcessEntry,
+} from '@/modules/accounting/shared/utils/monthly-processes';
 export {
   assertPeriodOpen,
   type AssertPeriodOpenOptions,

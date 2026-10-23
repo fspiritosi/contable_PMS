@@ -73,6 +73,21 @@ export interface RevertToDraftTxInput {
   userId: string;
 }
 
+export interface RewriteDraftEntryTxInput {
+  companyId: string;
+  entryId: string;
+  date: Date;
+  description: string;
+  lines: readonly JournalEntryLineDraft[];
+  /** Etiqueta del origen para el log; no se persiste. */
+  source?: string;
+}
+
+export interface DeleteDraftEntryTxInput {
+  companyId: string;
+  entryId: string;
+}
+
 export interface ReversedJournalEntry {
   original: { id: string; number: number };
   reversal: CreatedJournalEntry;
@@ -83,6 +98,22 @@ const STATUS_LABELS: Record<string, string> = {
   POSTED: 'Registrado',
   REVERSED: 'Anulado',
 };
+
+/** Todas las columnas de una línea a persistir (auxiliares, centro de costo y moneda). */
+function toLineColumns(line: JournalEntryLineDraft) {
+  return {
+    accountId: line.accountId,
+    debit: line.debit,
+    credit: line.credit,
+    description: line.description ?? null,
+    customerId: line.customerId ?? null,
+    supplierId: line.supplierId ?? null,
+    costCenterId: line.costCenterId ?? null,
+    currency: line.currency ?? 'ARS',
+    originalAmount: line.originalAmount ?? null,
+    exchangeRate: line.exchangeRate ?? null,
+  };
+}
 
 /** Tipo de período guardado → tipo con el que se valida (sin período: MONTHLY). */
 function toEntryPeriodType(stored: string | null | undefined): EntryPeriodType {
@@ -173,20 +204,7 @@ export async function createJournalEntryTx(
       originalEntryId: input.originalEntryId ?? null,
       process: input.process ?? null,
       createdBy: input.createdBy,
-      lines: {
-        create: lines.map((line) => ({
-          accountId: line.accountId,
-          debit: line.debit,
-          credit: line.credit,
-          description: line.description ?? null,
-          customerId: line.customerId ?? null,
-          supplierId: line.supplierId ?? null,
-          costCenterId: line.costCenterId ?? null,
-          currency: line.currency ?? 'ARS',
-          originalAmount: line.originalAmount ?? null,
-          exchangeRate: line.exchangeRate ?? null,
-        })),
-      },
+      lines: { create: lines.map(toLineColumns) },
     },
     select: { id: true, number: true },
   });
@@ -417,4 +435,90 @@ export async function revertJournalEntryToDraftTx(
   });
 
   return { id: entry.id, number: entry.number };
+}
+
+/**
+ * Reescribe el asiento en borrador de un comprobante corregido (TSK-792, §5): conserva id y
+ * número y reemplaza fecha, descripción, líneas, `fiscalYearId` y `periodId`. Valida como al
+ * crear (balance, cuentas, período de la fecha nueva con el lock de la empresa) y no avanza
+ * la numeración. Solo DRAFT. Puro: sin checkPermission ni $transaction propios.
+ */
+export async function rewriteDraftJournalEntryTx(
+  tx: Tx,
+  input: RewriteDraftEntryTxInput
+): Promise<{ id: string; number: number }> {
+  const { companyId, entryId, lines } = input;
+
+  validateEntryLines(lines);
+  await assertAccountsUsableTx(
+    tx,
+    companyId,
+    lines.map((line) => line.accountId)
+  );
+
+  const entry = await tx.journalEntry.findFirst({
+    where: { id: entryId, companyId },
+    select: { id: true, number: true, status: true, period: { select: { type: true } } },
+  });
+  if (!entry) throw new BusinessError('Asiento no encontrado.');
+  if (entry.status !== 'DRAFT') {
+    throw new BusinessError(`El asiento N° ${entry.number} ya no está en borrador.`);
+  }
+
+  const period = await assertPeriodOpen(tx, companyId, input.date, {
+    periodType: toEntryPeriodType(entry.period?.type),
+  });
+
+  // Ídem registrar: si otra tx lo registró mientras esperábamos el lock, no se toca.
+  const { count } = await tx.journalEntry.updateMany({
+    where: { id: entry.id, status: 'DRAFT' },
+    data: {
+      date: input.date,
+      description: input.description,
+      fiscalYearId: period.fiscalYearId,
+      periodId: period.periodId,
+    },
+  });
+  if (count === 0) throw new BusinessError(`El asiento N° ${entry.number} ya no está en borrador.`);
+
+  await tx.journalEntryLine.deleteMany({ where: { entryId: entry.id } });
+  await tx.journalEntryLine.createMany({
+    data: lines.map((line) => ({ entryId: entry.id, ...toLineColumns(line) })),
+  });
+
+  logger.debug('Asiento reescrito', {
+    data: { companyId, entryId: entry.id, number: entry.number, source: input.source },
+  });
+
+  return { id: entry.id, number: entry.number };
+}
+
+/**
+ * Elimina el asiento en borrador de un comprobante que se elimina (TSK-792, §5). Solo DRAFT:
+ * el borrado va condicionado al estado, así que un asiento registrado entre la lectura y el
+ * borrado no se toca. Las líneas caen por cascada. Puro: sin checkPermission ni $transaction
+ * propios, y sin mirar a qué comprobante pertenece (eso lo decide el llamador).
+ */
+export async function deleteDraftJournalEntryTx(
+  tx: Tx,
+  input: DeleteDraftEntryTxInput
+): Promise<{ number: number }> {
+  const { companyId, entryId } = input;
+
+  const entry = await tx.journalEntry.findFirst({
+    where: { id: entryId, companyId },
+    select: { number: true },
+  });
+  if (!entry) throw new BusinessError('Asiento no encontrado.');
+
+  const { count } = await tx.journalEntry.deleteMany({
+    where: { id: entryId, companyId, status: 'DRAFT' },
+  });
+  if (count === 0) throw new BusinessError(`El asiento N° ${entry.number} ya no está en borrador.`);
+
+  logger.debug('Asiento en borrador eliminado', {
+    data: { companyId, entryId, number: entry.number },
+  });
+
+  return { number: entry.number };
 }
