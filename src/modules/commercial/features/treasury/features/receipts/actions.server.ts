@@ -1,5 +1,6 @@
 ﻿'use server';
 
+import { recomputeSalesInvoiceStatusTx } from '@/modules/commercial/shared/effects/document-status.server';
 import { getCurrentUserId } from '@/shared/lib/current-user';
 import { getActiveCompanyId } from '@/shared/lib/company';
 import { logger } from '@/shared/lib/logger';
@@ -290,29 +291,7 @@ export async function confirmReceipt(
 
       // 2. Actualizar estado de facturas
       for (const item of receipt.items) {
-        const invoice = item.invoice;
-
-        // Calcular total pagado (recibos + NC aplicadas)
-        const existingPayments = await tx.receiptItem.aggregate({
-          where: { invoiceId: item.invoiceId },
-          _sum: { amount: true },
-        });
-
-        const cnApplications = await tx.salesCreditNoteApplication.aggregate({
-          where: { invoiceId: item.invoiceId },
-          _sum: { amount: true },
-        });
-
-        const totalPaid = Number(existingPayments._sum.amount || 0) + Number(cnApplications._sum.amount || 0);
-        const invoiceTotal = Number(invoice.total);
-
-        // Actualizar estado según si está totalmente pagada
-        const newStatus = totalPaid >= invoiceTotal ? 'PAID' : 'PARTIAL_PAID';
-
-        await tx.salesInvoice.update({
-          where: { id: item.invoiceId },
-          data: { status: newStatus },
-        });
+        await recomputeSalesInvoiceStatusTx(tx, item.invoiceId);
       }
 
       // 3. Crear movimientos de caja/banco según formas de pago

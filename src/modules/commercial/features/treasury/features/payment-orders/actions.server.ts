@@ -21,6 +21,7 @@ import {
   loadPaymentOrderEntryPreflight,
   type EntryPreflight,
 } from '../../shared/entry-preflight';
+import { recomputeExpenseStatusTx, recomputePurchaseInvoiceStatusTx } from '@/modules/commercial/shared/effects/document-status.server';
 import { calculatePendingAmount, hasPendingBalance } from './shared/pending-invoices';
 
 /**
@@ -500,43 +501,10 @@ export async function confirmPaymentOrder(
 
       // 2. Actualizar estado de facturas y gastos
       for (const item of paymentOrder.items) {
-        if (item.invoiceId && item.invoice) {
-          // Item de factura de compra
-          const invoice = item.invoice;
-
-          const existingPayments = await tx.paymentOrderItem.aggregate({
-            where: { invoiceId: item.invoiceId },
-            _sum: { amount: true },
-          });
-
-          const cnApplications = await tx.purchaseCreditNoteApplication.aggregate({
-            where: { invoiceId: item.invoiceId },
-            _sum: { amount: true },
-          });
-
-          const totalPaid = Number(existingPayments._sum.amount || 0) + Number(cnApplications._sum.amount || 0);
-          const invoiceTotal = Number(invoice.total);
-          const newStatus = totalPaid >= invoiceTotal ? 'PAID' : 'PARTIAL_PAID';
-
-          await tx.purchaseInvoice.update({
-            where: { id: item.invoiceId },
-            data: { status: newStatus },
-          });
-        } else if (item.expenseId && item.expense) {
-          // Item de gasto
-          const existingPayments = await tx.paymentOrderItem.aggregate({
-            where: { expenseId: item.expenseId },
-            _sum: { amount: true },
-          });
-
-          const totalPaid = Number(existingPayments._sum.amount || 0);
-          const expenseTotal = Number(item.expense.amount);
-          const newStatus = totalPaid >= expenseTotal ? 'PAID' : 'PARTIAL_PAID';
-
-          await tx.expense.update({
-            where: { id: item.expenseId },
-            data: { status: newStatus },
-          });
+        if (item.invoiceId) {
+          await recomputePurchaseInvoiceStatusTx(tx, item.invoiceId);
+        } else if (item.expenseId) {
+          await recomputeExpenseStatusTx(tx, item.expenseId);
         }
       }
 
