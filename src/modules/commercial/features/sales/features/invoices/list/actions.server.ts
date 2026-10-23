@@ -5,41 +5,22 @@ import { prisma } from '@/shared/lib/prisma';
 import { logger } from '@/shared/lib/logger';
 import { getActiveCompanyId } from '@/shared/lib/company';
 import { checkPermission } from '@/shared/lib/permissions';
-import { buildImputableAccountsWhere } from '@/shared/lib/accounts/imputable-accounts';
 import { BusinessError, toActionResult, type ActionResult } from '@/shared/lib/action-result';
 import { createInvoiceSchema } from '../shared/validators';
 import { revalidatePath } from 'next/cache';
-import { Prisma } from '@/generated/prisma/client';
+import type { Prisma } from '@/generated/prisma/client';
 import type { DataTableSearchParams } from '@/shared/components/common/DataTable';
 import { buildFiltersWhere, buildDateRangeFiltersWhere, buildTextFiltersWhere, parseSearchParams, stateToPrismaParams } from '@/shared/components/common/DataTable/helpers';
 import {
   validateVoucherType,
   mapTaxStatusToCustomerTaxCondition,
 } from '../shared/afip-validation';
-import { createJournalEntryForSalesInvoice } from '@/modules/accounting/features/integrations/commercial';
-import { isCreditNote, isDebitNote } from '@/modules/commercial/shared/voucher-utils';
-import { applySalesCreditNote } from '@/modules/commercial/shared/credit-note-compensation';
 import {
-  buildMissingCostCenterMessage,
-  effectiveAccountType,
-  findLinesMissingCostCenter,
-} from '@/modules/commercial/shared/cost-center';
-import {
-  buildMissingTributeAccountsMessage,
-  calculateOtherTaxes,
-  findMissingTributeAccounts,
-  parseInternalTaxes,
-  perceptionAccountId,
-  toPerceptionRecords,
-} from '@/modules/commercial/shared/perceptions';
-import {
-  buildMissingLineAccountsMessage,
-  buildUnavailableLineAccountsMessage,
-  findLinesMissingAccount,
-  findLinesWithUnavailableAccount,
-  formatAccountLabel,
-  resolveLineAccount,
-} from '@/modules/commercial/shared/line-accounts';
+  applySalesInvoiceEffectsTx,
+  validateSalesInvoiceForConfirmation,
+} from '@/modules/commercial/shared/effects/sales-invoice.server';
+import { writeSalesInvoiceDataTx } from '@/modules/commercial/shared/effects/sales-invoice-data.server';
+import { buildSalesInvoiceAmounts } from '../shared/totals';
 
 // Obtener todas las facturas de venta
 export async function getInvoices() {
@@ -484,86 +465,6 @@ export async function getNextInvoiceNumber(
   }
 }
 
-// Calcular totales de una línea
-function calculateLineAmounts(
-  quantity: number,
-  unitPrice: number,
-  vatRate: number,
-  discountPercent: number | null,
-  discountAmount: number | null,
-): {
-  baseAmount: number;
-  discountValue: number;
-  subtotal: number;
-  vatAmount: number;
-  total: number;
-} {
-  const baseAmount = quantity * unitPrice;
-
-  let discountValue = 0;
-  if (discountPercent != null && discountPercent > 0) {
-    discountValue = baseAmount * (discountPercent / 100);
-  } else if (discountAmount != null && discountAmount > 0) {
-    discountValue = Math.min(discountAmount, baseAmount);
-  }
-
-  const subtotal = baseAmount - discountValue;
-  const vatAmount = subtotal * (vatRate / 100);
-  const total = subtotal + vatAmount;
-
-  return {
-    baseAmount: Math.round(baseAmount * 100) / 100,
-    discountValue: Math.round(discountValue * 100) / 100,
-    subtotal: Math.round(subtotal * 100) / 100,
-    vatAmount: Math.round(vatAmount * 100) / 100,
-    total: Math.round(total * 100) / 100,
-  };
-}
-
-function calculateGlobalDiscount(
-  sumLineSubtotals: number,
-  globalDiscountPercent: number | null,
-  globalDiscountAmount: number | null,
-): number {
-  if (globalDiscountPercent != null && globalDiscountPercent > 0) {
-    return Math.round(sumLineSubtotals * (globalDiscountPercent / 100) * 100) / 100;
-  }
-  if (globalDiscountAmount != null && globalDiscountAmount > 0) {
-    return Math.round(Math.min(globalDiscountAmount, sumLineSubtotals) * 100) / 100;
-  }
-  return 0;
-}
-
-function calculateInvoiceTotalsWithGlobalDiscount(
-  linesData: Array<{ subtotal: number; vatRate: number }>,
-  globalDiscount: number,
-): { invoiceSubtotal: number; invoiceVatAmount: number } {
-  const sumLineSubtotals = linesData.reduce((acc, l) => acc + l.subtotal, 0);
-
-  if (globalDiscount <= 0 || sumLineSubtotals <= 0) {
-    return {
-      invoiceSubtotal: sumLineSubtotals,
-      invoiceVatAmount: linesData.reduce(
-        (acc, l) => acc + l.subtotal * (l.vatRate / 100),
-        0,
-      ),
-    };
-  }
-
-  let invoiceVatAmount = 0;
-  for (const line of linesData) {
-    const weight = line.subtotal / sumLineSubtotals;
-    const lineGlobalDiscount = globalDiscount * weight;
-    const discountedBase = line.subtotal - lineGlobalDiscount;
-    invoiceVatAmount += discountedBase * (line.vatRate / 100);
-  }
-
-  return {
-    invoiceSubtotal: Math.round((sumLineSubtotals - globalDiscount) * 100) / 100,
-    invoiceVatAmount: Math.round(invoiceVatAmount * 100) / 100,
-  };
-}
-
 // Obtener facturas de un cliente para select de factura original (NC/ND)
 export async function getCustomerInvoicesForSelect(customerId: string) {
   await checkPermission('commercial.invoices', 'view', { redirect: true });
@@ -723,66 +624,7 @@ export async function createInvoice(data: unknown) {
     const fullNumber = `${pointOfSale.number.toString().padStart(4, '0')}-${nextNumber.toString().padStart(8, '0')}`;
 
     // Calcular totales
-    let totalLineDiscounts = 0;
-
-    const linesData = validatedData.lines.map((line) => {
-      const amounts = calculateLineAmounts(
-        line.quantity,
-        line.unitPrice,
-        line.vatRate,
-        line.discountPercent,
-        line.discountAmount,
-      );
-
-      totalLineDiscounts += amounts.discountValue;
-
-      return {
-        productId: line.productId,
-        description: line.description,
-        quantity: new Prisma.Decimal(line.quantity),
-        unitPrice: new Prisma.Decimal(line.unitPrice),
-        vatRate: new Prisma.Decimal(line.vatRate),
-        vatAmount: new Prisma.Decimal(amounts.vatAmount),
-        subtotal: new Prisma.Decimal(amounts.subtotal),
-        total: new Prisma.Decimal(amounts.total),
-        discountPercent: line.discountPercent != null ? new Prisma.Decimal(line.discountPercent) : null,
-        discountAmount: line.discountAmount != null ? new Prisma.Decimal(line.discountAmount) : null,
-        costCenterAllocations: {
-          create: (line.costCenterAllocations ?? []).map((a) => ({
-            costCenterId: a.costCenterId,
-            percentage: a.percentage,
-          })),
-        },
-      };
-    });
-
-    const sumLineSubtotals = linesData.reduce((acc, l) => acc + Number(l.subtotal), 0);
-
-    const globalDiscount = calculateGlobalDiscount(
-      sumLineSubtotals,
-      validatedData.globalDiscountPercent,
-      validatedData.globalDiscountAmount,
-    );
-
-    const { invoiceSubtotal, invoiceVatAmount } = calculateInvoiceTotalsWithGlobalDiscount(
-      validatedData.lines.map((line, i) => ({
-        subtotal: Number(linesData[i].subtotal),
-        vatRate: line.vatRate,
-      })),
-      globalDiscount,
-    );
-
-    // Percepciones e impuestos internos (TSK-644). `otherTaxes` es el agregado
-    // que AFIP llama "Otros Tributos" e incluye las percepciones: es el valor
-    // que la emisión electrónica informa como `ImpTrib`, y debe cuadrar con la
-    // suma de los tributos que se le declaran.
-    const perceptionsData = toPerceptionRecords(validatedData.perceptions ?? []);
-    const internalTaxes = parseInternalTaxes(validatedData.internalTaxes);
-    const otherTaxes = calculateOtherTaxes(perceptionsData, internalTaxes);
-
-    const invoiceTotal = invoiceSubtotal + invoiceVatAmount + otherTaxes;
-    const totalBeforeDiscount = sumLineSubtotals;
-    const discountTotal = totalLineDiscounts + globalDiscount;
+    const { linesData, perceptionsData, amounts } = buildSalesInvoiceAmounts(validatedData);
 
     // Crear factura en transacción
     const invoice = await prisma.$transaction(async (tx) => {
@@ -797,18 +639,7 @@ export async function createInvoice(data: unknown) {
           fullNumber: fullNumber,
           issueDate: validatedData.issueDate,
           dueDate: validatedData.dueDate,
-          subtotal: new Prisma.Decimal(invoiceSubtotal),
-          netTaxed: new Prisma.Decimal(invoiceSubtotal),
-          netNonTaxed: new Prisma.Decimal(0),
-          netExempt: new Prisma.Decimal(0),
-          vatAmount: new Prisma.Decimal(invoiceVatAmount),
-          internalTaxes: new Prisma.Decimal(internalTaxes),
-          otherTaxes: new Prisma.Decimal(otherTaxes),
-          total: new Prisma.Decimal(invoiceTotal),
-          globalDiscountPercent: validatedData.globalDiscountPercent != null ? new Prisma.Decimal(validatedData.globalDiscountPercent) : null,
-          globalDiscountAmount: validatedData.globalDiscountAmount != null ? new Prisma.Decimal(validatedData.globalDiscountAmount) : null,
-          totalBeforeDiscount: new Prisma.Decimal(totalBeforeDiscount),
-          discountTotal: new Prisma.Decimal(discountTotal),
+          ...amounts,
           notes: validatedData.notes,
           internalNotes: validatedData.internalNotes,
           originalInvoiceId: validatedData.originalInvoiceId || null,
@@ -880,307 +711,25 @@ export async function confirmInvoice(id: string): Promise<ActionResult<{ id: str
   try {
     // Verificar que la factura existe y está en borrador
     const invoice = await prisma.salesInvoice.findFirst({
-      where: {
-        id: id,
-        companyId: companyId,
-        status: 'DRAFT',
-      },
-      include: {
-        lines: {
-          include: {
-            product: {
-              select: {
-                id: true,
-                code: true,
-                name: true,
-                trackStock: true,
-                // El tipo de la cuenta decide si la línea exige centro de costo
-                // (TSK-583); id/code/name para pre-validar la cuenta de la
-                // línea y nombrarla en el mensaje (TSK-721).
-                defaultIncomeAccount: { select: { id: true, code: true, name: true, type: true } },
-              },
-            },
-            costCenterAllocations: true,
-          },
-        },
-        perceptions: { select: { type: true, amount: true } },
-      },
+      where: { id, companyId, status: 'DRAFT' },
+      select: { id: true, fullNumber: true },
     });
 
     if (!invoice) {
       throw new BusinessError('Factura no encontrada o ya está confirmada');
     }
 
-    const settings = await prisma.accountingSettings.findUnique({
-      where: { companyId },
-      select: {
-        requireCostCenter: true,
-        // Cuenta de ventas por defecto: la que usa el asiento si el ítem no
-        // tiene una propia (TSK-583, hallazgo de revisión final): sin esto,
-        // un ítem sin cuenta propia nunca exigía reparto aunque el asiento lo
-        // imputara igual a `salesAccountId`, que es de resultado. id/code/
-        // name para la pre-validación de cuentas de línea (TSK-721).
-        salesAccount: { select: { id: true, code: true, name: true, type: true } },
-        // Cuentas de los tributos del comprobante (TSK-644)
-        internalTaxesAccountId: true,
-        perceptionIvaCollectedAccountId: true,
-        perceptionIibbCollectedAccountId: true,
-        perceptionMunicipalCollectedAccountId: true,
-      },
-    });
+    // Cuentas de línea, tributos y centros de costo, antes de la transacción
+    await validateSalesInvoiceForConfirmation(id, companyId);
 
-    // Cuentas de las líneas (TSK-721). La cuenta la define el ítem; la "Cuenta
-    // de ventas por defecto" es el respaldo. Se comprueba ANTES de la
-    // transacción, como los tributos: así el error llega al usuario con el
-    // nombre de la línea en vez de quedar una factura confirmada sin asiento.
-    const defaultSalesAccount = settings?.salesAccount ?? null;
-    const lineChecks = invoice.lines.map((line) => ({
-      description: line.description,
-      productName: line.product.name,
-      itemAccountId: line.product.defaultIncomeAccount?.id ?? null,
-    }));
-
-    const missingLineAccounts = findLinesMissingAccount(lineChecks, defaultSalesAccount?.id);
-    if (missingLineAccounts.length > 0) {
-      throw new BusinessError(buildMissingLineAccountsMessage(missingLineAccounts, 'income'));
-    }
-
-    // La cuenta efectiva tiene que ser imputable HOY (hoja, activa, sin corte
-    // de ejercicio vigente); nunca se cae a la global en silencio. Sin `types`:
-    // la cuenta de un ítem puede ser ASSET (TSK-579).
-    const effectiveAccountIds = [
-      ...new Set(
-        lineChecks
-          .map((l) => resolveLineAccount(l.itemAccountId, defaultSalesAccount?.id))
-          .filter((accountId): accountId is string => accountId !== null)
-      ),
-    ];
-    const imputableAccounts = await prisma.account.findMany({
-      where: { ...buildImputableAccountsWhere({ companyId }), id: { in: effectiveAccountIds } },
-      select: { id: true },
-    });
-    const unavailableLineAccounts = findLinesWithUnavailableAccount(
-      lineChecks,
-      defaultSalesAccount?.id,
-      new Set(imputableAccounts.map((a) => a.id))
-    );
-    if (unavailableLineAccounts.length > 0) {
-      const labels = new Map<string, string>();
-      for (const line of invoice.lines) {
-        const account = line.product.defaultIncomeAccount;
-        if (account) labels.set(account.id, formatAccountLabel(account));
-      }
-      if (defaultSalesAccount) labels.set(defaultSalesAccount.id, formatAccountLabel(defaultSalesAccount));
-
-      throw new BusinessError(
-        buildUnavailableLineAccountsMessage(
-          unavailableLineAccounts.map((u) => ({
-            description: u.line.description,
-            accountLabel: labels.get(u.accountId) ?? u.accountId,
-            source: u.source,
-          })),
-          'income'
-        )
-      );
-    }
-
-    // Tributos sin cuenta contable configurada (TSK-644). Ver la nota
-    // equivalente en `confirmPurchaseInvoice`: se comprueba antes de abrir la
-    // transacción para no dejar la factura confirmada y sin asiento.
-    const missingTributeAccounts = findMissingTributeAccounts([
-      ...invoice.perceptions
-        .filter((p) => Number(p.amount) > 0)
-        .map((p) => ({
-          label: `percepción ${p.type} cobrada`,
-          accountId: perceptionAccountId(p.type, {
-            IVA: settings?.perceptionIvaCollectedAccountId,
-            IIBB: settings?.perceptionIibbCollectedAccountId,
-            MUNICIPAL: settings?.perceptionMunicipalCollectedAccountId,
-          }),
-        })),
-      ...(Number(invoice.internalTaxes) > 0
-        ? [
-            {
-              label: 'impuestos internos',
-              accountId: settings?.internalTaxesAccountId,
-            },
-          ]
-        : []),
-    ]);
-
-    if (missingTributeAccounts.length > 0) {
-      throw new BusinessError(buildMissingTributeAccountsMessage(missingTributeAccounts));
-    }
-
-    if (settings?.requireCostCenter) {
-      const missing = findLinesMissingCostCenter(
-        invoice.lines.map((line) => ({
-          description: line.description,
-          accountType: effectiveAccountType(
-            line.product?.defaultIncomeAccount?.type ?? null,
-            settings.salesAccount?.type
-          ),
-          allocations: line.costCenterAllocations.map((a) => ({
-            costCenterId: a.costCenterId,
-            percentage: Number(a.percentage),
-          })),
-        }))
-      );
-
-      if (missing.length > 0) {
-        throw new BusinessError(buildMissingCostCenterMessage(missing));
-      }
-    }
-
-    // Confirmar y descontar stock en transacción
+    // Confirmar, descontar stock, asiento y compensación de la NC en transacción
     const result = await prisma.$transaction(async (tx) => {
-      // Actualizar factura
       const updatedInvoice = await tx.salesInvoice.update({
-        where: { id: id },
-        data: {
-          status: 'CONFIRMED',
-        },
+        where: { id },
+        data: { status: 'CONFIRMED' },
+        select: { id: true },
       });
-
-      // ND no afecta stock (ajuste financiero)
-      // NC restaura stock, Factura descuenta stock
-      const isND = isDebitNote(invoice.voucherType);
-      const isNC = isCreditNote(invoice.voucherType);
-
-      if (!isND) {
-        for (const line of invoice.lines) {
-          if (line.product.trackStock) {
-            // Buscar almacén principal (o el primero disponible)
-            const warehouse = await tx.warehouse.findFirst({
-              where: {
-                companyId: companyId,
-                isActive: true,
-              },
-              orderBy: {
-                createdAt: 'asc',
-              },
-            });
-
-            if (!warehouse) {
-              throw new BusinessError('No hay almacenes disponibles para gestionar stock');
-            }
-
-            const quantityToHandle = line.quantity;
-
-            if (isNC) {
-              // NC de venta: restaurar stock (devuelve ítems)
-              await tx.warehouseStock.upsert({
-                where: {
-                  warehouseId_productId: {
-                    warehouseId: warehouse.id,
-                    productId: line.productId,
-                  },
-                },
-                update: {
-                  quantity: { increment: quantityToHandle },
-                  availableQty: { increment: quantityToHandle },
-                },
-                create: {
-                  warehouseId: warehouse.id,
-                  productId: line.productId,
-                  quantity: quantityToHandle,
-                  reservedQty: 0,
-                  availableQty: quantityToHandle,
-                },
-              });
-
-              await tx.stockMovement.create({
-                data: {
-                  companyId: companyId,
-                  productId: line.productId,
-                  warehouseId: warehouse.id,
-                  type: 'RETURN',
-                  quantity: quantityToHandle,
-                  referenceType: 'sales_invoice',
-                  referenceId: invoice.id,
-                  notes: `NC Venta ${invoice.fullNumber}`,
-                  date: new Date(),
-                  createdBy: userId,
-                },
-              });
-            } else {
-              // Factura normal: descontar stock
-              const warehouseStock = await tx.warehouseStock.findUnique({
-                where: {
-                  warehouseId_productId: {
-                    warehouseId: warehouse.id,
-                    productId: line.productId,
-                  },
-                },
-              });
-
-              const currentStock = warehouseStock?.quantity || new Prisma.Decimal(0);
-
-              if (currentStock.lessThan(quantityToHandle)) {
-                throw new BusinessError(
-                  `Stock insuficiente para ${line.product.name}. Disponible: ${currentStock}, Requerido: ${quantityToHandle}`
-                );
-              }
-
-              await tx.warehouseStock.upsert({
-                where: {
-                  warehouseId_productId: {
-                    warehouseId: warehouse.id,
-                    productId: line.productId,
-                  },
-                },
-                update: {
-                  quantity: { decrement: quantityToHandle },
-                  availableQty: { decrement: quantityToHandle },
-                },
-                create: {
-                  warehouseId: warehouse.id,
-                  productId: line.productId,
-                  quantity: new Prisma.Decimal(0).minus(quantityToHandle),
-                  reservedQty: 0,
-                  availableQty: new Prisma.Decimal(0).minus(quantityToHandle),
-                },
-              });
-
-              await tx.stockMovement.create({
-                data: {
-                  companyId: companyId,
-                  productId: line.productId,
-                  warehouseId: warehouse.id,
-                  type: 'SALE',
-                  quantity: quantityToHandle,
-                  referenceType: 'sales_invoice',
-                  referenceId: invoice.id,
-                  notes: `Factura ${invoice.fullNumber}`,
-                  date: new Date(),
-                  createdBy: userId,
-                },
-              });
-            }
-          }
-        }
-      }
-
-      // Asiento contable. TSK-721: antes solo se relanzaba "período cerrado" y
-      // cualquier otro fallo del asiento se degradaba a warn, dejando la
-      // factura CONFIRMED sin asiento. Ahora cualquier error aborta la
-      // transacción y llega al usuario por el catch externo.
-      const journalEntryId = await createJournalEntryForSalesInvoice(id, companyId, tx);
-      await tx.salesInvoice.update({ where: { id }, data: { journalEntryId } });
-      logger.info('Asiento contable generado para factura de venta', {
-        data: { invoiceId: id, journalEntryId },
-      });
-
-      // Auto-compensar NC contra facturas/ND pendientes del mismo cliente
-      if (isCreditNote(updatedInvoice.voucherType)) {
-        await applySalesCreditNote(tx, {
-          id: updatedInvoice.id,
-          total: updatedInvoice.total,
-          customerId: updatedInvoice.customerId,
-          originalInvoiceId: updatedInvoice.originalInvoiceId,
-        }, companyId);
-      }
-
+      await applySalesInvoiceEffectsTx(tx, { companyId, userId }, id);
       return updatedInvoice;
     });
 
@@ -1271,108 +820,19 @@ export async function updateInvoice(id: string, data: unknown) {
   try {
     const validatedData = createInvoiceSchema.parse(data);
 
-    // Verificar que la factura existe y está en borrador
-    const invoice = await prisma.salesInvoice.findFirst({
-      where: { id, companyId, status: 'DRAFT' },
-    });
-
-    if (!invoice) {
-      throw new Error('Factura no encontrada o no está en borrador');
-    }
-
-    // Calcular totales
-    let totalLineDiscounts = 0;
-
-    const linesData = validatedData.lines.map((line) => {
-      const amounts = calculateLineAmounts(
-        line.quantity,
-        line.unitPrice,
-        line.vatRate,
-        line.discountPercent,
-        line.discountAmount,
-      );
-      totalLineDiscounts += amounts.discountValue;
-
-      return {
-        productId: line.productId,
-        description: line.description,
-        quantity: new Prisma.Decimal(line.quantity),
-        unitPrice: new Prisma.Decimal(line.unitPrice),
-        vatRate: new Prisma.Decimal(line.vatRate),
-        vatAmount: new Prisma.Decimal(amounts.vatAmount),
-        subtotal: new Prisma.Decimal(amounts.subtotal),
-        total: new Prisma.Decimal(amounts.total),
-        discountPercent: line.discountPercent != null ? new Prisma.Decimal(line.discountPercent) : null,
-        discountAmount: line.discountAmount != null ? new Prisma.Decimal(line.discountAmount) : null,
-        costCenterAllocations: {
-          create: (line.costCenterAllocations ?? []).map((a) => ({
-            costCenterId: a.costCenterId,
-            percentage: a.percentage,
-          })),
-        },
-      };
-    });
-
-    const sumLineSubtotals = linesData.reduce((acc, l) => acc + Number(l.subtotal), 0);
-
-    const globalDiscount = calculateGlobalDiscount(
-      sumLineSubtotals,
-      validatedData.globalDiscountPercent,
-      validatedData.globalDiscountAmount,
-    );
-
-    const { invoiceSubtotal, invoiceVatAmount } = calculateInvoiceTotalsWithGlobalDiscount(
-      validatedData.lines.map((line, i) => ({
-        subtotal: Number(linesData[i].subtotal),
-        vatRate: line.vatRate,
-      })),
-      globalDiscount,
-    );
-
-    // Ver nota en createInvoice sobre la semántica de `otherTaxes`.
-    const perceptionsData = toPerceptionRecords(validatedData.perceptions ?? []);
-    const internalTaxes = parseInternalTaxes(validatedData.internalTaxes);
-    const otherTaxes = calculateOtherTaxes(perceptionsData, internalTaxes);
-
-    const invoiceTotal = invoiceSubtotal + invoiceVatAmount + otherTaxes;
-    const totalBeforeDiscount = sumLineSubtotals;
-    const discountTotal = totalLineDiscounts + globalDiscount;
-
-    const result = await prisma.$transaction(async (tx) => {
-      // Eliminar líneas existentes: el cascade también borra su reparto por
-      // centro de costo (SalesInvoiceLineCostCenter.onDelete: Cascade).
-      await tx.salesInvoiceLine.deleteMany({ where: { invoiceId: id } });
-
-      // Las percepciones se reemplazan enteras, no se reconcilian fila por
-      // fila (TSK-644).
-      await tx.salesInvoicePerception.deleteMany({ where: { invoiceId: id } });
-
-      return tx.salesInvoice.update({
-        where: { id },
-        data: {
-          customerId: validatedData.customerId,
-          voucherType: validatedData.voucherType as any,
-          issueDate: validatedData.issueDate,
-          dueDate: validatedData.dueDate,
-          subtotal: new Prisma.Decimal(invoiceSubtotal),
-          netTaxed: new Prisma.Decimal(invoiceSubtotal),
-          netNonTaxed: new Prisma.Decimal(0),
-          netExempt: new Prisma.Decimal(0),
-          vatAmount: new Prisma.Decimal(invoiceVatAmount),
-          internalTaxes: new Prisma.Decimal(internalTaxes),
-          otherTaxes: new Prisma.Decimal(otherTaxes),
-          total: new Prisma.Decimal(invoiceTotal),
-          globalDiscountPercent: validatedData.globalDiscountPercent != null ? new Prisma.Decimal(validatedData.globalDiscountPercent) : null,
-          globalDiscountAmount: validatedData.globalDiscountAmount != null ? new Prisma.Decimal(validatedData.globalDiscountAmount) : null,
-          totalBeforeDiscount: new Prisma.Decimal(totalBeforeDiscount),
-          discountTotal: new Prisma.Decimal(discountTotal),
-          notes: validatedData.notes,
-          internalNotes: validatedData.internalNotes,
-          lines: { create: linesData },
-          perceptions: { create: perceptionsData },
-        },
-        include: { lines: true, customer: true, pointOfSale: true },
+    const invoice = await prisma.$transaction(async (tx) => {
+      // Verificar que la factura existe y está en borrador
+      const draft = await tx.salesInvoice.findFirst({
+        where: { id, companyId, status: 'DRAFT' },
+        select: { id: true, fullNumber: true },
       });
+
+      if (!draft) {
+        throw new BusinessError('Factura no encontrada o no está en borrador');
+      }
+
+      await writeSalesInvoiceDataTx(tx, companyId, id, validatedData);
+      return draft;
     });
 
     logger.info('Factura actualizada', {
@@ -1381,7 +841,7 @@ export async function updateInvoice(id: string, data: unknown) {
 
     revalidatePath('/dashboard/commercial/invoices');
     revalidatePath(`/dashboard/commercial/invoices/${id}`);
-    return { success: true, id: result.id };
+    return { success: true, id: invoice.id };
   } catch (error) {
     logger.error('Error al actualizar factura', { data: { id, companyId, error } });
     if (error instanceof Error) throw error;
