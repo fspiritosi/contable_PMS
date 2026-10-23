@@ -233,6 +233,8 @@ export interface ReceiptWithDetails extends Record<string, unknown> {
     id: string;
     paymentMethod: PaymentMethod;
     amount: number;
+    cashRegisterId: string | null;
+    bankAccountId: string | null;
     cashRegister: {
       code: string;
       name: string;
@@ -244,6 +246,11 @@ export interface ReceiptWithDetails extends Record<string, unknown> {
     checkNumber: string | null;
     cardLast4: string | null;
     reference: string | null;
+    checkBankName: string | null;
+    checkIssueDate: Date | null;
+    checkDueDate: Date | null;
+    checkDrawerName: string | null;
+    checkDrawerTaxId: string | null;
   }>;
   withholdings: Array<{
     id: string;

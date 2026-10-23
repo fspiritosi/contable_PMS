@@ -1,868 +1,192 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/shared/components/ui/dialog';
-import { Button } from '@/shared/components/ui/button';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/shared/components/ui/form';
-import { Input } from '@/shared/components/ui/input';
-import { _DateInput } from '@/shared/components/common/_DateInput';
-import { Textarea } from '@/shared/components/ui/textarea';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/shared/components/ui/select';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/card';
-import { Plus, Trash2, AlertCircle, ArrowDownToLine } from 'lucide-react';
-import { toast } from 'sonner';
-import { createReceiptSchema, type CreateReceiptFormData, PAYMENT_METHOD_LABELS, WITHHOLDING_TAX_TYPE_LABELS } from '../../../../shared/validators';
-import { createReceipt, getPendingInvoices, getAvailableCashRegisters, getAvailableBankAccounts } from '../../actions.server';
-import { getContractorsForSelect } from '@/modules/company/features/contractors/list/actions.server';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Skeleton } from '@/shared/components/ui/skeleton';
-import { Badge } from '@/shared/components/ui/badge';
-import { Alert, AlertDescription } from '@/shared/components/ui/alert';
-import { MoneyInput } from '@/shared/components/ui/money-input';
-import moment from 'moment';
-import { formatCurrency } from '@/shared/utils/formatters';
+import { Plus } from 'lucide-react';
+import { useState } from 'react';
+import { useForm, useWatch } from 'react-hook-form';
+import { toast } from 'sonner';
+
+import { getContractorsForSelect } from '@/modules/company/features/contractors/list/actions.server';
+import { Button } from '@/shared/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/shared/components/ui/dialog';
+import { Form } from '@/shared/components/ui/form';
 import { businessToday } from '@/shared/utils/date-input';
+
+import { createReceiptSchema, type CreateReceiptFormData } from '../../../../shared/validators';
+import {
+  createReceipt,
+  getAvailableBankAccounts,
+  getAvailableCashRegisters,
+  getPendingInvoices,
+  updateReceipt,
+} from '../../actions.server';
+import { _ReceiptBasicDataCard } from './_ReceiptBasicDataCard';
+import { _ReceiptInvoicesCard } from './_ReceiptInvoicesCard';
+import { _ReceiptPaymentsCard } from './_ReceiptPaymentsCard';
+import { _ReceiptSummaryCard } from './_ReceiptSummaryCard';
+import { _ReceiptWithholdingsCard } from './_ReceiptWithholdingsCard';
+import { emptyReceiptValues, receiptTotals, type ReceiptFormInput } from './receipt-form-utils';
 
 interface CreateReceiptModalProps {
   onSuccess: () => void;
+  /** Si se pasa, el modal se controla desde afuera y no muestra el botón "Nuevo Recibo". */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  /** Modo edición (lo abre `_EditReceiptModal`): guarda con `updateReceipt(editReceiptId, data)`. */
+  editReceiptId?: string;
+  editReceiptNumber?: string;
+  initialValues?: CreateReceiptFormData;
+  /** Número de cada factura ya imputada, por si dejó de figurar como pendiente. */
+  initialInvoiceLabels?: Record<string, string>;
 }
 
-export function CreateReceiptModal({ onSuccess }: CreateReceiptModalProps) {
-  const [open, setOpen] = useState(false);
-  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
+export function CreateReceiptModal({
+  onSuccess,
+  open: controlledOpen,
+  onOpenChange,
+  editReceiptId,
+  editReceiptNumber,
+  initialValues,
+  initialInvoiceLabels = {},
+}: CreateReceiptModalProps) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isControlled = controlledOpen !== undefined;
+  const open = isControlled ? controlledOpen : internalOpen;
+  const setOpen = (next: boolean) => (isControlled ? onOpenChange?.(next) : setInternalOpen(next));
+  const isEdit = Boolean(editReceiptId);
+
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(
+    initialValues?.customerId ?? null
+  );
   const queryClient = useQueryClient();
 
-  const form = useForm<CreateReceiptFormData>({
+  const form = useForm<ReceiptFormInput, unknown, CreateReceiptFormData>({
     resolver: zodResolver(createReceiptSchema),
-    defaultValues: {
-      customerId: '',
-      date: businessToday(),
-      notes: null,
-      items: [],
-      payments: [],
-      withholdings: [],
-    },
+    defaultValues: initialValues ?? emptyReceiptValues(businessToday()),
   });
 
-  const { fields: itemFields, append: appendItem, remove: removeItem } = useFieldArray({
-    control: form.control,
-    name: 'items',
-  });
+  // Lo que este borrador ya imputa a cada factura: el pendiente informado lo descuenta.
+  const ownAmounts = Object.fromEntries(
+    (initialValues?.items ?? []).map((item) => [item.invoiceId, Number(item.amount)])
+  );
 
-  const { fields: paymentFields, append: appendPayment, remove: removePayment } = useFieldArray({
-    control: form.control,
-    name: 'payments',
-  });
-
-  const { fields: withholdingFields, append: appendWithholding, remove: removeWithholding } = useFieldArray({
-    control: form.control,
-    name: 'withholdings',
-  });
-
-  // Query para clientes
-  const { data: customersData = [] } = useQuery({
+  const { data: customers = [] } = useQuery({
     queryKey: ['contractors'],
     queryFn: getContractorsForSelect,
     enabled: open,
   });
-
-  // Query para facturas pendientes
   const { data: pendingInvoices = [], isLoading: loadingInvoices } = useQuery({
     queryKey: ['pendingInvoices', selectedCustomerId],
     queryFn: () => getPendingInvoices(selectedCustomerId!),
     enabled: Boolean(selectedCustomerId),
   });
-
-  // Query para cajas disponibles
   const { data: cashRegisters = [] } = useQuery({
     queryKey: ['availableCashRegisters'],
     queryFn: getAvailableCashRegisters,
     enabled: open,
   });
-
-  // Query para cuentas bancarias
   const { data: bankAccounts = [] } = useQuery({
     queryKey: ['availableBankAccounts'],
     queryFn: getAvailableBankAccounts,
     enabled: open,
   });
 
-
   const handleCustomerChange = (customerId: string) => {
     setSelectedCustomerId(customerId);
     form.setValue('customerId', customerId);
-    // Limpiar items cuando cambia el cliente
-    form.setValue('items', []);
-  };
-
-  const addInvoiceItem = (invoiceId: string) => {
-    const invoice = pendingInvoices.find((inv) => inv.id === invoiceId);
-    if (!invoice) return;
-
-    // Verificar que no esté ya agregada
-    const exists = itemFields.some((field) => field.invoiceId === invoiceId);
-    if (exists) {
-      toast.error('Esta factura ya fue agregada');
-      return;
-    }
-
-    appendItem({
-      invoiceId,
-      amount: invoice.pendingAmount.toString(),
-    });
-  };
-
-  const addPaymentMethod = () => {
-    appendPayment({
-      paymentMethod: 'CASH',
-      amount: '',
-      cashRegisterId: null,
-      bankAccountId: null,
-      checkNumber: null,
-      cardLast4: null,
-      reference: null,
-      // Metadata de cheque/e-cheq: fecha de emisión por defecto = fecha del recibo
-      checkBankName: null,
-      checkIssueDate: form.getValues('date') ?? businessToday(),
-      checkDueDate: null,
-      checkDrawerName: null,
-      checkDrawerTaxId: null,
-    });
-  };
-
-  const addWithholding = () => {
-    appendWithholding({
-      taxType: 'IVA',
-      rate: '',
-      amount: '',
-      certificateNumber: null,
-    });
-  };
-
-  const calculateTotals = () => {
-    const items = form.watch('items');
-    const payments = form.watch('payments');
-    const withholdings = form.watch('withholdings');
-
-    const totalItems = items.reduce((sum, item) => sum + Math.round(parseFloat(item.amount || '0') * 100), 0) / 100;
-    const totalPayments = payments.reduce((sum, payment) => sum + Math.round(parseFloat(payment.amount || '0') * 100), 0) / 100;
-    const totalWithholdings = withholdings.reduce((sum, w) => sum + Math.round(parseFloat(w.amount || '0') * 100), 0) / 100;
-
-    return { totalItems, totalPayments, totalWithholdings, difference: Math.round((totalItems - totalPayments - totalWithholdings) * 100) / 100 };
-  };
-
-  const { totalItems, totalPayments, totalWithholdings, difference } = calculateTotals();
-
-  const getRemainingForPayment = (currentIndex: number) => {
-    const items = form.watch('items');
-    const payments = form.watch('payments');
-    const withholdings = form.watch('withholdings');
-
-    const totalItemsCents = items.reduce((sum, item) => sum + Math.round(parseFloat(item.amount || '0') * 100), 0);
-    const totalWithholdingsCents = withholdings.reduce((sum, w) => sum + Math.round(parseFloat(w.amount || '0') * 100), 0);
-    const otherPaymentsCents = payments.reduce((sum, payment, idx) => {
-      if (idx === currentIndex) return sum;
-      return sum + Math.round(parseFloat(payment.amount || '0') * 100);
-    }, 0);
-
-    return Math.max(0, (totalItemsCents - totalWithholdingsCents - otherPaymentsCents) / 100);
+    form.setValue('items', []); // las facturas son del cliente anterior
   };
 
   const onSubmit = async (data: CreateReceiptFormData) => {
     try {
-      await createReceipt(data);
-      toast.success('Recibo creado correctamente');
-
-      // Invalidar cache de React Query para actualizar la tabla
+      if (editReceiptId) {
+        const result = await updateReceipt(editReceiptId, data);
+        if (!result.success) {
+          toast.error(result.error);
+          return;
+        }
+        // Que la próxima apertura cargue el recibo actualizado y no el de la caché
+        queryClient.removeQueries({ queryKey: ['receipt', editReceiptId] });
+        toast.success('Recibo actualizado correctamente');
+      } else {
+        await createReceipt(data);
+        toast.success('Recibo creado correctamente');
+      }
       await queryClient.invalidateQueries({ queryKey: ['receipts'] });
       await queryClient.invalidateQueries({ queryKey: ['pendingInvoices'] });
 
       setOpen(false);
-      form.reset();
-      setSelectedCustomerId(null);
+      if (!isEdit) {
+        form.reset(emptyReceiptValues(businessToday()));
+        setSelectedCustomerId(null);
+      }
+      onSuccess();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Error al crear recibo');
+      toast.error(error instanceof Error ? error.message : 'Error al guardar el recibo');
     }
   };
 
+  const values = useWatch({ control: form.control });
+  const { difference } = receiptTotals(values);
+  const hasFunds = (values.payments ?? []).length > 0 || (values.withholdings ?? []).length > 0;
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button>
-          <Plus className="mr-2 h-4 w-4" />
-          Nuevo Recibo
-        </Button>
-      </DialogTrigger>
+      {!isControlled && (
+        <DialogTrigger asChild>
+          <Button>
+            <Plus className="mr-2 h-4 w-4" />
+            Nuevo Recibo
+          </Button>
+        </DialogTrigger>
+      )}
       <DialogContent className="md:min-w-[800px]">
         <DialogHeader>
-          <DialogTitle>Crear Recibo de Cobro</DialogTitle>
+          <DialogTitle>
+            {isEdit ? `Editar Recibo ${editReceiptNumber ?? ''}`.trim() : 'Crear Recibo de Cobro'}
+          </DialogTitle>
         </DialogHeader>
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            {/* Datos Básicos */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Datos Básicos</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="customerId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Cliente *</FormLabel>
-                      <Select onValueChange={handleCustomerChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Seleccionar cliente" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {customersData.length === 0 && (
-                            <div className="p-2 text-sm text-muted-foreground">No hay clientes disponibles</div>
-                          )}
-                          {customersData.map((customer) => (
-                            <SelectItem key={customer.id} value={customer.id}>
-                              {customer.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+            <_ReceiptBasicDataCard
+              form={form}
+              customers={customers}
+              onCustomerChange={handleCustomerChange}
+              customerLocked={isEdit}
+            />
+            <_ReceiptInvoicesCard
+              form={form}
+              customerId={selectedCustomerId}
+              pendingInvoices={pendingInvoices}
+              loading={loadingInvoices}
+              ownAmounts={ownAmounts}
+              invoiceLabels={initialInvoiceLabels}
+            />
+            <_ReceiptPaymentsCard
+              form={form}
+              cashRegisters={cashRegisters}
+              bankAccounts={bankAccounts}
+            />
+            <_ReceiptWithholdingsCard form={form} />
+            <_ReceiptSummaryCard values={values} />
 
-                <FormField
-                  control={form.control}
-                  name="date"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Fecha *</FormLabel>
-                      <FormControl>
-                        <_DateInput {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="notes"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Notas</FormLabel>
-                      <FormControl>
-                        <Textarea
-                          placeholder="Observaciones opcionales"
-                          {...field}
-                          value={field.value || ''}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </CardContent>
-            </Card>
-
-            {/* Facturas a Cobrar */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Facturas a Cobrar</CardTitle>
-                <CardDescription>Seleccione las facturas pendientes del cliente</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {!selectedCustomerId && (
-                  <Alert>
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertDescription>Seleccione un cliente para ver sus facturas pendientes</AlertDescription>
-                  </Alert>
-                )}
-
-                {selectedCustomerId && loadingInvoices && <Skeleton className="h-20 w-full" />}
-
-                {selectedCustomerId && !loadingInvoices && pendingInvoices.length === 0 && (
-                  <Alert>
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertDescription>El cliente no tiene facturas pendientes de cobro</AlertDescription>
-                  </Alert>
-                )}
-
-                {selectedCustomerId && !loadingInvoices && pendingInvoices.length > 0 && (
-                  <div className="space-y-2">
-                    <Select onValueChange={addInvoiceItem}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Agregar factura" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {pendingInvoices.map((invoice) => (
-                          <SelectItem key={invoice.id} value={invoice.id}>
-                            {invoice.fullNumber} - Pendiente: {formatCurrency(invoice.pendingAmount)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-
-                {itemFields.map((field, index) => {
-                  const invoice = pendingInvoices.find((inv) => inv.id === field.invoiceId);
-                  return (
-                    <div key={field.id} className="flex items-end gap-2 p-3 border rounded-lg">
-                      <div className="flex-1">
-                        <div className="text-sm font-medium">{invoice?.fullNumber}</div>
-                        <div className="text-xs text-muted-foreground">
-                          Pendiente: {formatCurrency(invoice?.pendingAmount)}
-                        </div>
-                      </div>
-                      <FormField
-                        control={form.control}
-                        name={`items.${index}.amount`}
-                        render={({ field }) => (
-                          <FormItem className="w-64">
-                            <FormLabel className="text-xs">Monto</FormLabel>
-                            <div className="flex gap-1">
-                              <FormControl>
-                                <MoneyInput
-                                  placeholder="0,00"
-                                  value={field.value}
-                                  onChange={field.onChange}
-                                  onBlur={field.onBlur}
-                                  name={field.name}
-                                  ref={field.ref}
-                                />
-                              </FormControl>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                className="px-2 text-xs"
-                                onClick={() => {
-                                  if (invoice) {
-                                    form.setValue(`items.${index}.amount`, invoice.pendingAmount.toFixed(2));
-                                  }
-                                }}
-                                title="Usar monto pendiente completo"
-                              >
-                                Total
-                              </Button>
-                            </div>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => removeItem(index)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  );
-                })}
-              </CardContent>
-            </Card>
-
-            {/* Formas de Pago */}
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="text-base">Formas de Pago</CardTitle>
-                    <CardDescription>Agregue las formas de pago utilizadas</CardDescription>
-                  </div>
-                  <Button type="button" variant="outline" size="sm" onClick={addPaymentMethod}>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Agregar Pago
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {paymentFields.length === 0 && (
-                  <Alert>
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertDescription>
-                      Sin formas de pago — el recibo podrá vincularse a un movimiento bancario existente
-                    </AlertDescription>
-                  </Alert>
-                )}
-
-                {paymentFields.map((field, index) => {
-                  const paymentMethod = form.watch(`payments.${index}.paymentMethod`);
-
-                  return (
-                    <div key={field.id} className="space-y-3 p-4 border rounded-lg">
-                      <div className="flex items-center justify-between">
-                        <h4 className="text-sm font-medium">Pago {index + 1}</h4>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => removePayment(index)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-
-                      <div className="grid gap-4 md:grid-cols-2">
-                        <FormField
-                          control={form.control}
-                          name={`payments.${index}.paymentMethod`}
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Forma de Pago *</FormLabel>
-                              <Select onValueChange={field.onChange} value={field.value}>
-                                <FormControl>
-                                  <SelectTrigger>
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                </FormControl>
-                                <SelectContent>
-                                  {Object.entries(PAYMENT_METHOD_LABELS).map(([value, label]) => (
-                                    <SelectItem key={value} value={value}>
-                                      {label}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-
-                        <FormField
-                          control={form.control}
-                          name={`payments.${index}.amount`}
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Monto *</FormLabel>
-                              <div className="flex gap-1">
-                                <FormControl>
-                                  <MoneyInput
-                                    placeholder="0,00"
-                                    value={field.value}
-                                    onChange={field.onChange}
-                                    onBlur={field.onBlur}
-                                    name={field.name}
-                                    ref={field.ref}
-                                  />
-                                </FormControl>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  className="px-2 text-xs shrink-0"
-                                  onClick={() => {
-                                    const remaining = getRemainingForPayment(index);
-                                    form.setValue(`payments.${index}.amount`, remaining.toFixed(2));
-                                  }}
-                                  title="Usar monto restante"
-                                >
-                                  <ArrowDownToLine className="h-3 w-3 mr-1" />
-                                  Resto
-                                </Button>
-                              </div>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      </div>
-
-                      {/* Campos condicionales según forma de pago */}
-                      {paymentMethod === 'CASH' && (
-                        <FormField
-                          control={form.control}
-                          name={`payments.${index}.cashRegisterId`}
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Caja</FormLabel>
-                              <Select onValueChange={field.onChange} value={field.value || undefined}>
-                                <FormControl>
-                                  <SelectTrigger>
-                                    <SelectValue placeholder="Seleccionar caja" />
-                                  </SelectTrigger>
-                                </FormControl>
-                                <SelectContent>
-                                  {cashRegisters.map((cr) => (
-                                    <SelectItem key={cr.id} value={cr.id}>
-                                      {cr.code} - {cr.name}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      )}
-
-                      {(paymentMethod === 'TRANSFER' || paymentMethod === 'DEBIT_CARD') && (
-                        <FormField
-                          control={form.control}
-                          name={`payments.${index}.bankAccountId`}
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Cuenta Bancaria</FormLabel>
-                              <Select onValueChange={field.onChange} value={field.value || undefined}>
-                                <FormControl>
-                                  <SelectTrigger>
-                                    <SelectValue placeholder="Seleccionar cuenta" />
-                                  </SelectTrigger>
-                                </FormControl>
-                                <SelectContent>
-                                  {bankAccounts.map((account) => (
-                                    <SelectItem key={account.id} value={account.id}>
-                                      {account.bankName} - {account.accountNumber}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      )}
-
-                      {(paymentMethod === 'CHECK' || paymentMethod === 'ECHEQ') && (
-                        <div className="space-y-3 rounded-md border bg-muted/30 p-3">
-                          <p className="text-sm font-medium">
-                            Datos del {paymentMethod === 'ECHEQ' ? 'e-cheq' : 'cheque'}
-                          </p>
-                          <div className="grid gap-3 sm:grid-cols-2">
-                            <FormField
-                              control={form.control}
-                              name={`payments.${index}.checkNumber`}
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel>Número *</FormLabel>
-                                  <FormControl>
-                                    <Input placeholder="123456" {...field} value={field.value || ''} />
-                                  </FormControl>
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
-                            <FormField
-                              control={form.control}
-                              name={`payments.${index}.checkBankName`}
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel>Banco emisor *</FormLabel>
-                                  <FormControl>
-                                    <Input placeholder="Banco Nación" {...field} value={field.value || ''} />
-                                  </FormControl>
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
-                            <FormField
-                              control={form.control}
-                              name={`payments.${index}.checkDrawerName`}
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel>Emisor / Librador *</FormLabel>
-                                  <FormControl>
-                                    <Input placeholder="Nombre del emisor" {...field} value={field.value || ''} />
-                                  </FormControl>
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
-                            <FormField
-                              control={form.control}
-                              name={`payments.${index}.checkDrawerTaxId`}
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel>CUIT del emisor (opcional)</FormLabel>
-                                  <FormControl>
-                                    <Input placeholder="30-12345678-9" {...field} value={field.value || ''} />
-                                  </FormControl>
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
-                            <FormField
-                              control={form.control}
-                              name={`payments.${index}.checkIssueDate`}
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel>Fecha de emisión</FormLabel>
-                                  <FormControl>
-                                    <Input
-                                      type="date"
-                                      value={field.value ? moment(field.value).format('YYYY-MM-DD') : ''}
-                                      onChange={(e) =>
-                                        field.onChange(e.target.value ? new Date(e.target.value + 'T12:00:00') : null)
-                                      }
-                                    />
-                                  </FormControl>
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
-                            <FormField
-                              control={form.control}
-                              name={`payments.${index}.checkDueDate`}
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel>Fecha de vencimiento *</FormLabel>
-                                  <FormControl>
-                                    <Input
-                                      type="date"
-                                      value={field.value ? moment(field.value).format('YYYY-MM-DD') : ''}
-                                      onChange={(e) =>
-                                        field.onChange(e.target.value ? new Date(e.target.value + 'T12:00:00') : null)
-                                      }
-                                    />
-                                  </FormControl>
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
-                          </div>
-                          {paymentMethod === 'ECHEQ' && (
-                            <FormField
-                              control={form.control}
-                              name={`payments.${index}.bankAccountId`}
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel>Cuenta de depósito *</FormLabel>
-                                  <Select onValueChange={field.onChange} value={field.value || undefined}>
-                                    <FormControl>
-                                      <SelectTrigger>
-                                        <SelectValue placeholder="Cuenta donde ingresó el e-cheq" />
-                                      </SelectTrigger>
-                                    </FormControl>
-                                    <SelectContent>
-                                      {bankAccounts.map((account) => (
-                                        <SelectItem key={account.id} value={account.id}>
-                                          {account.bankName} - {account.accountNumber}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
-                          )}
-                        </div>
-                      )}
-
-                      {(paymentMethod === 'DEBIT_CARD' || paymentMethod === 'CREDIT_CARD') && (
-                        <FormField
-                          control={form.control}
-                          name={`payments.${index}.cardLast4`}
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Últimos 4 Dígitos</FormLabel>
-                              <FormControl>
-                                <Input placeholder="1234" maxLength={4} {...field} value={field.value || ''} />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      )}
-                    </div>
-                  );
-                })}
-              </CardContent>
-            </Card>
-
-            {/* Retenciones Sufridas */}
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="text-base">Retenciones Sufridas</CardTitle>
-                    <CardDescription>Retenciones aplicadas por el cliente</CardDescription>
-                  </div>
-                  <Button type="button" variant="outline" size="sm" onClick={addWithholding}>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Agregar Retención
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {withholdingFields.length === 0 && (
-                  <p className="text-sm text-muted-foreground text-center py-2">
-                    Sin retenciones
-                  </p>
-                )}
-
-                {withholdingFields.map((field, index) => (
-                  <div key={field.id} className="space-y-3 p-4 border rounded-lg">
-                    <div className="flex items-center justify-between">
-                      <h4 className="text-sm font-medium">Retención {index + 1}</h4>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => removeWithholding(index)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-
-                    <div className="grid gap-4 md:grid-cols-4">
-                      <FormField
-                        control={form.control}
-                        name={`withholdings.${index}.taxType`}
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Tipo *</FormLabel>
-                            <Select onValueChange={field.onChange} value={field.value}>
-                              <FormControl>
-                                <SelectTrigger>
-                                  <SelectValue />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                {Object.entries(WITHHOLDING_TAX_TYPE_LABELS).map(([value, label]) => (
-                                  <SelectItem key={value} value={value}>
-                                    {label}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name={`withholdings.${index}.rate`}
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Alícuota %</FormLabel>
-                            <FormControl>
-                              <Input type="number" step="0.01" placeholder="0.00" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name={`withholdings.${index}.amount`}
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Monto *</FormLabel>
-                            <FormControl>
-                              <MoneyInput
-                                placeholder="0,00"
-                                value={field.value}
-                                onChange={field.onChange}
-                                onBlur={field.onBlur}
-                                name={field.name}
-                                ref={field.ref}
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name={`withholdings.${index}.certificateNumber`}
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>N° Certificado</FormLabel>
-                            <FormControl>
-                              <Input placeholder="Opcional" {...field} value={field.value || ''} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-
-            {/* Resumen */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Resumen</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  <div className="flex justify-between">
-                    <span>Total Facturas:</span>
-                    <span className="font-medium">
-                      ${totalItems.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </span>
-                  </div>
-                  {(paymentFields.length > 0 || withholdingFields.length > 0) && (
-                    <>
-                      {paymentFields.length > 0 && (
-                        <div className="flex justify-between">
-                          <span>Total Pagos:</span>
-                          <span className="font-medium">
-                            ${totalPayments.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </span>
-                        </div>
-                      )}
-                      {withholdingFields.length > 0 && (
-                        <div className="flex justify-between">
-                          <span>Total Retenciones:</span>
-                          <span className="font-medium">
-                            ${totalWithholdings.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </span>
-                        </div>
-                      )}
-                      <div className="flex justify-between border-t pt-2">
-                        <span>Diferencia:</span>
-                        <span className={`font-bold ${difference === 0 ? 'text-green-600' : 'text-red-600'}`}>
-                          ${Math.abs(difference).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </span>
-                      </div>
-                      {difference !== 0 && (
-                        <Alert variant="destructive">
-                          <AlertCircle className="h-4 w-4" />
-                          <AlertDescription>
-                            El total de facturas debe ser igual al total de pagos + retenciones
-                          </AlertDescription>
-                        </Alert>
-                      )}
-                    </>
-                  )}
-                  {paymentFields.length === 0 && withholdingFields.length === 0 && (
-                    <Alert>
-                      <AlertCircle className="h-4 w-4" />
-                      <AlertDescription>
-                        Este recibo se creará sin formas de pago. Podrá vincularlo a un movimiento bancario desde la conciliación.
-                      </AlertDescription>
-                    </Alert>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-
-            <div className="flex justify-end gap-2">
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                 Cancelar
               </Button>
-              <Button type="submit" disabled={(paymentFields.length > 0 || withholdingFields.length > 0) && difference !== 0}>
-                Crear Recibo
+              <Button
+                type="submit"
+                disabled={form.formState.isSubmitting || (hasFunds && difference !== 0)}
+              >
+                {isEdit ? 'Guardar Cambios' : 'Crear Recibo'}
               </Button>
             </div>
           </form>

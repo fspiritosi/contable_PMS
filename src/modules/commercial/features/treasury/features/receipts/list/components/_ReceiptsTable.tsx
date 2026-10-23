@@ -184,6 +184,7 @@ export function _ReceiptsTable({ data, totalRows, searchParams }: Props) {
         receiptId={selectedReceiptId}
         open={editModalOpen}
         onOpenChange={setEditModalOpen}
+        onSuccess={() => router.refresh()}
       />
     </>
   );
