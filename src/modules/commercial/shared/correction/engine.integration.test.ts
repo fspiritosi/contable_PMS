@@ -1365,4 +1365,41 @@ describe.skipIf(!dbAvailable)('integración: motor de corrección en cadena (TSK
     ]);
     expect(found[0].message).toContain('500,00');
   });
+
+  it('I3: corregir la FC (con OP dependiente) y la OP como origen a la vez: una sola corrección aplica', async () => {
+    for (let round = 0; round < 3; round++) {
+      const fc = await confirmedFC(1000);
+      const bankBefore = await bankBalance(bankAId);
+      const opId = await confirmedOP([{ invoiceId: fc.id, amount: 1000 }], [transfer(1000)]);
+      const editRequest = editFC(fc.id, withTotal(fc.input, 800));
+      const cancelRequest: CorrectionRequest = { mode: 'CANCEL', ref: ref('PAYMENT_ORDER', opId) };
+      const [editPreview, cancelPreview] = await Promise.all([
+        previewCorrection(ctx, editRequest),
+        previewCorrection(ctx, cancelRequest),
+      ]);
+
+      const results = await Promise.all([
+        applyCorrection(ctx, editRequest, editPreview.fingerprint),
+        applyCorrection(ctx, cancelRequest, cancelPreview.fingerprint),
+      ]);
+      expect(results.filter((r) => r.applied)).toHaveLength(1);
+      expect(results.find((r) => !r.applied)).toMatchObject({ reason: 'STALE' });
+
+      // Efectos consistentes: un solo movimiento vigente por pago y el saldo cuadra.
+      const op = await opRow(opId);
+      const movements = await prisma.bankMovement.findMany({
+        where: { paymentOrderId: opId },
+        select: { amount: true },
+      });
+      const moved = movements.reduce((sum, m) => sum + Number(m.amount), 0);
+      expect(await bankBalance(bankAId)).toBeCloseTo(bankBefore - moved, 2);
+      if (op.status === 'CONFIRMED') {
+        expect(movements.map((m) => Number(m.amount))).toEqual([800]);
+        expect(op.payments.map((p) => Number(p.amount))).toEqual([800]);
+      } else {
+        expect(op.status).toBe('CANCELLED');
+        expect(movements).toEqual([]);
+      }
+    }
+  });
 });

@@ -1122,6 +1122,10 @@ Misma mecánica para `PAYMENT_ORDER`, `RECEIPT` y `FUND_MOVEMENT` (permisos `com
   `snapshot.server.ts` toma la foto antes/después y `fingerprint.ts` la huella. La vista previa hace rollback;
   al aplicar se vuelve a ejecutar y solo se confirma si la huella coincide con la que vio el usuario (si no,
   devuelve la propuesta nueva con `stale: true`).
+- **Concurrencia**: antes de ejecutar, el motor bloquea (`SELECT … FOR UPDATE`, en orden fijo por tabla e id) todo lo
+  que el plan escribe —origen, OP/RC/NC de la cadena, facturas y gastos que imputan— y vuelve a planificar sobre
+  las filas bloqueadas (`planLockedTx`). Dos correcciones que se cruzan (la FC y la OP que la paga) se serializan
+  sin interbloqueo: la segunda ve lo que dejó la primera y vuelve como STALE.
 - **Acciones** (`shared/actions/document-correction.server.ts`): `previewDocumentCorrection` y
   `applyDocumentCorrection`. UI: `shared/hooks/useDocumentCorrection.ts`, `_CorrectionProposalDialog`,
   `_CorrectionCard`, `_CorrectionImpediments` y `_DocumentCorrectionButtons`.

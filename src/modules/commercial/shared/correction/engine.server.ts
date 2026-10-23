@@ -56,23 +56,41 @@ export type ApplyResult =
   | { applied: true }
   | { applied: false; stale: true; reason: ApplyRejectionReason; proposal: CorrectionProposal };
 
-/** Tabla de cada tipo, para bloquear la fila del origen (constantes: no vienen del usuario). */
-const ORIGIN_TABLES: Record<DocRef['kind'], string> = {
+// ============================================================================
+// BLOQUEOS
+// ============================================================================
+
+/** Tabla de cada comprobante que la corrección escribe (constantes: no vienen del usuario). */
+const LOCK_TABLES = {
   PURCHASE_INVOICE: 'purchase_invoices',
   SALES_INVOICE: 'sales_invoices',
   PAYMENT_ORDER: 'payment_orders',
   RECEIPT: 'receipts',
   FUND_MOVEMENT: 'fund_movements',
-};
+  EXPENSE: 'expenses',
+} as const;
+
+interface LockRef {
+  kind: keyof typeof LOCK_TABLES;
+  id: string;
+}
+
+const lockKey = (ref: LockRef) => `${LOCK_TABLES[ref.kind]}:${ref.id}`;
+
+/** Rondas de bloqueo y replanificación antes de rendirse (la cadena no se estabiliza). */
+const MAX_LOCK_ROUNDS = 3;
 
 /**
- * `SELECT … FOR UPDATE` sobre la fila del comprobante de origen (R15): dos
- * correcciones del mismo comprobante se serializan, y la segunda planifica sobre lo
- * que dejó la primera (su huella ya no coincide y vuelve como STALE).
+ * `SELECT … FOR UPDATE` de las filas, siempre en el mismo orden (tabla e id): dos
+ * correcciones que comparten comprobantes se serializan sin interbloquearse, sea cual
+ * sea el origen de cada una.
  */
-async function lockOriginTx(tx: Tx, companyId: string, ref: DocRef): Promise<void> {
-  const table = Prisma.raw(ORIGIN_TABLES[ref.kind]);
-  await tx.$queryRaw`SELECT id FROM ${table} WHERE id = ${ref.id}::uuid AND company_id = ${companyId}::uuid FOR UPDATE`;
+async function lockRowsTx(tx: Tx, companyId: string, refs: LockRef[]): Promise<void> {
+  const ordered = [...refs].sort((a, b) => lockKey(a).localeCompare(lockKey(b)));
+  for (const ref of ordered) {
+    const table = Prisma.raw(LOCK_TABLES[ref.kind]);
+    await tx.$queryRaw`SELECT id FROM ${table} WHERE id = ${ref.id}::uuid AND company_id = ${companyId}::uuid FOR UPDATE`;
+  }
 }
 
 // ============================================================================
@@ -128,6 +146,67 @@ class TouchedDocuments {
     for (const { id } of sales) await recomputeSalesInvoiceStatusTx(tx, id);
     for (const { id } of expenses) await recomputeExpenseStatusTx(tx, id);
   }
+}
+
+/**
+ * Comprobantes que escribe la ejecución del plan: el origen, las OP/RC y NC de la
+ * cadena, las facturas y gastos que imputan esas OP/RC y las facturas a las que el
+ * origen (si es una NC) está aplicado.
+ */
+async function chainLockRefsTx(tx: Tx, plan: CorrectionPlan): Promise<LockRef[]> {
+  const { ref } = plan.request;
+  const docs: DocRef[] = [
+    ref,
+    ...plan.dependents.map((d) => d.ref),
+    ...plan.creditNoteChanges.map((c) => ({ kind: ref.kind, id: c.creditNoteId })),
+  ];
+  const touched = new TouchedDocuments();
+  await touched.collectImputations(tx, docs);
+  if (ref.kind === 'PURCHASE_INVOICE') {
+    const given = await tx.purchaseCreditNoteApplication.findMany({
+      where: { creditNoteId: ref.id },
+      select: { invoiceId: true },
+    });
+    for (const g of given) touched.purchaseInvoices.add(g.invoiceId);
+  } else if (ref.kind === 'SALES_INVOICE') {
+    const given = await tx.salesCreditNoteApplication.findMany({
+      where: { creditNoteId: ref.id },
+      select: { invoiceId: true },
+    });
+    for (const g of given) touched.salesInvoices.add(g.invoiceId);
+  }
+  return [
+    ...docs,
+    ...[...touched.purchaseInvoices].map((id) => ({ kind: 'PURCHASE_INVOICE' as const, id })),
+    ...[...touched.salesInvoices].map((id) => ({ kind: 'SALES_INVOICE' as const, id })),
+    ...[...touched.expenses].map((id) => ({ kind: 'EXPENSE' as const, id })),
+  ];
+}
+
+/**
+ * Planifica con la cadena bloqueada (R15, I3): planifica, bloquea en orden fijo todo lo
+ * que el plan escribe y vuelve a planificar sobre las filas bloqueadas, hasta que el
+ * plan no traiga comprobantes nuevos. Dos correcciones que se cruzan (la de una FC y la
+ * de la OP que la paga, o dos del mismo comprobante) se serializan: la segunda
+ * planifica sobre lo que dejó la primera y su huella vuelve como STALE.
+ */
+async function planLockedTx(
+  tx: Tx,
+  ctx: EffectsCtx,
+  request: CorrectionRequest
+): Promise<CorrectionPlan> {
+  const locked = new Set<string>();
+  let plan = await planCorrectionTx(tx, ctx, request);
+  for (let round = 0; round < MAX_LOCK_ROUNDS; round++) {
+    const pending = (await chainLockRefsTx(tx, plan)).filter((r) => !locked.has(lockKey(r)));
+    if (pending.length === 0) return plan;
+    await lockRowsTx(tx, ctx.companyId, pending);
+    for (const r of pending) locked.add(lockKey(r));
+    plan = await planCorrectionTx(tx, ctx, request);
+  }
+  throw new BusinessError(
+    'Los comprobantes de la cadena cambiaron mientras se calculaba la corrección. Reintentá.'
+  );
 }
 
 // ============================================================================
@@ -347,8 +426,7 @@ async function simulateTx(
   ctx: EffectsCtx,
   request: CorrectionRequest
 ): Promise<Simulation> {
-  await lockOriginTx(tx, ctx.companyId, request.ref);
-  const plan = await planCorrectionTx(tx, ctx, request);
+  const plan = await planLockedTx(tx, ctx, request);
   const base = { mode: request.mode, origin: request.ref, paymentChoices: plan.paymentChoices };
   const blocked = (
     rejection: NonNullable<Simulation['rejection']>,
