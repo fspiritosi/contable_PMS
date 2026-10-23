@@ -52,6 +52,8 @@ export async function EditPurchaseInvoice({ invoiceId }: EditPurchaseInvoiceProp
   const defaultValues = {
     supplierId: invoice.supplierId,
     voucherType: invoice.voucherType,
+    // Conserva el vínculo con la OC: sin esto la edición lo desvincularía en silencio.
+    purchaseOrderId: invoice.purchaseOrderId ?? '',
     pointOfSale: invoice.pointOfSale,
     number: invoice.number,
     issueDate: new Date(invoice.issueDate),
@@ -60,6 +62,7 @@ export async function EditPurchaseInvoice({ invoiceId }: EditPurchaseInvoiceProp
     notes: invoice.notes || '',
     lines: invoice.lines.map((line) => ({
       productId: line.productId || undefined,
+      purchaseOrderLineId: line.purchaseOrderLineId ?? '',
       description: line.description,
       quantity: line.quantity.toString(),
       unitCost: line.unitCost.toString(),

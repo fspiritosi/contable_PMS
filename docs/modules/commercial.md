@@ -1100,12 +1100,12 @@ corrección en cadena (`shared/hooks/useDocumentCorrection`, motor en `shared/co
 | Evento | Stock | Factura Status | OC Status | OC InvoicingStatus | Banco/Caja | Asiento |
 |--------|-------|----------------|-----------|-------------------|------------|---------|
 | Confirmar FC Compra | +qty* | CONFIRMED | — | PARTIALLY/FULLY | — | Si |
-| Cancelar FC Compra | -qty | CANCELLED | — | Recalcula | — | — |
+| Anular FC Compra (corrección en cadena) | revierte efectos | CANCELLED | — | Recalcula | Revierte pagos que la cancelaban | Contraasiento con fecha del comprobante (o se elimina si está en borrador) |
 | Confirmar NC Compra | -qty | CONFIRMED | — | — | — | Si |
 | Confirmar ND Compra | — | CONFIRMED | — | — | — | Si |
 | Confirmar Remito | +qty | — | PARTIALLY/COMPLETED | — | — | — |
 | Confirmar FC Venta | -qty | CONFIRMED | — | — | — | Si |
-| Cancelar FC Venta | +qty | CANCELLED | — | — | — | — |
+| Anular FC Venta (corrección en cadena) | +qty | CANCELLED | — | — | Revierte cobros que la cancelaban | Contraasiento con fecha del comprobante (o se elimina si está en borrador) |
 | Confirmar NC Venta | +qty | CONFIRMED | — | — | — | Si |
 | Confirmar ND Venta | — | CONFIRMED | — | — | — | Si |
 | Confirmar Recibo | — | PAID/PARTIAL | — | — | +balance | Si |

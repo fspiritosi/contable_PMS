@@ -51,7 +51,7 @@ import {
   type PurchaseInvoiceFormInput,
 } from '../../shared/validators';
 import moment from 'moment';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useDocumentCorrection } from '@/modules/commercial/shared/hooks/useDocumentCorrection';
 import { useQuery } from '@tanstack/react-query';
 import { Card } from '@/shared/components/ui/card';
@@ -343,6 +343,9 @@ export function _PurchaseInvoiceForm({
   // Auto-poblar líneas cuando se selecciona una OC
   useEffect(() => {
     if (!watchedPurchaseOrderId || watchedPurchaseOrderId === '' || loadingPOLines) return;
+    // Al editar, las líneas y la OC vinculada ya vienen cargadas: solo se reemplazan si el
+    // usuario elige otra OC (si no, se pisarían con las pendientes y se perdería lo facturado).
+    if (mode === 'edit' && watchedPurchaseOrderId === initialValues?.purchaseOrderId) return;
 
     if (poLines.length > 0) {
       replace(
@@ -359,8 +362,11 @@ export function _PurchaseInvoiceForm({
     }
   }, [poLines, loadingPOLines, watchedPurchaseOrderId, replace]);
 
-  // Limpiar OC al cambiar proveedor
+  // Limpiar OC al cambiar proveedor (no en el montaje: al editar la OC viene vinculada)
+  const lastSupplier = useRef(watchedSupplierId);
   useEffect(() => {
+    if (lastSupplier.current === watchedSupplierId) return;
+    lastSupplier.current = watchedSupplierId;
     if (watchedPurchaseOrderId) {
       form.setValue('purchaseOrderId', '');
     }
@@ -368,7 +374,10 @@ export function _PurchaseInvoiceForm({
   }, [watchedSupplierId]);
 
   // Limpiar OC al cambiar a NC/ND
+  const lastRegular = useRef(isRegularInvoice);
   useEffect(() => {
+    if (lastRegular.current === isRegularInvoice) return;
+    lastRegular.current = isRegularInvoice;
     if (!isRegularInvoice && watchedPurchaseOrderId) {
       form.setValue('purchaseOrderId', '');
       replace([]);
@@ -382,10 +391,15 @@ export function _PurchaseInvoiceForm({
       let hasError = false;
       data.lines.forEach((line, index) => {
         const poLine = poLines.find((pl) => pl.id === line.purchaseOrderLineId);
-        if (poLine && parseFloat(line.quantity) > poLine.pendingQty) {
+        // En una corrección, `pendingQty` ya descuenta lo que esta factura facturó: se suma de vuelta.
+        const ownQty = isCorrection
+          ? Number(initialValues?.lines?.find((l) => l.purchaseOrderLineId === line.purchaseOrderLineId)?.quantity ?? 0)
+          : 0;
+        const maxQty = poLine ? poLine.pendingQty + ownQty : 0;
+        if (poLine && parseFloat(line.quantity) > maxQty) {
           form.setError(`lines.${index}.quantity`, {
             type: 'manual',
-            message: `Máximo permitido: ${poLine.pendingQty}`,
+            message: `Máximo permitido: ${maxQty}`,
           });
           hasError = true;
         }
