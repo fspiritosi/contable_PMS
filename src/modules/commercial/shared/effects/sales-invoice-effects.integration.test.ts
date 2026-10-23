@@ -817,12 +817,33 @@ describe.skipIf(!dbAvailable)('integración: efectos de la factura de venta (TSK
       );
     });
 
-    it('tampoco deja cambiar el tipo de un borrador', async () => {
+    it('un borrador puede cambiar el tipo y el punto de venta se ignora, como antes (R11)', async () => {
       const { id } = await draftInvoice();
       const before = await invoiceRow(id);
-      await expect(updateInvoice(id, rawInput({ voucherType: 'NOTA_DEBITO_A' }))).rejects.toThrow(
-        FIXED_FIELDS_MESSAGE
+
+      await updateInvoice(
+        id,
+        rawInput({ voucherType: 'NOTA_DEBITO_A', pointOfSaleId: otherPointOfSaleId })
       );
+
+      expect(await invoiceRow(id)).toMatchObject({
+        status: 'DRAFT',
+        voucherType: 'NOTA_DEBITO_A',
+        pointOfSaleId: before.pointOfSaleId,
+        number: before.number,
+        fullNumber: before.fullNumber,
+      });
+    });
+
+    it('el mismo cambio de tipo en una FV confirmada → mensaje de campos fijos y queda igual', async () => {
+      const { id, input } = await confirmedInvoice();
+      const before = await invoiceRow(id);
+
+      await expect(
+        inTx((tx) =>
+          writeSalesInvoiceDataTx(tx, companyId, id, { ...input, voucherType: 'NOTA_DEBITO_A' })
+        )
+      ).rejects.toThrow(new BusinessError(FIXED_FIELDS_MESSAGE));
       expect(await invoiceRow(id)).toEqual(before);
     });
   });
