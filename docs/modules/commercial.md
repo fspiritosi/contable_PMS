@@ -1133,6 +1133,12 @@ Misma mecánica para `PAYMENT_ORDER`, `RECEIPT` y `FUND_MOVEMENT` (permisos `com
   liquidación de IVA del mes generada, cambio de tercero con pagos, movimiento bancario vinculado a mano) o
   `BLOCKED` ("No se puede": período cerrado, CAE de AFIP, caja cerrada, movimiento anterior a la trazabilidad).
 - **Eliminar** exige el asiento en DRAFT; **Anular** con asiento POSTED genera el contraasiento.
+- **Saldos vigentes** (`shared/lib/effective-settlements.ts`): una OP o un RC **anulado conserva sus
+  imputaciones como histórico, pero no cuenta en ningún saldo** (tampoco los borradores, TSK-797). Todo cálculo
+  de saldo pendiente, deuda o estado filtra las relaciones con `EFFECTIVE_PAYMENT_ORDER_ITEM`,
+  `EFFECTIVE_RECEIPT_ITEM` y `EFFECTIVE_*_CREDIT_NOTE_APPLICATION` (OP/RC CONFIRMED, NC no anulada): facturas
+  pendientes de la Nueva OP / Nuevo recibo, detalle y PDF de la factura, cuenta corriente, dashboard, cashflow,
+  compensación de NC y `document-status.server.ts`.
 - **Datos nuevos**: ver `docs/architecture/data-model.md` (`CashMovement.receiptId/paymentOrderId/fundMovementId`,
   `BankMovement.fundMovementId/documentLink`, `CashflowProjection.paymentOrderInstallmentId`).
 
@@ -1226,6 +1232,7 @@ Misma mecánica para `PAYMENT_ORDER`, `RECEIPT` y `FUND_MOVEMENT` (permisos `com
 | `shared/lib/accounts/settings-account-labels.ts` | Labels literales de los 31 campos de Ajustes contables + `ACCOUNTING_SETTINGS_PATH`; los lee el formulario y los citan los mensajes (TSK-728) |
 | `modules/commercial/features/treasury/features/fund-movements/shared/lines-calc.ts` | Totales de conceptos de gastos bancarios y `pickDefaultLineAccount` (preselección de la cuenta por defecto, TSK-718) |
 | `modules/commercial/features/treasury/features/fund-movements/shared/view-mode.ts` | Modos del modal (`create`/`edit`/`view`), rótulos y variante de estado, `getRowActions`/`hasAnyRowAction`, `buildFundOptions`/`withSnapshotOption`, `formValuesFromMovement`, `getModalCopy`, guardas del hook y `getViewSummaryFacts` (TSK-720a) |
+| `shared/lib/effective-settlements.ts` | Filtros de imputaciones vigentes (OP/RC CONFIRMED, NC no anulada) para todo saldo pendiente (TSK-792) |
 | `shared/lib/action-result.ts` | `ActionResult`, `BusinessError`, `toActionResult`: errores de negocio como dato en Server Actions (TSK-481 / TSK-721) |
 | `modules/commercial/shared/components/_DocumentAttachment.tsx` | UI de adjuntos |
 

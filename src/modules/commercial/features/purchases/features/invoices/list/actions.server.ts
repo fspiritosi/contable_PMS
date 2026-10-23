@@ -18,6 +18,10 @@ import type { Prisma } from '@/generated/prisma/client';
 import { purchaseInvoiceFormSchema, type PurchaseInvoiceFormInput } from '../shared/validators';
 import type { VoucherType } from '@/generated/prisma/enums';
 import { checkPermission } from '@/shared/lib/permissions';
+import {
+  EFFECTIVE_PAYMENT_ORDER_ITEM,
+  EFFECTIVE_PURCHASE_CREDIT_NOTE_APPLICATION,
+} from '@/shared/lib/effective-settlements';
 import { BusinessError, toActionResult, type ActionResult } from '@/shared/lib/action-result';
 import { isCreditNote, isDebitNote } from '@/modules/commercial/shared/voucher-utils';
 import {
@@ -326,7 +330,9 @@ export async function getPurchaseInvoiceById(id: string) {
             voucherType: true,
           },
         },
+        // Solo pagos y NC vigentes: una OP anulada o en borrador no cuenta (TSK-792/797).
         paymentOrderItems: {
+          where: EFFECTIVE_PAYMENT_ORDER_ITEM,
           select: {
             amount: true,
             paymentOrder: {
@@ -341,6 +347,7 @@ export async function getPurchaseInvoiceById(id: string) {
           },
         },
         creditNoteApplicationsReceived: {
+          where: EFFECTIVE_PURCHASE_CREDIT_NOTE_APPLICATION,
           select: {
             amount: true,
             appliedAt: true,

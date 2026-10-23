@@ -8,6 +8,12 @@ import {
   type Tx,
 } from '@/modules/accounting/features/integrations/core';
 import { BusinessError } from '@/shared/lib/action-result';
+import {
+  EFFECTIVE_PAYMENT_ORDER_ITEM,
+  EFFECTIVE_PURCHASE_CREDIT_NOTE_APPLICATION,
+  EFFECTIVE_RECEIPT_ITEM,
+  EFFECTIVE_SALES_CREDIT_NOTE_APPLICATION,
+} from '@/shared/lib/effective-settlements';
 
 import type { EffectsCtx } from '../effects/types';
 import {
@@ -82,7 +88,7 @@ async function loadPurchaseInvoiceChainTx(
 ): Promise<InvoiceChain> {
   const [items, applications] = await Promise.all([
     tx.paymentOrderItem.findMany({
-      where: { invoiceId, paymentOrder: { companyId, status: 'CONFIRMED' } },
+      where: { invoiceId, paymentOrder: { companyId, ...EFFECTIVE_PAYMENT_ORDER_ITEM.paymentOrder } },
       select: {
         id: true,
         amount: true,
@@ -92,7 +98,7 @@ async function loadPurchaseInvoiceChainTx(
       orderBy: { id: 'asc' },
     }),
     tx.purchaseCreditNoteApplication.findMany({
-      where: { invoiceId, companyId, creditNote: { status: { not: 'CANCELLED' } } },
+      where: { invoiceId, companyId, ...EFFECTIVE_PURCHASE_CREDIT_NOTE_APPLICATION },
       select: {
         id: true,
         amount: true,
@@ -136,7 +142,7 @@ async function loadSalesInvoiceChainTx(
 ): Promise<InvoiceChain> {
   const [items, applications] = await Promise.all([
     tx.receiptItem.findMany({
-      where: { invoiceId, receipt: { companyId, status: 'CONFIRMED' } },
+      where: { invoiceId, receipt: { companyId, ...EFFECTIVE_RECEIPT_ITEM.receipt } },
       select: {
         id: true,
         amount: true,
@@ -146,7 +152,7 @@ async function loadSalesInvoiceChainTx(
       orderBy: { id: 'asc' },
     }),
     tx.salesCreditNoteApplication.findMany({
-      where: { invoiceId, companyId, creditNote: { status: { not: 'CANCELLED' } } },
+      where: { invoiceId, companyId, ...EFFECTIVE_SALES_CREDIT_NOTE_APPLICATION },
       select: {
         id: true,
         amount: true,

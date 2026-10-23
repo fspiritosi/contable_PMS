@@ -1,11 +1,19 @@
 import type { Tx } from '@/modules/accounting/features/integrations/core';
 import type { ExpenseStatus, PurchaseInvoiceStatus, SalesInvoiceStatus } from '@/generated/prisma/enums';
+import {
+  EFFECTIVE_PAYMENT_ORDER_ITEM,
+  EFFECTIVE_PURCHASE_CREDIT_NOTE_APPLICATION,
+  EFFECTIVE_RECEIPT_ITEM,
+  EFFECTIVE_SALES_CREDIT_NOTE_APPLICATION,
+} from '@/shared/lib/effective-settlements';
+
 import { isCreditNote } from '../voucher-utils';
 
 /**
  * Recalculo del estado de cobro/pago de facturas y gastos (TSK-792).
  *
- * Cuenta únicamente OP/RC en CONFIRMED y NC aplicadas cuya NC no está anulada.
+ * Cuenta únicamente OP/RC en CONFIRMED y NC aplicadas cuya NC no está anulada
+ * (`effective-settlements`: el mismo criterio que todos los saldos pendientes).
  * Los borradores y anulados no cuentan ni se tocan.
  */
 
@@ -36,11 +44,11 @@ export async function recomputePurchaseInvoiceStatusTx(tx: Tx, invoiceId: string
   } else {
     const [payments, applications] = await Promise.all([
       tx.paymentOrderItem.aggregate({
-        where: { invoiceId, paymentOrder: { status: 'CONFIRMED' } },
+        where: { invoiceId, ...EFFECTIVE_PAYMENT_ORDER_ITEM },
         _sum: { amount: true },
       }),
       tx.purchaseCreditNoteApplication.aggregate({
-        where: { invoiceId, creditNote: { status: { not: 'CANCELLED' } } },
+        where: { invoiceId, ...EFFECTIVE_PURCHASE_CREDIT_NOTE_APPLICATION },
         _sum: { amount: true },
       }),
     ]);
@@ -71,11 +79,11 @@ export async function recomputeSalesInvoiceStatusTx(tx: Tx, invoiceId: string): 
   } else {
     const [receipts, applications] = await Promise.all([
       tx.receiptItem.aggregate({
-        where: { invoiceId, receipt: { status: 'CONFIRMED' } },
+        where: { invoiceId, ...EFFECTIVE_RECEIPT_ITEM },
         _sum: { amount: true },
       }),
       tx.salesCreditNoteApplication.aggregate({
-        where: { invoiceId, creditNote: { status: { not: 'CANCELLED' } } },
+        where: { invoiceId, ...EFFECTIVE_SALES_CREDIT_NOTE_APPLICATION },
         _sum: { amount: true },
       }),
     ]);
@@ -97,7 +105,7 @@ export async function recomputeExpenseStatusTx(tx: Tx, expenseId: string): Promi
   if (expense.status === 'DRAFT' || expense.status === 'CANCELLED') return expense.status;
 
   const payments = await tx.paymentOrderItem.aggregate({
-    where: { expenseId, paymentOrder: { status: 'CONFIRMED' } },
+    where: { expenseId, ...EFFECTIVE_PAYMENT_ORDER_ITEM },
     _sum: { amount: true },
   });
 

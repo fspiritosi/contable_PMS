@@ -4,6 +4,12 @@ import { getCurrentUserId } from '@/shared/lib/current-user';
 import { getActiveCompanyId } from '@/shared/lib/company';
 import { logger } from '@/shared/lib/logger';
 import { prisma } from '@/shared/lib/prisma';
+import {
+  EFFECTIVE_PAYMENT_ORDER_ITEM,
+  EFFECTIVE_PURCHASE_CREDIT_NOTE_APPLICATION,
+  EFFECTIVE_RECEIPT_ITEM,
+  EFFECTIVE_SALES_CREDIT_NOTE_APPLICATION,
+} from '@/shared/lib/effective-settlements';
 import moment from 'moment';
 import { checkPermission } from '@/shared/lib/permissions';
 import { CREDIT_NOTE_TYPES, isCreditNote } from '@/modules/commercial/shared/voucher-utils';
@@ -212,7 +218,7 @@ export async function getCashflowData(
           fullNumber: true,
           description: true,
           paymentOrderItems: {
-            where: { paymentOrder: { status: 'CONFIRMED' } },
+            where: EFFECTIVE_PAYMENT_ORDER_ITEM,
             select: { amount: true },
           },
         },
@@ -267,8 +273,9 @@ export async function getCashflowData(
           dueDate: true,
           total: true,
           customer: { select: { name: true } },
-          receiptItems: { select: { amount: true } },
+          receiptItems: { where: EFFECTIVE_RECEIPT_ITEM, select: { amount: true } },
           creditNoteApplicationsReceived: {
+            where: EFFECTIVE_SALES_CREDIT_NOTE_APPLICATION,
             select: { amount: true, creditNoteId: true },
           },
           creditDebitNotes: {
@@ -292,8 +299,9 @@ export async function getCashflowData(
           dueDate: true,
           total: true,
           supplier: { select: { tradeName: true, businessName: true } },
-          paymentOrderItems: { select: { amount: true } },
+          paymentOrderItems: { where: EFFECTIVE_PAYMENT_ORDER_ITEM, select: { amount: true } },
           creditNoteApplicationsReceived: {
+            where: EFFECTIVE_PURCHASE_CREDIT_NOTE_APPLICATION,
             select: { amount: true, creditNoteId: true },
           },
           creditDebitNotes: {

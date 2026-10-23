@@ -19,6 +19,10 @@ import { CREDIT_NOTE_TYPES, isCreditNote } from '@/modules/commercial/shared/vou
 import { createReceiptSchema, type CreateReceiptFormData } from '../../shared/validators';
 import type { PendingInvoice, ReceiptListItem, ReceiptWithDetails } from '../../shared/types';
 import { checkPermission } from '@/shared/lib/permissions';
+import {
+  EFFECTIVE_RECEIPT_ITEM,
+  EFFECTIVE_SALES_CREDIT_NOTE_APPLICATION,
+} from '@/shared/lib/effective-settlements';
 import { BusinessError, toActionResult, type ActionResult } from '@/shared/lib/action-result';
 import {
   assertEntryPreflight,
@@ -54,11 +58,13 @@ export async function getPendingInvoices(customerId: string): Promise<PendingInv
         total: true,
         status: true,
         receiptItems: {
+          where: EFFECTIVE_RECEIPT_ITEM,
           select: {
             amount: true,
           },
         },
         creditNoteApplicationsReceived: {
+          where: EFFECTIVE_SALES_CREDIT_NOTE_APPLICATION,
           select: {
             amount: true,
             creditNoteId: true,

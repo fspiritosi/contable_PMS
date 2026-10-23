@@ -1,3 +1,9 @@
+import {
+  EFFECTIVE_PAYMENT_ORDER_ITEM,
+  EFFECTIVE_PURCHASE_CREDIT_NOTE_APPLICATION,
+  EFFECTIVE_RECEIPT_ITEM,
+  EFFECTIVE_SALES_CREDIT_NOTE_APPLICATION,
+} from '@/shared/lib/effective-settlements';
 import { logger } from '@/shared/lib/logger';
 import { CREDIT_NOTE_TYPES } from './voucher-utils';
 import type { Prisma } from '@/generated/prisma/client';
@@ -43,10 +49,11 @@ export async function applySalesCreditNote(
       total: true,
       issueDate: true,
       receiptItems: {
-        where: { receipt: { status: 'CONFIRMED' } },
+        where: EFFECTIVE_RECEIPT_ITEM,
         select: { amount: true },
       },
       creditNoteApplicationsReceived: {
+        where: EFFECTIVE_SALES_CREDIT_NOTE_APPLICATION,
         select: { amount: true, creditNoteId: true },
       },
       creditDebitNotes: {
@@ -173,10 +180,11 @@ export async function applyPurchaseCreditNote(
       total: true,
       issueDate: true,
       paymentOrderItems: {
-        where: { paymentOrder: { status: 'CONFIRMED' } },
+        where: EFFECTIVE_PAYMENT_ORDER_ITEM,
         select: { amount: true },
       },
       creditNoteApplicationsReceived: {
+        where: EFFECTIVE_PURCHASE_CREDIT_NOTE_APPLICATION,
         select: { amount: true, creditNoteId: true },
       },
       creditDebitNotes: {

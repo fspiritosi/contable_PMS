@@ -5,6 +5,10 @@ import { getActiveCompanyId } from '@/shared/lib/company';
 import { logger } from '@/shared/lib/logger';
 import { checkPermission } from '@/shared/lib/permissions';
 import { prisma } from '@/shared/lib/prisma';
+import {
+  EFFECTIVE_PAYMENT_ORDER_ITEM,
+  EFFECTIVE_RECEIPT_ITEM,
+} from '@/shared/lib/effective-settlements';
 import moment from 'moment';
 import 'moment/locale/es';
 
@@ -625,7 +629,7 @@ export async function getTopClientDebts(limit = 10) {
         total: true,
         customerId: true,
         customer: { select: { name: true, taxId: true } },
-        receiptItems: { select: { amount: true } },
+        receiptItems: { where: EFFECTIVE_RECEIPT_ITEM, select: { amount: true } },
       },
     });
 
@@ -683,7 +687,7 @@ export async function getTopSupplierDebts(limit = 10) {
         total: true,
         supplierId: true,
         supplier: { select: { businessName: true, taxId: true } },
-        paymentOrderItems: { select: { amount: true } },
+        paymentOrderItems: { where: EFFECTIVE_PAYMENT_ORDER_ITEM, select: { amount: true } },
       },
     });
 

@@ -5,6 +5,10 @@ import { prisma } from '@/shared/lib/prisma';
 import { logger } from '@/shared/lib/logger';
 import { getActiveCompanyId } from '@/shared/lib/company';
 import { checkPermission } from '@/shared/lib/permissions';
+import {
+  EFFECTIVE_RECEIPT_ITEM,
+  EFFECTIVE_SALES_CREDIT_NOTE_APPLICATION,
+} from '@/shared/lib/effective-settlements';
 import { BusinessError, toActionResult, type ActionResult } from '@/shared/lib/action-result';
 import { createInvoiceSchema } from '../shared/validators';
 import { revalidatePath } from 'next/cache';
@@ -311,7 +315,9 @@ export async function getInvoiceById(id: string) {
             voucherType: true,
           },
         },
+        // Solo cobros y NC vigentes: un recibo anulado o en borrador no cuenta (TSK-792/797).
         receiptItems: {
+          where: EFFECTIVE_RECEIPT_ITEM,
           select: {
             amount: true,
             receipt: {
@@ -326,6 +332,7 @@ export async function getInvoiceById(id: string) {
           },
         },
         creditNoteApplicationsReceived: {
+          where: EFFECTIVE_SALES_CREDIT_NOTE_APPLICATION,
           select: {
             amount: true,
             appliedAt: true,

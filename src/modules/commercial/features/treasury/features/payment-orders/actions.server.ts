@@ -13,6 +13,10 @@ import type { CreatePaymentOrderFormData, PartnerRepaymentFormData } from '../..
 import { partnerRepaymentSchema } from '../../shared/validators';
 import type { PendingPurchaseInvoice, PaymentOrderListItem, PaymentOrderWithDetails } from '../../shared/types';
 import { checkPermission } from '@/shared/lib/permissions';
+import {
+  EFFECTIVE_PAYMENT_ORDER_ITEM,
+  EFFECTIVE_PURCHASE_CREDIT_NOTE_APPLICATION,
+} from '@/shared/lib/effective-settlements';
 import { BusinessError, toActionResult, type ActionResult } from '@/shared/lib/action-result';
 import {
   assertEntryPreflight,
@@ -51,11 +55,13 @@ export async function getPendingPurchaseInvoices(supplierId: string): Promise<Pe
         total: true,
         status: true,
         paymentOrderItems: {
+          where: EFFECTIVE_PAYMENT_ORDER_ITEM,
           select: {
             amount: true,
           },
         },
         creditNoteApplicationsReceived: {
+          where: EFFECTIVE_PURCHASE_CREDIT_NOTE_APPLICATION,
           select: {
             amount: true,
             creditNoteId: true,

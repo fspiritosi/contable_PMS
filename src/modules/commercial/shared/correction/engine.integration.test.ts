@@ -42,10 +42,12 @@ import {
   confirmPaymentOrder,
   createPartnerRepaymentOrder,
   createPaymentOrder,
+  getPendingPurchaseInvoices,
 } from '@/modules/commercial/features/treasury/features/payment-orders/actions.server';
 import {
   confirmReceipt,
   createReceipt,
+  getPendingInvoices,
 } from '@/modules/commercial/features/treasury/features/receipts/actions.server';
 import type { EffectsCtx } from '../effects/types';
 import { applyCorrection, previewCorrection } from './engine.server';
@@ -1275,5 +1277,39 @@ describe.skipIf(!dbAvailable)('integración: motor de corrección en cadena (TSK
     }
     expect(await bankBalance(bankAId)).toBe(bankBeforeCancel + 2000);
     expect((await opRow(opId)).status).toBe('CANCELLED');
+  });
+
+  // --- Revisión final ---------------------------------------------------------
+
+  it('C1: anular la OP que pagaba la FC la vuelve a ofrecer con todo su saldo pendiente', async () => {
+    const fc = await confirmedFC(1900);
+    const opId = await confirmedOP([{ invoiceId: fc.id, amount: 1900 }], [transfer(1900)]);
+    const pendingIds = async () => (await getPendingPurchaseInvoices(supplierId)).map((i) => i.id);
+    expect(await pendingIds()).not.toContain(fc.id);
+
+    await previewAndApply({ mode: 'CANCEL', ref: ref('PAYMENT_ORDER', opId) });
+
+    // La OP anulada conserva su imputación como histórico, pero no cuenta en el saldo.
+    expect((await opRow(opId)).items.map((i) => i.invoiceId)).toEqual([fc.id]);
+    const pending = (await getPendingPurchaseInvoices(supplierId)).find((i) => i.id === fc.id);
+    expect(pending).toMatchObject({ status: 'CONFIRMED', paidAmount: 0, pendingAmount: 1900 });
+  });
+
+  it('C1: anular el recibo que cobraba la FV le devuelve el saldo pendiente', async () => {
+    const fvId = await confirmedFV(650);
+    const rcId = await confirmedRC(fvId, [
+      { paymentMethod: 'CASH', amount: '650.00', cashRegisterId: cashId },
+    ]);
+    const pendingOf = async () => (await getPendingInvoices(customerId)).find((i) => i.id === fvId);
+    expect(await pendingOf()).toBeUndefined();
+
+    await previewAndApply({ mode: 'CANCEL', ref: ref('RECEIPT', rcId) });
+
+    expect(await prisma.receiptItem.count({ where: { receiptId: rcId } })).toBe(1);
+    expect(await pendingOf()).toMatchObject({
+      status: 'CONFIRMED',
+      paidAmount: 0,
+      pendingAmount: 650,
+    });
   });
 });
