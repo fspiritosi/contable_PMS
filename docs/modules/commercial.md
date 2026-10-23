@@ -1112,6 +1112,46 @@ Misma mecánica para `PAYMENT_ORDER`, `RECEIPT` y `FUND_MOVEMENT` (permisos `com
   `getRowActions` (MF) suma `cancel` y habilita `edit`/`delete` en CONFIRMED.
 - Los estados CANCELLED se rotulan "Anulada" (OP) y "Anulado" (RC, MF).
 
+### Motor de corrección, impedimentos y permisos (TSK-792)
+
+- **Efectos** (`shared/effects/`): cada `confirm*` usa funciones `apply…EffectsTx` y sus inversas
+  `revert…EffectsTx` (FC, FV, OP, RC, MF), más `document-status.server.ts` que recalcula el estado
+  (CONFIRMED / PARTIAL_PAID / PAID) contando solo OP/RC CONFIRMED y NC aplicadas no anuladas.
+- **Motor** (`shared/correction/`): `chain.server.ts` arma el plan (origen + OP/RC/NC que lo cancelan + sus efectos),
+  `engine.server.ts` lo ejecuta en una transacción (revertir efectos, escribir datos, reaplicar, recalcular),
+  `snapshot.server.ts` toma la foto antes/después y `fingerprint.ts` la huella. La vista previa hace rollback;
+  al aplicar se vuelve a ejecutar y solo se confirma si la huella coincide con la que vio el usuario (si no,
+  devuelve la propuesta nueva con `stale: true`).
+- **Acciones** (`shared/actions/document-correction.server.ts`): `previewDocumentCorrection` y
+  `applyDocumentCorrection`. UI: `shared/hooks/useDocumentCorrection.ts`, `_CorrectionProposalDialog`,
+  `_CorrectionCard`, `_CorrectionImpediments` y `_DocumentCorrectionButtons`.
+- **Propagación**: si el monto baja, baja el pago/cobro (de la cancelación más reciente a la más antigua; con varios
+  medios de pago elige el usuario); si sube no se toca y queda "Pago parcial"; si se elimina o anula, el pago que
+  solo cancelaba ese comprobante se elimina y, si cancelaba varios, pierde la imputación. Las retenciones no se
+  recalculan. Profundidad: origen → OP/RC/NC → sus efectos.
+- **Impedimentos**: con al menos uno no se aplica nada. `MANUAL` ("Podés resolverlo": asiento Registrado,
+  liquidación de IVA del mes generada, cambio de tercero con pagos, movimiento bancario vinculado a mano) o
+  `BLOCKED` ("No se puede": período cerrado, CAE de AFIP, caja cerrada, movimiento anterior a la trazabilidad).
+- **Eliminar** exige el asiento en DRAFT; **Anular** con asiento POSTED genera el contraasiento.
+- **Datos nuevos**: ver `docs/architecture/data-model.md` (`CashMovement.receiptId/paymentOrderId/fundMovementId`,
+  `BankMovement.fundMovementId/documentLink`, `CashflowProjection.paymentOrderInstallmentId`).
+
+### Deploy de la corrección en cadena (TSK-792)
+
+1. Las migraciones `20261023100000_tsk_792_correction_traceability` (columnas, enums, índices) y
+   `20261023100100_tsk_792_trigger_and_backfill` (trigger y backfill de la trazabilidad) corren con
+   `prisma migrate deploy`. El backfill vincula solo ante una coincidencia única; ante la duda no vincula.
+2. **Después de deployar**, correr `prisma/scripts/tsk792-diagnostico-trazabilidad.sql` en producción (la imagen
+   runner no tiene `tsx`: usar `psql` dentro del contenedor de la base) y revisar los conteos:
+   - Los movimientos que quedaron **sin vincular** (caja, banco, proyecciones) no se pueden corregir
+     automáticamente: la corrección los muestra como impedimento "anterior a la trazabilidad".
+   - Revisar **cada** `MANUAL_LINK` que informe: son movimientos bancarios vinculados a mano a una OP/RC y la
+     corrección no los toca sin que el usuario lo resuelva.
+3. Las facturas **anuladas antes de este cambio** que conservan un asiento vivo (el viejo `cancelInvoice` no lo
+   revertía) **no se migran**: siguen como estaban y hay que regularizarlas a mano.
+4. Roles personalizados: Editar requiere `update`, Eliminar y Anular `delete` del módulo del comprobante;
+   volver a borrador requiere `accounting.entries`/`approve`. Revisar que los roles que deban hacerlo los tengan.
+
 ## Tabla Resumen de Efectos
 
 | Evento | Stock | Factura Status | OC Status | OC InvoicingStatus | Banco/Caja | Asiento |

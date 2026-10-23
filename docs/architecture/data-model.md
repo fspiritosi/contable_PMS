@@ -356,7 +356,7 @@ Reglas:
 | Modelo | Descripcion |
 |--------|-------------|
 | `BankAccount` | Cuenta bancaria (type, status, balance) |
-| `BankMovement` | Movimiento bancario (type: DEBIT/CREDIT, amount); conceptId?/conceptName? (TSK-791, solo los manuales) |
+| `BankMovement` | Movimiento bancario (type: DEBIT/CREDIT, amount); conceptId?/conceptName? (TSK-791, solo los manuales); fundMovementId? (movimiento de fondo que lo creó) y documentLink? (`BankMovementDocumentLink`: CREATED_BY_DOCUMENT / MANUAL_LINK) (TSK-792) |
 | `MovementConcept` | Concepto de movimiento (TSK-791) | name, usages (`ConceptUsage[]`), accountMode, accountId?, isActive |
 | `Receipt` | Recibo de cobro (clientId, status, total) |
 | `ReceiptItem` | Facturas aplicadas al recibo |
@@ -368,7 +368,7 @@ Reglas:
 | `PaymentOrderWithholding` | Retenciones de la OP |
 | `CashRegister` | Caja registradora |
 | `CashRegisterSession` | Sesion de caja (apertura/cierre) |
-| `CashMovement` | Movimiento de caja |
+| `CashMovement` | Movimiento de caja; receiptId? / paymentOrderId? / fundMovementId? (comprobante de tesorería que lo creó, TSK-792) |
 | `Partner` | Socio de la empresa (titular de tarjetas, cuenta corriente y cuenta de aportes) | name, taxId, isActive, contributionsAccountId → Account (TSK-717, relación `PartnerOwnContributionsAccount`, `onDelete: SetNull`) |
 | `PartnerAccountMovement` | Cuenta corriente de tesorería del socio (OWED/REPAYMENT/ADJUSTMENT): lo que la empresa le debe por gastos pagados con su tarjeta personal. Sin relación con la contabilidad ni con los aportes | partnerId, type, amount |
 | `FundMovement` | Movimiento de fondos (aporte/retiro de socio, transferencia entre cuentas, gastos e impuestos bancarios) | type, status, date, amount (total), fundOutKind/fundOutId/fundOutLabel, fundInKind/fundInId/fundInLabel, partnerId (obligatorio en aporte/retiro desde TSK-717, sin FK), partnerName, journalEntryId |
@@ -486,7 +486,7 @@ Reglas:
 | Modelo | Descripcion | Campos clave |
 |--------|-------------|--------------|
 | `Account` | Cuenta contable (arbol) | code (formato x.x.x/xx/xx), name, type, nature, parentId, isLeaf, isActive, disabledFrom, disabledFromFiscalYearId |
-| `JournalEntry` | Asiento contable | number, date (dia calendario a 00:00Z), description, status, createdBy (userId o `'system'`), fiscalYearId?, periodId? (los carga siempre `createJournalEntryTx`, TSK-760), originalEntryId?, reversalEntryId?, reversedAt?, reversedBy? |
+| `JournalEntry` | Asiento contable | number, date (dia calendario a 00:00Z), description, status, createdBy (userId o `'system'`), fiscalYearId?, periodId? (los carga siempre `createJournalEntryTx`, TSK-760), originalEntryId?, reversalEntryId?, reversedAt?, reversedBy?, process? (`JournalEntryProcess`: VAT_SETTLEMENT / INFLATION_ADJUSTMENT / EXCHANGE_DIFFERENCE, TSK-792), revertedToDraftAt?, revertedToDraftBy? (volver a borrador, TSK-792) |
 | `FiscalYear` | Ejercicio contable | number (unico por empresa), startDate (00:00:00.000Z del primer dia), endDate (23:59:59.999Z del ultimo), isClosed, closedAt, closedBy, closingEntryId? (refundicion), openingEntryId? (apertura del ejercicio siguiente generada por el cierre) |
 | `AccountingPeriod` | Periodo de un ejercicio | fiscalYearId, year, month, type (`MONTHLY` \| `OPENING` \| `CLOSING` \| `ADJUSTMENT`), isClosed, closedAt, closedBy; unique(fiscalYearId, year, month, type) |
 | `JournalEntryLine` | Linea de asiento | accountId, debit, credit, description, y los auxiliares opcionales customerId?, supplierId?, costCenterId?. Indices: `@@index([costCenterId])` y `@@index([entryId])` (TSK-719) |
@@ -565,3 +565,18 @@ Reglas:
 - Solo cuentas hoja (sin hijos) de tipo EXPENSE o REVENUE pueden tener presupuesto
 
 ---
+
+## Trazabilidad para la corrección en cadena (TSK-792)
+
+Enums nuevos: `JournalEntryProcess` (`VAT_SETTLEMENT`, `INFLATION_ADJUSTMENT`, `EXCHANGE_DIFFERENCE`) y
+`BankMovementDocumentLink` (`CREATED_BY_DOCUMENT`, `MANUAL_LINK`).
+
+| Modelo | Campos nuevos | Para qué |
+|---|---|---|
+| `JournalEntry` | `process`, `revertedToDraftAt`, `revertedToDraftBy` | Detectar procesos mensuales ya generados; auditar el paso a borrador |
+| `BankMovement` | `fundMovementId`, `documentLink` | Saber qué comprobante lo creó y si el vínculo con la OP/RC fue automático o manual |
+| `CashMovement` | `receiptId`, `paymentOrderId`, `fundMovementId` | Revertir el efecto en caja de un RC, OP o MF |
+| `CashflowProjection` | `paymentOrderInstallmentId` (único) | Volver a cartera la cuota que una OP había cancelado |
+
+Todas las FK nuevas son `onDelete: SetNull` e indexadas. El backfill de las migraciones vincula solo ante una
+coincidencia única; lo no vinculado se informa con `prisma/scripts/tsk792-diagnostico-trazabilidad.sql`.

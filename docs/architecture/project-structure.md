@@ -239,3 +239,24 @@ Importar enums:
 ```typescript
 import { Gender, VoucherType } from '@/generated/prisma/enums';
 ```
+
+---
+
+## Corrección en cadena de comprobantes (TSK-792)
+
+Vive en `src/modules/commercial/shared/` (lo usan compras, ventas y tesorería):
+
+```
+commercial/shared/
+├── effects/                       # apply…EffectsTx / revert…EffectsTx por comprobante (FC, FV, OP, RC, MF)
+│                                  # y document-status.server.ts (recalculo de estado)
+├── correction/                    # Motor: chain (arma el plan), engine (ejecuta), snapshot, fingerprint,
+│                                  # impediments, allocation, labels, describe-changes
+├── actions/document-correction.server.ts   # previewDocumentCorrection / applyDocumentCorrection
+├── hooks/useDocumentCorrection.ts          # Abre la propuesta y aplica
+└── components/                    # _CorrectionProposalDialog, _CorrectionCard, _CorrectionImpediments,
+                                   # _DocumentCorrectionButtons
+```
+
+Contabilidad aporta `revertJournalEntryToDraftTx` y `rewriteDraftJournalEntryTx` (`accounting/shared/utils/journal-entry-tx.ts`),
+reexportadas por `accounting/features/integrations/core`. Detalle en `docs/modules/commercial.md`.
