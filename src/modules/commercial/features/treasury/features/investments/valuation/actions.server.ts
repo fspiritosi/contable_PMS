@@ -2,6 +2,8 @@
 
 import { revalidatePath } from 'next/cache';
 
+import moment from 'moment';
+
 import { Prisma } from '@/generated/prisma/client';
 import type { Tx } from '@/modules/accounting/features/integrations/core';
 import { BusinessError, toActionResult, type ActionResult } from '@/shared/lib/action-result';
@@ -44,6 +46,35 @@ async function requireCtx() {
   const userId = await getCurrentUserId();
   if (!userId) throw new Error('No autenticado');
   return { companyId, userId };
+}
+
+export interface ValuationFiscalYear {
+  id: string;
+  number: number;
+  startDate: string;
+  endDate: string;
+  isClosed: boolean;
+}
+
+/** Ejercicios de la empresa para el selector: los abiertos primero, y dentro de cada grupo el más reciente. */
+export async function getValuationFiscalYears(): Promise<ValuationFiscalYear[]> {
+  await checkPermission(MODULE, 'view', { redirect: true });
+  const companyId = await requireCompanyId();
+  const years = await prisma.fiscalYear.findMany({
+    where: { companyId },
+    orderBy: { number: 'desc' },
+    select: { id: true, number: true, startDate: true, endDate: true, isClosed: true },
+  });
+  const format = (date: Date) => moment.utc(date).format('DD/MM/YYYY');
+  return [...years]
+    .sort((a, b) => Number(a.isClosed) - Number(b.isClosed))
+    .map((y) => ({
+      id: y.id,
+      number: y.number,
+      startDate: format(y.startDate),
+      endDate: format(y.endDate),
+      isClosed: y.isClosed,
+    }));
 }
 
 /** Ejercicio, valuación existente y tenencias con posición al cierre. */

@@ -24,6 +24,18 @@ const KIND_VARIANT: Record<HoldingMovementRow['kind'], 'default' | 'secondary' |
 
 const signed = (value: number) => `${value > 0 ? '+' : ''}${formatCurrency(value)}`;
 
+function ValuationOrigin({ hasValuation }: { hasValuation: boolean }) {
+  if (!hasValuation) return <span className="text-sm text-muted-foreground">—</span>;
+  return (
+    <Link
+      href="/dashboard/commercial/treasury/investments/valuation"
+      className="text-sm hover:underline"
+    >
+      Valuación al cierre
+    </Link>
+  );
+}
+
 export function _HoldingMovementsTable({ data }: { data: HoldingMovementRow[] }) {
   const columns = useMemo<ColumnDef<HoldingMovementRow>[]>(
     () => [
@@ -83,9 +95,7 @@ export function _HoldingMovementsTable({ data }: { data: HoldingMovementRow[] })
               Movimiento de fondos
             </Link>
           ) : (
-            <span className="text-sm text-muted-foreground">
-              {row.original.valuationId ? 'Valuación al cierre' : '—'}
-            </span>
+            <ValuationOrigin hasValuation={!!row.original.valuationId} />
           ),
       },
     ],
