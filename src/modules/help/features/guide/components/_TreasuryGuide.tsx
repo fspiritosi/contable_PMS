@@ -29,6 +29,8 @@ import {
 } from '@/shared/components/ui/card';
 import { Separator } from '@/shared/components/ui/separator';
 
+import { _InvestmentsGuide } from './_InvestmentsGuide';
+
 export function _TreasuryGuide() {
   return (
     <div className="space-y-6">
@@ -56,7 +58,7 @@ export function _TreasuryGuide() {
           </p>
           <ol className="list-decimal pl-6 space-y-1 text-muted-foreground">
             <li>
-              Ve a <strong>Tesorería → Cuentas Bancarias</strong>
+              Ve a <strong>Tesorería → Cuentas Bancarias y Brokers</strong>
             </li>
             <li>
               Haz clic en <strong>Nueva Cuenta</strong>
@@ -1289,6 +1291,9 @@ export function _TreasuryGuide() {
           </p>
         </CardContent>
       </Card>
+
+      {/* Inversiones (TSK-793) */}
+      <_InvestmentsGuide />
     </div>
   );
 }

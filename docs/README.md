@@ -27,6 +27,7 @@ Documentacion tecnica del proyecto para desarrolladores. Cubre arquitectura, mod
 - [Ordenes de Compra](modules/purchase-orders.md) - OC a proveedores, flujo de aprobacion, recepcion, cashflow
 - [Remitos de Recepcion](modules/receiving-notes.md) - Recepcion de materiales, integracion con stock, OC y FC
 - [Tesorería - Cheques](modules/treasury-checks.md) - Cartera de cheques propios y terceros, ciclo de vida
+- [Tesorería - Inversiones](modules/treasury-investments.md) - Brokers, tenencias, compra/venta de inversiones y valuación al cierre (TSK-793)
 - [Tesorería - Flujo de Caja](modules/treasury-cashflow.md) - Dashboard cashflow, proyecciones manuales
 - [Contabilidad](modules/accounting.md) - Plan de cuentas, asientos, integracion, reportes
 - [Empresa](modules/company.md) - Catalogos, usuarios, roles, auditoria

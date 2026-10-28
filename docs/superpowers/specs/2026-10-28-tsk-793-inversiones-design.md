@@ -106,15 +106,15 @@ Los **nominales son opcionales** aun en los tipos que los admiten (decisión del
 - La refundición de resultados del cierre de ejercicio (`closeFiscalYearTx`) ya lleva estas cuentas a cero: no hace falta un proceso nuevo para "se refunde a fin de año y pasa cero al otro".
 - Orden esperado: la valuación se hace **antes** del cierre contable del ejercicio. Si el ejercicio ya está cerrado, no se puede valuar.
 
-## Pregunta abierta (la contesta el cliente)
+## Pregunta abierta — RESUELTA por el cliente (2026-10-28)
 
 **Venta parcial antes del cierre:** ¿se calcula el resultado de la parte vendida en ese momento, o solo se baja el capital y el resultado espera al cierre o a la venta total?
 
-Recomendación si el cliente no tiene preferencia:
-- Con nominales: costo promedio. Se baja del valor en libros la parte proporcional a los nominales vendidos y la diferencia con lo cobrado va a resultado en ese momento.
-- Sin nominales (FCI, cauciones, fideicomisos, plazo fijo): se baja del valor en libros el importe cobrado; el resultado aparece al cierre o en la venta total.
+**Respuesta del cliente:** la venta parcial registra **en ese momento** el resultado de la parte vendida: los nominales vendidos contra su costo de compra. El resto se valúa al cierre del ejercicio y se arrastra. Las recompras se suman a la misma tenencia. Se usa **precio promedio ponderado (PPP)**.
 
-La implementación puede avanzar con todo lo demás; la política de venta parcial va aislada.
+Queda implementado así (aislado en `computeSaleCost`):
+- Con nominales: costo = valor en libros × nominales vendidos / nominales en tenencia (PPP). El resultado (bruto − costo) se registra en esa fecha.
+- Sin nominales (FCI, cauciones, fideicomisos, plazo fijo): se baja el capital por el importe cobrado; el resultado aparece al cierre o en la venta total.
 
 ## Restricciones
 
@@ -131,12 +131,12 @@ La implementación puede avanzar con todo lo demás; la política de venta parci
 - **Cuenta contable por tenencia, obligatoria y elegida por el usuario** (sin cuenta por defecto por tipo). Al crear, se sugiere filtrar por activo.
 - **Nuevos ajustes contables** en `AccountingSettings` (pantalla de integración comercial): cuenta de resultado por tenencia positivo, negativo y cuenta de comisiones de inversiones. Sin configurar, la compra/venta/valuación que las necesite da un error claro diciendo qué configurar (como el `entry-preflight` existente).
 - **Validación de saldo** solo en las tenencias. Bancos y brokers mantienen el comportamiento actual (hoy no validan saldo insuficiente).
-- **Permisos:** módulo nuevo `commercial.investments` (view/create/update/delete) para tenencias, compras/ventas y valuación; la valuación además pide `approve`.
+- **Permisos (ruling P1):** el módulo es `commercial.treasury.investments` (view/create/update/delete) para tenencias, compras/ventas y valuación; la valuación además pide `approve`. Sigue la nomenclatura de Tesorería. Antes se pensó `commercial.investments`.
 - **Valor en libros con fecha.** Es realista valuar 2025 en marzo de 2026, con movimientos de 2026 ya cargados. Por eso el valor en libros de una tenencia es función de la fecha: el valor de la última valuación hasta esa fecha más/menos los movimientos posteriores a ella. La valuación toma el valor en libros **a la fecha de cierre** (solo movimientos hasta ese día). Las compras posteriores al cierre no molestan. Si la tenencia tiene **ventas confirmadas posteriores al cierre** (su resultado se calculó contra el valor previo a la valuación), esa tenencia no se puede valuar: se informa cuáles son, para que el usuario las anule o corrija, valúe y las vuelva a cargar. Lo mismo al deshacer una valuación.
 - **Bloqueo por valuación.** Además del bloqueo mensual que ya da el proceso nuevo en `JournalEntryProcess`, corregir, anular o cargar con fecha anterior un movimiento de una tenencia **valuada**, con fecha igual o anterior al cierre de ese ejercicio, es un **impedimento** del motor del TSK-792 (tipo "podés resolverlo": deshacer la valuación). El bloqueo es por tenencia y por ejercicio valuado, no por mes.
 - **Comisiones.** Los formularios piden el **importe bruto** (nominales × precio, o el importe) y la comisión aparte. Compra: sale del origen bruto + comisión. Venta: entra al destino bruto − comisión. El resultado por tenencia se calcula sobre el **bruto** (bruto − valor en libros). La comisión siempre va al Debe de la cuenta de comisiones.
-- **Conceptos del TSK-791.** En compra y venta de inversión el concepto es **opcional e informativo** (etiqueta). Las cuentas del asiento salen de la tenencia, del banco/broker y de los ajustes, nunca del concepto.
-- **Módulo activable.** `commercial.investments` cae en el mapeo por prefijo `commercial.*` de `PERMISSION_MODULE_MAP` (`src/shared/lib/modules/constants.ts:72`): se activa con Comercial, como el resto de Tesorería. No se registra un módulo nuevo.
+- **Conceptos del TSK-791 (ruling P2).** Compra y venta de inversión **no usan conceptos**: `fundMovementUsage` devuelve `null`, como la transferencia. Las cuentas del asiento salen de la tenencia, del banco/broker y de los ajustes, nunca de un concepto. Sin cuenta asociada, el concepto aportaba poco y obligaba a sumar usos nuevos.
+- **Módulo activable.** `commercial.treasury.investments` cae en el mapeo por prefijo `commercial.*` de `PERMISSION_MODULE_MAP` (`src/shared/lib/modules/constants.ts:72`): se activa con Comercial, como el resto de Tesorería. No se registra un módulo nuevo.
 - **Sin posiciones cortas.** Opciones y futuros lanzados (posición vendida, saldo negativo) **no** se soportan en esta entrega: toda tenencia tiene valor en libros y nominales ≥ 0.
 - **Ubicación:** "Inversiones" como ítem nuevo del grupo Tesorería (listado de tenencias agrupadas por cuenta, con detalle e historial de cada una) y "Valuación de inversiones" dentro de esa sección. El detalle de una cuenta broker también lista sus tenencias.
 
@@ -146,3 +146,10 @@ La implementación puede avanzar con todo lo demás; la política de venta parci
 - Cómo se guarda el historial de una tenencia (tabla de movimientos de tenencia ligada al Movimiento de Fondos, como `BankMovement`).
 - Diseño visual de las pantallas, siguiendo los patrones de Tesorería existentes.
 - Cómo encaja la valuación en el motor de corrección (impedimento al corregir un movimiento anterior a una valuación hecha).
+- **P3. Venta parcial.** Ver "Pregunta abierta — RESUELTA": costo proporcional por PPP con nominales; sin nominales, baja de capital sin resultado.
+- **P4. Ventas posteriores.** Corregir o anular un movimiento de una tenencia con una **venta posterior** es un impedimento MANUAL ("anulá primero la venta posterior"): el costo de una venta queda fijo al confirmarse.
+- **P5. Asiento de la valuación en borrador.** Se genera en **borrador** (`process: INVESTMENT_VALUATION`). Deshacer la valuación lo borra mientras siga en borrador; si ya está Registrado, primero se vuelve a borrador (TSK-792).
+- **R4. Nombre del broker obligatorio.** Un broker no tiene CBU ni alias, así que el nombre (`bankName`) es lo único que lo identifica.
+- **R5. La venta total es el último movimiento.** No se pueden cargar movimientos de una tenencia con fecha posterior a su venta total, ni vender todo si hay movimientos posteriores.
+- **R6. Sin compra ni venta anteriores a una venta existente.** No se acepta una compra o venta de la tenencia con fecha anterior a una venta ya registrada de la misma tenencia: el costo de esa venta dejaría de ser coherente.
+- **R7. Valuaciones en orden entre ejercicios.** No se puede valuar un ejercicio si hay una valuación posterior de la misma tenencia: primero se deshace la más reciente (se valúa y se deshace en orden).

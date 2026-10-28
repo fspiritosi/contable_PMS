@@ -369,6 +369,9 @@ Reglas:
 | `CashRegister` | Caja registradora |
 | `CashRegisterSession` | Sesion de caja (apertura/cierre) |
 | `CashMovement` | Movimiento de caja; receiptId? / paymentOrderId? / fundMovementId? (comprobante de tesorería que lo creó, TSK-792) |
+| `InvestmentHolding` | Tenencia de un instrumento en un banco/broker (TSK-793) | bankAccountId, instrumentType (`InvestmentInstrumentType`), name, maturityDate?, accountId → Account, currency, status (`InvestmentHoldingStatus`) |
+| `InvestmentMovement` | Historial de la tenencia (TSK-793); la posición es la suma con fecha <= D | holdingId, kind (`InvestmentMovementKind`: PURCHASE/SALE/VALUATION), date, bookDelta, nominalsDelta?, proceeds?, result?, closesHolding, fundMovementId?, valuationId? |
+| `InvestmentValuation` | Valuación al cierre de un ejercicio (TSK-793) | fiscalYearId (único por empresa), closingDate, journalEntryId? (asiento en borrador, process INVESTMENT_VALUATION) |
 | `Partner` | Socio de la empresa (titular de tarjetas, cuenta corriente y cuenta de aportes) | name, taxId, isActive, contributionsAccountId → Account (TSK-717, relación `PartnerOwnContributionsAccount`, `onDelete: SetNull`) |
 | `PartnerAccountMovement` | Cuenta corriente de tesorería del socio (OWED/REPAYMENT/ADJUSTMENT): lo que la empresa le debe por gastos pagados con su tarjeta personal. Sin relación con la contabilidad ni con los aportes | partnerId, type, amount |
 | `FundMovement` | Movimiento de fondos (aporte/retiro de socio, transferencia entre cuentas, gastos e impuestos bancarios) | type, status, date, amount (total), fundOutKind/fundOutId/fundOutLabel, fundInKind/fundInId/fundInLabel, partnerId (obligatorio en aporte/retiro desde TSK-717, sin FK), partnerName, journalEntryId |
@@ -580,3 +583,16 @@ Enums nuevos: `JournalEntryProcess` (`VAT_SETTLEMENT`, `INFLATION_ADJUSTMENT`, `
 
 Todas las FK nuevas son `onDelete: SetNull` e indexadas. El backfill de las migraciones vincula solo ante una
 coincidencia única; lo no vinculado se informa con `prisma/scripts/tsk792-diagnostico-trazabilidad.sql`.
+
+---
+
+## Inversiones (TSK-793)
+
+Enums nuevos: `InvestmentInstrumentType`, `InvestmentHoldingStatus`, `InvestmentMovementKind`. Valores nuevos en enums existentes: `BankAccountType.BROKER`, `FundMovementType.INVESTMENT_PURCHASE` / `INVESTMENT_SALE`, `JournalEntryProcess.INVESTMENT_VALUATION`.
+
+| Modelo | Campos nuevos | Para qué |
+|---|---|---|
+| `FundMovement` | `holdingId`, `nominals`, `unitPrice`, `commission`, `isFullSale` | Tenencia, nominales, precio, comisión (gasto aparte) y marca de venta total de una compra/venta de inversión |
+| `AccountingSettings` | `holdingGainAccountId`, `holdingLossAccountId`, `investmentFeesAccountId` | Cuentas de resultado por tenencia (positivo/negativo) y de comisiones de inversiones |
+
+Migración `20261028144955_tsk_793_inversiones`. Detalle en [Tesorería - Inversiones](../modules/treasury-investments.md).
