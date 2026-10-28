@@ -15,10 +15,6 @@ import {
 import type { FundSourceKind } from '@/modules/commercial/features/treasury/features/fund-movements/shared/validators';
 import { PARTNER_CONTRIBUTION_ACCOUNT_TYPES } from '@/modules/commercial/features/treasury/features/partners/shared/types';
 import { buildImputableAccountsWhere } from '@/shared/lib/accounts/imputable-accounts';
-import {
-  ACCOUNTING_SETTINGS_ACCOUNT_LABELS,
-  type AccountingSettingsAccountField,
-} from '@/shared/lib/accounts/settings-account-labels';
 import { BusinessError } from '@/shared/lib/action-result';
 import { countActiveConcepts, resolveConceptForUsage } from '@/shared/lib/concepts/concepts.server';
 import { fundMovementUsage } from '@/shared/lib/concepts/usages';
@@ -26,7 +22,11 @@ import { logger } from '@/shared/lib/logger';
 
 import { dedupeImpediments, impediments } from '../correction/impediments';
 import type { Impediment } from '../correction/types';
-import { applyInvestmentSideTx, investmentEffectImpedimentsTx } from './investment.server';
+import {
+  applyInvestmentSideTx,
+  investmentEffectImpedimentsTx,
+  requireInvestmentSetting,
+} from './investment.server';
 import type { EffectsCtx, EffectsResult } from './types';
 
 /**
@@ -527,22 +527,6 @@ async function createJournalEntryForFundMovement(
 
 /** El MF con sus líneas, tal como lo lee `applyFundMovementEffectsTx`. */
 type MovementWithLines = Prisma.FundMovementGetPayload<{ include: { lines: true } }>;
-
-/** Cuenta de un ajuste contable de inversiones, o el error que dice cuál configurar. */
-function requireInvestmentSetting(
-  accountId: string | null,
-  field: Extract<
-    AccountingSettingsAccountField,
-    'holdingGainAccountId' | 'holdingLossAccountId' | 'investmentFeesAccountId'
-  >
-): string {
-  if (!accountId) {
-    throw new BusinessError(
-      `Configurá la cuenta de ${ACCOUNTING_SETTINGS_ACCOUNT_LABELS[field].toLowerCase()} en Ajustes contables`
-    );
-  }
-  return accountId;
-}
 
 /**
  * Compra y venta de inversión (TSK-793). El importe del MF es el BRUTO (nominales ×

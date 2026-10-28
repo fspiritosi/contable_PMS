@@ -10,6 +10,10 @@ import {
   positionAt,
   type PositionMovement,
 } from '@/modules/commercial/features/treasury/features/investments/shared/position';
+import {
+  ACCOUNTING_SETTINGS_ACCOUNT_LABELS,
+  type AccountingSettingsAccountField,
+} from '@/shared/lib/accounts/settings-account-labels';
 import { BusinessError } from '@/shared/lib/action-result';
 
 import { impediments } from '../correction/impediments';
@@ -28,6 +32,25 @@ import type { EffectsCtx } from './types';
 
 const formatDay = (date: Date) => moment.utc(date).format('DD/MM/YYYY');
 
+/**
+ * Cuenta de un ajuste contable de inversiones, o el error que dice cuál configurar.
+ * La usan la compra/venta (`fund-movement.server.ts`) y la valuación al cierre.
+ */
+export function requireInvestmentSetting(
+  accountId: string | null,
+  field: Extract<
+    AccountingSettingsAccountField,
+    'holdingGainAccountId' | 'holdingLossAccountId' | 'investmentFeesAccountId'
+  >
+): string {
+  if (!accountId) {
+    throw new BusinessError(
+      `Configurá la cuenta de ${ACCOUNTING_SETTINGS_ACCOUNT_LABELS[field].toLowerCase()} en Ajustes contables`
+    );
+  }
+  return accountId;
+}
+
 /** Movimientos de la tenencia, listos para el módulo puro de posición. */
 export async function loadHoldingMovementsTx(
   tx: Tx,
@@ -35,15 +58,31 @@ export async function loadHoldingMovementsTx(
 ): Promise<PositionMovement[]> {
   const rows = await tx.investmentMovement.findMany({
     where: { holdingId },
-    select: { kind: true, date: true, bookDelta: true, nominalsDelta: true, createdAt: true },
+    select: POSITION_MOVEMENT_SELECT,
   });
-  return rows.map((row) => ({
+  return rows.map(toPositionMovement);
+}
+
+/** Campos de `InvestmentMovement` que necesita el módulo puro de posición. */
+export const POSITION_MOVEMENT_SELECT = {
+  kind: true,
+  date: true,
+  bookDelta: true,
+  nominalsDelta: true,
+  createdAt: true,
+} as const;
+
+/** Fila de `InvestmentMovement` (Decimal) → movimiento del módulo de posición (number). */
+export function toPositionMovement(
+  row: Prisma.InvestmentMovementGetPayload<{ select: typeof POSITION_MOVEMENT_SELECT }>
+): PositionMovement {
+  return {
     kind: row.kind,
     date: row.date,
     bookDelta: Number(row.bookDelta),
     nominalsDelta: row.nominalsDelta === null ? null : Number(row.nominalsDelta),
     createdAt: row.createdAt,
-  }));
+  };
 }
 
 async function holdingName(tx: Tx, holdingId: string): Promise<string> {
@@ -111,19 +150,25 @@ export async function assertHoldingNotValuedTx(
   }
 }
 
+interface LaterSale {
+  date: Date;
+  holdingName: string;
+  description: string | null;
+}
+
 /**
- * Primera venta de la tenencia posterior a `date`, o null. Es posterior la de un día
+ * Ventas de la tenencia posteriores a `date`, por fecha. Es posterior la de un día
  * siguiente (día calendario UTC) o, en el mismo día, la creada después de
  * `sameDayAfter`; con `sameDayAfter` null, ninguna del mismo día cuenta (un
  * movimiento que se está aplicando es el último creado). `excludeIds` deja afuera
- * los movimientos propios.
+ * los movimientos propios. Solo las ventas confirmadas tienen `InvestmentMovement`.
  */
-async function findLaterSaleTx(
+async function findLaterSalesTx(
   tx: Tx,
   holdingId: string,
   date: Date,
   opts: { excludeIds: string[]; sameDayAfter: Date | null }
-): Promise<{ date: Date; holdingName: string; description: string | null } | null> {
+): Promise<LaterSale[]> {
   const day = moment.utc(date).format('YYYY-MM-DD');
   const sales = await tx.investmentMovement.findMany({
     where: {
@@ -140,17 +185,44 @@ async function findLaterSaleTx(
       fundMovement: { select: { description: true } },
     },
   });
-  const later = sales.find(
-    (sale) =>
-      moment.utc(sale.date).format('YYYY-MM-DD') > day ||
-      (opts.sameDayAfter !== null && sale.createdAt.getTime() > opts.sameDayAfter.getTime())
-  );
-  if (!later) return null;
-  return {
-    date: later.date,
-    holdingName: later.holding.name,
-    description: later.fundMovement?.description ?? null,
-  };
+  return sales
+    .filter(
+      (sale) =>
+        moment.utc(sale.date).format('YYYY-MM-DD') > day ||
+        (opts.sameDayAfter !== null && sale.createdAt.getTime() > opts.sameDayAfter.getTime())
+    )
+    .map((sale) => ({
+      date: sale.date,
+      holdingName: sale.holding.name,
+      description: sale.fundMovement?.description ?? null,
+    }));
+}
+
+/** Primera venta de la tenencia posterior a `date` (ver `findLaterSalesTx`), o null. */
+async function findLaterSaleTx(
+  tx: Tx,
+  holdingId: string,
+  date: Date,
+  opts: { excludeIds: string[]; sameDayAfter: Date | null }
+): Promise<LaterSale | null> {
+  return (await findLaterSalesTx(tx, holdingId, date, opts))[0] ?? null;
+}
+
+/** Etiqueta de una venta en los mensajes: «descripción» del DD/MM/YYYY. */
+function laterSaleLabel(sale: LaterSale): string {
+  return sale.description
+    ? `«${sale.description}» del ${formatDay(sale.date)}`
+    : `del ${formatDay(sale.date)}`;
+}
+
+/**
+ * Etiquetas de las ventas confirmadas de la tenencia con fecha posterior al día
+ * `date`. La valuación al cierre no se puede generar ni deshacer mientras existan:
+ * su costo se calculó contra el valor en libros previo (TSK-793).
+ */
+export async function laterSaleLabelsTx(tx: Tx, holdingId: string, date: Date): Promise<string[]> {
+  const sales = await findLaterSalesTx(tx, holdingId, date, { excludeIds: [], sameDayAfter: null });
+  return sales.map(laterSaleLabel);
 }
 
 /**
@@ -205,10 +277,7 @@ export async function investmentEffectImpedimentsTx(
     sameDayAfter: own[0]?.createdAt ?? movement.createdAt,
   });
   if (later) {
-    const saleLabel = later.description
-      ? `«${later.description}» del ${formatDay(later.date)}`
-      : `del ${formatDay(later.date)}`;
-    found.push(impediments.investmentLaterSale(later.holdingName, saleLabel));
+    found.push(impediments.investmentLaterSale(later.holdingName, laterSaleLabel(later)));
   }
 
   return found;

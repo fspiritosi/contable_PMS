@@ -41,3 +41,14 @@ export const HOLDING_STATUS_LABELS: Record<InvestmentHoldingStatus, string> = {
   OPEN: 'Abierta',
   CLOSED: 'Cerrada',
 };
+
+/** Etiqueta del banco o broker donde está la tenencia; los brokers no llevan número de cuenta. */
+export function custodyLabel(bank: {
+  bankName: string;
+  accountNumber: string;
+  accountType: string;
+}): string {
+  return bank.accountType === 'BROKER' || !bank.accountNumber
+    ? bank.bankName
+    : `${bank.bankName} - ${bank.accountNumber}`;
+}

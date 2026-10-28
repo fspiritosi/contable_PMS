@@ -18,6 +18,7 @@ import { checkPermission } from '@/shared/lib/permissions';
 import { prisma } from '@/shared/lib/prisma';
 
 import { positionAt } from '../shared/position';
+import { custodyLabel } from '../shared/types';
 import { holdingFormSchema, type HoldingFormInput } from '../shared/validators';
 
 const MODULE = 'commercial.treasury.investments' as const;
@@ -72,13 +73,6 @@ async function requireCompanyId(): Promise<string> {
   return companyId;
 }
 
-/** Etiqueta del banco o broker; los brokers no llevan número de cuenta. */
-function bankLabel(bank: { bankName: string; accountNumber: string; accountType: string }) {
-  return bank.accountType === 'BROKER' || !bank.accountNumber
-    ? bank.bankName
-    : `${bank.bankName} - ${bank.accountNumber}`;
-}
-
 /** Posición actual: suma de los movimientos, vía el módulo puro (R2 para el promedio). */
 async function currentPosition(holdingId: string) {
   const { bookValue, nominals } = positionAt(
@@ -102,7 +96,7 @@ async function toRow(holding: HoldingRecord): Promise<InvestmentHoldingRow> {
   const { bankAccount, ...rest } = holding;
   return {
     ...rest,
-    bankAccountLabel: bankLabel(bankAccount),
+    bankAccountLabel: custodyLabel(bankAccount),
     ...(await currentPosition(holding.id)),
   };
 }
@@ -187,7 +181,7 @@ export async function getHoldingFormCatalogs(): Promise<HoldingFormCatalogs> {
   return {
     banks: banks.map((b) => ({
       id: b.id,
-      label: bankLabel(b),
+      label: custodyLabel(b),
       isBroker: b.accountType === 'BROKER',
     })),
     accounts,
