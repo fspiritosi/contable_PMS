@@ -166,4 +166,15 @@ describe('broker como tipo de cuenta (TSK-793)', () => {
   it('el tipo se muestra como "Broker"', () => {
     expect(BANK_ACCOUNT_TYPE_LABELS.BROKER).toBe('Broker');
   });
+
+  it('exige el nombre del broker', () => {
+    const result = bankAccountSchema.safeParse({ accountType: 'BROKER', bankName: '' });
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]?.message).toBe('Ingresá el nombre del broker');
+  });
+
+  it('acepta un broker con nombre y sin CBU, alias ni número de cuenta', () => {
+    const result = bankAccountSchema.safeParse({ accountType: 'BROKER', bankName: 'Balanz' });
+    expect(result.success).toBe(true);
+  });
 });

@@ -167,7 +167,7 @@ export function _BankAccountFormModal({ open, onOpenChange, bankAccount, onSucce
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>
-                      {isNonBank ? 'Nombre' : 'Banco'} {!isNonBank && '*'}
+                      {isNonBank ? 'Nombre' : 'Banco'} {(!isNonBank || isBroker) && '*'}
                     </FormLabel>
                     <FormControl>
                       <Input

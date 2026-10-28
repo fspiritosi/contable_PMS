@@ -154,6 +154,10 @@ export const bankAccountSchema = z
     accountId: z.string().uuid('Cuenta contable inválida').optional().nullable(),
   })
   .refine(
+    (data) => data.accountType !== 'BROKER' || !!data.bankName?.trim(),
+    { message: 'Ingresá el nombre del broker', path: ['bankName'] }
+  )
+  .refine(
     (data) => {
       if (NON_BANK_TYPES.includes(data.accountType as (typeof NON_BANK_TYPES)[number])) return true;
       return data.bankName && data.bankName.length > 0;
