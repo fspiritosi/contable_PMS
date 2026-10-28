@@ -227,6 +227,15 @@ describe.skipIf(!dbAvailable)('integración: tenencias de inversión (TSK-793)',
     });
     expect(changeBank.success).toBe(false);
 
+    const changeType = await updateInvestmentHolding(id, {
+      ...input('Con movimientos'),
+      instrumentType: 'STOCK',
+    });
+    expect(changeType).toEqual({
+      success: false,
+      error: 'La tenencia ya tiene movimientos: no se puede cambiar su tipo de instrumento',
+    });
+
     // El nombre sí se puede cambiar.
     const rename = await updateInvestmentHolding(id, input('Renombrada'));
     expect(rename.success).toBe(true);
@@ -244,5 +253,35 @@ describe.skipIf(!dbAvailable)('integración: tenencias de inversión (TSK-793)',
     const empty = await create('Borrado vacía');
     expect(await deleteInvestmentHolding(empty)).toEqual({ success: true });
     expect(await prisma.investmentHolding.count({ where: { id: empty } })).toBe(0);
+  });
+
+  it('renombrar una tenencia cuyo banco quedó inactivo funciona', async () => {
+    const inactiveBank = (
+      await prisma.bankAccount.create({
+        data: {
+          companyId,
+          bankName: `${PREFIX}Inactivo`,
+          accountNumber: 'T793H-3',
+          accountType: 'BROKER',
+          balance: 0,
+          status: 'ACTIVE',
+          accountId: bankLedgerId,
+        },
+        select: { id: true },
+      })
+    ).id;
+    const created = await createInvestmentHolding({
+      ...input('Inactivo'),
+      bankAccountId: inactiveBank,
+    });
+    if (!created.success) throw new Error(created.error);
+    await prisma.bankAccount.update({ where: { id: inactiveBank }, data: { status: 'INACTIVE' } });
+
+    const result = await updateInvestmentHolding(created.id, {
+      ...input('Inactivo renombrada'),
+      bankAccountId: inactiveBank,
+    });
+
+    expect(result).toEqual({ success: true });
   });
 });

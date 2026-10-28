@@ -195,16 +195,24 @@ export async function getHoldingFormCatalogs(): Promise<HoldingFormCatalogs> {
 }
 
 /** La custodia es una cuenta activa de la empresa y la cuenta contable, de activo imputable. */
-async function assertHoldingTargets(companyId: string, bankAccountId: string, accountId: string) {
+async function assertHoldingTargets(
+  companyId: string,
+  bankAccountId: string | null,
+  accountId: string | null
+) {
   const [bank, account] = await Promise.all([
-    prisma.bankAccount.findFirst({
-      where: { id: bankAccountId, companyId, status: 'ACTIVE' },
-      select: { id: true },
-    }),
-    prisma.account.findFirst({
-      where: { id: accountId, ...buildImputableAccountsWhere({ companyId, types: ['ASSET'] }) },
-      select: { id: true },
-    }),
+    bankAccountId === null
+      ? true
+      : prisma.bankAccount.findFirst({
+          where: { id: bankAccountId, companyId, status: 'ACTIVE' },
+          select: { id: true },
+        }),
+    accountId === null
+      ? true
+      : prisma.account.findFirst({
+          where: { id: accountId, ...buildImputableAccountsWhere({ companyId, types: ['ASSET'] }) },
+          select: { id: true },
+        }),
   ]);
   if (!bank) throw new BusinessError('El banco o broker no existe o no está activo');
   if (!account) {
@@ -255,17 +263,36 @@ export async function updateInvestmentHolding(
     const data = holdingFormSchema.parse(input);
     const current = await prisma.investmentHolding.findFirst({
       where: { id, companyId },
-      select: { bankAccountId: true, accountId: true, _count: { select: { movements: true } } },
+      select: {
+        bankAccountId: true,
+        accountId: true,
+        instrumentType: true,
+        _count: { select: { movements: true } },
+      },
     });
     if (!current) throw new BusinessError('Tenencia no encontrada');
 
-    const changesLedger =
-      current.accountId !== data.accountId || current.bankAccountId !== data.bankAccountId;
+    const hasMovements = current._count.movements > 0;
+    const bankChanged = current.bankAccountId !== data.bankAccountId;
+    const accountChanged = current.accountId !== data.accountId;
     // Los asientos viejos quedarían contra otra cuenta (o con otra custodia).
-    if (changesLedger && current._count.movements > 0) {
+    if ((bankChanged || accountChanged) && hasMovements) {
       throw new BusinessError('La tenencia ya tiene movimientos: no se puede cambiar su cuenta');
     }
-    await assertHoldingTargets(companyId, data.bankAccountId, data.accountId);
+    // El tipo define si se lleva en nominales y si vence: cambiaría el sentido de lo cargado.
+    if (current.instrumentType !== data.instrumentType && hasMovements) {
+      throw new BusinessError(
+        'La tenencia ya tiene movimientos: no se puede cambiar su tipo de instrumento'
+      );
+    }
+    // Solo se valida lo que cambia: renombrar no depende de que el banco siga activo.
+    if (bankChanged || accountChanged) {
+      await assertHoldingTargets(
+        companyId,
+        bankChanged ? data.bankAccountId : null,
+        accountChanged ? data.accountId : null
+      );
+    }
 
     await prisma.investmentHolding.update({
       where: { id },
