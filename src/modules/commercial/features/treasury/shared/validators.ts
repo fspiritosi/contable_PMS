@@ -116,7 +116,7 @@ export const CASH_MOVEMENT_TYPE_COLORS = {
 // ====================================
 
 // Schema para crear/editar cuenta bancaria
-const NON_BANK_TYPES = ['CASH', 'VIRTUAL_WALLET'] as const;
+const NON_BANK_TYPES = ['CASH', 'VIRTUAL_WALLET', 'BROKER'] as const;
 
 export const bankAccountSchema = z
   .object({

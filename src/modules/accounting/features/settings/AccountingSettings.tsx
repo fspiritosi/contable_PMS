@@ -90,6 +90,9 @@ async function AccountingSettingsContent({ companyId }: { companyId: string }) {
               defaultCashAccountId: settings?.defaultCashAccountId ?? null,
               defaultBankAccountId: settings?.defaultBankAccountId ?? null,
               bankChargesAccountId: settings?.bankChargesAccountId ?? null, // TSK-718
+              holdingGainAccountId: settings?.holdingGainAccountId ?? null, // TSK-793
+              holdingLossAccountId: settings?.holdingLossAccountId ?? null,
+              investmentFeesAccountId: settings?.investmentFeesAccountId ?? null,
               expensesAccountId: settings?.expensesAccountId ?? null,
               resultAccountId: settings?.resultAccountId ?? null,
               partnerContributionsAccountId: settings?.partnerContributionsAccountId ?? null,

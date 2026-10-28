@@ -141,7 +141,7 @@ export const MODULE_LABELS: Record<Module, string> = {
   'commercial.receiving-notes': 'Remitos de Recepción',
   'commercial.delivery-notes': 'Remitos de Entrega',
   'commercial.treasury.cash-registers': 'Cajas',
-  'commercial.treasury.bank-accounts': 'Cuentas',
+  'commercial.treasury.bank-accounts': 'Cuentas Bancarias y Brokers',
   'commercial.treasury.receipts': 'Recibos de Cobro',
   'commercial.treasury.payment-orders': 'Órdenes de Pago',
   'commercial.treasury.checks': 'Cheques',

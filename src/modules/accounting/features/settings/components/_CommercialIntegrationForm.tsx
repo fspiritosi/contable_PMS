@@ -128,6 +128,25 @@ const SECTIONS: SectionDef[] = [
         types: ['ASSET'],
         help: 'Se usa si la cuenta bancaria no tiene cuenta específica asignada',
       },
+      // TSK-793: inversiones. El resultado por tenencia se imputa a estas cuentas.
+      {
+        name: 'holdingGainAccountId',
+        label: ACCOUNTING_SETTINGS_ACCOUNT_LABELS.holdingGainAccountId,
+        types: ['REVENUE'],
+        help: 'Ganancia al vender una inversión o al valuarla al cierre',
+      },
+      {
+        name: 'holdingLossAccountId',
+        label: ACCOUNTING_SETTINGS_ACCOUNT_LABELS.holdingLossAccountId,
+        types: ['EXPENSE'],
+        help: 'Pérdida al vender una inversión o al valuarla al cierre',
+      },
+      {
+        name: 'investmentFeesAccountId',
+        label: ACCOUNTING_SETTINGS_ACCOUNT_LABELS.investmentFeesAccountId,
+        types: ['EXPENSE'],
+        help: 'Comisiones de compra y venta de inversiones',
+      },
     ],
   },
   {

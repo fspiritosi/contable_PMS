@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { paymentOrderPaymentSchema, receiptPaymentSchema } from './validators';
+import {
+  BANK_ACCOUNT_TYPE_LABELS,
+  bankAccountSchema,
+  paymentOrderPaymentSchema,
+  receiptPaymentSchema,
+} from './validators';
 
 /**
  * TSK-728: efectivo sin caja y transferencia/débito sin banco no mueven fondos
@@ -145,5 +150,20 @@ describe('pago de una orden de pago', () => {
         endorsedCheckId: CHEQUE_EN_CARTERA,
       }).success
     ).toBe(true);
+  });
+});
+
+describe('broker como tipo de cuenta (TSK-793)', () => {
+  it('acepta un broker sin CBU ni alias', () => {
+    const result = bankAccountSchema.safeParse({
+      accountType: 'BROKER',
+      bankName: 'Balanz',
+      accountNumber: '123',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('el tipo se muestra como "Broker"', () => {
+    expect(BANK_ACCOUNT_TYPE_LABELS.BROKER).toBe('Broker');
   });
 });
