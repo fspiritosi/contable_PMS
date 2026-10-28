@@ -1,42 +1,22 @@
 'use client';
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card';
-import {
-  TrendingUp,
-  ShoppingCart,
-  Receipt,
-  ArrowDownCircle,
-  ArrowUpCircle,
-  AlertTriangle,
-  Landmark,
-} from 'lucide-react';
-import { formatCurrency } from '@/shared/utils/formatters';
 import { useDashboardPreferences } from '../hooks/useDashboardPreferences';
+import { _AlertsList } from './_AlertsList';
+import { _CriticalStockList } from './_CriticalStockList';
 import { _DashboardSettingsDialog } from './_DashboardSettingsDialog';
-import { _PeriodSelector } from './_PeriodSelector';
+import { _KpiCards, type KpiData } from './_KpiCards';
 import { _MonthsRangeSelector } from './_MonthsRangeSelector';
-import { _SalesTrendChart } from './_SalesTrendChart';
-import { _PurchasesTrendChart } from './_PurchasesTrendChart';
-import { _ProfitabilityChart } from './_ProfitabilityChart';
-import { _WeeklySalesChart } from './_WeeklySalesChart';
 import { _PaymentMethodsWidget } from './_PaymentMethodsWidget';
+import { _PeriodSelector } from './_PeriodSelector';
+import { _ProfitabilityChart } from './_ProfitabilityChart';
+import { _PurchasesTrendChart } from './_PurchasesTrendChart';
+import { _SalesTrendChart } from './_SalesTrendChart';
 import { _TopDebtsWidget } from './_TopDebtsWidget';
 import { _TopProductsWidget } from './_TopProductsWidget';
 import { _UpcomingDueDatesWidget } from './_UpcomingDueDatesWidget';
-import { _CriticalStockList } from './_CriticalStockList';
-import { _AlertsList } from './_AlertsList';
+import { _WeeklySalesChart } from './_WeeklySalesChart';
 
 // --- Data types (inline, matching server action returns) ---
-
-interface KpiData {
-  salesThisMonth: { total: number; count: number };
-  purchasesThisMonth: { total: number; count: number };
-  expensesThisMonth: { total: number; count: number };
-  pendingReceivables: { total: number; count: number };
-  pendingPayables: { total: number; count: number };
-  criticalStockCount: number;
-  bankBalance: number;
-}
 
 interface TrendItem {
   month: string;
@@ -157,15 +137,6 @@ export function _DashboardGrid({
   const { isWidgetVisible, preferences } = useDashboardPreferences(companyId);
   const accordionsOpen = preferences.accordionsOpen;
 
-  const anyKpiVisible =
-    isWidgetVisible('kpi-sales') ||
-    isWidgetVisible('kpi-purchases') ||
-    isWidgetVisible('kpi-expenses') ||
-    isWidgetVisible('kpi-receivables') ||
-    isWidgetVisible('kpi-payables') ||
-    isWidgetVisible('kpi-critical-stock') ||
-    isWidgetVisible('kpi-bank-balance');
-
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -184,138 +155,7 @@ export function _DashboardGrid({
       </div>
 
       {/* KPI Cards */}
-      {anyKpiVisible && (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7">
-          {isWidgetVisible('kpi-sales') && (
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  {isCurrentMonth ? 'Ventas del Mes' : 'Ventas'}
-                </CardTitle>
-                <TrendingUp className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{formatCurrency(kpis.salesThisMonth.total)}</div>
-                <p className="text-xs text-muted-foreground">
-                  {kpis.salesThisMonth.count} factura{kpis.salesThisMonth.count !== 1 ? 's' : ''}
-                </p>
-              </CardContent>
-            </Card>
-          )}
-
-          {isWidgetVisible('kpi-purchases') && (
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  {isCurrentMonth ? 'Compras del Mes' : 'Compras'}
-                </CardTitle>
-                <ShoppingCart className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {formatCurrency(kpis.purchasesThisMonth.total)}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {kpis.purchasesThisMonth.count} factura
-                  {kpis.purchasesThisMonth.count !== 1 ? 's' : ''}
-                </p>
-              </CardContent>
-            </Card>
-          )}
-
-          {isWidgetVisible('kpi-expenses') && (
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  {isCurrentMonth ? 'Gastos del Mes' : 'Gastos'}
-                </CardTitle>
-                <Receipt className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {formatCurrency(kpis.expensesThisMonth.total)}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {kpis.expensesThisMonth.count} gasto
-                  {kpis.expensesThisMonth.count !== 1 ? 's' : ''}
-                </p>
-              </CardContent>
-            </Card>
-          )}
-
-          {isWidgetVisible('kpi-receivables') && (
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Pendiente de Cobro</CardTitle>
-                <ArrowDownCircle className="h-4 w-4 text-orange-500" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-orange-600">
-                  {formatCurrency(kpis.pendingReceivables.total)}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {kpis.pendingReceivables.count} documento
-                  {kpis.pendingReceivables.count !== 1 ? 's' : ''}
-                </p>
-              </CardContent>
-            </Card>
-          )}
-
-          {isWidgetVisible('kpi-payables') && (
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Pendiente de Pago</CardTitle>
-                <ArrowUpCircle className="h-4 w-4 text-red-500" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-red-600">
-                  {formatCurrency(kpis.pendingPayables.total)}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {kpis.pendingPayables.count} documento
-                  {kpis.pendingPayables.count !== 1 ? 's' : ''}
-                </p>
-              </CardContent>
-            </Card>
-          )}
-
-          {isWidgetVisible('kpi-critical-stock') && (
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Stock Crítico</CardTitle>
-                <AlertTriangle className="h-4 w-4 text-yellow-500" />
-              </CardHeader>
-              <CardContent>
-                <div
-                  className={`text-2xl font-bold ${kpis.criticalStockCount > 0 ? 'text-yellow-600' : ''}`}
-                >
-                  {kpis.criticalStockCount}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  ítem{kpis.criticalStockCount !== 1 ? 's' : ''} bajo mínimo
-                </p>
-              </CardContent>
-            </Card>
-          )}
-
-          {isWidgetVisible('kpi-bank-balance') && (
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Saldo Bancario</CardTitle>
-                <Landmark className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div
-                  className={`text-2xl font-bold ${kpis.bankBalance < 0 ? 'text-red-600' : 'text-green-600'}`}
-                >
-                  {formatCurrency(kpis.bankBalance)}
-                </div>
-                <p className="text-xs text-muted-foreground">Cuentas activas</p>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-      )}
+      <_KpiCards kpis={kpis} isCurrentMonth={isCurrentMonth} isWidgetVisible={isWidgetVisible} />
 
       {/* Profitability Chart */}
       {isWidgetVisible('chart-profitability') && (
