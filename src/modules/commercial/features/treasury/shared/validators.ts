@@ -130,7 +130,7 @@ export const bankAccountSchema = z
       .max(50, 'El número de cuenta no puede exceder 50 caracteres')
       .optional()
       .default(''),
-    accountType: z.enum(['CHECKING', 'SAVINGS', 'CREDIT', 'CASH', 'VIRTUAL_WALLET'], {
+    accountType: z.enum(['CHECKING', 'SAVINGS', 'CREDIT', 'CASH', 'VIRTUAL_WALLET', 'BROKER'], {
       message: 'Debe seleccionar un tipo de cuenta',
     }),
     cbu: z
@@ -255,6 +255,7 @@ export const BANK_ACCOUNT_TYPE_LABELS = {
   CREDIT: 'Cuenta de Crédito',
   CASH: 'Caja',
   VIRTUAL_WALLET: 'Billetera Virtual',
+  BROKER: 'Broker',
 } as const;
 
 export const BANK_ACCOUNT_STATUS_LABELS = {

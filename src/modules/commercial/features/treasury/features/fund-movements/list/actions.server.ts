@@ -95,7 +95,10 @@ export async function getFundMovementById(id: string) {
 }
 
 /** Tipos de movimiento de fondo que imputan por concepto (TSK-791). */
-export type FundMovementConceptType = Exclude<FundMovementType, 'ACCOUNT_TRANSFER'>;
+export type FundMovementConceptType = Exclude<
+  FundMovementType,
+  'ACCOUNT_TRANSFER' | 'INVESTMENT_PURCHASE' | 'INVESTMENT_SALE'
+>;
 
 /** Un concepto como lo ve Gestión: id, nombre y modo, nunca la cuenta (TSK-791). */
 export type FundMovementConceptOption = ConceptOption;

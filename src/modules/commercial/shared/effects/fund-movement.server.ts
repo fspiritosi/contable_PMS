@@ -675,6 +675,9 @@ async function applySidesAndBuildEntryLinesTx(
     const src = await applyFundSide(tx, srcRef, 'OUT', sideCtx);
     const dest = await applyFundSide(tx, destRef, 'IN', sideCtx);
     entryLines = parLineas(dest.accountId, src.accountId);
+  } else if (movement.type === 'INVESTMENT_PURCHASE' || movement.type === 'INVESTMENT_SALE') {
+    // La Tarea 4 de TSK-793 reemplaza esta rama por el asiento real de compra/venta.
+    throw new BusinessError('Tipo de movimiento no soportado todavía');
   } else {
     // Descarte exhaustivo: si se agrega un quinto FundMovementType y no se
     // contempla acá, esto deja de tipar y rompe el build en vez de llegar

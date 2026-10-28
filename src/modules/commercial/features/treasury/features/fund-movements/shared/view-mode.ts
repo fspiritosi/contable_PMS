@@ -209,7 +209,13 @@ export function clearInactiveConcepts(
   const isActive = (list: readonly { id: string }[], id: string | undefined) =>
     Boolean(id) && list.some((c) => c.id === id);
   const type = values.type;
-  const partnerList = type === 'ACCOUNT_TRANSFER' || type === 'BANK_CHARGES' ? [] : concepts[type];
+  const partnerList =
+    type === 'ACCOUNT_TRANSFER' ||
+    type === 'BANK_CHARGES' ||
+    type === 'INVESTMENT_PURCHASE' ||
+    type === 'INVESTMENT_SALE'
+      ? []
+      : concepts[type];
   return {
     ...values,
     conceptId: isActive(partnerList, values.conceptId) ? values.conceptId : '',

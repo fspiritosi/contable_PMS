@@ -28,6 +28,8 @@ export const FUND_MOVEMENT_TYPES = [
   'PARTNER_WITHDRAWAL',
   'ACCOUNT_TRANSFER',
   'BANK_CHARGES',
+  'INVESTMENT_PURCHASE',
+  'INVESTMENT_SALE',
 ] as const;
 
 export type FundMovementTypeValue = (typeof FUND_MOVEMENT_TYPES)[number];
@@ -37,6 +39,8 @@ export const FUND_MOVEMENT_TYPE_LABELS: Record<FundMovementTypeValue, string> = 
   PARTNER_WITHDRAWAL: 'Retiro de socio',
   ACCOUNT_TRANSFER: 'Transferencia entre cuentas',
   BANK_CHARGES: 'Gastos e impuestos bancarios',
+  INVESTMENT_PURCHASE: 'Compra de inversión',
+  INVESTMENT_SALE: 'Venta de inversión',
 };
 
 /**

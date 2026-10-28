@@ -35,6 +35,8 @@ const TYPE_BADGE_VARIANT: Record<FundMovementTypeValue, 'default' | 'secondary' 
   PARTNER_WITHDRAWAL: 'secondary',
   ACCOUNT_TRANSFER: 'outline',
   BANK_CHARGES: 'secondary',
+  INVESTMENT_PURCHASE: 'default',
+  INVESTMENT_SALE: 'secondary',
 };
 
 interface ColumnsProps {

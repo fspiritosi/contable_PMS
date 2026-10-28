@@ -194,6 +194,9 @@ model Company {
   paymentOrderInstallments PaymentOrderInstallment[]
   partnerAccountMovements  PartnerAccountMovement[]
   fundMovements            FundMovement[]
+  investmentHoldings       InvestmentHolding[] // TSK-793
+  investmentMovements      InvestmentMovement[] // TSK-793
+  investmentValuations     InvestmentValuation[] // TSK-793
   movementConcepts         MovementConcept[]
 
   // Retenciones y padrones
@@ -250,6 +253,7 @@ enum JournalEntryProcess {
   VAT_SETTLEMENT // Liquidación de IVA
   INFLATION_ADJUSTMENT // Ajuste por inflación (RECPAM)
   EXCHANGE_DIFFERENCE // Diferencia de cambio
+  INVESTMENT_VALUATION // Valuación de inversiones al cierre del ejercicio (TSK-793)
 
   @@map("journal_entry_process")
 }
@@ -354,6 +358,10 @@ model Account {
   settingsAsDefaultCashAccount       AccountingSettings[]   @relation("DefaultCashAccount")
   settingsAsDefaultBankAccount       AccountingSettings[]   @relation("DefaultBankAccount")
   settingsAsBankCharges              AccountingSettings[]   @relation("BankChargesAccount") // TSK-718
+  settingsAsHoldingGain              AccountingSettings[]   @relation("HoldingGainAccount") // TSK-793
+  settingsAsHoldingLoss              AccountingSettings[]   @relation("HoldingLossAccount") // TSK-793
+  settingsAsInvestmentFees           AccountingSettings[]   @relation("InvestmentFeesAccount") // TSK-793
+  investmentHoldings                 InvestmentHolding[] // TSK-793
   settingsAsExpensesAccount          AccountingSettings[]   @relation("ExpensesAccount")
   settingsAsResultAccount            AccountingSettings[]   @relation("ResultAccount")
   settingsAsPartnerContributions     AccountingSettings[]   @relation("PartnerContributionsAccount")
@@ -564,6 +572,11 @@ model AccountingSettings {
   // movimiento "Gastos e impuestos bancarios". Solo UI: el asiento usa FundMovementLine.accountId.
   bankChargesAccountId String? @map("bank_charges_account_id") @db.Uuid
 
+  // TSK-793: cuentas de resultado de inversiones (sugeridas 4.1.1/03/02 y 4.2.1/05/11; se configuran, no se buscan por código)
+  holdingGainAccountId    String? @map("holding_gain_account_id") @db.Uuid // Resultado por tenencia (positivo)
+  holdingLossAccountId    String? @map("holding_loss_account_id") @db.Uuid // Resultado por tenencia (negativo)
+  investmentFeesAccountId String? @map("investment_fees_account_id") @db.Uuid // Comisiones de inversiones
+
   // Cuenta de gastos operativos (para módulo de gastos)
   expensesAccountId String? @map("expenses_account_id") @db.Uuid // Gastos operativos
 
@@ -595,6 +608,9 @@ model AccountingSettings {
   defaultCashAccount          Account? @relation("DefaultCashAccount", fields: [defaultCashAccountId], references: [id])
   defaultBankAccount          Account? @relation("DefaultBankAccount", fields: [defaultBankAccountId], references: [id])
   bankChargesAccount          Account? @relation("BankChargesAccount", fields: [bankChargesAccountId], references: [id])
+  holdingGainAccount          Account? @relation("HoldingGainAccount", fields: [holdingGainAccountId], references: [id])
+  holdingLossAccount          Account? @relation("HoldingLossAccount", fields: [holdingLossAccountId], references: [id])
+  investmentFeesAccount       Account? @relation("InvestmentFeesAccount", fields: [investmentFeesAccountId], references: [id])
   expensesAccount             Account? @relation("ExpensesAccount", fields: [expensesAccountId], references: [id])
   resultAccount               Account? @relation("ResultAccount", fields: [resultAccountId], references: [id])
   partnerContributionsAccount Account? @relation("PartnerContributionsAccount", fields: [partnerContributionsAccountId], references: [id])
@@ -742,11 +758,12 @@ model FiscalYear {
   closingEntryId String? @unique @map("closing_entry_id") @db.Uuid
   openingEntryId String? @unique @map("opening_entry_id") @db.Uuid
 
-  company      Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  closingEntry JournalEntry?      @relation("FiscalYearClosingEntry", fields: [closingEntryId], references: [id])
-  openingEntry JournalEntry?      @relation("FiscalYearOpeningEntry", fields: [openingEntryId], references: [id])
-  periods      AccountingPeriod[]
-  entries      JournalEntry[]
+  company              Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  closingEntry         JournalEntry?         @relation("FiscalYearClosingEntry", fields: [closingEntryId], references: [id])
+  openingEntry         JournalEntry?         @relation("FiscalYearOpeningEntry", fields: [openingEntryId], references: [id])
+  periods              AccountingPeriod[]
+  entries              JournalEntry[]
+  investmentValuations InvestmentValuation[] // TSK-793
 
   // Cuentas deshabilitadas a partir de este ejercicio (ticket #376)
   disabledAccounts Account[] @relation("AccountDisabledFrom")
@@ -2660,6 +2677,7 @@ enum BankAccountType {
   CREDIT // Cuenta de crédito
   CASH // Caja
   VIRTUAL_WALLET // Billetera virtual
+  BROKER // Broker / agente de bolsa: cuenta de Tesorería donde se custodian inversiones (TSK-793)
 
   @@map("bank_account_type")
 }
@@ -3266,6 +3284,7 @@ model BankAccount {
   receiptPayments      ReceiptPayment[]
   paymentOrderPayments PaymentOrderPayment[]
   checks               Check[]
+  investmentHoldings   InvestmentHolding[] // TSK-793: tenencias en custodia
 
   createdBy String?  @map("created_by")
   createdAt DateTime @default(now()) @map("created_at")
@@ -4406,6 +4425,8 @@ enum FundMovementType {
   PARTNER_WITHDRAWAL // Retiro de socio (capital contra banco/caja)
   ACCOUNT_TRANSFER // Transferencia entre cuentas (activo contra activo)
   BANK_CHARGES // Gastos e impuestos bancarios: débito del banco desglosado en conceptos (TSK-585)
+  INVESTMENT_PURCHASE // Compra de inversión: banco/broker contra la tenencia (TSK-793)
+  INVESTMENT_SALE // Venta de inversión: tenencia contra banco/broker, con resultado (TSK-793)
 
   @@map("fund_movement_type")
 }
@@ -4447,6 +4468,13 @@ model FundMovement {
   conceptId   String? @map("concept_id") @db.Uuid
   conceptName String? @map("concept_name")
 
+  // TSK-793: compra/venta de inversión. La tenencia va aquí; el lado banco/broker usa fundOut*/fundIn*.
+  holdingId  String?  @map("holding_id") @db.Uuid
+  nominals   Decimal? @db.Decimal(18, 6) // nominales comprados/vendidos (opcional)
+  unitPrice  Decimal? @map("unit_price") @db.Decimal(18, 6) // precio unitario informado (opcional)
+  commission Decimal? @db.Decimal(15, 2) // comisión: gasto aparte del importe bruto
+  isFullSale Boolean  @default(false) @map("is_full_sale") // venta que cierra la tenencia
+
   journalEntryId     String?   @map("journal_entry_id") @db.Uuid // asiento generado (al confirmar)
   journalEntryNumber Int?      @map("journal_entry_number")
   confirmedAt        DateTime? @map("confirmed_at")
@@ -4455,16 +4483,139 @@ model FundMovement {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  company       Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  concept       MovementConcept?   @relation(fields: [conceptId], references: [id], onDelete: SetNull)
-  lines         FundMovementLine[]
+  company             Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  concept             MovementConcept?     @relation(fields: [conceptId], references: [id], onDelete: SetNull)
+  holding             InvestmentHolding?   @relation(fields: [holdingId], references: [id], onDelete: Restrict)
+  lines               FundMovementLine[]
+  // TSK-793: movimientos de la tenencia que crea al confirmarse
+  investmentMovements InvestmentMovement[]
   // TSK-792: movimientos de banco y caja que creó al confirmarse
-  bankMovements BankMovement[]
-  cashMovements CashMovement[]
+  bankMovements       BankMovement[]
+  cashMovements       CashMovement[]
 
   @@index([companyId])
   @@index([conceptId])
+  @@index([holdingId])
   @@map("fund_movements")
+}
+
+/// Tipo de instrumento de una tenencia (TSK-793).
+enum InvestmentInstrumentType {
+  STOCK // Acciones
+  CEDEAR // CEDEARs
+  BOND // Bonos
+  OPTION // Opciones
+  LETTER // Letras
+  FUTURE // Futuros
+  TENDER // Licitaciones
+  CORPORATE_BOND // Obligaciones negociables
+  MUTUAL_FUND // Fondos comunes de inversión (FCI)
+  TRUST // Fideicomisos
+  REPO // Cauciones
+  FIXED_TERM // Plazo fijo
+
+  @@map("investment_instrument_type")
+}
+
+/// Estado de una tenencia (TSK-793).
+enum InvestmentHoldingStatus {
+  OPEN // Con posición
+  CLOSED // Cerrada por una venta total
+
+  @@map("investment_holding_status")
+}
+
+/// Clase de movimiento de una tenencia (TSK-793).
+enum InvestmentMovementKind {
+  PURCHASE // Compra: bookDelta positivo
+  SALE // Venta: bookDelta negativo (costo)
+  VALUATION // Valuación al cierre: ajusta el valor en libros al valor de cierre
+
+  @@map("investment_movement_kind")
+}
+
+/// Tenencia de un instrumento atada a un banco o broker (TSK-793). Guarda solo los
+/// datos fijos: la posición (valor en libros y nominales) es la suma de sus
+/// InvestmentMovement con fecha <= D, o sea función de la fecha.
+model InvestmentHolding {
+  id             String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId      String                   @map("company_id") @db.Uuid
+  bankAccountId  String                   @map("bank_account_id") @db.Uuid // custodia: banco o broker
+  instrumentType InvestmentInstrumentType @map("instrument_type")
+  name           String
+  maturityDate   DateTime?                @map("maturity_date") @db.Date
+  accountId      String                   @map("account_id") @db.Uuid // cuenta contable de la tenencia
+  currency       String                   @default("ARS")
+  status         InvestmentHoldingStatus  @default(OPEN)
+
+  createdBy String   @map("created_by")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  company       Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  bankAccount   BankAccount          @relation(fields: [bankAccountId], references: [id])
+  account       Account              @relation(fields: [accountId], references: [id])
+  movements     InvestmentMovement[]
+  fundMovements FundMovement[]
+
+  @@index([companyId])
+  @@index([bankAccountId])
+  @@map("investment_holdings")
+}
+
+/// Movimiento de una tenencia (TSK-793): compra, venta o valuación. Los deltas llevan signo.
+model InvestmentMovement {
+  id        String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId String                 @map("company_id") @db.Uuid
+  holdingId String                 @map("holding_id") @db.Uuid
+  kind      InvestmentMovementKind
+  date      DateTime               @db.Date
+
+  bookDelta     Decimal  @map("book_delta") @db.Decimal(15, 2) // variación del valor en libros (con signo)
+  nominalsDelta Decimal? @map("nominals_delta") @db.Decimal(18, 6) // variación de nominales (con signo)
+
+  // Solo SALE
+  proceeds      Decimal? @db.Decimal(15, 2) // importe bruto cobrado
+  result        Decimal? @db.Decimal(15, 2) // resultado = bruto - costo
+  closesHolding Boolean  @default(false) @map("closes_holding")
+
+  // Solo VALUATION
+  valuedAmount Decimal? @map("valued_amount") @db.Decimal(15, 2)
+  unitPrice    Decimal? @map("unit_price") @db.Decimal(18, 6)
+
+  fundMovementId String? @map("fund_movement_id") @db.Uuid // compra/venta que lo originó
+  valuationId    String? @map("valuation_id") @db.Uuid // valuación que lo originó
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  company      Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  holding      InvestmentHolding    @relation(fields: [holdingId], references: [id], onDelete: Cascade)
+  fundMovement FundMovement?        @relation(fields: [fundMovementId], references: [id], onDelete: Cascade)
+  valuation    InvestmentValuation? @relation(fields: [valuationId], references: [id], onDelete: Cascade)
+
+  @@index([holdingId, date])
+  @@map("investment_movements")
+}
+
+/// Valuación de inversiones al cierre de un ejercicio (TSK-793): una por ejercicio.
+/// Genera movimientos VALUATION y un asiento en borrador (process INVESTMENT_VALUATION).
+model InvestmentValuation {
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId          String   @map("company_id") @db.Uuid
+  fiscalYearId       String   @map("fiscal_year_id") @db.Uuid
+  closingDate        DateTime @map("closing_date") @db.Date
+  journalEntryId     String?  @map("journal_entry_id") @db.Uuid
+  journalEntryNumber Int?     @map("journal_entry_number")
+
+  createdBy String   @map("created_by")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  company    Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  fiscalYear FiscalYear           @relation(fields: [fiscalYearId], references: [id])
+  movements  InvestmentMovement[]
+
+  @@unique([companyId, fiscalYearId])
+  @@map("investment_valuations")
 }
 
 /// Usos a los que puede aplicar un concepto (TSK-791). Abarca las dos familias:
