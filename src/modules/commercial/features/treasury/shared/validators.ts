@@ -116,7 +116,7 @@ export const CASH_MOVEMENT_TYPE_COLORS = {
 // ====================================
 
 // Schema para crear/editar cuenta bancaria
-const NON_BANK_TYPES = ['CASH', 'VIRTUAL_WALLET'] as const;
+const NON_BANK_TYPES = ['CASH', 'VIRTUAL_WALLET', 'BROKER'] as const;
 
 export const bankAccountSchema = z
   .object({
@@ -130,7 +130,7 @@ export const bankAccountSchema = z
       .max(50, 'El número de cuenta no puede exceder 50 caracteres')
       .optional()
       .default(''),
-    accountType: z.enum(['CHECKING', 'SAVINGS', 'CREDIT', 'CASH', 'VIRTUAL_WALLET'], {
+    accountType: z.enum(['CHECKING', 'SAVINGS', 'CREDIT', 'CASH', 'VIRTUAL_WALLET', 'BROKER'], {
       message: 'Debe seleccionar un tipo de cuenta',
     }),
     cbu: z
@@ -153,6 +153,10 @@ export const bankAccountSchema = z
       .default('0.00'),
     accountId: z.string().uuid('Cuenta contable inválida').optional().nullable(),
   })
+  .refine(
+    (data) => data.accountType !== 'BROKER' || !!data.bankName?.trim(),
+    { message: 'Ingresá el nombre del broker', path: ['bankName'] }
+  )
   .refine(
     (data) => {
       if (NON_BANK_TYPES.includes(data.accountType as (typeof NON_BANK_TYPES)[number])) return true;
@@ -255,6 +259,7 @@ export const BANK_ACCOUNT_TYPE_LABELS = {
   CREDIT: 'Cuenta de Crédito',
   CASH: 'Caja',
   VIRTUAL_WALLET: 'Billetera Virtual',
+  BROKER: 'Broker',
 } as const;
 
 export const BANK_ACCOUNT_STATUS_LABELS = {

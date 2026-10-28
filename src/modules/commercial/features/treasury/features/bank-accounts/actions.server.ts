@@ -25,7 +25,7 @@ export async function createBankAccount(data: BankAccountFormData) {
     const validated = bankAccountSchema.parse(data);
 
     // Para tipos no bancarios, generar número de cuenta si no se proporcionó
-    const NON_BANK_TYPES = ['CASH', 'VIRTUAL_WALLET'];
+    const NON_BANK_TYPES = ['CASH', 'VIRTUAL_WALLET', 'BROKER'];
     const accountNumber = !validated.accountNumber && NON_BANK_TYPES.includes(validated.accountType)
       ? `${validated.accountType}-${Date.now()}`
       : validated.accountNumber || '';
@@ -109,7 +109,7 @@ export async function updateBankAccount(id: string, data: BankAccountFormData) {
     }
 
     // Para tipos no bancarios, generar número de cuenta si no se proporcionó
-    const NON_BANK_TYPES = ['CASH', 'VIRTUAL_WALLET'];
+    const NON_BANK_TYPES = ['CASH', 'VIRTUAL_WALLET', 'BROKER'];
     const accountNumber = !validated.accountNumber && NON_BANK_TYPES.includes(validated.accountType)
       ? existing.accountNumber
       : validated.accountNumber || existing.accountNumber;

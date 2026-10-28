@@ -17,13 +17,21 @@ import type { FundMovementFormInput } from '../../shared/validators';
 interface FundMovementAmountDateFieldsProps {
   /** false en BANK_CHARGES: solo Fecha (el importe sale de la suma de los conceptos). */
   showAmount: boolean;
+  /** Compra con nominales y precio: el importe se calcula y no se edita (TSK-793). */
+  amountReadOnly?: boolean;
+  /** Venta de inversión: el importe es lo cobrado bruto. */
+  amountLabel?: string;
 }
 
 /**
  * Monto + Fecha del movimiento. No recibe `disabled`: `Input` y `MoneyInput`
  * son `<input>` nativos y en vista los deshabilita el `<fieldset>` del modal.
  */
-export function _FundMovementAmountDateFields({ showAmount }: FundMovementAmountDateFieldsProps) {
+export function _FundMovementAmountDateFields({
+  showAmount,
+  amountReadOnly,
+  amountLabel = 'Monto *',
+}: FundMovementAmountDateFieldsProps) {
   const { control } = useFormContext<FundMovementFormInput>();
 
   const dateField = (
@@ -51,7 +59,7 @@ export function _FundMovementAmountDateFields({ showAmount }: FundMovementAmount
         name="amount"
         render={({ field }) => (
           <FormItem>
-            <FormLabel>Monto *</FormLabel>
+            <FormLabel>{amountLabel}</FormLabel>
             <FormControl>
               <MoneyInput
                 placeholder="0,00"
@@ -60,6 +68,8 @@ export function _FundMovementAmountDateFields({ showAmount }: FundMovementAmount
                 onBlur={field.onBlur}
                 name={field.name}
                 ref={field.ref}
+                readOnly={amountReadOnly}
+                className={amountReadOnly ? 'bg-muted' : undefined}
               />
             </FormControl>
             <FormMessage />

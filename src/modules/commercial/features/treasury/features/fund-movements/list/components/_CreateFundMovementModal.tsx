@@ -1,7 +1,5 @@
 'use client';
 
-import { AlertTriangle } from 'lucide-react';
-
 import { _NoConceptsNotice } from '@/shared/components/common/_NoConceptsNotice';
 import {
   Dialog,
@@ -18,6 +16,7 @@ import { conceptNamesById, getModalCopy, type FundMovementModalMode } from '../.
 import type {
   FundMovementAccountRef,
   FundMovementConceptCatalog,
+  FundMovementHoldingOption,
   FundMovementListItem,
   FundMovementPartnerOption,
   FundOption,
@@ -26,11 +25,13 @@ import { useFundMovementForm } from '../hooks/useFundMovementForm';
 import { _FundMovementAmountDateFields } from './_FundMovementAmountDateFields';
 import { _FundMovementDescriptionField } from './_FundMovementDescriptionField';
 import { _FundMovementFormFooter } from './_FundMovementFormFooter';
+import { _FundMovementInvestmentSection } from './_FundMovementInvestmentSection';
 import { _FundMovementLinesField } from './_FundMovementLinesField';
 import { _FundMovementPartnerSection } from './_FundMovementPartnerSection';
 import { _FundMovementTypeField } from './_FundMovementTypeField';
+import { _NoFundAccountsNotice } from './_NoFundAccountsNotice';
 import { _FundMovementViewSummary } from './_FundMovementViewSummary';
-import { _FundSelectField } from './_FundSelectField';
+import { _FundMovementFundFields } from './_FundMovementFundFields';
 
 /**
  * Vista (TSK-720a, D2): los controles van `disabled` pero el texto se lee al
@@ -50,6 +51,8 @@ interface Props {
   defaultContributionsAccount: FundMovementAccountRef | null;
   /** Conceptos activos por tipo (TSK-791); Gestión no ve la cuenta de ninguno. */
   concepts: FundMovementConceptCatalog;
+  /** Tenencias abiertas para compra/venta de inversión (TSK-793). */
+  holdings: FundMovementHoldingOption[];
   /** Fuente de verdad del modo (antes se derivaba de `Boolean(movement)`). */
   mode: FundMovementModalMode;
   /** Requerido en 'edit' y 'view'. */
@@ -65,6 +68,7 @@ export function _CreateFundMovementModal({
   partners,
   defaultContributionsAccount,
   concepts,
+  holdings,
   mode,
   movement,
   onSuccess,
@@ -76,16 +80,18 @@ export function _CreateFundMovementModal({
   const {
     form,
     movementDetail,
+    type,
     isContribution,
-    isWithdrawal,
-    isTransfer,
     isBankCharges,
+    isInvestmentPurchase,
+    isInvestmentSale,
     isPartnerMovement,
     isSubmitting,
     submit,
     correctionDialog,
   } = useFundMovementForm({ open, mode, movement, concepts, onOpenChange, onSuccess });
 
+  const isInvestment = isInvestmentPurchase || isInvestmentSale;
   const noFundAccounts = banks.length === 0 && cashRegisters.length === 0;
   // TSK-791: gastos bancarios sin conceptos no se puede guardar ni confirmar.
   const noBankChargesConcepts = !isView && isBankCharges && concepts.BANK_CHARGES.length === 0;
@@ -120,47 +126,32 @@ export function _CreateFundMovementModal({
             >
               <_FundMovementTypeField disabled={isView} />
 
-              {!isView && noFundAccounts && (
-                <div className="flex items-start gap-2 rounded-md border border-orange-500/50 bg-orange-500/10 p-3 text-sm text-orange-600">
-                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                  <span>
-                    No hay cuentas bancarias ni cajas con sesión abierta disponibles. Creá una
-                    cuenta bancaria o abrí una caja antes de registrar movimientos de fondos.
-                  </span>
-                </div>
-              )}
+              {!isView && noFundAccounts && <_NoFundAccountsNotice />}
 
-              <_FundMovementAmountDateFields showAmount={!isBankCharges} />
-
-              {(isContribution || isTransfer) && (
-                <_FundSelectField
-                  name="destinationFund"
-                  label={
-                    isContribution
-                      ? 'Banco/caja donde ingresan los fondos *'
-                      : 'Banco/caja destino *'
-                  }
+              {isInvestment ? (
+                <_FundMovementInvestmentSection
+                  isSale={isInvestmentSale}
+                  holdings={holdings}
+                  movement={movement}
                   banks={banks}
                   cashRegisters={cashRegisters}
-                  disabled={isView}
-                  snapshotLabel={snapshot(movement?.fundInLabel)}
+                  isView={isView}
+                  fundSnapshot={snapshot(
+                    isInvestmentSale ? movement?.fundInLabel : movement?.fundOutLabel
+                  )}
                 />
+              ) : (
+                <_FundMovementAmountDateFields showAmount={!isBankCharges} />
               )}
 
-              {(isWithdrawal || isTransfer || isBankCharges) && (
-                <_FundSelectField
-                  name="sourceFund"
-                  label={
-                    isWithdrawal || isBankCharges
-                      ? 'Banco/caja de donde salen los fondos *'
-                      : 'Banco/caja origen *'
-                  }
-                  banks={banks}
-                  cashRegisters={cashRegisters}
-                  disabled={isView}
-                  snapshotLabel={snapshot(movement?.fundOutLabel)}
-                />
-              )}
+              <_FundMovementFundFields
+                type={type}
+                banks={banks}
+                cashRegisters={cashRegisters}
+                isView={isView}
+                destinationSnapshot={snapshot(movement?.fundInLabel)}
+                sourceSnapshot={snapshot(movement?.fundOutLabel)}
+              />
 
               {isBankCharges && (
                 <_FundMovementLinesField

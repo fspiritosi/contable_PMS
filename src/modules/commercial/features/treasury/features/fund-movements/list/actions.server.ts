@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 
+import type { Prisma } from '@/generated/prisma/client';
 import type { FundMovementType } from '@/generated/prisma/enums';
 import {
   resolveFundMovementDataTx,
@@ -20,6 +21,8 @@ import { getCurrentUserId } from '@/shared/lib/current-user';
 import { logger } from '@/shared/lib/logger';
 import { checkPermission } from '@/shared/lib/permissions';
 import { prisma } from '@/shared/lib/prisma';
+import { positionAt } from '../../investments/shared/position';
+import { INSTRUMENT_TYPE_TRAITS } from '../../investments/shared/types';
 import { fundMovementSchema, type FundMovementFormInput } from '../shared/validators';
 
 /**
@@ -33,6 +36,45 @@ export type FundMovementActionResult = ActionResult<{ id?: string }>;
 // ============================================================================
 // QUERIES
 // ============================================================================
+
+/** Lo que se lee de la tenencia de un movimiento para mostrarla en el formulario. */
+const HOLDING_SELECT = {
+  name: true,
+  instrumentType: true,
+  bankAccount: { select: { bankName: true, accountNumber: true } },
+} as const;
+
+/** Etiqueta de una tenencia en el selector del formulario: nombre · custodia. */
+function holdingOptionLabel(h: {
+  name: string;
+  bankAccount: { bankName: string; accountNumber: string };
+}): string {
+  return `${h.name} · ${h.bankAccount.bankName} - ${h.bankAccount.accountNumber}`;
+}
+
+/**
+ * Campos de inversión (TSK-793) listos para el cliente: los `Decimal` de Prisma
+ * no se serializan a Client Components, así que se pasan a number. La etiqueta y
+ * si lleva unidades sirven para mostrar la tenencia aunque ya no esté abierta (por
+ * ejemplo, al corregir la venta total que la cerró).
+ */
+function investmentFieldsForClient(
+  m: {
+    nominals: { toString(): string } | null;
+    unitPrice: { toString(): string } | null;
+    commission: { toString(): string } | null;
+  },
+  holding: Prisma.InvestmentHoldingGetPayload<{ select: typeof HOLDING_SELECT }> | null
+) {
+  return {
+    nominals: m.nominals === null ? null : Number(m.nominals),
+    unitPrice: m.unitPrice === null ? null : Number(m.unitPrice),
+    commission: m.commission === null ? null : Number(m.commission),
+    holdingName: holding?.name ?? null,
+    holdingLabel: holding ? holdingOptionLabel(holding) : null,
+    holdingHasUnits: holding ? INSTRUMENT_TYPE_TRAITS[holding.instrumentType].hasUnits : null,
+  };
+}
 
 /** Listado paginado de movimientos de fondos. */
 export async function getFundMovements(searchParams: DataTableSearchParams) {
@@ -51,12 +93,17 @@ export async function getFundMovements(searchParams: DataTableSearchParams) {
         skip,
         take,
         orderBy: orderBy || [{ date: 'desc' }, { createdAt: 'desc' }],
+        include: { holding: { select: HOLDING_SELECT } },
       }),
       prisma.fundMovement.count({ where }),
     ]);
 
     return {
-      data: movements.map((m) => ({ ...m, amount: Number(m.amount) })),
+      data: movements.map(({ holding, ...m }) => ({
+        ...m,
+        amount: Number(m.amount),
+        ...investmentFieldsForClient(m, holding),
+      })),
       total,
     };
   } catch (error) {
@@ -73,12 +120,14 @@ export async function getFundMovementById(id: string) {
 
   const movement = await prisma.fundMovement.findFirst({
     where: { id, companyId },
-    include: { lines: { orderBy: { position: 'asc' } } },
+    include: { lines: { orderBy: { position: 'asc' } }, holding: { select: HOLDING_SELECT } },
   });
   if (!movement) return null;
+  const { holding, ...rest } = movement;
   return {
-    ...movement,
+    ...rest,
     amount: Number(movement.amount),
+    ...investmentFieldsForClient(movement, holding),
     // TSK-791: la cuenta contable de la línea no viaja al cliente (Gestión no ve cuentas).
     lines: movement.lines.map((line) => ({
       id: line.id,
@@ -95,7 +144,10 @@ export async function getFundMovementById(id: string) {
 }
 
 /** Tipos de movimiento de fondo que imputan por concepto (TSK-791). */
-export type FundMovementConceptType = Exclude<FundMovementType, 'ACCOUNT_TRANSFER'>;
+export type FundMovementConceptType = Exclude<
+  FundMovementType,
+  'ACCOUNT_TRANSFER' | 'INVESTMENT_PURCHASE' | 'INVESTMENT_SALE'
+>;
 
 /** Un concepto como lo ve Gestión: id, nombre y modo, nunca la cuenta (TSK-791). */
 export type FundMovementConceptOption = ConceptOption;
@@ -117,7 +169,7 @@ export async function getFundMovementCatalogs() {
   const companyId = await getActiveCompanyId();
   if (!companyId) throw new Error('No hay empresa activa');
 
-  const [banks, cashRegisters, partners, settings, conceptsByUsage] = await Promise.all([
+  const [banks, cashRegisters, partners, settings, conceptsByUsage, holdingRows] = await Promise.all([
     prisma.bankAccount.findMany({
       where: { companyId, status: 'ACTIVE' },
       select: { id: true, bankName: true, accountNumber: true },
@@ -149,7 +201,41 @@ export async function getFundMovementCatalogs() {
       'FUND_PARTNER_CONTRIBUTION',
       'FUND_PARTNER_WITHDRAWAL',
     ]),
+    // TSK-793: tenencias abiertas para compra/venta. Se leen acá (no con la action de
+    // Inversiones) para que Movimientos de Fondos no exija el permiso de ese módulo.
+    prisma.investmentHolding.findMany({
+      where: { companyId, status: 'OPEN' },
+      select: {
+        id: true,
+        name: true,
+        instrumentType: true,
+        bankAccount: { select: { bankName: true, accountNumber: true } },
+        movements: {
+          select: { kind: true, date: true, bookDelta: true, nominalsDelta: true, createdAt: true },
+        },
+      },
+      orderBy: { name: 'asc' },
+    }),
   ]);
+
+  const holdings: FundMovementHoldingOption[] = holdingRows.map((h) => {
+    const position = positionAt(
+      h.movements.map((m) => ({
+        kind: m.kind,
+        date: m.date,
+        bookDelta: Number(m.bookDelta),
+        nominalsDelta: m.nominalsDelta === null ? null : Number(m.nominalsDelta),
+        createdAt: m.createdAt,
+      }))
+    );
+    return {
+      id: h.id,
+      label: holdingOptionLabel(h),
+      hasUnits: INSTRUMENT_TYPE_TRAITS[h.instrumentType].hasUnits,
+      bookValue: position.bookValue,
+      nominals: position.nominals,
+    };
+  });
 
   const concepts: FundMovementConceptCatalog = {
     BANK_CHARGES: conceptsByUsage.FUND_BANK_CHARGES,
@@ -169,6 +255,7 @@ export async function getFundMovementCatalogs() {
     // código y nombre para decir "se usará la cuenta por defecto X".
     defaultContributionsAccount: settings?.partnerContributionsAccount ?? null,
     concepts,
+    holdings,
   };
 }
 
@@ -326,6 +413,16 @@ export async function deleteFundMovement(id: string): Promise<FundMovementAction
 export type FundMovementListItem = Awaited<ReturnType<typeof getFundMovements>>['data'][number];
 export type FundMovementRecord = NonNullable<Awaited<ReturnType<typeof getFundMovementById>>>;
 export type FundOption = { id: string; label: string };
+/** Tenencia abierta elegible en compra/venta de inversión, con su posición actual (TSK-793). */
+export type FundMovementHoldingOption = {
+  id: string;
+  label: string;
+  hasUnits: boolean;
+  bookValue: number;
+  nominals: number | null;
+  /** La tenencia del movimiento que se ve o edita, ya no abierta: su posición no se muestra. */
+  isClosed?: boolean;
+};
 /** Referencia mínima a una cuenta del plan, para mostrar `code - name` (TSK-717). */
 export type FundMovementAccountRef = { id: string; code: string; name: string };
 export type FundMovementPartnerOption = Awaited<

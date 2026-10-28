@@ -28,6 +28,8 @@ export const FUND_MOVEMENT_TYPES = [
   'PARTNER_WITHDRAWAL',
   'ACCOUNT_TRANSFER',
   'BANK_CHARGES',
+  'INVESTMENT_PURCHASE',
+  'INVESTMENT_SALE',
 ] as const;
 
 export type FundMovementTypeValue = (typeof FUND_MOVEMENT_TYPES)[number];
@@ -37,6 +39,8 @@ export const FUND_MOVEMENT_TYPE_LABELS: Record<FundMovementTypeValue, string> = 
   PARTNER_WITHDRAWAL: 'Retiro de socio',
   ACCOUNT_TRANSFER: 'Transferencia entre cuentas',
   BANK_CHARGES: 'Gastos e impuestos bancarios',
+  INVESTMENT_PURCHASE: 'Compra de inversión',
+  INVESTMENT_SALE: 'Venta de inversión',
 };
 
 /**
@@ -55,6 +59,8 @@ export function parseFundRef(ref: string): { kind: FundSourceKind; id: string } 
 }
 
 const amountRegex = /^\d+(\.\d{1,2})?$/;
+// Nominales y precio unitario admiten hasta 6 decimales (TSK-793).
+const quantityRegex = /^\d+(\.\d{1,6})?$/;
 
 export const fundMovementSchema = z
   .object({
@@ -91,6 +97,13 @@ export const fundMovementSchema = z
     // asimetría sin declarar un tercer genérico en `useForm` (mismo problema,
     // preexistente, documentado en `purchases/features/invoices/shared/validators.ts`
     // con `costCenterAllocations`).
+    // Inversiones (TSK-793): tenencia de la compra/venta, nominales, precio
+    // unitario, comisión y marca de venta total. Solo los usan INVESTMENT_*.
+    holdingId: z.string().uuid().optional().or(z.literal('')),
+    nominals: z.string().optional(),
+    unitPrice: z.string().optional(),
+    commission: z.string().optional(),
+    isFullSale: z.boolean().optional(),
     lines: z
       .array(
         z.object({
@@ -139,7 +152,87 @@ export const fundMovementSchema = z
       }
     }
 
-    if (data.type === 'PARTNER_CONTRIBUTION') {
+    if (data.type === 'INVESTMENT_PURCHASE' || data.type === 'INVESTMENT_SALE') {
+      if (!data.holdingId) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['holdingId'],
+          message: 'Seleccioná la tenencia',
+        });
+      }
+      for (const field of ['nominals', 'unitPrice'] as const) {
+        const v = data[field];
+        if (v && !quantityRegex.test(v)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [field],
+            message: 'Valor inválido (hasta 6 decimales)',
+          });
+        } else if (v && !(Number(v) > 0)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [field],
+            message:
+              field === 'nominals' ? 'Los nominales deben ser mayores a 0' : 'El precio debe ser mayor a 0',
+          });
+        }
+      }
+      const commissionOk = !data.commission || amountRegex.test(data.commission);
+      if (data.commission && !commissionOk) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['commission'],
+          message: 'La comisión debe ser un monto válido mayor o igual a 0',
+        });
+      }
+      if (data.type === 'INVESTMENT_PURCHASE') {
+        if (!validRef(data.sourceFund)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['sourceFund'],
+            message: 'Seleccioná el banco, broker o caja de donde sale la plata',
+          });
+        }
+        if (
+          data.nominals &&
+          data.unitPrice &&
+          quantityRegex.test(data.nominals) &&
+          quantityRegex.test(data.unitPrice) &&
+          data.amount &&
+          amountRegex.test(data.amount)
+        ) {
+          const esperado = Math.round((Number(data.nominals) * Number(data.unitPrice) + Number.EPSILON) * 100) / 100;
+          if (Math.abs(esperado - Number(data.amount)) > 0.0049) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ['amount'],
+              message: 'El importe no coincide con nominales × precio',
+            });
+          }
+        }
+      } else {
+        if (!validRef(data.destinationFund)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['destinationFund'],
+            message: 'Seleccioná el banco, broker o caja donde entra la plata',
+          });
+        }
+        if (
+          commissionOk &&
+          data.commission &&
+          data.amount &&
+          amountRegex.test(data.amount) &&
+          Number(data.commission) >= Number(data.amount)
+        ) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['commission'],
+            message: 'La comisión no puede ser mayor o igual al importe',
+          });
+        }
+      }
+    } else if (data.type === 'PARTNER_CONTRIBUTION') {
       if (!validRef(data.destinationFund)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,

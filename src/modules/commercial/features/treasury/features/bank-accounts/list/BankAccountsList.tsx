@@ -30,7 +30,7 @@ export async function BankAccountsList({ searchParams = {} }: Props) {
     <PermissionGuard module="commercial.treasury.bank-accounts" action="view" redirect>
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Cuentas Bancarias</h1>
+        <h1 className="text-3xl font-bold tracking-tight">Cuentas Bancarias y Brokers</h1>
         <p className="text-muted-foreground">
           Gestión de cuentas bancarias y movimientos
         </p>

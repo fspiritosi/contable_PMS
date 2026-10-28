@@ -61,12 +61,24 @@ describe('impediments', () => {
     ],
     ['untraceable', impediments.untraceable('OP 1'), 'UNTRACEABLE_EFFECT', 'BLOCKED'],
     ['referencedByNote', impediments.referencedByNote('NC 1'), 'REFERENCED_BY_NOTE', 'MANUAL'],
+    [
+      'investmentLaterSale',
+      impediments.investmentLaterSale('AL30', '«Venta» del 10/04/2026'),
+      'INVESTMENT_LATER_SALE',
+      'MANUAL',
+    ],
+    [
+      'investmentValued',
+      impediments.investmentValued('AL30', '31/12/2025'),
+      'INVESTMENT_VALUED',
+      'MANUAL',
+    ],
     ['invalidState', impediments.invalidState('Estado inválido'), 'INVALID_STATE', 'BLOCKED'],
     ['simulationError', impediments.simulationError('Falló'), 'SIMULATION_ERROR', 'BLOCKED'],
   ];
 
-  it('cubre los 18 constructores', () => {
-    expect(table).toHaveLength(18);
+  it('cubre los 20 constructores', () => {
+    expect(table).toHaveLength(20);
     expect(Object.keys(impediments).sort()).toEqual(table.map(([name]) => name).sort());
   });
 
@@ -95,6 +107,19 @@ describe('impediments', () => {
     expect(impediments.untraceable('OP 1').message).toBe(
       'Un movimiento de OP 1 es anterior a la trazabilidad y no se puede corregir automáticamente.'
     );
+    expect(impediments.investmentLaterSale('AL30', '«Venta» del 10/04/2026')).toEqual({
+      code: 'INVESTMENT_LATER_SALE',
+      severity: 'MANUAL',
+      message: 'La tenencia «AL30» tiene una venta posterior («Venta» del 10/04/2026).',
+      action: 'Anulá primero esa venta, corregí este movimiento y volvé a cargarla.',
+    });
+    expect(impediments.investmentValued('AL30', '31/12/2025')).toEqual({
+      code: 'INVESTMENT_VALUED',
+      severity: 'MANUAL',
+      message: 'La tenencia «AL30» ya tiene valuación al cierre del 31/12/2025.',
+      action: 'Deshacé esa valuación desde Tesorería › Inversiones › Valuación y reintentá.',
+      href: '/dashboard/commercial/treasury/investments/valuation',
+    });
   });
 });
 

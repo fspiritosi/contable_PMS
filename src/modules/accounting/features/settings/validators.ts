@@ -30,6 +30,10 @@ export const commercialIntegrationSchema = z.object({
   defaultBankAccountId: accountField,
   // TSK-718: se preselecciona en cada concepto de "Gastos e impuestos bancarios".
   bankChargesAccountId: accountField,
+  // TSK-793: resultado por tenencia y comisiones de inversiones.
+  holdingGainAccountId: accountField,
+  holdingLossAccountId: accountField,
+  investmentFeesAccountId: accountField,
   expensesAccountId: accountField,
   resultAccountId: accountField,
   partnerContributionsAccountId: accountField,

@@ -401,3 +401,78 @@ describe('concepto del movimiento (TSK-791)', () => {
     );
   });
 });
+
+describe('compra y venta de inversiones (TSK-793)', () => {
+  const uuidTenencia = '44444444-4444-4444-8444-444444444444';
+  const compra = {
+    type: 'INVESTMENT_PURCHASE' as const,
+    date: '2026-07-31',
+    amount: '1000.00',
+    description: 'Compra de acciones',
+    sourceFund: `BANK:${uuidBanco}`,
+    destinationFund: '',
+    holdingId: uuidTenencia,
+  };
+  const venta = {
+    type: 'INVESTMENT_SALE' as const,
+    date: '2026-07-31',
+    amount: '1000.00',
+    description: 'Venta de acciones',
+    sourceFund: '',
+    destinationFund: `BANK:${uuidBanco}`,
+    holdingId: uuidTenencia,
+  };
+  const mensajes = (input: object) => {
+    const r = fundMovementSchema.safeParse(input);
+    return r.success ? [] : r.error.issues.map((i) => i.message);
+  };
+
+  it('una compra y una venta válidas pasan', () => {
+    expect(fundMovementSchema.safeParse(compra).success).toBe(true);
+    expect(fundMovementSchema.safeParse(venta).success).toBe(true);
+  });
+
+  it('la compra exige origen', () => {
+    expect(mensajes({ ...compra, sourceFund: '' })).toContain(
+      'Seleccioná el banco, broker o caja de donde sale la plata'
+    );
+  });
+
+  it('la venta exige destino', () => {
+    expect(mensajes({ ...venta, destinationFund: '' })).toContain(
+      'Seleccioná el banco, broker o caja donde entra la plata'
+    );
+  });
+
+  it('exigen tenencia', () => {
+    expect(mensajes({ ...compra, holdingId: '' })).toContain('Seleccioná la tenencia');
+    expect(mensajes({ ...venta, holdingId: undefined })).toContain('Seleccioná la tenencia');
+  });
+
+  it('la compra valida importe = nominales x precio', () => {
+    expect(mensajes({ ...compra, nominals: '10', unitPrice: '100' })).toEqual([]);
+    expect(mensajes({ ...compra, nominals: '10', unitPrice: '99' })).toContain(
+      'El importe no coincide con nominales × precio'
+    );
+  });
+
+  it('la comisión de la venta debe ser menor al importe', () => {
+    expect(mensajes({ ...venta, commission: '10' })).toEqual([]);
+    expect(mensajes({ ...venta, commission: '1000' })).toContain(
+      'La comisión no puede ser mayor o igual al importe'
+    );
+  });
+
+  it('la comisión no puede ser negativa', () => {
+    expect(fundMovementSchema.safeParse({ ...compra, commission: '-5' }).success).toBe(false);
+  });
+
+  it('nominales y precio presentes deben ser mayores a 0', () => {
+    expect(mensajes({ ...compra, nominals: '0', unitPrice: '100' })).toContain(
+      'Los nominales deben ser mayores a 0'
+    );
+    expect(mensajes({ ...compra, amount: '0.00', nominals: '10', unitPrice: '0' })).toContain(
+      'El precio debe ser mayor a 0'
+    );
+  });
+});

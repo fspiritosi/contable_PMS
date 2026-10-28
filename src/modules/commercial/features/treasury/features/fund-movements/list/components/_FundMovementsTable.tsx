@@ -13,6 +13,7 @@ import type { FundMovementDetailMode } from '../../shared/view-mode';
 import type {
   FundMovementAccountRef,
   FundMovementConceptCatalog,
+  FundMovementHoldingOption,
   FundMovementListItem,
   FundMovementPartnerOption,
   FundOption,
@@ -31,6 +32,7 @@ interface Props {
   partners: FundMovementPartnerOption[];
   defaultContributionsAccount: FundMovementAccountRef | null;
   concepts: FundMovementConceptCatalog;
+  holdings: FundMovementHoldingOption[];
 }
 
 type DetailSelection = { movement: FundMovementListItem; mode: FundMovementDetailMode };
@@ -45,6 +47,7 @@ export function _FundMovementsTable({
   partners,
   defaultContributionsAccount,
   concepts,
+  holdings,
 }: Props) {
   const router = useRouter();
   const [createOpen, setCreateOpen] = useState(false);
@@ -85,6 +88,7 @@ export function _FundMovementsTable({
     partners,
     defaultContributionsAccount,
     concepts,
+    holdings,
     onSuccess: refresh,
   };
 

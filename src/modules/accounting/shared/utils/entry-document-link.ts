@@ -6,10 +6,13 @@
  * asientos no se anulan ni se eliminan desde Asientos: se corrigen desde su documento
  * (o no se tocan, en el caso del cierre anual).
  *
- * `FundMovement.journalEntryId` es una columna **sin relación** Prisma: se consulta
- * aparte. Sin `'use server'` (H7): lo usan solo las actions.
+ * `FundMovement.journalEntryId` e `InvestmentValuation.journalEntryId` (TSK-793) son
+ * columnas **sin relación** Prisma: se consultan aparte. Sin `'use server'` (H7): lo
+ * usan solo las actions.
  */
 import 'server-only';
+
+import moment from 'moment';
 
 import type { Prisma } from '@/generated/prisma/client';
 
@@ -22,6 +25,7 @@ export type EntryDocumentKind =
   | 'PAYMENT_ORDER'
   | 'EXPENSE'
   | 'FUND_MOVEMENT'
+  | 'INVESTMENT_VALUATION'
   | 'DEPRECIATION'
   | 'VALUE_ADJUSTMENT'
   | 'FISCAL_YEAR_CLOSING'
@@ -42,7 +46,8 @@ const vehicleLabel = (vehicle: VehicleRef) => vehicle?.internNumber || vehicle?.
  * Documento al que pertenece el asiento, o `null` si no tiene vínculo persistido
  * (manuales, recurrentes, IVA, cambio, inflación, apertura manual, bancos,
  * transferencias y baja de equipo). Un `findFirst` con las relaciones inversas y un
- * `fundMovement.findFirst` por la columna sin relación.
+ * `findFirst` por cada columna sin relación (movimiento de fondos y valuación de
+ * inversiones).
  */
 export async function getEntryDocumentLink(
   tx: Tx,
@@ -121,13 +126,28 @@ export async function getEntryDocumentLink(
   if (fund) {
     return { kind: 'FUND_MOVEMENT', documentId: fund.id, label: `el movimiento de fondos "${fund.description}"` };
   }
+
+  // Valuación de inversiones al cierre (TSK-793): se deshace desde Tesorería, que
+  // borra el asiento junto con la valuación. Borrarlo o anularlo desde acá dejaría la
+  // valuación sin su asiento (o sin poder deshacerse).
+  const valuation = await tx.investmentValuation.findFirst({
+    where: { companyId, journalEntryId: entryId },
+    select: { id: true, closingDate: true },
+  });
+  if (valuation) {
+    return {
+      kind: 'INVESTMENT_VALUATION',
+      documentId: valuation.id,
+      label: `la valuación de inversiones al ${moment.utc(valuation.closingDate).format('DD/MM/YYYY')}`,
+    };
+  }
   return null;
 }
 
 /**
  * Where de "asiento sin documento" (reporte de asientos sin respaldo): ninguna de las
  * 7 relaciones inversas, ni refundición/apertura, ni referenciado por un movimiento de
- * fondos de la empresa.
+ * fondos o una valuación de inversiones de la empresa.
  */
 export async function entriesWithoutDocumentWhere(
   tx: Tx,
@@ -137,7 +157,13 @@ export async function entriesWithoutDocumentWhere(
     where: { companyId, journalEntryId: { not: null } },
     select: { journalEntryId: true },
   });
-  const fundEntryIds = funds.flatMap((fund) => (fund.journalEntryId ? [fund.journalEntryId] : []));
+  const valuations = await tx.investmentValuation.findMany({
+    where: { companyId, journalEntryId: { not: null } },
+    select: { journalEntryId: true },
+  });
+  const fundEntryIds = [...funds, ...valuations].flatMap((doc) =>
+    doc.journalEntryId ? [doc.journalEntryId] : []
+  );
 
   return {
     salesInvoices: { none: {} },

@@ -3,6 +3,7 @@ import { formatCurrency } from '@/shared/utils/formatters';
 import type { Impediment } from './types';
 
 const ENTRIES_HREF = '/dashboard/company/accounting/entries';
+const INVESTMENT_VALUATION_HREF = '/dashboard/commercial/treasury/investments/valuation';
 
 /** Constructores de impedimentos con el texto ya armado (spec §3 y §7). */
 export const impediments = {
@@ -126,6 +127,24 @@ export const impediments = {
       severity: 'MANUAL',
       message: `El comprobante está referenciado por ${noteLabel}.`,
       action: `Eliminá o anulá ${noteLabel} y reintentá.`,
+    };
+  },
+  /** El costo de una venta queda fijo al confirmarla: lo anterior no se toca (TSK-793, P4). */
+  investmentLaterSale(holdingName: string, saleLabel: string): Impediment {
+    return {
+      code: 'INVESTMENT_LATER_SALE',
+      severity: 'MANUAL',
+      message: `La tenencia «${holdingName}» tiene una venta posterior (${saleLabel}).`,
+      action: 'Anulá primero esa venta, corregí este movimiento y volvé a cargarla.',
+    };
+  },
+  investmentValued(holdingName: string, closingDate: string): Impediment {
+    return {
+      code: 'INVESTMENT_VALUED',
+      severity: 'MANUAL',
+      message: `La tenencia «${holdingName}» ya tiene valuación al cierre del ${closingDate}.`,
+      action: 'Deshacé esa valuación desde Tesorería › Inversiones › Valuación y reintentá.',
+      href: INVESTMENT_VALUATION_HREF,
     };
   },
   invalidState(message: string): Impediment {

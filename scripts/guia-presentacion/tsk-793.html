@@ -1,0 +1,525 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>TSK-793 — Inversiones: brokers y tenencias</title>
+<style>
+  @page {
+    size: A4;
+    margin: 0;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #1f2430;
+    font-size: 13px;
+    line-height: 1.55;
+    background: #ffffff;
+  }
+
+  .page {
+    padding: 4mm 2mm;
+  }
+
+  header.cover {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    text-align: left;
+    padding: 10mm 2mm 8mm 2mm;
+    border-bottom: 3px solid #2f6f4f;
+    margin-bottom: 10mm;
+  }
+
+  .eyebrow {
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 11px;
+    font-weight: 700;
+    color: #2f6f4f;
+    margin-bottom: 6px;
+  }
+
+  h1 {
+    font-size: 26px;
+    margin: 0 0 8px 0;
+    color: #14251c;
+  }
+
+  .subtitle {
+    font-size: 14px;
+    color: #4b5563;
+    margin: 0;
+  }
+
+  section {
+    margin-bottom: 9mm;
+    page-break-inside: avoid;
+  }
+
+  section.allow-break {
+    page-break-inside: auto;
+  }
+
+  section:last-of-type { margin-bottom: 2mm; }
+
+  h2 {
+    font-size: 16px;
+    color: #14251c;
+    border-left: 4px solid #2f6f4f;
+    padding-left: 8px;
+    margin: 0 0 6mm 0;
+    page-break-after: avoid;
+  }
+
+  h3.sub {
+    font-size: 13.5px;
+    color: #14251c;
+    margin: 6mm 0 3mm 0;
+    page-break-after: avoid;
+  }
+
+  .quote {
+    background: #f4f7f5;
+    border-left: 4px solid #2f6f4f;
+    padding: 10px 14px;
+    font-style: italic;
+    color: #2b3a33;
+    margin: 0 0 6px 0;
+  }
+
+  .quote cite {
+    display: block;
+    font-style: normal;
+    font-size: 11.5px;
+    color: #6b7280;
+    margin-top: 6px;
+  }
+
+  .before-after {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    page-break-inside: avoid;
+  }
+
+  .card {
+    border: 1px solid #e2e5e0;
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+
+  .card.before { background: #fbf7f2; border-color: #ecd9bd; }
+  .card.after { background: #f2f8f4; border-color: #bfe0cb; }
+
+  .card h3 {
+    margin: 0 0 6px 0;
+    font-size: 12.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .card.before h3 { color: #9a6a1f; }
+  .card.after h3 { color: #226240; }
+
+  .card p { margin: 0; }
+
+  ol.steps {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    counter-reset: step;
+  }
+
+  ol.steps > li {
+    counter-increment: step;
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+    page-break-inside: avoid;
+  }
+
+  ol.steps > li::before {
+    content: counter(step);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    border-radius: 50%;
+    background: #2f6f4f;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  ol.steps.letters > li::before {
+    content: counter(step, lower-alpha);
+  }
+
+  .step-body { flex: 1; }
+
+  .step-body strong { color: #14251c; }
+
+  figure {
+    margin: 8px 0 0 0;
+    page-break-inside: avoid;
+  }
+
+  figure img {
+    max-width: 100%;
+    border: 1px solid #d9dce0;
+    border-radius: 6px;
+    display: block;
+  }
+
+  figure.small img { max-width: 320px; }
+
+  figure.sidebar img { max-width: 150px; }
+
+  figure.modal img { max-width: 400px; }
+
+  figure.modal-sm img { max-width: 340px; }
+
+  ol.steps.long > li { page-break-inside: auto; }
+
+  figcaption {
+    font-size: 11px;
+    color: #6b7280;
+    margin-top: 4px;
+  }
+
+  .callout {
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin: 0 0 8px 0;
+    page-break-inside: avoid;
+  }
+
+  .callout.config {
+    background: #f2f6fb;
+    border: 1px solid #cddaeb;
+  }
+
+  .callout.warning {
+    background: #fdf5ec;
+    border: 1px solid #efd6a8;
+  }
+
+  .callout h3 {
+    margin: 0 0 4px 0;
+    font-size: 13px;
+  }
+
+  .callout p { margin: 0 0 6px 0; }
+  .callout p:last-child { margin-bottom: 0; }
+
+  ul.plain {
+    margin: 4px 0 0 0;
+    padding-left: 18px;
+  }
+
+  ul.plain li { margin-bottom: 4px; }
+
+  .no-change-list {
+    display: grid;
+    gap: 6px;
+  }
+
+  .no-change-item {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+  }
+
+  .check {
+    color: #2f6f4f;
+    font-weight: 700;
+  }
+
+  .side-by-side {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8mm;
+    align-items: start;
+    page-break-inside: avoid;
+  }
+
+  .side-by-side figure { margin-top: 0; }
+
+  .side-by-side.narrow-left {
+    grid-template-columns: 160px 1fr;
+  }
+
+  .ui-text {
+    font-style: italic;
+    color: #374151;
+  }
+
+  table.chain {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 6px 0 8px 0;
+    font-size: 12px;
+    page-break-inside: avoid;
+  }
+
+  table.chain th, table.chain td {
+    border: 1px solid #dfe3e0;
+    padding: 6px 8px;
+    text-align: left;
+    vertical-align: top;
+  }
+
+  table.chain th {
+    background: #f4f7f5;
+    color: #14251c;
+    font-weight: 700;
+  }
+
+  .entry {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 11.5px;
+    background: #f7f8f7;
+    border: 1px solid #e2e5e0;
+    border-radius: 6px;
+    padding: 8px 10px;
+    margin: 6px 0;
+    white-space: pre;
+  }
+
+  /* TSK-782: los campos de fecha se muestran a su tamaño real; el encabezado del detalle, a lo ancho */
+  figure.field img { max-width: 360px; }
+  figure.phone img { max-width: 190px; }
+  .side-by-side.phone-left { grid-template-columns: 200px 1fr; }
+  .keep-together { page-break-inside: avoid; }
+
+  footer.doc-footer {
+    text-align: center;
+    color: #9ca3af;
+    font-size: 10.5px;
+    margin-top: 2mm;
+  }
+
+  .callout.critical { background: #fdf0ee; border: 1px solid #e8b4ac; }
+  .callout.critical h3 { color: #9b2c1f; }
+  figure.wide img { max-width: 560px; }
+  figure.mid img { max-width: 430px; }
+  figure.tall img { max-width: 330px; }
+  figure.tall-sm img { max-width: 340px; }
+  .tag { display:inline-block; font-size:11px; font-weight:700; padding:1px 8px; border-radius:10px; background:#eef0f2; color:#374151; }
+  .tag.manual { background:#fdf5ec; color:#8a5a12; border:1px solid #efd6a8; }
+  .tag.blocked { background:#fdf0ee; color:#9b2c1f; border:1px solid #e8b4ac; }
+</style>
+
+</head>
+
+<body>
+<div class="page">
+
+  <header class="cover">
+    <div class="eyebrow">Ticket 793 · Comercial · Tesorería · Inversiones</div>
+    <h1>Inversiones: brokers, tenencias y resultado por tenencia al cierre</h1>
+    <p class="subtitle">Guía de presentación — qué pediste, qué cambió, cómo se registra una compra, una venta y la valuación al cierre paso a paso con un ejemplo real, qué hay que configurar y qué queda para la próxima entrega</p>
+  </header>
+
+  <section>
+    <h2>1. Qué pediste</h2>
+    <p class="quote">"El módulo de inversiones lo manejaría con la complejidad de una plataforma de bróker pero con la simplificación contable real."
+    <cite>Pedido del cliente</cite></p>
+    <p>El resultado por tenencia (lo que pagaste por un instrumento contra lo que vale al 31/12) era lo más
+    difícil de llevar a mano. No hace falta seguir el día a día del mercado: alcanza con el
+    <strong>capital</strong> de cada instrumento y su <strong>resultado</strong>.</p>
+    <div class="before-after">
+      <div class="card before">
+        <h3>Antes</h3>
+        <p>No había dónde registrar un broker ni las inversiones. La plata que salía del banco hacia un bono
+        o un fondo se cargaba como un gasto o una transferencia suelta, y el resultado al cierre se
+        calculaba aparte, a mano.</p>
+      </div>
+      <div class="card after">
+        <h3>Ahora</h3>
+        <p>Cargás el broker, la tenencia, las compras y las ventas como Movimientos de Fondos con su asiento,
+        y al cierre del ejercicio el sistema genera solo el asiento de resultado por tenencia.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="allow-break">
+    <h2>2. Qué cambió</h2>
+    <h3 class="sub">Brokers como cuenta de Tesorería</h3>
+    <p>La sección <strong>Tesorería → Cuentas Bancarias y Brokers</strong> (antes "Cuentas Bancarias") tiene un
+    tipo de cuenta nuevo: <strong>Broker</strong>. Solo pide el nombre (por ejemplo, Balanz): no hay CBU ni
+    alias. El broker tiene su propio saldo y se le pasa plata con la <strong>Transferencia entre cuentas</strong>
+    de siempre.</p>
+    <div class="side-by-side">
+      <figure><img src="assets/tsk793-01-broker-formulario.png" alt="Formulario Nueva Cuenta con tipo Broker y el nombre TSK793 Balanz" /><figcaption>Alta de un broker: tipo, nombre y cuenta contable.</figcaption></figure>
+      <figure><img src="assets/tsk793-02-cuentas-y-brokers.png" alt="Listado de cuentas bancarias y brokers" /><figcaption>El broker aparece en el listado junto con los bancos.</figcaption></figure>
+    </div>
+
+    <h3 class="sub">Tenencias: un instrumento dentro de un banco o broker</h3>
+    <p>En <strong>Tesorería → Inversiones</strong> ves las tenencias con su valor en libros, sus nominales y
+    su precio promedio. Si el mismo bono está en dos brokers, son dos tenencias distintas.</p>
+    <figure class="wide"><img src="assets/tsk793-03-listado-tenencias.png" alt="Listado de tenencias con tipo, banco o broker, nominales, valor en libros y precio promedio" /><figcaption>El listado de tenencias.</figcaption></figure>
+    <p>Al entrar a una tenencia ves su historial: cada compra, venta y valuación, con el resultado de las
+    ventas. Los nominales y el valor en libros <strong>no se editan a mano</strong>: salen de esos movimientos.</p>
+    <figure class="wide"><img src="assets/tsk793-04-detalle-tenencia.png" alt="Detalle de la tenencia con valor en libros, nominales, precio promedio y el historial de movimientos" /><figcaption>El detalle de una tenencia y su historial.</figcaption></figure>
+    <p>Hay <strong>12 tipos de instrumento</strong>: acciones, CEDEARs, bonos, opciones, letras, futuros,
+    licitaciones, obligaciones negociables, fondos comunes, fideicomisos, cauciones y plazo fijo. Los
+    que son por unidades llevan nominales (opcionales); algunos llevan vencimiento.</p>
+
+    <h3 class="sub">Compra y venta como Movimientos de Fondos</h3>
+    <p>En <strong>Tesorería → Movimientos de Fondos</strong> hay dos tipos nuevos: <strong>Compra de
+    inversión</strong> y <strong>Venta de inversión</strong>. Heredan todo lo que ya conocés: borrador,
+    confirmación con asiento, y editar, eliminar o anular con la propuesta del TSK-792.</p>
+
+    <h3 class="sub">Valuación al cierre</h3>
+    <p>Una pantalla nueva donde cargás el valor de cada tenencia al 31/12 y el sistema arma el asiento del
+    resultado por tenencia.</p>
+  </section>
+
+  <section class="allow-break">
+    <h2>3. Paso a paso con un ejemplo: el bono AL30</h2>
+    <p>Comprás <strong>100 nominales de AL30 a $1.250,50</strong> (total $125.050), vendés <strong>40</strong>
+    por <strong>$60.000</strong> con $200 de comisión, y al 31/12 el bono cotiza a <strong>$1.400</strong>.</p>
+
+    <h3 class="sub">a) Crear la tenencia</h3>
+    <ol class="steps">
+      <li><div class="step-body">En <strong>Tesorería → Inversiones</strong> tocá <strong>Nueva tenencia</strong>.</div></li>
+      <li><div class="step-body">Elegí el banco o broker, el tipo (<strong>Bonos</strong>), el nombre
+      (<strong>AL30</strong>) y la <strong>cuenta contable del activo</strong> (obligatoria).</div></li>
+    </ol>
+
+    <h3 class="sub">b) Registrar la compra</h3>
+    <ol class="steps">
+      <li><div class="step-body">En <strong>Movimientos de Fondos</strong> tocá <strong>Nuevo Movimiento</strong>
+      y elegí <strong>Compra de inversión</strong>.</div></li>
+      <li><div class="step-body">Elegí el banco, broker o caja de donde sale la plata y la tenencia.</div></li>
+      <li><div class="step-body">Cargá <strong>nominales</strong> y <strong>precio unitario</strong>: el monto se
+      calcula solo (100 × $1.250,50 = $125.050). Si no tenés nominales, cargás el importe directamente.</div></li>
+      <li><div class="step-body">Si hubo <strong>comisión</strong>, cargala aparte: sale del origen además del
+      importe y va a una cuenta de gasto. Guardá y confirmá.</div></li>
+    </ol>
+    <figure class="mid"><img src="assets/tsk793-05-compra-con-nominales.png" alt="Formulario de compra de inversión con nominales, precio unitario, monto calculado y comisión" /><figcaption>Compra con nominales: el monto sale de nominales × precio. (Ejemplo con otros números, sin guardar.)</figcaption></figure>
+
+    <h3 class="sub">c) Registrar la venta parcial</h3>
+    <ol class="steps">
+      <li><div class="step-body">Nuevo Movimiento → <strong>Venta de inversión</strong>. El origen es la
+      tenencia y el destino, el banco o broker donde entra la plata.</div></li>
+      <li><div class="step-body">Cargá los <strong>nominales vendidos</strong> (40) y el <strong>importe cobrado
+      bruto</strong> ($60.000). Cargá la comisión ($200) aparte: entra al destino lo cobrado menos la comisión.</div></li>
+    </ol>
+    <table class="chain">
+      <tr><th>Concepto</th><th>Cuenta</th><th>Importe</th></tr>
+      <tr><td>Cobrado neto</td><td>Banco o broker (Debe)</td><td>$59.800</td></tr>
+      <tr><td>Comisión</td><td>Comisiones de inversiones (Debe)</td><td>$200</td></tr>
+      <tr><td>Costo de lo vendido</td><td>Tenencia AL30 (Haber)</td><td>$50.020</td></tr>
+      <tr><td>Ganancia</td><td>Resultado por tenencia positivo (Haber)</td><td>$9.980</td></tr>
+    </table>
+    <p>El <strong>costo</strong> de lo vendido es el valor en libros por la parte vendida, a
+    <strong>precio promedio ponderado</strong>: 40/100 de $125.050 = $50.020. El <strong>resultado</strong>
+    ($60.000 − $50.020 = $9.980) se registra en ese momento, como pediste. Quedan <strong>60 nominales</strong>
+    con valor en libros de $75.030. Si más adelante volvés a comprar AL30 en el mismo lugar, se suma a la
+    misma tenencia.</p>
+    <div class="callout config">
+      <h3>Venta total y fondos sin nominales</h3>
+      <p><strong>Venta total o vencimiento:</strong> marcá <em>Venta total (cierra la tenencia)</em>. El
+      resultado es lo cobrado menos el valor en libros, va en el mismo asiento y la tenencia queda cerrada.</p>
+      <p><strong>Tenencias sin nominales</strong> (fondos, cauciones, fideicomisos, plazo fijo): una venta
+      parcial baja el capital por lo cobrado y el resultado aparece al cierre o en la venta total.</p>
+    </div>
+
+    <h3 class="sub">d) Valuar al cierre del ejercicio</h3>
+    <ol class="steps">
+      <li><div class="step-body">En <strong>Inversiones</strong> tocá <strong>Valuación al cierre</strong> y
+      elegí el ejercicio (necesitás el permiso de aprobar).</div></li>
+      <li><div class="step-body">Por cada tenencia cargá el <strong>valor al cierre</strong> o, si tiene
+      nominales, el <strong>precio por nominal</strong>: 60 × $1.400 = $84.000.</div></li>
+      <li><div class="step-body">La <strong>vista previa</strong> muestra la diferencia contra el valor en
+      libros (+$8.970) y el asiento resultante. Revisala y tocá <strong>Generar valuación</strong>.</div></li>
+    </ol>
+    <figure class="wide"><img src="assets/tsk793-07-valuacion-vista-previa.png" alt="Pantalla de valuación al cierre con la tenencia AL30, el precio por nominal 1400, la diferencia de 8970 y la vista previa del asiento" /><figcaption>La valuación con su vista previa antes de generar.</figcaption></figure>
+    <p>Se crea <strong>un asiento en Borrador</strong>, con fecha de fin del ejercicio, contra la cuenta de
+    resultado por tenencia. Lo revisás y lo registrás desde Contabilidad → Asientos. El valor cargado ($84.000)
+    pasa a ser el <strong>nuevo valor en libros</strong> de la tenencia.</p>
+    <figure class="wide"><img src="assets/tsk793-08-valuacion-generada.png" alt="Valuación generada con el número de asiento en borrador y el botón Deshacer" /><figcaption>La valuación generada. Mientras el asiento esté en Borrador se puede deshacer.</figcaption></figure>
+    <ul class="plain">
+      <li>Hay <strong>una valuación por ejercicio</strong>, y se hacen en orden entre ejercicios.</li>
+      <li>Se hace <strong>antes del cierre contable</strong>: con el ejercicio cerrado no se puede valuar.</li>
+      <li>Si una tenencia tiene <strong>ventas posteriores</strong> a la fecha de cierre, el sistema no valúa y
+      te dice cuáles son: las anulás, valuás y las volvés a cargar.</li>
+      <li><strong>Deshacer:</strong> borra el asiento y devuelve el valor en libros anterior, mientras el
+      asiento siga en Borrador.</li>
+    </ul>
+  </section>
+
+  <section class="allow-break">
+    <h2>4. Reglas que cuidan los números</h2>
+    <ul class="plain">
+      <li>Una tenencia <strong>nunca queda en negativo</strong>: no se vende más de lo que hay, ni más
+      nominales de los que tiene.</li>
+      <li>Una <strong>venta total tiene que ser el último movimiento</strong> de la tenencia.</li>
+      <li>No se cargan compras ni ventas con fecha <strong>anterior a una venta</strong> ya registrada de esa
+      tenencia, ni movimientos con fecha igual o anterior a una <strong>valuación</strong>.</li>
+      <li>La comisión de una venta tiene que ser menor al importe cobrado.</li>
+      <li>Una tenencia con movimientos no se elimina, y no se puede cambiar su cuenta contable, su banco o
+      broker ni su tipo.</li>
+    </ul>
+
+    <h3 class="sub">Corregir o anular: la propuesta de siempre</h3>
+    <p>Anular, eliminar o editar una compra o venta funciona como en el TSK-792: antes de aplicar te
+    muestra todo lo que cambia. Acá, anular la venta parcial del ejemplo borra su asiento y su movimiento
+    bancario, y <strong>devuelve la tenencia a 100 nominales y $125.050</strong>.</p>
+    <figure class="tall-sm"><img src="assets/tsk793-06-anular-venta.png" alt="Propuesta de anular la venta: se anula el movimiento de fondos, se eliminan su asiento y su movimiento bancario, la tenencia vuelve a 100 nominales y 125050 pesos y cambia el saldo del banco" /><figcaption>Anular la venta parcial: la tenencia vuelve a su posición anterior.</figcaption></figure>
+    <p>Si la tenencia tiene una <strong>venta posterior</strong>, hay que anular primero esa venta
+    (<span class="tag manual">Podés resolverlo</span>); si ya fue <strong>valuada</strong>, hay que deshacer
+    la valuación primero.</p>
+  </section>
+
+  <section class="allow-break">
+    <h2>5. Qué hay que configurar</h2>
+    <div class="callout config">
+      <h3>Ajustes contables (una sola vez)</h3>
+      <p>En <strong>Empresa → Contabilidad → Configuración</strong>, dentro de las cuentas de Tesorería,
+      elegí las tres cuentas nuevas. Sin ellas, la compra, la venta o la valuación te avisan qué falta.</p>
+      <ul class="plain">
+        <li><strong>Resultado por tenencia positivo (inversiones):</strong> sugerida 4.1.1/03/02.</li>
+        <li><strong>Resultado por tenencia negativo (inversiones):</strong> sugerida 4.2.1/05/11.</li>
+        <li><strong>Comisiones de inversiones:</strong> la cuenta de gasto donde van las comisiones.</li>
+      </ul>
+    </div>
+    <figure class="wide"><img src="assets/tsk793-09-ajustes-contables.png" alt="Ajustes contables con las cuentas de resultado por tenencia positivo y negativo y de comisiones de inversiones" /><figcaption>Las tres cuentas nuevas en Ajustes contables.</figcaption></figure>
+    <div class="callout config">
+      <h3>Permiso y cuentas</h3>
+      <ul class="plain">
+        <li><strong>Permiso nuevo "Inversiones"</strong> (ver, crear, modificar, eliminar y aprobar). El rol
+        Administrador lo recibe al desplegar; los roles personalizados se lo otorgan desde Roles. La
+        valuación pide además el permiso de aprobar.</li>
+        <li>Cada tenencia necesita su <strong>cuenta contable de activo</strong>, y cada broker puede tener la
+        suya (si no, usa la cuenta de banco por defecto).</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <h2>6. Qué no cambia</h2>
+    <div class="no-change-list">
+      <div class="no-change-item"><span class="check">✓</span><div>Todo está en <strong>pesos</strong>: dólares y moneda extranjera quedan para la próxima entrega.</div></div>
+      <div class="no-change-item"><span class="check">✓</span><div><strong>Dividendos y rentas:</strong> no suman al instrumento; quedan para la próxima entrega.</div></div>
+      <div class="no-change-item"><span class="check">✓</span><div><strong>Cotizaciones de mercado, órdenes e integración con brokers:</strong> no se incluyen. El valor al cierre lo cargás vos.</div></div>
+      <div class="no-change-item"><span class="check">✓</span><div>No se admiten posiciones vendidas (opciones o futuros lanzados) ni tenencias en negativo.</div></div>
+      <div class="no-change-item"><span class="check">✓</span><div>Los movimientos de fondos existentes y la transferencia entre cuentas funcionan igual que antes.</div></div>
+    </div>
+  </section>
+
+  <footer class="doc-footer">
+    TSK-793 — Inversiones: brokers y tenencias · Comercial · Tesorería
+  </footer>
+
+</div>
+</body>
+</html>

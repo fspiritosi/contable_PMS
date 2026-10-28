@@ -47,6 +47,7 @@ export const MODULES = {
   'commercial.treasury.partners': 'commercial.treasury.partners',
   'commercial.treasury.cards': 'commercial.treasury.cards',
   'commercial.treasury.fund-movements': 'commercial.treasury.fund-movements',
+  'commercial.treasury.investments': 'commercial.treasury.investments',
   'commercial.expenses': 'commercial.expenses',
   'commercial.equivalences': 'commercial.equivalences',
 
@@ -141,7 +142,7 @@ export const MODULE_LABELS: Record<Module, string> = {
   'commercial.receiving-notes': 'Remitos de Recepción',
   'commercial.delivery-notes': 'Remitos de Entrega',
   'commercial.treasury.cash-registers': 'Cajas',
-  'commercial.treasury.bank-accounts': 'Cuentas',
+  'commercial.treasury.bank-accounts': 'Cuentas Bancarias y Brokers',
   'commercial.treasury.receipts': 'Recibos de Cobro',
   'commercial.treasury.payment-orders': 'Órdenes de Pago',
   'commercial.treasury.checks': 'Cheques',
@@ -150,6 +151,7 @@ export const MODULE_LABELS: Record<Module, string> = {
   'commercial.treasury.partners': 'Socios',
   'commercial.treasury.cards': 'Tarjetas',
   'commercial.treasury.fund-movements': 'Movimientos de Fondos',
+  'commercial.treasury.investments': 'Inversiones',
   'commercial.expenses': 'Egresos',
   'commercial.equivalences': 'Equivalencias',
 
@@ -239,6 +241,7 @@ export const MODULE_GROUPS = {
       'commercial.treasury.partners',
       'commercial.treasury.cards',
       'commercial.treasury.fund-movements',
+      'commercial.treasury.investments',
       'commercial.expenses',
       'commercial.equivalences',
     ] as Module[],

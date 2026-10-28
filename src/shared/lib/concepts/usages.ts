@@ -49,6 +49,8 @@ const FUND_USAGE_BY_TYPE: Record<FundMovementType, ConceptUsage | null> = {
   PARTNER_CONTRIBUTION: 'FUND_PARTNER_CONTRIBUTION',
   PARTNER_WITHDRAWAL: 'FUND_PARTNER_WITHDRAWAL',
   ACCOUNT_TRANSFER: null, // la transferencia entre cuentas nunca usa conceptos
+  INVESTMENT_PURCHASE: null, // la compra de inversión no usa conceptos (TSK-793)
+  INVESTMENT_SALE: null, // la venta de inversión no usa conceptos (TSK-793)
 };
 
 const BANK_USAGE_BY_TYPE: Record<BankMovementType, ConceptUsage> = {

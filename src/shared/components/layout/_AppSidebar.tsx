@@ -225,7 +225,7 @@ const navMain: NavItemWithSub[] = [
             module: 'commercial.treasury.cash-registers',
           },
           {
-            title: 'Cuentas',
+            title: 'Cuentas Bancarias y Brokers',
             href: '/dashboard/commercial/treasury/bank-accounts',
             module: 'commercial.treasury.bank-accounts',
           },
@@ -253,6 +253,11 @@ const navMain: NavItemWithSub[] = [
             title: 'Movimientos de Fondos',
             href: '/dashboard/commercial/treasury/fund-movements',
             module: 'commercial.treasury.fund-movements',
+          },
+          {
+            title: 'Inversiones',
+            href: '/dashboard/commercial/treasury/investments',
+            module: 'commercial.treasury.investments',
           },
           {
             title: 'Tarjetas',

@@ -35,6 +35,8 @@ const TYPE_BADGE_VARIANT: Record<FundMovementTypeValue, 'default' | 'secondary' 
   PARTNER_WITHDRAWAL: 'secondary',
   ACCOUNT_TRANSFER: 'outline',
   BANK_CHARGES: 'secondary',
+  INVESTMENT_PURCHASE: 'default',
+  INVESTMENT_SALE: 'secondary',
 };
 
 interface ColumnsProps {
@@ -94,6 +96,12 @@ export function getColumns({ onView, onEdit, onConfirm, onDelete, onCancel, perm
       meta: { title: 'Socio' },
       header: ({ column }) => <DataTableColumnHeader column={column} title="Socio" />,
       cell: ({ row }) => <span className="text-sm">{row.original.partnerName ?? '—'}</span>,
+    },
+    {
+      id: 'tenencia',
+      meta: { title: 'Tenencia' },
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Tenencia" />,
+      cell: ({ row }) => <span className="text-sm">{row.original.holdingName ?? '—'}</span>,
     },
     {
       accessorKey: 'amount',

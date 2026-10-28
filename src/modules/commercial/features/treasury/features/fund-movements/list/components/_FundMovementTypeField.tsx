@@ -44,6 +44,12 @@ export function _FundMovementTypeField({ disabled }: FundMovementTypeFieldProps)
               field.onChange(value);
               // TSK-791: el concepto de un aporte no vale para un retiro (ni al revés).
               setValue('conceptId', '');
+              // TSK-793: los datos de una compra no valen para una venta (ni al revés).
+              setValue('holdingId', '');
+              setValue('nominals', '');
+              setValue('unitPrice', '');
+              setValue('commission', '');
+              setValue('isFullSale', false);
             }}
             value={field.value}
             disabled={disabled}

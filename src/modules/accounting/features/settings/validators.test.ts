@@ -83,12 +83,12 @@ describe('commercialIntegrationSchema', () => {
 
   // 23 + las 7 de percepciones e impuestos internos (TSK-644): percepción
   // IVA/IIBB/Municipal cobrada y sufrida, más impuestos internos; + la cuenta de
-  // gastos bancarios por defecto (TSK-718).
-  it('cubre las 31 cuentas configurables', () => {
+  // gastos bancarios por defecto (TSK-718); + las 3 de inversiones (TSK-793).
+  it('cubre las 34 cuentas configurables', () => {
     const cuentas = Object.keys(commercialIntegrationSchema.shape).filter((key) =>
       key.endsWith('AccountId')
     );
-    expect(cuentas).toHaveLength(31);
+    expect(cuentas).toHaveLength(34);
   });
 
   /**
@@ -175,5 +175,20 @@ describe('ejercicio fiscal de meses completos (TSK-760, C3)', () => {
     expect(
       fiscalYearSettingsSchema.parse({ startDay: '2026-01-01', endDay: '2026-12-31' })
     ).toEqual({ startDay: '2026-01-01', endDay: '2026-12-31' });
+  });
+
+  it('acepta las cuentas de inversiones vacías o con un id (TSK-793)', () => {
+    const campos = [
+      'holdingGainAccountId',
+      'holdingLossAccountId',
+      'investmentFeesAccountId',
+    ] as const;
+    const vacio = commercialIntegrationSchema.parse({});
+    const id = '11111111-1111-4111-8111-111111111111';
+    for (const campo of campos) {
+      expect(vacio[campo]).toBeNull();
+      expect(commercialIntegrationSchema.parse({ [campo]: '' })[campo]).toBeNull();
+      expect(commercialIntegrationSchema.parse({ [campo]: id })[campo]).toBe(id);
+    }
   });
 });

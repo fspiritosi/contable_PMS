@@ -81,7 +81,8 @@ Creados como `isAutomatic = true`, `createdBy = 'system'`.
 `reverseJournalEntry({ entryId })` (permiso `accounting.entries` `approve`, `ActionResult`):
 
 1. Si el asiento pertenece a un documento (`getEntryDocumentLink`: factura de venta o compra, recibo,
-   OP, egreso, movimiento de fondos, depreciacion, revaluo, refundicion o apertura de ejercicio) se
+   OP, egreso, movimiento de fondos, valuacion de inversiones (TSK-793), depreciacion, revaluo,
+   refundicion o apertura de ejercicio) se
    rechaza con "Este asiento pertenece a … y no se puede anular desde Asientos: anulá el
    comprobante." El dialogo lo consulta antes (`getReversalCheck`) y deshabilita el boton.
 2. Los asientos `createdBy = 'system'` sin vinculo persistido (bancos, transferencias, baja de

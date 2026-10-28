@@ -2,6 +2,7 @@ import moment from 'moment';
 import { describe, expect, it } from 'vitest';
 
 import type { FundMovementStatus } from '@/generated/prisma/enums';
+import { formatCurrency } from '@/shared/utils/formatters';
 
 import {
   buildFundOptions,
@@ -20,6 +21,7 @@ import {
   isSnapshotOption,
   needsMovementDetail,
   shouldCleanupFieldsOnTypeChange,
+  withMovementHolding,
   withSnapshotOption,
   type FundMovementFormSource,
   type FundMovementLineSource,
@@ -233,6 +235,50 @@ describe('isSnapshotOption', () => {
     const result = withSnapshotOption(options, 'b', 'B');
     expect(isSnapshotOption(result[1])).toBe(true);
     expect(isSnapshotOption(result[0])).toBe(false);
+  });
+});
+
+describe('withMovementHolding', () => {
+  const open = {
+    id: 'h-abierta',
+    label: 'AL30 · Broker - 1',
+    hasUnits: true,
+    bookValue: 600,
+    nominals: 60,
+  };
+  const holdings = [open];
+
+  it('agrega la tenencia cerrada del movimiento con su etiqueta', () => {
+    const result = withMovementHolding(holdings, {
+      holdingId: 'h-cerrada',
+      holdingLabel: 'GD30 · Broker - 1',
+      holdingHasUnits: true,
+    });
+    expect(result).toEqual([
+      open,
+      {
+        id: 'h-cerrada',
+        label: 'GD30 · Broker - 1',
+        hasUnits: true,
+        bookValue: 0,
+        nominals: null,
+        isClosed: true,
+      },
+    ]);
+  });
+
+  it('sin cambios si la tenencia está en el catálogo, falta o no hay movimiento', () => {
+    expect(
+      withMovementHolding(holdings, {
+        holdingId: open.id,
+        holdingLabel: open.label,
+        holdingHasUnits: true,
+      })
+    ).toBe(holdings);
+    expect(
+      withMovementHolding(holdings, { holdingId: null, holdingLabel: null, holdingHasUnits: null })
+    ).toBe(holdings);
+    expect(withMovementHolding(holdings, undefined)).toBe(holdings);
   });
 });
 
@@ -474,6 +520,46 @@ describe('getViewSummaryFacts', () => {
       journalEntryNumber: null,
     });
     expect(facts.map((f) => f.key)).toEqual(['confirmedAt']);
+  });
+
+  // TSK-793: compra/venta de inversión
+  it('compra de inversión → tenencia, nominales y comisión', () => {
+    const facts = getViewSummaryFacts({
+      confirmedAt: null,
+      journalEntryNumber: null,
+      type: 'INVESTMENT_PURCHASE',
+      holdingName: 'AL30',
+      nominals: 1500.5,
+      commission: 250,
+    });
+    expect(facts).toEqual([
+      { key: 'holding', label: 'Tenencia', value: 'AL30' },
+      { key: 'nominals', label: 'Nominales', value: '1.500,5' },
+      { key: 'commission', label: 'Comisión', value: formatCurrency(250) },
+    ]);
+  });
+
+  it('venta total de inversión → agrega "Venta total"', () => {
+    const facts = getViewSummaryFacts({
+      confirmedAt: null,
+      journalEntryNumber: null,
+      type: 'INVESTMENT_SALE',
+      holdingName: 'AL30',
+      isFullSale: true,
+    });
+    expect(facts.map((f) => f.label)).toEqual(['Tenencia', 'Venta total']);
+  });
+
+  it('aporte de socio → no muestra datos de inversión', () => {
+    const facts = getViewSummaryFacts({
+      confirmedAt: null,
+      journalEntryNumber: null,
+      type: 'PARTNER_CONTRIBUTION',
+      holdingName: null,
+      nominals: null,
+      commission: null,
+    });
+    expect(facts).toEqual([]);
   });
 });
 

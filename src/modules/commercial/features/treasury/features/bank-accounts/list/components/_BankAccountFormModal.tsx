@@ -73,7 +73,9 @@ export function _BankAccountFormModal({ open, onOpenChange, bankAccount, onSucce
   const watchedAccountType = form.watch('accountType');
   const isCash = watchedAccountType === 'CASH';
   const isVirtualWallet = watchedAccountType === 'VIRTUAL_WALLET';
-  const isNonBank = isCash || isVirtualWallet;
+  // El broker no tiene CBU/alias ni número de cuenta propio (TSK-793).
+  const isBroker = watchedAccountType === 'BROKER';
+  const isNonBank = isCash || isVirtualWallet || isBroker;
 
   // Resetear form cuando cambia el modal o la cuenta
   useEffect(() => {
@@ -165,11 +167,11 @@ export function _BankAccountFormModal({ open, onOpenChange, bankAccount, onSucce
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>
-                      {isNonBank ? 'Nombre' : 'Banco'} {!isNonBank && '*'}
+                      {isNonBank ? 'Nombre' : 'Banco'} {(!isNonBank || isBroker) && '*'}
                     </FormLabel>
                     <FormControl>
                       <Input
-                        placeholder={isNonBank ? 'Ej: Caja Principal' : 'Banco Nación'}
+                        placeholder={isBroker ? 'Ej: Balanz' : isNonBank ? 'Ej: Caja Principal' : 'Banco Nación'}
                         {...field}
                         value={field.value || ''}
                       />
@@ -196,7 +198,7 @@ export function _BankAccountFormModal({ open, onOpenChange, bankAccount, onSucce
               )}
             </div>
 
-            {!isCash && (
+            {!isCash && !isBroker && (
               <div className="grid grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
