@@ -9,6 +9,10 @@ import { getCurrentUserId } from '@/shared/lib/current-user';
 import { prisma } from '@/shared/lib/prisma';
 import { getActiveCompanyId } from '@/shared/lib/company';
 import { logger } from '@/shared/lib/logger';
+import {
+  EFFECTIVE_RECEIPT_ITEM,
+  EFFECTIVE_SALES_CREDIT_NOTE_APPLICATION,
+} from '@/shared/lib/effective-settlements';
 import { generateInvoicePDF, getInvoiceFileName } from '@/modules/commercial/features/sales/shared/pdf/generator';
 import { mapInvoiceDataForPDF } from '@/modules/commercial/features/sales/shared/pdf/data-mapper';
 import { VOUCHER_TYPE_LABELS, INVOICE_STATUS_LABELS } from '@/modules/commercial/features/sales/features/invoices/shared/validators';
@@ -100,6 +104,7 @@ export async function GET(
         }),
         ...(includes.has('receipts') && {
           receiptItems: {
+            where: EFFECTIVE_RECEIPT_ITEM,
             select: {
               amount: true,
               receipt: {
@@ -114,6 +119,7 @@ export async function GET(
         }),
         ...(includes.has('creditNoteApplications') && {
           creditNoteApplicationsReceived: {
+            where: EFFECTIVE_SALES_CREDIT_NOTE_APPLICATION,
             select: {
               amount: true,
               appliedAt: true,

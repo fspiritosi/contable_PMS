@@ -31,8 +31,13 @@ type ReceiptData = {
       fullNumber: string;
       issueDate: Date;
       total: any;
+      /** Solo imputaciones de recibos confirmados (EFFECTIVE_RECEIPT_ITEM). */
       receiptItems: Array<{
         amount: any;
+      }>;
+      /** Solo NC aplicadas no anuladas (EFFECTIVE_SALES_CREDIT_NOTE_APPLICATION). */
+      creditNoteApplicationsReceived: Array<{
+        amount: unknown;
       }>;
     };
   }>;
@@ -107,8 +112,11 @@ export function mapReceiptDataForPDF(
     invoices: receipt.items.map((item) => {
       const invoice = item.invoice;
 
-      // Calcular total pagado de esta factura (incluye todos los cobros, no solo este recibo)
-      const totalPaid = invoice.receiptItems.reduce((sum, ri) => sum + Number(ri.amount), 0);
+      // Cobrado vigente de la factura (TSK-792): recibos confirmados (incluido este, si lo
+      // está) más NC aplicadas no anuladas. Los recibos en borrador o anulados no cuentan.
+      const totalPaid =
+        invoice.receiptItems.reduce((sum, ri) => sum + Number(ri.amount), 0) +
+        invoice.creditNoteApplicationsReceived.reduce((sum, app) => sum + Number(app.amount), 0);
       const total = Number(invoice.total);
       const pendingAmount = total - totalPaid;
 

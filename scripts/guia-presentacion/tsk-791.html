@@ -1,0 +1,532 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>TSK-791 — Conceptos de movimientos</title>
+<style>
+  @page {
+    size: A4;
+    margin: 0;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #1f2430;
+    font-size: 13px;
+    line-height: 1.55;
+    background: #ffffff;
+  }
+
+  .page {
+    padding: 4mm 2mm;
+  }
+
+  header.cover {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    text-align: left;
+    padding: 10mm 2mm 8mm 2mm;
+    border-bottom: 3px solid #2f6f4f;
+    margin-bottom: 10mm;
+  }
+
+  .eyebrow {
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 11px;
+    font-weight: 700;
+    color: #2f6f4f;
+    margin-bottom: 6px;
+  }
+
+  h1 {
+    font-size: 26px;
+    margin: 0 0 8px 0;
+    color: #14251c;
+  }
+
+  .subtitle {
+    font-size: 14px;
+    color: #4b5563;
+    margin: 0;
+  }
+
+  section {
+    margin-bottom: 9mm;
+    page-break-inside: avoid;
+  }
+
+  section.allow-break {
+    page-break-inside: auto;
+  }
+
+  section:last-of-type { margin-bottom: 2mm; }
+
+  h2 {
+    font-size: 16px;
+    color: #14251c;
+    border-left: 4px solid #2f6f4f;
+    padding-left: 8px;
+    margin: 0 0 6mm 0;
+    page-break-after: avoid;
+  }
+
+  h3.sub {
+    font-size: 13.5px;
+    color: #14251c;
+    margin: 6mm 0 3mm 0;
+    page-break-after: avoid;
+  }
+
+  .quote {
+    background: #f4f7f5;
+    border-left: 4px solid #2f6f4f;
+    padding: 10px 14px;
+    font-style: italic;
+    color: #2b3a33;
+    margin: 0 0 6px 0;
+  }
+
+  .quote cite {
+    display: block;
+    font-style: normal;
+    font-size: 11.5px;
+    color: #6b7280;
+    margin-top: 6px;
+  }
+
+  .before-after {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    page-break-inside: avoid;
+  }
+
+  .card {
+    border: 1px solid #e2e5e0;
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+
+  .card.before { background: #fbf7f2; border-color: #ecd9bd; }
+  .card.after { background: #f2f8f4; border-color: #bfe0cb; }
+
+  .card h3 {
+    margin: 0 0 6px 0;
+    font-size: 12.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .card.before h3 { color: #9a6a1f; }
+  .card.after h3 { color: #226240; }
+
+  .card p { margin: 0; }
+
+  ol.steps {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    counter-reset: step;
+  }
+
+  ol.steps > li {
+    counter-increment: step;
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+    page-break-inside: avoid;
+  }
+
+  ol.steps > li::before {
+    content: counter(step);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    border-radius: 50%;
+    background: #2f6f4f;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  ol.steps.letters > li::before {
+    content: counter(step, lower-alpha);
+  }
+
+  .step-body { flex: 1; }
+
+  .step-body strong { color: #14251c; }
+
+  figure {
+    margin: 8px 0 0 0;
+    page-break-inside: avoid;
+  }
+
+  figure img {
+    max-width: 100%;
+    border: 1px solid #d9dce0;
+    border-radius: 6px;
+    display: block;
+  }
+
+  figure.small img { max-width: 320px; }
+
+  figure.sidebar img { max-width: 150px; }
+
+  figure.modal img { max-width: 400px; }
+
+  figure.modal-sm img { max-width: 340px; }
+
+  ol.steps.long > li { page-break-inside: auto; }
+
+  figcaption {
+    font-size: 11px;
+    color: #6b7280;
+    margin-top: 4px;
+  }
+
+  .callout {
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin: 0 0 8px 0;
+    page-break-inside: avoid;
+  }
+
+  .callout.config {
+    background: #f2f6fb;
+    border: 1px solid #cddaeb;
+  }
+
+  .callout.warning {
+    background: #fdf5ec;
+    border: 1px solid #efd6a8;
+  }
+
+  .callout h3 {
+    margin: 0 0 4px 0;
+    font-size: 13px;
+  }
+
+  .callout p { margin: 0 0 6px 0; }
+  .callout p:last-child { margin-bottom: 0; }
+
+  ul.plain {
+    margin: 4px 0 0 0;
+    padding-left: 18px;
+  }
+
+  ul.plain li { margin-bottom: 4px; }
+
+  .no-change-list {
+    display: grid;
+    gap: 6px;
+  }
+
+  .no-change-item {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+  }
+
+  .check {
+    color: #2f6f4f;
+    font-weight: 700;
+  }
+
+  .side-by-side {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8mm;
+    align-items: start;
+    page-break-inside: avoid;
+  }
+
+  .side-by-side figure { margin-top: 0; }
+
+  .side-by-side.narrow-left {
+    grid-template-columns: 160px 1fr;
+  }
+
+  .ui-text {
+    font-style: italic;
+    color: #374151;
+  }
+
+  table.chain {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 6px 0 8px 0;
+    font-size: 12px;
+    page-break-inside: avoid;
+  }
+
+  table.chain th, table.chain td {
+    border: 1px solid #dfe3e0;
+    padding: 6px 8px;
+    text-align: left;
+    vertical-align: top;
+  }
+
+  table.chain th {
+    background: #f4f7f5;
+    color: #14251c;
+    font-weight: 700;
+  }
+
+  .entry {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 11.5px;
+    background: #f7f8f7;
+    border: 1px solid #e2e5e0;
+    border-radius: 6px;
+    padding: 8px 10px;
+    margin: 6px 0;
+    white-space: pre;
+  }
+
+  /* TSK-782: los campos de fecha se muestran a su tamaño real; el encabezado del detalle, a lo ancho */
+  figure.field img { max-width: 360px; }
+  figure.phone img { max-width: 190px; }
+  .side-by-side.phone-left { grid-template-columns: 200px 1fr; }
+  .keep-together { page-break-inside: avoid; }
+
+  footer.doc-footer {
+    text-align: center;
+    color: #9ca3af;
+    font-size: 10.5px;
+    margin-top: 2mm;
+  }
+
+  .callout.critical { background: #fdf0ee; border: 1px solid #e8b4ac; }
+  .callout.critical h3 { color: #9b2c1f; }
+  figure.wide img { max-width: 560px; }
+  figure.mid img { max-width: 430px; }
+</style>
+</head>
+
+<body>
+<div class="page">
+
+  <header class="cover">
+    <div class="eyebrow">Ticket 791 · Contabilidad → Conceptos · Gestión → Tesorería</div>
+    <h1>Conceptos: Gestión deja de elegir cuentas contables</h1>
+    <p class="subtitle">Guía de presentación — qué pediste, qué cambió, cómo se usa paso a paso, qué hay que configurar antes y qué no cambia</p>
+  </header>
+
+  <div class="callout critical">
+    <p><strong>Importante:</strong> Contabilidad tiene que crear los conceptos antes de que Gestión cargue
+    Gastos bancarios y movimientos bancarios manuales.</p>
+  </div>
+
+  <section>
+    <h2>1. Qué pediste</h2>
+    <p>Que quien trabaja en <strong>Gestión</strong> no tenga que elegir cuentas contables. Hasta ahora
+    había que hacerlo en dos lugares de Tesorería:</p>
+    <ul class="plain">
+      <li><strong>Gastos e impuestos bancarios</strong>: cada línea pedía elegir una cuenta contable.</li>
+      <li><strong>Nuevo Movimiento</strong> dentro de una cuenta bancaria: había un campo obligatorio
+      <span class="ui-text">Cuenta Contable (Contrapartida)</span>.</li>
+    </ul>
+    <p>Ahora <strong>Contabilidad arma una lista de Conceptos</strong> (por ejemplo, "Impuesto ley
+    25.413" o "Aporte para obra"), y cada concepto ya sabe a qué cuenta va. En Gestión solo se elige el
+    concepto: <strong>no se ve ni se elige ninguna cuenta</strong>.</p>
+    <div class="before-after">
+      <div class="card before">
+        <h3>Antes</h3>
+        <p>En Gestión había que saber qué cuenta contable corresponde a cada gasto o movimiento.</p>
+      </div>
+      <div class="card after">
+        <h3>Ahora</h3>
+        <p>Contabilidad define cada concepto una sola vez. En Gestión se elige por nombre, y el asiento
+        sale con la cuenta correcta.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="allow-break">
+    <h2>2. Contabilidad: crear los conceptos</h2>
+    <p>La lista está en <strong>Empresa → Contabilidad → Conceptos</strong>. Cada fila muestra el
+    nombre, dónde se puede usar, la cuenta a la que va y si está activo.</p>
+    <figure class="wide">
+      <img src="assets/tsk791-01-listado.png" alt="Listado de Conceptos con nombre, usos, cuenta y estado" />
+      <figcaption>Listado de conceptos de la empresa.</figcaption>
+    </figure>
+
+<div class="keep-together">
+    <h3 class="sub">Cómo crear uno</h3>
+    <ol class="steps">
+      <li><div class="step-body">Entrá a <strong>Empresa → Contabilidad → Conceptos</strong> y hacé clic
+      en <span class="ui-text">Nuevo concepto</span>.</div></li>
+      <li><div class="step-body">Escribí el <strong>nombre</strong>. No puede repetirse entre los
+      conceptos activos.</div></li>
+      <li><div class="step-body">Marcá <strong>dónde se puede elegir</strong>: en los movimientos de
+      fondo (Gastos e impuestos bancarios, Aporte de socio, Retiro de socio) y/o en los movimientos
+      bancarios (Depósito, Extracción, Transferencia recibida o enviada, Cheque, Débito automático,
+      Comisión, Interés). Un mismo concepto puede servir en varios lugares.</div></li>
+      <li><div class="step-body">Elegí la <strong>cuenta contable</strong> y guardá.</div></li>
+    </ol>
+</div>
+    <div class="keep-together">
+    <figure class="wide">
+      <img src="assets/tsk791-02-alta-gasto.png" alt="Formulario Nuevo concepto con el nombre Impuesto ley 25.413, el uso Gastos e impuestos bancarios marcado y la cuenta elegida" />
+      <figcaption>Ejemplo: "Impuesto ley 25.413", para Gastos e impuestos bancarios.</figcaption>
+    </figure>
+    </div>
+
+    <h3 class="sub">Aportes y retiros de socios</h3>
+    <p>Si el concepto es solo para aportes o retiros, el formulario pregunta
+    <span class="ui-text">¿Qué cuenta usa?</span>: <strong>mantener la cuenta del socio</strong> (como
+    funcionaba hasta ahora) o <strong>usar otra cuenta</strong> propia del concepto.</p>
+    <div class="keep-together">
+    <figure class="wide">
+      <img src="assets/tsk791-03-alta-aporte-radio.png" alt="Formulario Nuevo concepto con Aporte de socio marcado, la pregunta Qué cuenta usa con la opción Usar otra cuenta elegida y la cuenta Aportes Irrevocables" />
+      <figcaption>Ejemplo: "Aporte para obra" con una cuenta propia.</figcaption>
+    </figure>
+    </div>
+
+<div class="keep-together">
+    <h3 class="sub">Qué cuentas se pueden elegir</h3>
+    <p>El sistema solo ofrece cuentas que sirven para el uso elegido:</p>
+    <table class="chain">
+      <tr><th>Dónde se usa el concepto</th><th>Tipos de cuenta que admite</th></tr>
+      <tr><td>Gastos e impuestos bancarios</td><td>Egreso o Activo</td></tr>
+      <tr><td>Aporte de socio / Retiro de socio</td><td>Activo, Pasivo o Patrimonio Neto</td></tr>
+      <tr><td>Movimientos bancarios (Depósito, Comisión, etc.)</td><td>Activo, Pasivo o Patrimonio Neto</td></tr>
+    </table>
+    <p>Si un concepto sirve en <strong>varios lugares a la vez</strong>, solo admite las cuentas que
+    sirven para todos. Por ejemplo, un concepto de Gastos bancarios y de Comisión bancaria admite
+    únicamente cuentas de Activo.</p>
+
+</div>
+    <h3 class="sub">Desactivar o eliminar</h3>
+    <ul class="plain">
+      <li><strong>Desactivar</strong> saca el concepto de las listas de Gestión, pero conserva el
+      historial. Se puede volver a activar.</li>
+      <li><strong>Eliminar</strong> solo se puede si el concepto nunca se usó. Si ya se usó, el sistema
+      avisa y solo queda desactivarlo.</li>
+    </ul>
+  </section>
+
+  <section class="allow-break">
+    <h2>3. Gestión: cargar movimientos con conceptos</h2>
+
+    <h3 class="sub">Gastos e impuestos bancarios</h3>
+    <p>En <strong>Tesorería → Movimientos de Fondos → Nuevo Movimiento</strong>, con el tipo
+    <span class="ui-text">Gastos e impuestos bancarios</span>, cada línea tiene un
+    <strong>Concepto</strong> (se elige de la lista), un <strong>detalle</strong> opcional y el
+    <strong>importe</strong>. Si dejás el detalle vacío, el asiento usa el nombre del concepto. No
+    aparece ninguna cuenta contable.</p>
+    <div class="keep-together">
+    <figure class="mid">
+      <img src="assets/tsk791-04-gastos-bancarios-conceptos.png" alt="Nuevo Movimiento de Fondos tipo Gastos e impuestos bancarios con dos líneas: Impuesto ley 25.413 por 1.500 y Comisión de mantenimiento por 800, total 2.300" />
+      <figcaption>Dos líneas, cada una con su concepto. El total se calcula solo.</figcaption>
+    </figure>
+    </div>
+
+<div class="keep-together">
+    <h3 class="sub">Aporte y retiro de socio</h3>
+    <p>Si Contabilidad creó conceptos para aportes (o retiros), aparece el campo
+    <strong>Concepto</strong>, obligatorio. Debajo, un aviso te dice cómo se va a imputar. Si todavía no
+    hay conceptos para ese tipo, <strong>el formulario funciona exactamente como antes</strong>.</p>
+    <figure class="mid">
+      <img src="assets/tsk791-05-aporte-concepto.png" alt="Nuevo Movimiento de Fondos tipo Aporte de socio con el campo Concepto Aporte para obra y el aviso: El asiento se imputará según el concepto Aporte para obra" />
+      <figcaption>Aporte de socio con el concepto "Aporte para obra".</figcaption>
+    </figure>
+
+</div>
+    <h3 class="sub">Movimiento bancario manual</h3>
+    <p>En <strong>Tesorería → Cuentas → (la cuenta bancaria) → Nuevo Movimiento</strong>, el campo
+    <span class="ui-text">Cuenta Contable (Contrapartida)</span> se reemplazó por
+    <strong>Concepto</strong>. La lista muestra solo los conceptos que sirven para el tipo elegido: si
+    cambiás de Comisión a Depósito, el concepto elegido se limpia si no corresponde. La tabla de
+    movimientos de la cuenta muestra una columna <span class="ui-text">Concepto</span>.</p>
+    <div class="keep-together">
+    <figure class="mid">
+      <img src="assets/tsk791-07-movimiento-bancario.png" alt="Nuevo Movimiento Bancario de tipo Comisión con el concepto Comisión bancaria y sin ningún campo de cuenta contable" />
+      <figcaption>Comisión bancaria: se elige el concepto, no una cuenta.</figcaption>
+    </figure>
+    </div>
+  </section>
+
+  <section class="allow-break">
+    <h2>4. Qué hay que configurar antes de usarlo</h2>
+    <div class="callout critical">
+      <h3>Importante: Contabilidad tiene que crear los conceptos primero</h3>
+      <p><strong>Sin conceptos de Gastos e impuestos bancarios, Gestión no puede cargar esos
+      movimientos.</strong> Lo mismo pasa con los movimientos bancarios manuales: hace falta al menos un
+      concepto para <strong>cada tipo</strong> que se use (Depósito, Extracción, Comisión, Interés,
+      etc.).</p>
+      <p>Antes de que Gestión vuelva a cargar estos movimientos, Contabilidad debería crear en
+      <strong>Empresa → Contabilidad → Conceptos</strong>, como mínimo:</p>
+      <ul class="plain">
+        <li>los conceptos de <strong>Gastos e impuestos bancarios</strong> que se usen (por ejemplo,
+        impuesto a los débitos y créditos, comisiones de mantenimiento, Sircreb);</li>
+        <li>un concepto por cada <strong>tipo de movimiento bancario</strong> que se cargue a mano.</li>
+      </ul>
+    </div>
+<div class="keep-together">
+    <p>Si falta, Gestión ve este aviso y no puede guardar ni confirmar el movimiento:</p>
+    <div class="keep-together">
+    <figure class="mid">
+      <img src="assets/tsk791-06-sin-conceptos.png" alt="Nuevo Movimiento de Fondos de Gastos e impuestos bancarios con el aviso No hay conceptos configurados y los botones Guardar y Guardar y Confirmar deshabilitados" />
+      <figcaption>Sin conceptos para el tipo: el aviso indica dónde crearlos y los botones quedan deshabilitados.</figcaption>
+    </figure>
+    </div>
+</div>
+    <div class="callout config">
+      <h3>Aportes y retiros de socios</h3>
+      <p>Son opcionales: si Contabilidad no crea conceptos para aportes o retiros, todo sigue como antes
+      (se usa la cuenta del socio).</p>
+    </div>
+    <div class="callout config">
+      <h3>Permiso para administrar conceptos</h3>
+      <p>Para ver y editar la lista hace falta el permiso <span class="ui-text">Conceptos</span> de
+      Contabilidad. Lo tienen el Propietario y el Desarrollador; para el rol Administrador y los roles
+      personalizados, hay que otorgarlo desde <strong>Empresa → Roles</strong>. Gestión no lo necesita
+      para elegir conceptos en sus formularios.</p>
+    </div>
+    <div class="callout warning">
+      <h3>Borradores que ya estaban cargados</h3>
+      <p>Un borrador de Gastos bancarios creado antes de este cambio abre con el concepto vacío (se
+      conserva su detalle): hay que elegir el concepto de cada línea antes de confirmar. Lo mismo pasa
+      con un borrador cuyo concepto Contabilidad desactivó o dejó de aplicar: el sistema no deja
+      confirmarlo y avisa cuál es el concepto; se edita el borrador y se elige otro.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>5. Qué no cambia</h2>
+    <div class="no-change-list">
+      <div class="no-change-item"><span class="check">✓</span><div>Los movimientos <strong>ya
+      confirmados</strong> conservan la cuenta con la que se registraron: no se modifican.</div></div>
+      <div class="no-change-item"><span class="check">✓</span><div>Las <strong>transferencias entre
+      cuentas</strong> propias no usan conceptos y se cargan igual que antes.</div></div>
+      <div class="no-change-item"><span class="check">✓</span><div>Los movimientos bancarios que generan
+      los <strong>recibos, las órdenes de pago</strong> y los cheques no pasan por este formulario y no
+      cambian.</div></div>
+      <div class="no-change-item"><span class="check">✓</span><div>Los <strong>aportes y retiros</strong>
+      de una empresa sin conceptos configurados funcionan exactamente como hasta ahora.</div></div>
+      <div class="no-change-item"><span class="check">✓</span><div>El <strong>asiento</strong> de cada
+      movimiento sigue generándose al confirmar y actualiza el saldo del banco o la caja, igual que
+      antes.</div></div>
+      <div class="no-change-item"><span class="check">✓</span><div>La cuenta de gastos bancarios "por
+      defecto" de la configuración contable ya no se usa ni se muestra: ahora la cuenta la define cada
+      concepto.</div></div>
+    </div>
+  </section>
+
+  <footer class="doc-footer">
+    TSK-791 — Conceptos de movimientos · Contabilidad → Conceptos · Gestión → Tesorería
+  </footer>
+
+</div>
+</body>
+</html>

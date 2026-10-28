@@ -78,6 +78,11 @@ export const fundMovementSchema = z
     // define la cuenta del asiento (TSK-717). El tipo base sigue admitiendo ''
     // porque transferencia y gastos bancarios no lo usan.
     partnerId: z.string().uuid().optional().or(z.literal('')),
+    // Concepto de un aporte o retiro (TSK-791). Acá solo se valida la forma:
+    // si es obligatorio depende de que haya conceptos activos para el tipo, y
+    // eso lo decide el servidor al guardar y al confirmar. Los demás tipos lo
+    // ignoran (gastos bancarios lleva un concepto por línea).
+    conceptId: z.string().uuid().optional().or(z.literal('')),
     // Conceptos del débito bancario. Solo los usa BANK_CHARGES (TSK-585).
     //
     // `.optional()` en lugar de `.default([])`: el `default` hace que el tipo
@@ -89,11 +94,13 @@ export const fundMovementSchema = z
     lines: z
       .array(
         z.object({
-          // `.uuid()`, igual que `partnerId` más arriba: sin esta validación un id
-          // malformado (payload manipulado, o un bug de otro lado del formulario)
-          // llegaba hasta Prisma y explotaba con un P2023 que el usuario veía como
-          // "Ocurrió un error inesperado" (hallazgo de revisión final, TSK-585).
-          accountId: z.string().uuid('Cuenta contable inválida'),
+          // TSK-791: la línea elige un concepto; la cuenta la resuelve el servidor
+          // y nunca viene del cliente. `.uuid()` (TSK-585): sin esta validación un
+          // id malformado llegaba hasta Prisma y explotaba con un P2023 que el
+          // usuario veía como "Ocurrió un error inesperado". El mensaje es el
+          // mismo de `validateLines`, porque un concepto vacío incumple los dos.
+          conceptId: z.string().uuid(LINE_ERROR_MESSAGES.MISSING_CONCEPT),
+          // Detalle opcional: si queda vacío, el asiento usa el nombre del concepto.
           description: z.string(),
           amount: z.string(),
         })

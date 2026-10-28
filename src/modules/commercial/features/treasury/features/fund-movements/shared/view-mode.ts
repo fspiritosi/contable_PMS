@@ -50,6 +50,8 @@ export interface FundMovementRowActions {
   confirm: boolean;
   edit: boolean;
   delete: boolean;
+  /** Anular un movimiento confirmado (corrección en cadena, TSK-792). */
+  cancel: boolean;
 }
 
 export function getRowActions(
@@ -57,11 +59,14 @@ export function getRowActions(
   permissions: RowActionPermissions
 ): FundMovementRowActions {
   const isDraft = status === 'DRAFT';
+  // Confirmado: editar, eliminar y anular pasan por la corrección en cadena (TSK-792).
+  const isConfirmed = status === 'CONFIRMED';
   return {
     view: permissions.canView,
     confirm: isDraft && permissions.canUpdate,
-    edit: isDraft && permissions.canUpdate,
-    delete: isDraft && permissions.canDelete,
+    edit: (isDraft || isConfirmed) && permissions.canUpdate,
+    delete: (isDraft || isConfirmed) && permissions.canDelete,
+    cancel: isConfirmed && permissions.canDelete,
   };
 }
 
@@ -70,9 +75,9 @@ export function hasAnyRowAction(permissions: RowActionPermissions): boolean {
   return permissions.canView || permissions.canUpdate || permissions.canDelete;
 }
 
-/** confirm || edit || delete — decide el separador después de "Ver". */
+/** confirm || edit || delete || cancel — decide el separador después de "Ver". */
 export function hasDraftActions(actions: FundMovementRowActions): boolean {
-  return actions.confirm || actions.edit || actions.delete;
+  return actions.confirm || actions.edit || actions.delete || actions.cancel;
 }
 
 // ---------------------------------------------------------------- opciones con snapshot (D4)
@@ -132,6 +137,7 @@ export function emptyFundMovementFormValues(today?: string): FundMovementFormInp
     sourceFund: '',
     destinationFund: '',
     partnerId: '',
+    conceptId: '',
     lines: [],
   };
 }
@@ -147,10 +153,11 @@ export type FundMovementFormSource = Pick<
   | 'fundInKind'
   | 'fundInId'
   | 'partnerId'
+  | 'conceptId'
 >;
 export type FundMovementLineSource = Pick<
   FundMovementRecord['lines'][number],
-  'accountId' | 'description' | 'amount'
+  'conceptId' | 'description' | 'amount'
 >;
 
 /**
@@ -171,15 +178,55 @@ export function formValuesFromMovement(
     sourceFund: fundRefFrom(movement.fundOutKind, movement.fundOutId),
     destinationFund: fundRefFrom(movement.fundInKind, movement.fundInId),
     partnerId: movement.partnerId ?? '',
+    // TSK-791: solo Aporte y Retiro llevan concepto a nivel movimiento.
+    conceptId:
+      type === 'PARTNER_CONTRIBUTION' || type === 'PARTNER_WITHDRAWAL'
+        ? (movement.conceptId ?? '')
+        : '',
     lines:
       type === 'BANK_CHARGES' && lines
         ? lines.map((line) => ({
-            accountId: line.accountId,
+            // TSK-791: una línea vieja (con cuenta y sin concepto) llega con el
+            // concepto vacío, para obligar a elegirlo; el detalle se conserva.
+            conceptId: line.conceptId ?? '',
             description: line.description,
             amount: String(line.amount),
           }))
         : [],
   };
+}
+
+/**
+ * TSK-791: al editar, un concepto guardado que ya no está entre los activos se
+ * blanquea para que el usuario tenga que elegir otro (si no, un borrador con un
+ * concepto desactivado no se podría volver a guardar). Si el tipo no tiene
+ * conceptos activos, el campo no se muestra y `conceptId` queda vacío.
+ */
+export function clearInactiveConcepts(
+  values: FundMovementFormInput,
+  concepts: Record<'BANK_CHARGES' | 'PARTNER_CONTRIBUTION' | 'PARTNER_WITHDRAWAL', readonly { id: string }[]>
+): FundMovementFormInput {
+  const isActive = (list: readonly { id: string }[], id: string | undefined) =>
+    Boolean(id) && list.some((c) => c.id === id);
+  const type = values.type;
+  const partnerList = type === 'ACCOUNT_TRANSFER' || type === 'BANK_CHARGES' ? [] : concepts[type];
+  return {
+    ...values,
+    conceptId: isActive(partnerList, values.conceptId) ? values.conceptId : '',
+    lines: values.lines?.map((line) => ({
+      ...line,
+      conceptId: isActive(concepts.BANK_CHARGES, line.conceptId) ? line.conceptId : '',
+    })),
+  };
+}
+
+/** `conceptId → conceptName` guardado de las líneas, para mostrar conceptos ya desactivados en la vista. */
+export function conceptNamesById(
+  lines: readonly { conceptId: string | null; conceptName: string | null }[] | undefined
+): Record<string, string> {
+  return Object.fromEntries(
+    (lines ?? []).flatMap((l) => (l.conceptId && l.conceptName ? [[l.conceptId, l.conceptName]] : []))
+  );
 }
 
 // ---------------------------------------------------------------- textos (D6)
@@ -230,16 +277,21 @@ export function formResetKey(mode: FundMovementModalMode, movementId: string | n
 
 // ---------------------------------------------------------------- resumen de vista (D3)
 export interface ViewSummaryFact {
-  key: 'confirmedAt' | 'journalEntry';
+  key: 'confirmedAt' | 'journalEntry' | 'concept';
   label: string;
   value: string;
 }
 
 /** Solo los hechos presentes, en orden. El estado va aparte (badge). */
 export function getViewSummaryFacts(
-  movement: Pick<FundMovementListItem, 'confirmedAt' | 'journalEntryNumber'>
+  movement: Pick<FundMovementListItem, 'confirmedAt' | 'journalEntryNumber'> &
+    Partial<Pick<FundMovementListItem, 'conceptName'>>
 ): ViewSummaryFact[] {
   const facts: ViewSummaryFact[] = [];
+  // TSK-791: concepto del aporte/retiro (snapshot). Los gastos bancarios lo llevan por línea.
+  if (movement.conceptName) {
+    facts.push({ key: 'concept', label: 'Concepto', value: movement.conceptName });
+  }
   if (movement.confirmedAt != null) {
     // Timestamp real: se muestra en hora local (a diferencia de `date`, anclada a mediodía UTC).
     facts.push({

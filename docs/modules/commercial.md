@@ -298,9 +298,9 @@ dentro de una única transacción. Confirmado no se edita ni se elimina.
   `AccountCombobox` (el fieldset no alcanza a Radix). La opacidad del `disabled` se neutraliza con
   `[&_:disabled]:opacity-100! [&_:disabled]:cursor-default!` (con `!`: sin él empata en
   especificidad con `disabled:opacity-50`). El footer queda fuera del fieldset con un único
-  "Cerrar". En vista se ocultan "Agregar concepto", los tachos, `_PartnerAccountNotice`,
-  `_BankChargesDefaultNotice` y el aviso de "no hay bancos ni cajas"; el total de conceptos se
-  mantiene. `useFundMovementSubmit` ignora el submit en `view`.
+  "Cerrar". En vista se ocultan "Agregar concepto", los tachos, `_PartnerAccountNotice`
+  (que además no anticipa bloqueos hasta elegir concepto, si el tipo tiene conceptos) y el aviso
+  de "no hay bancos ni cajas"; el total de conceptos se mantiene. `useFundMovementSubmit` ignora el submit en `view`.
 - **Resumen** (`_FundMovementViewSummary`): badge de estado y, si existen, "Confirmado el"
   (`confirmedAt`, `DD/MM/YYYY HH:mm` local) y "Asiento N°" (`journalEntryNumber`, texto sin link:
   no hay página de detalle de asiento). Es el lugar donde se consulta el N° de asiento.
@@ -325,21 +325,42 @@ dentro de una única transacción. Confirmado no se edita ni se elimina.
   arregló en `DataTablePagination` (ver `src/shared/components/common/DataTable/DOCS.md`). La fila
   de conceptos se apila en `< sm` (cuenta a ancho completo; debajo descripción, importe y tacho).
   Verificación: `scripts/guia-presentacion/capturas-tsk720a-726.mjs` (375 px con `isMobile: true`).
-- **Caso borde (D12)**: `getFundMovementLineAccounts` no cambió; si la cuenta de un concepto ya no
-  es de egreso/activo imputable, en la vista el combobox de esa fila puede quedar sin texto.
 
-**Gastos bancarios — cuenta por defecto preseleccionada (TSK-718)**: `getFundMovementCatalogs`
-devuelve `defaultBankChargesAccount` (`AccountingSettings.bankChargesAccountId`, "Gastos bancarios
-por defecto", `{ id, code, name } | null`). `_FundMovementLinesField` calcula
-`pickDefaultLineAccount(defaultAccount?.id, accounts)` (`shared/lines-calc.ts`: devuelve el id solo
-si está entre las cuentas que el combo ofrece hoy; si no, `''`) y lo usa como `accountId` inicial de
-cada concepto que se agrega. `_BankChargesDefaultNotice` (debajo de la tabla, siempre visible,
-`role="status"`) anticipa el estado: neutro «Los conceptos nuevos se imputan a `code - name`
-(cuenta de gastos bancarios por defecto). Podés cambiar la cuenta en cada fila.», naranja si la
-cuenta configurada ya no es imputable, o naranja «No hay cuenta de gastos bancarios por defecto:
-elegí la cuenta en cada concepto o configurala en Ajustes contables.» Ninguno bloquea:
-`FundMovementLine.accountId` sigue siendo obligatorio y el asiento usa la cuenta de cada línea, no
-la de configuración. Sircreb y otros conceptos que son activo se eligen a mano.
+**Conceptos en lugar de cuentas (TSK-791)**: Gestión ya no elige cuentas. Contabilidad define
+`MovementConcept` (ver `docs/modules/accounting.md` → Conceptos y `data-model.md`) y acá solo se elige el
+concepto; el servidor resuelve la cuenta con `resolveConceptForUsage` (`shared/lib/concepts`).
+
+- **Gastos e impuestos bancarios**: cada línea es `{ conceptId, description?, amount }`
+  (`Elegí el concepto` si falta; el detalle es opcional y, vacío, el asiento usa el nombre del
+  concepto). `getFundMovementCatalogs` devuelve `concepts` por tipo (`BANK_CHARGES`,
+  `PARTNER_CONTRIBUTION`, `PARTNER_WITHDRAWAL`) y ya **no** devuelve `defaultBankChargesAccount`.
+  `getFundMovementLineAccounts`, `_BankChargesDefaultNotice` y `pickDefaultLineAccount` se eliminaron;
+  `_CommercialIntegrationForm` ya no muestra `bankChargesAccountId` (la columna se conserva).
+- **Sin conceptos para el uso**: `_NoConceptsNotice` (en `shared/components/common/`) muestra «No hay
+  conceptos configurados para «{uso}». Pedile a Contabilidad que los cree en Empresa → Contabilidad →
+  Conceptos.» (con link si el usuario tiene `accounting.concepts` view) y deshabilita Guardar y Guardar y
+  Confirmar en Gastos bancarios.
+- **Aporte / Retiro**: si hay conceptos activos para el tipo, `Concepto` es obligatorio (uno por
+  movimiento; lo exige el servidor al guardar y confirmar, no Zod); si no hay ninguno, todo queda como
+  antes (cuenta del socio, `resolvePartnerCapitalAccount`). Con `OWN_ACCOUNT` el asiento usa la cuenta del
+  concepto y `_PartnerAccountNotice` solo nombra el concepto; con `PARTNER_ACCOUNT`, igual que antes.
+  El socio sigue siendo obligatorio.
+- **Confirmar** (`confirmFundMovement`): vuelve a resolver todos los conceptos **antes** de mover saldos
+  y rechaza concepto inactivo, sin el uso o con cuenta no imputable, o un borrador viejo sin concepto
+  cuando ya hay conceptos para el tipo. Los borradores anteriores abren con el concepto vacío y conservan
+  su detalle.
+- **Tipo del formulario**: al cambiar de tipo se limpia el concepto del movimiento; `buildLinesData`
+  ignora las líneas si el tipo no es `BANK_CHARGES`.
+- **Vista**: muestra el concepto (snapshot `conceptName`), nunca la cuenta.
+
+**Movimiento bancario manual con concepto (TSK-791)**: en el detalle de la cuenta bancaria, "Nuevo
+Movimiento" reemplaza "Cuenta Contable (Contrapartida)" por `Concepto` (obligatorio, filtrado por el
+tipo con `bankMovementUsage`). `getBankMovementConcepts()` (permiso `bank-accounts` view) devuelve las
+opciones por tipo y `getAccountsForBankMovement` se eliminó. `createBankMovement` ya no recibe
+`accountId`: resuelve el concepto dentro de la transacción (antes de tocar saldos) y guarda
+`conceptId`/`conceptName`; la contrapartida del asiento es la cuenta del concepto. Si no hay conceptos
+para el tipo, `_NoConceptsNotice` y Registrar deshabilitado. La tabla muestra la columna Concepto. No
+cambian las transferencias entre cuentas ni los movimientos que generan recibos, órdenes de pago o cheques.
 
 **Resolución de la cuenta de capital (TSK-717)** — `resolvePartnerCapitalAccount` en
 `fund-movements/list/actions.server.ts`:
@@ -1057,17 +1078,103 @@ Tanto Recibos como Órdenes de Pago soportan retenciones impositivas:
 
 ---
 
+## Editar, eliminar y anular facturas confirmadas (TSK-792)
+
+Una FC o FV confirmada (CONFIRMED, PARTIAL_PAID, PAID) se edita, elimina o anula desde la UI con la
+corrección en cadena (`shared/hooks/useDocumentCorrection`, motor en `shared/correction/`):
+
+- **Editar**: el formulario de edición de borrador también admite confirmadas. Si el comprobante no
+  es DRAFT, el submit llama a `open({ mode: 'EDIT', ref, data })` en vez de `updatePurchaseInvoice` /
+  `updateInvoice` (la FV agrega `number` para la regla de campos fijos). Aplicada la propuesta, navega al detalle.
+- **Eliminar / Anular**: botones en el detalle (`shared/components/_DocumentCorrectionButtons`) y en el
+  menú de cada fila del listado; abren el diálogo de propuesta (modos `DELETE` / `CANCEL`).
+- Permisos: Editar `update`, Eliminar y Anular `delete` (`commercial.purchases` / `commercial.invoices`).
+- Una FV con CAE o de un punto de venta con `afipEnabled` (`isAfipLocked`) no muestra los botones y la
+  página de edición redirige al detalle.
+- Los viejos `cancelInvoice` / `cancelPurchaseInvoice` (anulaban dejando el asiento vivo) se eliminaron.
+  Quedan `discardDraftInvoice` / `discardDraftPurchaseInvoice`, que solo descartan **borradores** y rechazan
+  cualquier otro estado.
+
+### OP, recibos y movimientos de fondos confirmados (TSK-792)
+
+Misma mecánica para `PAYMENT_ORDER`, `RECEIPT` y `FUND_MOVEMENT` (permisos `commercial.treasury.payment-orders`,
+`receipts` y `fund-movements`: Editar `update`, Eliminar y Anular `delete`):
+
+- **Editar**: `_EditPaymentOrderModal` / `_EditReceiptModal` / modo `edit` de `_CreateFundMovementModal` admiten
+  confirmados. El formulario recibe `isCorrection` (OP, RC) o lo deriva de `movement.status === 'CONFIRMED'`
+  (MF) y el submit va por `useDocumentCorrection().open({ mode: 'EDIT', ref, data })`; el botón dice
+  "Revisar cambios". `data` se valida en el motor con el mismo schema del borrador.
+- Los valores iniciales cargan todos los vínculos persistidos (`getPaymentOrder` ahora devuelve los datos del
+  cheque y `endorsedCheckId` de cada pago) y el "máximo/pendiente" de cada factura suma de vuelta el importe de
+  la propia OP/RC (`itemInfo` en la OP, `ownAmounts` en el RC).
+- **Eliminar / Anular**: ítems del menú de cada fila (`columns.tsx`) que abren la propuesta (`DELETE` / `CANCEL`).
+  En borradores, Eliminar sigue siendo `deletePaymentOrder` / `deleteReceipt` / `deleteFundMovement`.
+  `getRowActions` (MF) suma `cancel` y habilita `edit`/`delete` en CONFIRMED.
+- Los estados CANCELLED se rotulan "Anulada" (OP) y "Anulado" (RC, MF).
+
+### Motor de corrección, impedimentos y permisos (TSK-792)
+
+- **Efectos** (`shared/effects/`): cada `confirm*` usa funciones `apply…EffectsTx` y sus inversas
+  `revert…EffectsTx` (FC, FV, OP, RC, MF), más `document-status.server.ts` que recalcula el estado
+  (CONFIRMED / PARTIAL_PAID / PAID) contando solo OP/RC CONFIRMED y NC aplicadas no anuladas.
+- **Motor** (`shared/correction/`): `chain.server.ts` arma el plan (origen + OP/RC/NC que lo cancelan + sus efectos),
+  `engine.server.ts` lo ejecuta en una transacción (revertir efectos, escribir datos, reaplicar, recalcular),
+  `snapshot.server.ts` toma la foto antes/después y `fingerprint.ts` la huella. La vista previa hace rollback;
+  al aplicar se vuelve a ejecutar y solo se confirma si la huella coincide con la que vio el usuario (si no,
+  devuelve la propuesta nueva con `stale: true`).
+- **Concurrencia**: antes de ejecutar, el motor bloquea (`SELECT … FOR UPDATE`, en orden fijo por tabla e id) todo lo
+  que el plan escribe —origen, OP/RC/NC de la cadena, facturas y gastos que imputan— y vuelve a planificar sobre
+  las filas bloqueadas (`planLockedTx`). Dos correcciones que se cruzan (la FC y la OP que la paga) se serializan
+  sin interbloqueo: la segunda ve lo que dejó la primera y vuelve como STALE.
+- **Acciones** (`shared/actions/document-correction.server.ts`): `previewDocumentCorrection` y
+  `applyDocumentCorrection`. UI: `shared/hooks/useDocumentCorrection.ts`, `_CorrectionProposalDialog`,
+  `_CorrectionCard`, `_CorrectionImpediments` y `_DocumentCorrectionButtons`.
+- **Propagación**: si el monto baja, baja el pago/cobro (de la cancelación más reciente a la más antigua; con varios
+  medios de pago elige el usuario, solo entre los que cubren la diferencia por sí solos; si ninguno alcanza →
+  impedimento `NO_PAYMENT_COVERS_REDUCTION`, o `WITHHOLDINGS_INSUFFICIENT` si sin las retenciones no alcanzan); si sube no se toca y queda "Pago parcial"; si se elimina o anula, el pago que
+  solo cancelaba ese comprobante se elimina y, si cancelaba varios, pierde la imputación. Las retenciones no se
+  recalculan. Profundidad: origen → OP/RC/NC → sus efectos.
+- **Impedimentos**: con al menos uno no se aplica nada. `MANUAL` ("Podés resolverlo": asiento Registrado,
+  liquidación de IVA del mes generada, cambio de tercero con pagos, cambio de clase FC/ND ↔ NC con pagos,
+  cobros o NC aplicadas, movimiento bancario vinculado a mano) o
+  `BLOCKED` ("No se puede": período cerrado, CAE de AFIP, caja cerrada, movimiento anterior a la trazabilidad, cuota de tarjeta pendiente sin su proyección vinculada).
+- **Eliminar** exige el asiento en DRAFT; **Anular** con asiento POSTED genera el contraasiento.
+- **Saldos vigentes** (`shared/lib/effective-settlements.ts`): una OP o un RC **anulado conserva sus
+  imputaciones como histórico, pero no cuenta en ningún saldo** (tampoco los borradores, TSK-797). Todo cálculo
+  de saldo pendiente, deuda o estado filtra las relaciones con `EFFECTIVE_PAYMENT_ORDER_ITEM`,
+  `EFFECTIVE_RECEIPT_ITEM` y `EFFECTIVE_*_CREDIT_NOTE_APPLICATION` (OP/RC CONFIRMED, NC no anulada): facturas
+  pendientes de la Nueva OP / Nuevo recibo, detalle y PDF de la factura, cuenta corriente, dashboard, cashflow,
+  compensación de NC y `document-status.server.ts`.
+- **Datos nuevos**: ver `docs/architecture/data-model.md` (`CashMovement.receiptId/paymentOrderId/fundMovementId`,
+  `BankMovement.fundMovementId/documentLink`, `CashflowProjection.paymentOrderInstallmentId`).
+
+### Deploy de la corrección en cadena (TSK-792)
+
+1. Las migraciones `20261023100000_tsk_792_correction_traceability` (columnas, enums, índices) y
+   `20261023100100_tsk_792_trigger_and_backfill` (trigger y backfill de la trazabilidad) corren con
+   `prisma migrate deploy`. El backfill vincula solo ante una coincidencia única; ante la duda no vincula.
+2. **Después de deployar**, correr `prisma/scripts/tsk792-diagnostico-trazabilidad.sql` en producción (la imagen
+   runner no tiene `tsx`: usar `psql` dentro del contenedor de la base) y revisar los conteos:
+   - Los movimientos que quedaron **sin vincular** (caja, banco, proyecciones) no se pueden corregir
+     automáticamente: la corrección los muestra como impedimento "anterior a la trazabilidad".
+   - Revisar **cada** `MANUAL_LINK` que informe: son movimientos bancarios vinculados a mano a una OP/RC y la
+     corrección no los toca sin que el usuario lo resuelva.
+3. Las facturas **anuladas antes de este cambio** que conservan un asiento vivo (el viejo `cancelInvoice` no lo
+   revertía) **no se migran**: siguen como estaban y hay que regularizarlas a mano.
+4. Roles personalizados: Editar requiere `update`, Eliminar y Anular `delete` del módulo del comprobante;
+   volver a borrador requiere `accounting.entries`/`approve`. Revisar que los roles que deban hacerlo los tengan.
+
 ## Tabla Resumen de Efectos
 
 | Evento | Stock | Factura Status | OC Status | OC InvoicingStatus | Banco/Caja | Asiento |
 |--------|-------|----------------|-----------|-------------------|------------|---------|
 | Confirmar FC Compra | +qty* | CONFIRMED | — | PARTIALLY/FULLY | — | Si |
-| Cancelar FC Compra | -qty | CANCELLED | — | Recalcula | — | — |
+| Anular FC Compra (corrección en cadena) | revierte efectos | CANCELLED | — | Recalcula | Revierte pagos que la cancelaban | Contraasiento con fecha del comprobante (o se elimina si está en borrador) |
 | Confirmar NC Compra | -qty | CONFIRMED | — | — | — | Si |
 | Confirmar ND Compra | — | CONFIRMED | — | — | — | Si |
 | Confirmar Remito | +qty | — | PARTIALLY/COMPLETED | — | — | — |
 | Confirmar FC Venta | -qty | CONFIRMED | — | — | — | Si |
-| Cancelar FC Venta | +qty | CANCELLED | — | — | — | — |
+| Anular FC Venta (corrección en cadena) | +qty | CANCELLED | — | — | Revierte cobros que la cancelaban | Contraasiento con fecha del comprobante (o se elimina si está en borrador) |
 | Confirmar NC Venta | +qty | CONFIRMED | — | — | — | Si |
 | Confirmar ND Venta | — | CONFIRMED | — | — | — | Si |
 | Confirmar Recibo | — | PAID/PARTIAL | — | — | +balance | Si |
@@ -1131,6 +1238,7 @@ Tanto Recibos como Órdenes de Pago soportan retenciones impositivas:
 | `shared/lib/accounts/settings-account-labels.ts` | Labels literales de los 31 campos de Ajustes contables + `ACCOUNTING_SETTINGS_PATH`; los lee el formulario y los citan los mensajes (TSK-728) |
 | `modules/commercial/features/treasury/features/fund-movements/shared/lines-calc.ts` | Totales de conceptos de gastos bancarios y `pickDefaultLineAccount` (preselección de la cuenta por defecto, TSK-718) |
 | `modules/commercial/features/treasury/features/fund-movements/shared/view-mode.ts` | Modos del modal (`create`/`edit`/`view`), rótulos y variante de estado, `getRowActions`/`hasAnyRowAction`, `buildFundOptions`/`withSnapshotOption`, `formValuesFromMovement`, `getModalCopy`, guardas del hook y `getViewSummaryFacts` (TSK-720a) |
+| `shared/lib/effective-settlements.ts` | Filtros de imputaciones vigentes (OP/RC CONFIRMED, NC no anulada) para todo saldo pendiente (TSK-792) |
 | `shared/lib/action-result.ts` | `ActionResult`, `BusinessError`, `toActionResult`: errores de negocio como dato en Server Actions (TSK-481 / TSK-721) |
 | `modules/commercial/shared/components/_DocumentAttachment.tsx` | UI de adjuntos |
 

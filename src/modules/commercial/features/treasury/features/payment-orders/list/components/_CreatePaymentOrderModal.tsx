@@ -31,6 +31,7 @@ import { MoneyInput } from '@/shared/components/ui/money-input';
 import moment from 'moment';
 import { formatCurrency } from '@/shared/utils/formatters';
 import { businessToday } from '@/shared/utils/date-input';
+import { useDocumentCorrection } from '@/modules/commercial/shared/hooks/useDocumentCorrection';
 
 type ActiveCard = Awaited<ReturnType<typeof getActiveCardsForPayment>>[number];
 
@@ -76,6 +77,13 @@ interface CreatePaymentOrderModalProps {
   initialPayments?: CreatePaymentOrderFormData['payments'];
   /** Retenciones iniciales (modo edición) */
   initialWithholdings?: CreatePaymentOrderFormData['withholdings'];
+  /** Edición de una OP confirmada: el guardado abre la propuesta de corrección (TSK-792). */
+  isCorrection?: boolean;
+  /**
+   * Edición: número y monto ya imputado de cada factura/gasto de la OP (clave: id del
+   * documento). El pendiente informado lo descuenta, así que en una corrección se suma.
+   */
+  itemInfo?: Record<string, { label: string; own: number }>;
 }
 
 export function CreatePaymentOrderModal({
@@ -90,6 +98,8 @@ export function CreatePaymentOrderModal({
   initialNotes,
   initialPayments,
   initialWithholdings,
+  isCorrection = false,
+  itemInfo,
 }: CreatePaymentOrderModalProps) {
   const [internalOpen, setInternalOpen] = useState(false);
   const isControlled = controlledOpen !== undefined;
@@ -105,6 +115,15 @@ export function CreatePaymentOrderModal({
     prefilledSupplierId ?? null
   );
   const queryClient = useQueryClient();
+  const correction = useDocumentCorrection({
+    onApplied: () => {
+      queryClient.removeQueries({ queryKey: ['paymentOrder', editPaymentOrderId] });
+      void queryClient.invalidateQueries({ queryKey: ['pendingPurchaseInvoices'] });
+      void queryClient.invalidateQueries({ queryKey: ['pendingExpenses'] });
+      setOpen(false);
+      onSuccess();
+    },
+  });
   const isPrefilled = Boolean(
     (prefilledSupplierId && prefilledInvoices) || (prefilledExpenses && prefilledExpenses.length > 0)
   );
@@ -306,9 +325,17 @@ export function CreatePaymentOrderModal({
   };
 
   const onSubmit = async (data: CreatePaymentOrderFormData) => {
+    if (isCorrection && editPaymentOrderId) {
+      correction.open({ mode: 'EDIT', ref: { kind: 'PAYMENT_ORDER', id: editPaymentOrderId }, data });
+      return;
+    }
     try {
       if (isEdit && editPaymentOrderId) {
-        await updatePaymentOrder(editPaymentOrderId, data);
+        const result = await updatePaymentOrder(editPaymentOrderId, data);
+        if (!result.success) {
+          toast.error(result.error);
+          return;
+        }
         toast.success('Orden de pago actualizada correctamente');
       } else {
         await createPaymentOrder(data);
@@ -472,14 +499,17 @@ export function CreatePaymentOrderModal({
                       {itemFields.map((field, index) => {
                         const invoice = field.invoiceId ? pendingInvoices.find((inv) => inv.id === field.invoiceId) : null;
                         const expense = field.expenseId ? pendingExpenses.find((exp) => exp.id === field.expenseId) : null;
-                        const pendingAmount = invoice?.pendingAmount ?? expense?.pendingAmount ?? 0;
+                        const info = itemInfo?.[field.invoiceId ?? field.expenseId ?? ''];
+                        const pendingAmount =
+                          (invoice?.pendingAmount ?? expense?.pendingAmount ?? 0) +
+                          (isCorrection ? (info?.own ?? 0) : 0);
 
                         return (
                           <tr key={field.id} className="border-b last:border-0">
                             <td className="px-3 py-2">
-                              <p className="font-medium">{invoice?.fullNumber || expense?.fullNumber}</p>
+                              <p className="font-medium">{invoice?.fullNumber || expense?.fullNumber || info?.label}</p>
                               <p className="text-xs text-muted-foreground">
-                                {invoice ? 'Factura de Compra' : `Gasto · ${expense?.description ?? ''}`}
+                                {invoice || field.invoiceId ? 'Factura de Compra' : `Gasto · ${expense?.description ?? ''}`}
                               </p>
                             </td>
                             <td className="px-3 py-2 text-right text-muted-foreground whitespace-nowrap">
@@ -1113,13 +1143,20 @@ export function CreatePaymentOrderModal({
                 <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                   Cancelar
                 </Button>
-                <Button type="submit" disabled={(paymentFields.length > 0 || withholdingFields.length > 0) && difference !== 0}>
-                  Crear Orden de Pago
+                <Button
+                  type="submit"
+                  disabled={
+                    correction.isPending ||
+                    ((paymentFields.length > 0 || withholdingFields.length > 0) && difference !== 0)
+                  }
+                >
+                  {isCorrection ? 'Revisar cambios' : isEdit ? 'Guardar Cambios' : 'Crear Orden de Pago'}
                 </Button>
               </div>
             </div>
           </form>
         </Form>
+        {correction.dialog}
       </DialogContent>
     </Dialog>
   );

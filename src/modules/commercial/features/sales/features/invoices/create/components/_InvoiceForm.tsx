@@ -56,6 +56,7 @@ import { Card } from '@/shared/components/ui/card';
 import { logger } from '@/shared/lib/logger';
 import { Separator } from '@/shared/components/ui/separator';
 import { MoneyInput } from '@/shared/components/ui/money-input';
+import { useDocumentCorrection } from '@/modules/commercial/shared/hooks/useDocumentCorrection';
 import { businessToday } from '@/shared/utils/date-input';
 import type { VoucherType } from '@/generated/prisma/enums';
 
@@ -555,10 +556,18 @@ interface InvoiceFormProps {
   invoiceId?: string;
   initialData?: FormInput;
   fromQuoteId?: string;
+  /** Edición de una factura confirmada: el guardado abre la propuesta de corrección (TSK-792). */
+  correction?: { currentNumber: number };
 }
 
-export function InvoiceForm({ customers, pointsOfSale, products, costCenters, defaultAccountType = null, mode = 'create', invoiceId, initialData, fromQuoteId }: InvoiceFormProps) {
+export function InvoiceForm({ customers, pointsOfSale, products, costCenters, defaultAccountType = null, mode = 'create', invoiceId, initialData, fromQuoteId, correction }: InvoiceFormProps) {
   const router = useRouter();
+  const documentCorrection = useDocumentCorrection({
+    onApplied: () => {
+      router.push(`/dashboard/commercial/invoices/${invoiceId}`);
+      router.refresh();
+    },
+  });
   const isEdit = mode === 'edit';
   const [totals, setTotals] = useState({
     subtotalBeforeDiscount: 0,
@@ -855,6 +864,16 @@ export function InvoiceForm({ customers, pointsOfSale, products, costCenters, de
     try {
       if (data.lines.length === 0) {
         toast.error('Debe agregar al menos un ítem a la factura');
+        return;
+      }
+
+      if (isEdit && invoiceId && correction) {
+        // El número viaja para que la regla de campos fijos de la FV lo controle.
+        documentCorrection.open({
+          mode: 'EDIT',
+          ref: { kind: 'SALES_INVOICE', id: invoiceId },
+          data: { ...data, number: correction.currentNumber },
+        });
         return;
       }
 
@@ -1335,13 +1354,16 @@ export function InvoiceForm({ customers, pointsOfSale, products, costCenters, de
           >
             Cancelar
           </Button>
-          <Button type="submit" disabled={form.formState.isSubmitting}>
+          <Button type="submit" disabled={form.formState.isSubmitting || documentCorrection.isPending}>
             {form.formState.isSubmitting
               ? (isEdit ? 'Guardando...' : 'Creando...')
-              : (isEdit ? 'Guardar Cambios' : 'Crear Factura')}
+              : correction
+                ? 'Revisar cambios'
+                : (isEdit ? 'Guardar Cambios' : 'Crear Factura')}
           </Button>
         </div>
       </form>
+      {documentCorrection.dialog}
     </Form>
   );
 }

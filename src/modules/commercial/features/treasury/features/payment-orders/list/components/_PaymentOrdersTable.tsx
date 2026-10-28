@@ -14,6 +14,7 @@ import { EditPaymentOrderModal } from './_EditPaymentOrderModal';
 import { CreatePaymentOrderModal } from './_CreatePaymentOrderModal';
 import { _DeletePaymentOrderDialog } from './_DeletePaymentOrderDialog';
 import { _PartnerRepaymentDialog } from '../../../partners/features/detail/components/_PartnerRepaymentDialog';
+import { useDocumentCorrection } from '@/modules/commercial/shared/hooks/useDocumentCorrection';
 import { usePermissions } from '@/shared/hooks/usePermissions';
 import { Button } from '@/shared/components/ui/button';
 import { Undo2 } from 'lucide-react';
@@ -38,6 +39,7 @@ export function _PaymentOrdersTable({ data, totalRows, searchParams, facetCounts
   const [selectedPaymentOrderId, setSelectedPaymentOrderId] = useState<string | null>(null);
   const [repayOpen, setRepayOpen] = useState(false);
   const { hasPermission } = usePermissions();
+  const correction = useDocumentCorrection({ onApplied: () => router.refresh() });
 
   const canCreate = hasPermission('commercial.treasury.payment-orders', 'create');
   const canEdit = hasPermission('commercial.treasury.payment-orders', 'update');
@@ -95,10 +97,13 @@ export function _PaymentOrdersTable({ data, totalRows, searchParams, facetCounts
           setSelectedPaymentOrderId(order.id);
           setDeleteDialogOpen(true);
         },
+        onCorrect: (order, mode) =>
+          correction.open({ mode, ref: { kind: 'PAYMENT_ORDER', id: order.id } }),
         canEdit,
         canApprove,
         canDelete,
       }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [canEdit, canApprove, canDelete]
   );
 
@@ -170,7 +175,10 @@ export function _PaymentOrdersTable({ data, totalRows, searchParams, facetCounts
         paymentOrderId={selectedPaymentOrderId}
         open={editModalOpen}
         onOpenChange={setEditModalOpen}
+        onSuccess={() => router.refresh()}
       />
+
+      {correction.dialog}
     </>
   );
 }

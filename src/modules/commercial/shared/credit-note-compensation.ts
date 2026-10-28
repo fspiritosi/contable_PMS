@@ -1,6 +1,17 @@
+import {
+  EFFECTIVE_PAYMENT_ORDER_ITEM,
+  EFFECTIVE_PURCHASE_CREDIT_NOTE_APPLICATION,
+  EFFECTIVE_RECEIPT_ITEM,
+  EFFECTIVE_SALES_CREDIT_NOTE_APPLICATION,
+} from '@/shared/lib/effective-settlements';
 import { logger } from '@/shared/lib/logger';
-import { CREDIT_NOTE_TYPES, isCreditNote } from './voucher-utils';
+import { CREDIT_NOTE_TYPES } from './voucher-utils';
 import type { Prisma } from '@/generated/prisma/client';
+import type { Tx } from '@/modules/accounting/features/integrations/core';
+import {
+  recomputePurchaseInvoiceStatusTx,
+  recomputeSalesInvoiceStatusTx,
+} from './effects/document-status.server';
 
 type TransactionClient = Parameters<Parameters<typeof import('@/shared/lib/prisma').prisma.$transaction>[0]>[0];
 
@@ -38,10 +49,11 @@ export async function applySalesCreditNote(
       total: true,
       issueDate: true,
       receiptItems: {
-        where: { receipt: { status: 'CONFIRMED' } },
+        where: EFFECTIVE_RECEIPT_ITEM,
         select: { amount: true },
       },
       creditNoteApplicationsReceived: {
+        where: EFFECTIVE_SALES_CREDIT_NOTE_APPLICATION,
         select: { amount: true, creditNoteId: true },
       },
       creditDebitNotes: {
@@ -168,10 +180,11 @@ export async function applyPurchaseCreditNote(
       total: true,
       issueDate: true,
       paymentOrderItems: {
-        where: { paymentOrder: { status: 'CONFIRMED' } },
+        where: EFFECTIVE_PAYMENT_ORDER_ITEM,
         select: { amount: true },
       },
       creditNoteApplicationsReceived: {
+        where: EFFECTIVE_PURCHASE_CREDIT_NOTE_APPLICATION,
         select: { amount: true, creditNoteId: true },
       },
       creditDebitNotes: {
@@ -270,4 +283,52 @@ export async function applyPurchaseCreditNote(
   }
 
   return applications;
+}
+
+/**
+ * Inversa de `applySalesCreditNote` (TSK-792): borra las aplicaciones que DIO la NC,
+ * recalcula el estado de cada factura que compensaba y el de la propia NC (sin
+ * aplicaciones vuelve a CONFIRMED). Devuelve los ids de las facturas afectadas.
+ */
+export async function unapplySalesCreditNoteTx(tx: Tx, creditNoteId: string): Promise<string[]> {
+  const applications = await tx.salesCreditNoteApplication.findMany({
+    where: { creditNoteId },
+    select: { id: true, invoiceId: true },
+  });
+  if (applications.length === 0) return [];
+
+  await tx.salesCreditNoteApplication.deleteMany({
+    where: { id: { in: applications.map((a) => a.id) } },
+  });
+
+  const invoiceIds = [...new Set(applications.map((a) => a.invoiceId))];
+  for (const invoiceId of invoiceIds) {
+    await recomputeSalesInvoiceStatusTx(tx, invoiceId);
+  }
+  await recomputeSalesInvoiceStatusTx(tx, creditNoteId);
+  return invoiceIds;
+}
+
+/**
+ * Inversa de `applyPurchaseCreditNote` (TSK-792): borra las aplicaciones que DIO la
+ * NC, recalcula el estado de cada factura que compensaba y el de la propia NC (sin
+ * aplicaciones vuelve a CONFIRMED). Devuelve los ids de las facturas afectadas.
+ */
+export async function unapplyPurchaseCreditNoteTx(tx: Tx, creditNoteId: string): Promise<string[]> {
+  const applications = await tx.purchaseCreditNoteApplication.findMany({
+    where: { creditNoteId },
+    select: { id: true, invoiceId: true },
+  });
+  if (applications.length === 0) return [];
+
+  await tx.purchaseCreditNoteApplication.deleteMany({
+    where: { id: { in: applications.map((a) => a.id) } },
+  });
+
+  const invoiceIds = [...new Set(applications.map((a) => a.invoiceId))];
+  for (const invoiceId of invoiceIds) {
+    await recomputePurchaseInvoiceStatusTx(tx, invoiceId);
+  }
+  await recomputePurchaseInvoiceStatusTx(tx, creditNoteId);
+  return invoiceIds;
 }

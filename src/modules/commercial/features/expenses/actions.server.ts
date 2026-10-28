@@ -19,6 +19,7 @@ import {
 } from '@/modules/accounting/features/integrations/commercial';
 import moment from 'moment';
 import { checkPermission } from '@/shared/lib/permissions';
+import { EFFECTIVE_PAYMENT_ORDER_ITEM } from '@/shared/lib/effective-settlements';
 import {
   BusinessError,
   toActionResult,
@@ -845,7 +846,7 @@ export async function cancelExpense(id: string) {
         id: true,
         status: true,
         paymentOrderItems: {
-          where: { paymentOrder: { status: 'CONFIRMED' } },
+          where: EFFECTIVE_PAYMENT_ORDER_ITEM,
           select: { id: true },
         },
       },
@@ -963,7 +964,7 @@ export async function getPendingExpenses(supplierId?: string) {
         category: { select: { name: true } },
         supplier: { select: { businessName: true } },
         paymentOrderItems: {
-          where: { paymentOrder: { status: 'CONFIRMED' } },
+          where: EFFECTIVE_PAYMENT_ORDER_ITEM,
           select: { amount: true },
         },
       },

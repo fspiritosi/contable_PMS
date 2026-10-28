@@ -347,6 +347,7 @@ export async function generateExchangeDifferenceEntry(
         status: 'POSTED',
         createdBy: userId,
         source: 'exchange-difference',
+        process: 'EXCHANGE_DIFFERENCE',
       })
     );
 

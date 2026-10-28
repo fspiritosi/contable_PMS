@@ -6,11 +6,13 @@ import { useMemo, useState } from 'react';
 
 import { DataTable, type DataTableSearchParams } from '@/shared/components/common/DataTable';
 import { Button } from '@/shared/components/ui/button';
+import { useDocumentCorrection } from '@/modules/commercial/shared/hooks/useDocumentCorrection';
 import type { ModulePermissions } from '@/shared/lib/permissions';
 
 import type { FundMovementDetailMode } from '../../shared/view-mode';
 import type {
   FundMovementAccountRef,
+  FundMovementConceptCatalog,
   FundMovementListItem,
   FundMovementPartnerOption,
   FundOption,
@@ -28,7 +30,7 @@ interface Props {
   cashRegisters: FundOption[];
   partners: FundMovementPartnerOption[];
   defaultContributionsAccount: FundMovementAccountRef | null;
-  defaultBankChargesAccount: FundMovementAccountRef | null;
+  concepts: FundMovementConceptCatalog;
 }
 
 type DetailSelection = { movement: FundMovementListItem; mode: FundMovementDetailMode };
@@ -42,7 +44,7 @@ export function _FundMovementsTable({
   cashRegisters,
   partners,
   defaultContributionsAccount,
-  defaultBankChargesAccount,
+  concepts,
 }: Props) {
   const router = useRouter();
   const [createOpen, setCreateOpen] = useState(false);
@@ -55,6 +57,7 @@ export function _FundMovementsTable({
   const [deleting, setDeleting] = useState<FundMovementListItem | null>(null);
 
   const refresh = () => router.refresh();
+  const correction = useDocumentCorrection({ onApplied: refresh });
 
   const columns = useMemo(() => {
     const openDetail = (movement: FundMovementListItem, mode: FundMovementDetailMode) => {
@@ -65,9 +68,15 @@ export function _FundMovementsTable({
       onView: (m) => openDetail(m, 'view'),
       onEdit: (m) => openDetail(m, 'edit'),
       onConfirm: setConfirming,
-      onDelete: setDeleting,
+      // Borrador: se elimina directo. Confirmado: eliminar y anular van por la corrección (TSK-792).
+      onDelete: (m) =>
+        m.status === 'DRAFT'
+          ? setDeleting(m)
+          : correction.open({ mode: 'DELETE', ref: { kind: 'FUND_MOVEMENT', id: m.id } }),
+      onCancel: (m) => correction.open({ mode: 'CANCEL', ref: { kind: 'FUND_MOVEMENT', id: m.id } }),
       permissions,
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [permissions]);
 
   const modalProps = {
@@ -75,7 +84,7 @@ export function _FundMovementsTable({
     cashRegisters,
     partners,
     defaultContributionsAccount,
-    defaultBankChargesAccount,
+    concepts,
     onSuccess: refresh,
   };
 
@@ -122,6 +131,8 @@ export function _FundMovementsTable({
         onCloseDelete={() => setDeleting(null)}
         onSuccess={refresh}
       />
+
+      {correction.dialog}
     </>
   );
 }

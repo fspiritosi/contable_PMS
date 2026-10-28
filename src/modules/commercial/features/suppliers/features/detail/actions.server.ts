@@ -5,6 +5,10 @@ import { prisma } from '@/shared/lib/prisma';
 import { getActiveCompanyId } from '@/shared/lib/company';
 import { logger } from '@/shared/lib/logger';
 import { checkPermission } from '@/shared/lib/permissions';
+import {
+  EFFECTIVE_PAYMENT_ORDER_ITEM,
+  EFFECTIVE_PURCHASE_CREDIT_NOTE_APPLICATION,
+} from '@/shared/lib/effective-settlements';
 import type { Prisma } from '@prisma/client';
 import { isCreditNote } from '@/modules/commercial/shared/voucher-utils';
 
@@ -46,11 +50,7 @@ export async function getSupplierAccountStatement(supplierId: string) {
         total: true,
         status: true,
         paymentOrderItems: {
-          where: {
-            paymentOrder: {
-              status: 'CONFIRMED', // Solo pagos confirmados
-            },
-          },
+          where: EFFECTIVE_PAYMENT_ORDER_ITEM,
           select: {
             amount: true,
             paymentOrder: {
@@ -62,6 +62,7 @@ export async function getSupplierAccountStatement(supplierId: string) {
           },
         },
         creditNoteApplicationsReceived: {
+          where: EFFECTIVE_PURCHASE_CREDIT_NOTE_APPLICATION,
           select: {
             amount: true,
             creditNoteId: true,

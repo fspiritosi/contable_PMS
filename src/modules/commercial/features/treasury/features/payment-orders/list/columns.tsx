@@ -1,7 +1,7 @@
 'use client';
 
 import { ColumnDef } from '@tanstack/react-table';
-import { MoreHorizontal, CheckCircle, Eye, Download, Edit, Trash2 } from 'lucide-react';
+import { MoreHorizontal, CheckCircle, Eye, Download, Edit, Trash2, Ban } from 'lucide-react';
 import moment from 'moment';
 
 import { Badge } from '@/shared/components/ui/badge';
@@ -21,12 +21,13 @@ interface ColumnsProps {
   onEdit: (order: PaymentOrderListItem) => void;
   onConfirm: (order: PaymentOrderListItem) => void;
   onDelete: (order: PaymentOrderListItem) => void;
+  onCorrect: (order: PaymentOrderListItem, mode: 'DELETE' | 'CANCEL') => void;
   canEdit?: boolean;
   canApprove?: boolean;
   canDelete?: boolean;
 }
 
-export function getColumns({ onViewDetail, onEdit, onConfirm, onDelete, canEdit = true, canApprove = true, canDelete = true }: ColumnsProps): ColumnDef<PaymentOrderListItem>[] {
+export function getColumns({ onViewDetail, onEdit, onConfirm, onDelete, onCorrect, canEdit = true, canApprove = true, canDelete = true }: ColumnsProps): ColumnDef<PaymentOrderListItem>[] {
   return [
     {
       accessorKey: 'fullNumber',
@@ -129,6 +130,36 @@ export function getColumns({ onViewDetail, onEdit, onConfirm, onDelete, canEdit 
                       <Trash2 className="mr-2 h-4 w-4" />
                       Eliminar
                     </DropdownMenuItem>
+                  )}
+                </>
+              )}
+
+              {paymentOrder.status === 'CONFIRMED' && (
+                <>
+                  {/* Una devolución a socio confirmada no se edita: se anula o elimina. */}
+                  {canEdit && !paymentOrder.partnerId && (
+                    <DropdownMenuItem onClick={() => onEdit(paymentOrder)}>
+                      <Edit className="mr-2 h-4 w-4" />
+                      Editar
+                    </DropdownMenuItem>
+                  )}
+                  {canDelete && (
+                    <>
+                      <DropdownMenuItem
+                        onClick={() => onCorrect(paymentOrder, 'DELETE')}
+                        className="text-destructive"
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Eliminar
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => onCorrect(paymentOrder, 'CANCEL')}
+                        className="text-destructive"
+                      >
+                        <Ban className="mr-2 h-4 w-4" />
+                        Anular
+                      </DropdownMenuItem>
+                    </>
                   )}
                 </>
               )}

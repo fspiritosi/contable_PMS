@@ -3,13 +3,21 @@
 import { AlertTriangle, Info } from 'lucide-react';
 import Link from 'next/link';
 
-import type { FundMovementAccountRef, FundMovementPartnerOption } from '../actions.server';
+import type {
+  FundMovementAccountRef,
+  FundMovementConceptOption,
+  FundMovementPartnerOption,
+} from '../actions.server';
 
 interface PartnerAccountNoticeProps {
   /** Socio elegido en el formulario; `undefined` si todavía no se eligió. */
   partner: FundMovementPartnerOption | undefined;
   /** Cuenta de aportes por defecto de Ajustes contables; `null` si no está configurada. */
   defaultAccount: FundMovementAccountRef | null;
+  /** Concepto elegido (TSK-791); `undefined` si no hay o todavía no se eligió. */
+  concept?: FundMovementConceptOption;
+  /** Hay conceptos activos para el tipo: hasta elegir uno no se sabe qué cuenta aplica. */
+  hasConcepts?: boolean;
 }
 
 const ACCOUNTING_SETTINGS_HREF = '/dashboard/company/accounting/settings';
@@ -25,7 +33,27 @@ const label = (a: FundMovementAccountRef) => `${a.code} - ${a.name}`;
  * Anticipa a qué cuenta se va a imputar el aporte/retiro según el socio elegido
  * (TSK-717): la propia del socio, la por defecto, o ninguna (no va a poder confirmar).
  */
-export function _PartnerAccountNotice({ partner, defaultAccount }: PartnerAccountNoticeProps) {
+export function _PartnerAccountNotice({
+  partner,
+  defaultAccount,
+  concept,
+  hasConcepts = false,
+}: PartnerAccountNoticeProps) {
+  // TSK-791: con conceptos disponibles y ninguno elegido, el concepto puede definir la
+  // cuenta; no se anticipa un bloqueo que quizá no aplique hasta que se elija.
+  if (hasConcepts && !concept) return null;
+
+  // TSK-791: un concepto con cuenta propia define el asiento; la cuenta del socio
+  // no se usa, así que no se evalúa ni bloquea, y Gestión no ve la cuenta.
+  if (concept?.accountMode === 'OWN_ACCOUNT') {
+    return (
+      <div className={neutral} role="status">
+        <Info className="mt-0.5 h-4 w-4 shrink-0" />
+        <span>El asiento se imputará según el concepto «{concept.name}».</span>
+      </div>
+    );
+  }
+
   // Estado 4: sin socio elegido. Con cuenta por defecto no hay nada que avisar
   // (el campo obligatorio ya lo marca); sin ella se anticipa que no va a poder confirmar.
   if (!partner) {

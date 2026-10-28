@@ -194,6 +194,7 @@ model Company {
   paymentOrderInstallments PaymentOrderInstallment[]
   partnerAccountMovements  PartnerAccountMovement[]
   fundMovements            FundMovement[]
+  movementConcepts         MovementConcept[]
 
   // Retenciones y padrones
   withholdingRegimes WithholdingRegime[]
@@ -242,6 +243,23 @@ enum JournalEntryStatus {
   REVERSED // Anulado
 
   @@map("journal_entry_status")
+}
+
+// Proceso contable que generó el asiento (TSK-792). Null = manual o de un documento.
+enum JournalEntryProcess {
+  VAT_SETTLEMENT // Liquidación de IVA
+  INFLATION_ADJUSTMENT // Ajuste por inflación (RECPAM)
+  EXCHANGE_DIFFERENCE // Diferencia de cambio
+
+  @@map("journal_entry_process")
+}
+
+// Origen del vínculo de un movimiento bancario con una OP/RC (TSK-792).
+enum BankMovementDocumentLink {
+  CREATED_BY_DOCUMENT // Lo creó la OP/RC al confirmarse
+  MANUAL_LINK // Se vinculó a mano después (linkBankMovementToDocument)
+
+  @@map("bank_movement_document_link")
 }
 
 // Tipo de Período Contable
@@ -381,6 +399,7 @@ model Account {
   productsAsExpenseAccount           Product[]              @relation("ProductExpenseAccount")
   productsAsIncomeAccount            Product[]              @relation("ProductIncomeAccount")
   fundMovementLines                  FundMovementLine[]
+  movementConcepts                   MovementConcept[]
 
   @@unique([companyId, code])
   @@index([companyId, disabledFromFiscalYearId])
@@ -406,6 +425,11 @@ model JournalEntry {
   reversalEntryId String?   @map("reversal_entry_id") @db.Uuid
   reversedBy      String?   @map("reversed_by")
   reversedAt      DateTime? @map("reversed_at")
+
+  // TSK-792: proceso que lo generó y vuelta de Registrado a Borrador (quién y cuándo)
+  process           JournalEntryProcess? @map("process")
+  revertedToDraftAt DateTime?            @map("reverted_to_draft_at")
+  revertedToDraftBy String?              @map("reverted_to_draft_by")
 
   company                  Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
   fiscalYear               FiscalYear?        @relation(fields: [fiscalYearId], references: [id])
@@ -3192,6 +3216,14 @@ model CashMovement {
   purchaseInvoiceId String?          @map("purchase_invoice_id") @db.Uuid
   purchaseInvoice   PurchaseInvoice? @relation(fields: [purchaseInvoiceId], references: [id], onDelete: SetNull)
 
+  // TSK-792: comprobante de tesorería que creó el movimiento
+  receiptId      String?       @map("receipt_id") @db.Uuid
+  receipt        Receipt?      @relation(fields: [receiptId], references: [id], onDelete: SetNull)
+  paymentOrderId String?       @map("payment_order_id") @db.Uuid
+  paymentOrder   PaymentOrder? @relation(fields: [paymentOrderId], references: [id], onDelete: SetNull)
+  fundMovementId String?       @map("fund_movement_id") @db.Uuid
+  fundMovement   FundMovement? @relation(fields: [fundMovementId], references: [id], onDelete: SetNull)
+
   // Auditoría
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -3200,6 +3232,9 @@ model CashMovement {
   @@index([companyId, date])
   @@index([sessionId, type])
   @@index([cashRegisterId, date])
+  @@index([receiptId])
+  @@index([paymentOrderId])
+  @@index([fundMovementId])
   @@map("cash_movements")
 }
 
@@ -3260,19 +3295,29 @@ model BankMovement {
   referenceId   String? @map("reference_id") @db.Uuid
 
   // Vinculación con documentos de tesorería
-  receiptId      String? @map("receipt_id") @db.Uuid
-  paymentOrderId String? @map("payment_order_id") @db.Uuid
+  receiptId      String?                   @map("receipt_id") @db.Uuid
+  paymentOrderId String?                   @map("payment_order_id") @db.Uuid
+  // TSK-792: si el vínculo con la OP/RC lo creó el comprobante o se hizo a mano
+  documentLink   BankMovementDocumentLink? @map("document_link")
+  // TSK-792: movimiento de fondo que creó el movimiento
+  fundMovementId String?                   @map("fund_movement_id") @db.Uuid
 
   // Conciliación
   reconciled   Boolean   @default(false)
   reconciledAt DateTime? @map("reconciled_at")
   reconciledBy String?   @map("reconciled_by")
 
-  bankAccount  BankAccount   @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
-  company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  receipt      Receipt?      @relation(fields: [receiptId], references: [id])
-  paymentOrder PaymentOrder? @relation(fields: [paymentOrderId], references: [id])
+  // TSK-791: concepto elegido (nullable: los históricos no tienen) y snapshot de su nombre
+  conceptId   String? @map("concept_id") @db.Uuid
+  conceptName String? @map("concept_name")
+
+  bankAccount  BankAccount      @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
+  company      Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  receipt      Receipt?         @relation(fields: [receiptId], references: [id])
+  paymentOrder PaymentOrder?    @relation(fields: [paymentOrderId], references: [id])
+  fundMovement FundMovement?    @relation(fields: [fundMovementId], references: [id], onDelete: SetNull)
   check        Check?
+  concept      MovementConcept? @relation(fields: [conceptId], references: [id], onDelete: SetNull)
 
   createdBy String   @map("created_by")
   createdAt DateTime @default(now()) @map("created_at")
@@ -3281,6 +3326,8 @@ model BankMovement {
   @@index([companyId, date])
   @@index([bankAccountId, date])
   @@index([reconciled])
+  @@index([conceptId])
+  @@index([fundMovementId])
   @@map("bank_movements")
 }
 
@@ -3315,6 +3362,7 @@ model Receipt {
   payments      ReceiptPayment[]
   withholdings  ReceiptWithholding[]
   bankMovements BankMovement[]
+  cashMovements CashMovement[]
   journalEntry  JournalEntry?        @relation(fields: [journalEntryId], references: [id])
 
   createdBy   String    @map("created_by")
@@ -3405,6 +3453,7 @@ model PaymentOrder {
   payments            PaymentOrderPayment[]
   withholdings        PaymentOrderWithholding[]
   bankMovements       BankMovement[]
+  cashMovements       CashMovement[]
   journalEntry        JournalEntry?             @relation(fields: [journalEntryId], references: [id])
   installments        PaymentOrderInstallment[] @relation("InstallmentOrigin")
   settledInstallments PaymentOrderInstallment[] @relation("InstallmentSettlement")
@@ -4036,6 +4085,10 @@ model CashflowProjection {
   status          ProjectionStatus   @default(PENDING)
   confirmedAmount Decimal            @default(0) @map("confirmed_amount") @db.Decimal(15, 2)
 
+  // TSK-792: cuota de tarjeta de una OP que generó la proyección
+  paymentOrderInstallmentId String?                  @unique @map("payment_order_installment_id") @db.Uuid
+  paymentOrderInstallment   PaymentOrderInstallment? @relation(fields: [paymentOrderInstallmentId], references: [id], onDelete: SetNull)
+
   company       Company                  @relation(fields: [companyId], references: [id])
   documentLinks ProjectionDocumentLink[]
   createdBy     String                   @map("created_by")
@@ -4390,6 +4443,10 @@ model FundMovement {
   partnerId   String? @map("partner_id") @db.Uuid // socio (aporte/retiro), informativo
   partnerName String? @map("partner_name")
 
+  // TSK-791: concepto elegido (nullable: los históricos no tienen) y snapshot de su nombre
+  conceptId   String? @map("concept_id") @db.Uuid
+  conceptName String? @map("concept_name")
+
   journalEntryId     String?   @map("journal_entry_id") @db.Uuid // asiento generado (al confirmar)
   journalEntryNumber Int?      @map("journal_entry_number")
   confirmedAt        DateTime? @map("confirmed_at")
@@ -4398,11 +4455,68 @@ model FundMovement {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  company Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  lines   FundMovementLine[]
+  company       Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  concept       MovementConcept?   @relation(fields: [conceptId], references: [id], onDelete: SetNull)
+  lines         FundMovementLine[]
+  // TSK-792: movimientos de banco y caja que creó al confirmarse
+  bankMovements BankMovement[]
+  cashMovements CashMovement[]
 
   @@index([companyId])
+  @@index([conceptId])
   @@map("fund_movements")
+}
+
+/// Usos a los que puede aplicar un concepto (TSK-791). Abarca las dos familias:
+/// movimientos de fondo (FUND_*) y movimientos bancarios manuales (BANK_*).
+/// Sumar un uso nuevo es agregar un valor al enum: no migra datos de conceptos existentes.
+enum ConceptUsage {
+  FUND_BANK_CHARGES
+  FUND_PARTNER_CONTRIBUTION
+  FUND_PARTNER_WITHDRAWAL
+  BANK_DEPOSIT
+  BANK_WITHDRAWAL
+  BANK_TRANSFER_IN
+  BANK_TRANSFER_OUT
+  BANK_CHECK
+  BANK_DEBIT
+  BANK_FEE
+  BANK_INTEREST
+
+  @@map("concept_usage")
+}
+
+/// De dónde sale la cuenta contable de un concepto (TSK-791).
+enum ConceptAccountMode {
+  OWN_ACCOUNT // cuenta imputable elegida por Contabilidad
+  PARTNER_ACCOUNT // la cuenta que corresponde hoy al socio (TSK-717)
+
+  @@map("concept_account_mode")
+}
+
+/// Concepto de movimiento (TSK-791): lo define Contabilidad y lo eligen Gestión en gastos bancarios,
+/// aporte/retiro de socio y movimientos bancarios manuales. Resuelve la cuenta contable.
+model MovementConcept {
+  id          String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId   String             @map("company_id") @db.Uuid
+  name        String
+  usages      ConceptUsage[]
+  accountMode ConceptAccountMode @default(OWN_ACCOUNT) @map("account_mode")
+  accountId   String?            @map("account_id") @db.Uuid
+  isActive    Boolean            @default(true) @map("is_active")
+
+  createdBy String   @map("created_by")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  company           Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  account           Account?           @relation(fields: [accountId], references: [id])
+  fundMovementLines FundMovementLine[]
+  fundMovements     FundMovement[]
+  bankMovements     BankMovement[]
+
+  @@index([companyId, isActive])
+  @@map("movement_concepts")
 }
 
 /// Un concepto dentro de un movimiento de gastos e impuestos bancarios (TSK-585).
@@ -4415,13 +4529,19 @@ model FundMovementLine {
   /// Orden de carga, para mostrarlos como los escribió el usuario.
   position    Int
 
+  // TSK-791: concepto elegido (nullable: los históricos no tienen) y snapshot de su nombre
+  conceptId   String? @map("concept_id") @db.Uuid
+  conceptName String? @map("concept_name")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  movement FundMovement @relation(fields: [movementId], references: [id], onDelete: Cascade)
-  account  Account      @relation(fields: [accountId], references: [id])
+  movement FundMovement     @relation(fields: [movementId], references: [id], onDelete: Cascade)
+  account  Account          @relation(fields: [accountId], references: [id])
+  concept  MovementConcept? @relation(fields: [conceptId], references: [id], onDelete: SetNull)
 
   @@index([movementId])
+  @@index([conceptId])
   @@map("fund_movement_lines")
 }
 
@@ -4499,11 +4619,12 @@ model PaymentOrderInstallment {
   settledByPaymentOrderId String?                  @map("settled_by_payment_order_id") @db.Uuid
   paidAt                  DateTime?                @map("paid_at")
 
-  company      Company       @relation(fields: [companyId], references: [id])
-  paymentOrder PaymentOrder  @relation("InstallmentOrigin", fields: [paymentOrderId], references: [id], onDelete: Cascade)
-  card         Card?         @relation(fields: [cardId], references: [id])
-  partner      Partner?      @relation(fields: [partnerId], references: [id])
-  settledBy    PaymentOrder? @relation("InstallmentSettlement", fields: [settledByPaymentOrderId], references: [id])
+  company      Company             @relation(fields: [companyId], references: [id])
+  paymentOrder PaymentOrder        @relation("InstallmentOrigin", fields: [paymentOrderId], references: [id], onDelete: Cascade)
+  card         Card?               @relation(fields: [cardId], references: [id])
+  partner      Partner?            @relation(fields: [partnerId], references: [id])
+  settledBy    PaymentOrder?       @relation("InstallmentSettlement", fields: [settledByPaymentOrderId], references: [id])
+  projection   CashflowProjection?
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")

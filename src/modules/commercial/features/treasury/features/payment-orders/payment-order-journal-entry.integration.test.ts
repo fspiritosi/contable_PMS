@@ -709,5 +709,42 @@ describe.skipIf(!dbAvailable)(
       expect(entry.period).toMatchObject({ year: 2026, month: 3, type: 'MONTHLY' });
       expect(entry.period?.fiscalYearId).toBe(entry.fiscalYearId);
     });
+
+    it('vincula caja, banco y proyecciones a la OP (TSK-792)', async () => {
+      const { id } = await createDraft([
+        transferPayment('300', bancoConCuentaId),
+        {
+          paymentMethod: 'DEBIT_CARD',
+          amount: '400',
+          cardId: debitCardSocioId,
+          bankAccountId: bancoConCuentaId,
+        },
+        cashPayment('300'),
+      ]);
+      expect((await confirmPaymentOrder(id)).success).toBe(true);
+
+      const cash = await prisma.cashMovement.findMany({
+        where: { paymentOrderId: id },
+        select: { type: true },
+      });
+      expect(cash).toEqual([{ type: 'EXPENSE' }]);
+
+      const bank = await prisma.bankMovement.findMany({
+        where: { paymentOrderId: id },
+        select: { documentLink: true },
+      });
+      expect(bank).toEqual([{ documentLink: 'CREATED_BY_DOCUMENT' }]);
+
+      const installments = await prisma.paymentOrderInstallment.findMany({
+        where: { paymentOrderId: id },
+        select: { id: true },
+      });
+      expect(installments).toHaveLength(1);
+      const projections = await prisma.cashflowProjection.findMany({
+        where: { paymentOrderInstallmentId: { in: installments.map((i) => i.id) } },
+        select: { paymentOrderInstallmentId: true },
+      });
+      expect(projections).toEqual([{ paymentOrderInstallmentId: installments[0].id }]);
+    });
   }
 );

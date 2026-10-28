@@ -483,6 +483,11 @@ const getNavConfig = (isSingleMode: boolean, activeCompanyId?: string): NavItemW
             module: 'accounting.accounts',
           },
           {
+            title: 'Conceptos',
+            href: '/dashboard/company/accounting/concepts',
+            module: 'accounting.concepts',
+          },
+          {
             title: 'Configuración',
             href: '/dashboard/company/accounting/settings',
             module: 'accounting.settings',

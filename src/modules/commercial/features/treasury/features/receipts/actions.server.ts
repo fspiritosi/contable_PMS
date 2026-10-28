@@ -1,5 +1,7 @@
 ﻿'use server';
 
+import { applyReceiptEffectsTx } from '@/modules/commercial/shared/effects/receipt.server';
+import { writeReceiptDataTx } from '@/modules/commercial/shared/effects/receipt-data.server';
 import { getCurrentUserId } from '@/shared/lib/current-user';
 import { getActiveCompanyId } from '@/shared/lib/company';
 import { logger } from '@/shared/lib/logger';
@@ -14,10 +16,13 @@ import {
   stateToPrismaParams,
 } from '@/shared/components/common/DataTable/helpers';
 import { CREDIT_NOTE_TYPES, isCreditNote } from '@/modules/commercial/shared/voucher-utils';
-import type { CreateReceiptFormData } from '../../shared/validators';
+import { createReceiptSchema, type CreateReceiptFormData } from '../../shared/validators';
 import type { PendingInvoice, ReceiptListItem, ReceiptWithDetails } from '../../shared/types';
-import { createJournalEntryForReceipt } from '@/modules/accounting/features/integrations/commercial';
 import { checkPermission } from '@/shared/lib/permissions';
+import {
+  EFFECTIVE_RECEIPT_ITEM,
+  EFFECTIVE_SALES_CREDIT_NOTE_APPLICATION,
+} from '@/shared/lib/effective-settlements';
 import { BusinessError, toActionResult, type ActionResult } from '@/shared/lib/action-result';
 import {
   assertEntryPreflight,
@@ -53,11 +58,13 @@ export async function getPendingInvoices(customerId: string): Promise<PendingInv
         total: true,
         status: true,
         receiptItems: {
+          where: EFFECTIVE_RECEIPT_ITEM,
           select: {
             amount: true,
           },
         },
         creditNoteApplicationsReceived: {
+          where: EFFECTIVE_SALES_CREDIT_NOTE_APPLICATION,
           select: {
             amount: true,
             creditNoteId: true,
@@ -250,23 +257,14 @@ export async function confirmReceipt(
   if (!companyId) throw new Error('No hay empresa activa');
 
   try {
-    // Obtener recibo con todos sus datos
+    // Guarda: solo se confirma un borrador de la empresa activa
     const receipt = await prisma.receipt.findFirst({
       where: {
         id: receiptId,
         companyId,
         status: 'DRAFT',
       },
-      include: {
-        items: {
-          include: {
-            invoice: true,
-          },
-        },
-        // `include` (no `select`): 3b usa los escalares del cheque; el nombre de la caja es para el error de sesión
-        payments: { include: { cashRegister: { select: { name: true } } } },
-        withholdings: true,
-      },
+      select: { fullNumber: true },
     });
 
     if (!receipt) {
@@ -288,148 +286,8 @@ export async function confirmReceipt(
         },
       });
 
-      // 2. Actualizar estado de facturas
-      for (const item of receipt.items) {
-        const invoice = item.invoice;
-
-        // Calcular total pagado (recibos + NC aplicadas)
-        const existingPayments = await tx.receiptItem.aggregate({
-          where: { invoiceId: item.invoiceId },
-          _sum: { amount: true },
-        });
-
-        const cnApplications = await tx.salesCreditNoteApplication.aggregate({
-          where: { invoiceId: item.invoiceId },
-          _sum: { amount: true },
-        });
-
-        const totalPaid = Number(existingPayments._sum.amount || 0) + Number(cnApplications._sum.amount || 0);
-        const invoiceTotal = Number(invoice.total);
-
-        // Actualizar estado según si está totalmente pagada
-        const newStatus = totalPaid >= invoiceTotal ? 'PAID' : 'PARTIAL_PAID';
-
-        await tx.salesInvoice.update({
-          where: { id: item.invoiceId },
-          data: { status: newStatus },
-        });
-      }
-
-      // 3. Crear movimientos de caja/banco según formas de pago
-      for (const payment of receipt.payments) {
-        if (payment.cashRegisterId) {
-          // Obtener sesión activa de la caja
-          const activeSession = await tx.cashRegisterSession.findFirst({
-            where: {
-              cashRegisterId: payment.cashRegisterId,
-              status: 'OPEN',
-            },
-            select: { id: true },
-          });
-
-          if (!activeSession) {
-            throw new BusinessError(
-              `No hay sesión abierta para la caja "${payment.cashRegister?.name ?? 'seleccionada'}"`
-            );
-          }
-
-          // Movimiento de caja
-          await tx.cashMovement.create({
-            data: {
-              companyId,
-              cashRegisterId: payment.cashRegisterId,
-              sessionId: activeSession.id,
-              type: 'INCOME',
-              amount: payment.amount,
-              date: receipt.date,
-              description: `Cobro de ${receipt.fullNumber}`,
-              reference: receipt.fullNumber,
-              createdBy: userId,
-            },
-          });
-
-          // Actualizar saldo esperado de la sesión
-          await tx.cashRegisterSession.update({
-            where: { id: activeSession.id },
-            data: {
-              expectedBalance: {
-                increment: payment.amount,
-              },
-            },
-          });
-        } else if (payment.bankAccountId && payment.paymentMethod !== 'ECHEQ') {
-          // Movimiento bancario (el e-cheq NO acredita el saldo hasta que se cobra/acredita el cheque)
-          const bankAccount = await tx.bankAccount.findUnique({
-            where: { id: payment.bankAccountId },
-            select: { balance: true },
-          });
-
-          if (bankAccount) {
-            await tx.bankMovement.create({
-              data: {
-                companyId,
-                bankAccountId: payment.bankAccountId,
-                type: 'DEPOSIT',
-                amount: payment.amount,
-                date: receipt.date,
-                description: `Cobro de ${receipt.fullNumber}`,
-                reference: receipt.fullNumber,
-                receiptId,
-                reconciled: true,
-                reconciledAt: new Date(),
-                reconciledBy: userId,
-                createdBy: userId,
-              },
-            });
-
-            // Actualizar saldo
-            await tx.bankAccount.update({
-              where: { id: payment.bankAccountId },
-              data: {
-                balance: bankAccount.balance.add(payment.amount),
-              },
-            });
-          }
-        }
-
-        // 3b. Si el pago es con cheque o e-cheq, crear registro Check como THIRD_PARTY en PORTFOLIO
-        if ((payment.paymentMethod === 'CHECK' || payment.paymentMethod === 'ECHEQ') && payment.checkNumber) {
-          const isEcheq = payment.paymentMethod === 'ECHEQ';
-          await tx.check.create({
-            data: {
-              companyId,
-              type: 'THIRD_PARTY',
-              status: 'PORTFOLIO',
-              isElectronic: isEcheq,
-              checkNumber: payment.checkNumber,
-              bankName: payment.checkBankName || payment.reference || 'Sin especificar',
-              amount: payment.amount,
-              issueDate: payment.checkIssueDate ?? receipt.date,
-              dueDate: payment.checkDueDate ?? receipt.date,
-              drawerName: payment.checkDrawerName || 'Cliente',
-              drawerTaxId: payment.checkDrawerTaxId || null,
-              customerId: receipt.customerId,
-              // e-cheq: cuenta bancaria donde ingresó (cuenta de depósito)
-              bankAccountId: isEcheq ? payment.bankAccountId : null,
-              receiptPaymentId: payment.id,
-              createdBy: userId,
-            },
-          });
-        }
-      }
-
-      // Crear asiento contable. Si falla, la transacción entera se revierte.
-      // TSK-728: antes solo se relanzaba "período cerrado" y cualquier otro fallo
-      // dejaba el recibo confirmado sin asiento.
-      const journalEntryId = await createJournalEntryForReceipt(receiptId, companyId, tx);
-      await tx.receipt.update({
-        where: { id: receiptId },
-        data: { journalEntryId },
-      });
-
-      logger.info('Asiento contable generado para recibo de cobro', {
-        data: { receiptId, journalEntryId },
-      });
+      // 2. Efectos: facturas, caja, banco, cheques y asiento (TSK-792)
+      await applyReceiptEffectsTx(tx, { companyId, userId }, receiptId);
     });
 
     logger.info('Recibo de cobro confirmado', {
@@ -637,6 +495,8 @@ export async function getReceipt(id: string): Promise<ReceiptWithDetails> {
             id: true,
             paymentMethod: true,
             amount: true,
+            cashRegisterId: true,
+            bankAccountId: true,
             cashRegister: {
               select: {
                 code: true,
@@ -846,5 +706,55 @@ export async function deleteReceipt(receiptId: string) {
       throw error;
     }
     throw new Error('Error al eliminar recibo');
+  }
+}
+
+/**
+ * Edita un recibo en borrador (TSK-792). Reemplaza items, pagos y retenciones;
+ * los recibos confirmados se corrigen con el motor de corrección, no acá.
+ */
+export async function updateReceipt(
+  id: string,
+  input: CreateReceiptFormData
+): Promise<ActionResult<{ id: string }>> {
+  await checkPermission('commercial.treasury.receipts', 'update', { redirect: true });
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  try {
+    const parsed = createReceiptSchema.safeParse(input);
+    if (!parsed.success) {
+      throw new BusinessError(parsed.error.issues[0]?.message ?? 'Datos del recibo inválidos');
+    }
+
+    const fullNumber = await prisma.$transaction(async (tx) => {
+      const existing = await tx.receipt.findFirst({
+        where: { id, companyId },
+        select: { status: true, fullNumber: true },
+      });
+      if (!existing) {
+        throw new BusinessError('Recibo no encontrado');
+      }
+      if (existing.status !== 'DRAFT') {
+        throw new BusinessError('Solo se pueden editar recibos en estado borrador');
+      }
+      await writeReceiptDataTx(tx, companyId, id, parsed.data);
+      return existing.fullNumber;
+    });
+
+    logger.info('Recibo de cobro actualizado', {
+      data: {
+        receiptId: id,
+        fullNumber,
+        itemsCount: parsed.data.items.length,
+        paymentsCount: parsed.data.payments.length,
+      },
+    });
+
+    revalidatePath('/dashboard/commercial/treasury/receipts');
+
+    return { success: true, id };
+  } catch (error) {
+    return toActionResult(error, 'Error al actualizar recibo');
   }
 }
