@@ -31,11 +31,16 @@ vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 
 import type { InvestmentInstrumentType } from '@/generated/prisma/enums';
 import {
+  deleteDraftJournalEntry,
+  reverseJournalEntry,
+} from '@/modules/accounting/features/entries/actions.server';
+import {
   postJournalEntryTx,
   revertJournalEntryToDraftTx,
   type Tx,
 } from '@/modules/accounting/features/integrations/core';
 import { cleanupAccountingCompany } from '@/modules/accounting/shared/test-utils/cleanup-accounting-company';
+import { entriesWithoutDocumentWhere } from '@/modules/accounting/shared/utils/entry-document-link';
 import { createFiscalYearWithPeriodsTx } from '@/modules/accounting/shared/utils/period-lock';
 import {
   applyDocumentCorrection,
@@ -428,6 +433,48 @@ describe.skipIf(!dbAvailable)('integración: valuación de inversiones al cierre
     expect(candidates.holdings.find((h) => h.id === holding.H1)?.bookValue).toBe(1000);
   });
 
+  it('Contabilidad no elimina ni anula el asiento de la valuación: pertenece a ella', async () => {
+    const { journalEntryId } = await prisma.investmentValuation.findUniqueOrThrow({
+      where: { id: valuationId },
+      select: { journalEntryId: true },
+    });
+    const entryId = journalEntryId ?? '';
+    const belongsTo = 'Este asiento pertenece a la valuación de inversiones al 31/12/2025';
+
+    expect(await deleteDraftJournalEntry(entryId)).toEqual({
+      success: false,
+      error: `${belongsTo} y no se puede eliminar: solo se eliminan borradores manuales.`,
+    });
+    expect(await prisma.journalEntry.count({ where: { id: entryId } })).toBe(1);
+
+    await prisma.$transaction((tx) =>
+      postJournalEntryTx(tx, { companyId, entryId, userId: 'test-user' })
+    );
+    try {
+      expect(await reverseJournalEntry({ entryId })).toEqual({
+        success: false,
+        error: `${belongsTo} y no se puede anular desde Asientos: anulá el comprobante.`,
+      });
+      expect((await entryOf(entryId))?.status).toBe('POSTED');
+    } finally {
+      await prisma.$transaction((tx) =>
+        revertJournalEntryToDraftTx(tx, { companyId, entryId, userId: 'test-user' })
+      );
+    }
+
+    // Tampoco figura entre los asientos sin documento.
+    const where = await entriesWithoutDocumentWhere(prisma, companyId);
+    expect(await prisma.journalEntry.count({ where: { companyId, id: entryId, ...where } })).toBe(
+      0
+    );
+  });
+
+  it('candidatas con un id de ejercicio que no es uuid: "Ejercicio no encontrado"', async () => {
+    await expect(getValuationCandidates('no-es-un-uuid')).rejects.toThrow(
+      'Ejercicio no encontrado'
+    );
+  });
+
   it('deshacer con una venta confirmada posterior al cierre: rechazo', async () => {
     const saleId = await confirmed(
       venta(holding.H4, '2026-03-01', { description: `${PREFIX}Venta H4 bis` })
@@ -534,5 +581,37 @@ describe.skipIf(!dbAvailable)('integración: valuación de inversiones al cierre
         await prisma.investmentMovement.count({ where: { companyId, kind: 'VALUATION' } })
       ).toBe(movementsBefore);
     });
+  });
+
+  it('valuación sin diferencias: no genera asiento y se deshace igual', async () => {
+    // Deja solo el ejercicio 1: la valuación del 2 la dejó el test anterior.
+    const next = await prisma.investmentValuation.findFirstOrThrow({
+      where: { companyId },
+      select: { id: true },
+    });
+    expect(await undoInvestmentValuation(next.id)).toEqual({ success: true });
+
+    const result = await generateInvestmentValuation({
+      fiscalYearId,
+      lines: [
+        { holdingId: holding.H1, valuedAmount: '1000' },
+        { holdingId: holding.H2, unitPrice: '10' },
+        { holdingId: holding.H3, valuedAmount: '500' },
+        { holdingId: holding.H4, valuedAmount: '1000' },
+      ],
+    });
+    if (!result.success) throw new Error(result.error);
+    expect(result.journalEntryNumber).toBeNull();
+    const saved = await prisma.investmentValuation.findUniqueOrThrow({
+      where: { id: result.id },
+      select: { journalEntryId: true },
+    });
+    expect(saved.journalEntryId).toBeNull();
+
+    expect(await undoInvestmentValuation(result.id)).toEqual({ success: true });
+    expect(await prisma.investmentValuation.count({ where: { companyId } })).toBe(0);
+    expect(await prisma.investmentMovement.count({ where: { companyId, kind: 'VALUATION' } })).toBe(
+      0
+    );
   });
 });

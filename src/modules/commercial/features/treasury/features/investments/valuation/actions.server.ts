@@ -81,6 +81,8 @@ export async function getValuationFiscalYears(): Promise<ValuationFiscalYear[]> 
 export async function getValuationCandidates(fiscalYearId: string): Promise<ValuationCandidates> {
   await checkPermission(MODULE, 'view', { redirect: true });
   const companyId = await requireCompanyId();
+  // Un id que no es uuid haría fallar la consulta con un error crudo de Prisma.
+  if (!UUID_REGEX.test(fiscalYearId)) throw new BusinessError('Ejercicio no encontrado');
   return loadValuationCandidatesTx(prisma as unknown as Tx, companyId, fiscalYearId);
 }
 
