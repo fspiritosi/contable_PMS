@@ -480,15 +480,18 @@ export async function confirmPaymentOrder(
     const warnings = assertEntryPreflight(await loadPaymentOrderEntryPreflight(companyId, paymentOrderId));
 
     await prisma.$transaction(async (tx) => {
-      // 1. Confirmar orden de pago
-      await tx.paymentOrder.update({
-        where: { id: paymentOrderId },
+      // 1. Confirmar orden de pago.
+      // El estado se leyó fuera de la tx: si otra confirmación ganó mientras tanto, el
+      // UPDATE condicionado no toca nada y los efectos no se aplican dos veces (TSK-812).
+      const { count } = await tx.paymentOrder.updateMany({
+        where: { id: paymentOrderId, companyId, status: 'DRAFT' },
         data: {
           status: 'CONFIRMED',
           confirmedBy: userId,
           confirmedAt: new Date(),
         },
       });
+      if (count === 0) throw new BusinessError('Orden de pago no encontrada o ya confirmada');
 
       // 2. Efectos: facturas/gastos, caja, banco, cheques, cuotas y asiento (TSK-792)
       await applyPaymentOrderEffectsTx(tx, { companyId, userId }, paymentOrderId);

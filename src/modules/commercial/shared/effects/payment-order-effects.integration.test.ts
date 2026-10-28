@@ -324,6 +324,37 @@ describe.skipIf(!dbAvailable)('integración: efectos de la orden de pago (TSK-79
     await prisma.$disconnect();
   });
 
+  it('dos confirmaciones simultáneas aplican los efectos una sola vez (TSK-812)', async () => {
+    const invoiceId = await confirmedInvoice(500);
+    const created = await createPaymentOrder({
+      supplierId,
+      date: ORDER_DATE,
+      notes: `${PREFIX}orden`,
+      items: [{ invoiceId, amount: '500' }],
+      payments: [cash('200'), transfer('300')],
+      withholdings: [],
+    });
+    const bankBefore = await bankBalance();
+    const cashBefore = await expectedBalance();
+    const lastNumberBefore = await readLastEntryNumber(companyId);
+
+    const results = await Promise.all([
+      confirmPaymentOrder(created.id),
+      confirmPaymentOrder(created.id),
+    ]);
+
+    expect(results.filter((r) => r.success)).toHaveLength(1);
+    expect(results.filter((r) => !r.success)).toEqual([
+      { success: false, error: 'Orden de pago no encontrada o ya confirmada' },
+    ]);
+    expect(await bankBalance()).toBe(bankBefore - 300);
+    expect(await expectedBalance()).toBe(cashBefore - 200);
+    expect(await prisma.cashMovement.count({ where: { paymentOrderId: created.id } })).toBe(1);
+    expect(await prisma.bankMovement.count({ where: { paymentOrderId: created.id } })).toBe(1);
+    expect(await invoiceStatus(invoiceId)).toBe('PAID');
+    expect(await readLastEntryNumber(companyId)).toBe(lastNumberBefore + 1);
+  });
+
   it('revert(apply) deja saldos de banco y caja, cheques y cuotas como antes', async () => {
     const endorsedCheckId = await thirdPartyCheck(150);
     const bankBefore = await bankBalance();

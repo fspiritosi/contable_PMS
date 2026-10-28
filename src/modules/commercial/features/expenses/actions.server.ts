@@ -795,10 +795,13 @@ export async function confirmExpense(
     }
 
     await prisma.$transaction(async (tx) => {
-      await tx.expense.update({
-        where: { id },
+      // El estado se leyó fuera de la tx: si otra confirmación ganó mientras tanto, el
+      // UPDATE condicionado no toca nada y los efectos no se aplican dos veces (TSK-812).
+      const { count } = await tx.expense.updateMany({
+        where: { id, companyId, status: 'DRAFT' },
         data: { status: 'CONFIRMED' },
       });
+      if (count === 0) throw new BusinessError('Gasto no encontrado o ya confirmado');
 
       // Crear asiento contable. Si falla, la transacción entera se revierte.
       // TSK-728: antes solo se relanzaba "período cerrado" y cualquier otro fallo

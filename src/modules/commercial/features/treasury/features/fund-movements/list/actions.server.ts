@@ -365,10 +365,13 @@ export async function confirmFundMovement(id: string): Promise<FundMovementActio
     }
 
     await prisma.$transaction(async (tx) => {
-      await tx.fundMovement.update({
-        where: { id },
+      // El estado se leyó fuera de la tx: si otra confirmación ganó mientras tanto, el
+      // UPDATE condicionado no toca nada y los efectos no se aplican dos veces (TSK-812).
+      const { count } = await tx.fundMovement.updateMany({
+        where: { id, companyId, status: 'DRAFT' },
         data: { status: 'CONFIRMED', confirmedAt: new Date() },
       });
+      if (count === 0) throw new BusinessError('El movimiento ya fue confirmado o anulado');
       await applyFundMovementEffectsTx(tx, { companyId, userId }, id);
     });
 

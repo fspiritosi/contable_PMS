@@ -732,14 +732,15 @@ export async function confirmInvoice(id: string): Promise<ActionResult<{ id: str
     await validateSalesInvoiceForConfirmation(id, companyId);
 
     // Confirmar, descontar stock, asiento y compensación de la NC en transacción
-    const result = await prisma.$transaction(async (tx) => {
-      const updatedInvoice = await tx.salesInvoice.update({
-        where: { id },
+    await prisma.$transaction(async (tx) => {
+      // El estado se leyó fuera de la tx: si otra confirmación ganó mientras tanto, el
+      // UPDATE condicionado no toca nada y los efectos no se aplican dos veces (TSK-812).
+      const { count } = await tx.salesInvoice.updateMany({
+        where: { id, companyId, status: 'DRAFT' },
         data: { status: 'CONFIRMED' },
-        select: { id: true },
       });
+      if (count === 0) throw new BusinessError('Factura no encontrada o ya está confirmada');
       await applySalesInvoiceEffectsTx(tx, { companyId, userId }, id);
-      return updatedInvoice;
     });
 
     logger.info('Factura confirmada y stock descontado', {
@@ -754,7 +755,7 @@ export async function confirmInvoice(id: string): Promise<ActionResult<{ id: str
     revalidatePath('/dashboard/commercial/invoices');
     revalidatePath(`/dashboard/commercial/invoices/${id}`);
     revalidatePath('/dashboard/commercial/stock');
-    return { success: true, id: result.id };
+    return { success: true, id };
   } catch (error) {
     if (error instanceof BusinessError) {
       logger.warn('Confirmación de factura rechazada', {

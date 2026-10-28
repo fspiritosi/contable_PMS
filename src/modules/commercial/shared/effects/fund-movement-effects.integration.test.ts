@@ -31,6 +31,7 @@ import { getActiveCompanyId } from '@/shared/lib/company';
 import { getCurrentUserId } from '@/shared/lib/current-user';
 
 import {
+  confirmFundMovement,
   createFundMovement,
   updateFundMovement,
 } from '@/modules/commercial/features/treasury/features/fund-movements/list/actions.server';
@@ -655,6 +656,22 @@ describe.skipIf(!dbAvailable)('integración: efectos del movimiento de fondo (TS
         inTx((tx) => writeFundMovementDataTx(tx, otherCompanyId, id, aporte('99')))
       ).rejects.toMatchObject({ name: 'BusinessError', message: 'Movimiento no encontrado' });
       expect(await movementSnapshot(id)).toEqual(before);
+    });
+
+    it('dos confirmaciones simultáneas aplican los efectos una sola vez (TSK-812)', async () => {
+      const id = await draft(aporte('70'));
+      const before = await balances();
+      const lastNumberBefore = await readLastEntryNumber(companyId);
+
+      const results = await Promise.all([confirmFundMovement(id), confirmFundMovement(id)]);
+
+      expect(results.filter((r) => r.success)).toHaveLength(1);
+      expect(results.filter((r) => !r.success)).toEqual([
+        { success: false, error: 'El movimiento ya fue confirmado o anulado' },
+      ]);
+      expect(await balances()).toEqual({ ...before, bankA: before.bankA + 70 });
+      expect(await linkedMovements(id)).toEqual({ bank: 1, cash: 0 });
+      expect(await readLastEntryNumber(companyId)).toBe(lastNumberBefore + 1);
     });
 
     it('updateFundMovement edita un borrador y rechaza uno confirmado', async () => {
