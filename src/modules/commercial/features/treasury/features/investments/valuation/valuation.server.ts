@@ -69,6 +69,36 @@ const laterSalesError = (holdingName: string, labels: string[]) =>
     `No se puede valuar: «${holdingName}» tiene ventas posteriores al cierre (${labels.join(', ')}). Anulalas, valuá y volvé a cargarlas.`
   );
 
+/**
+ * Ruling R7: las valuaciones de distintos ejercicios van en orden. Valuar o deshacer
+ * un cierre con una valuación posterior (día UTC siguiente al cierre) en alguna de
+ * sus tenencias movería el valor en libros debajo de esa valuación, y su diferencia
+ * y su asiento dejarían de llevar la posición al valor valuado. Los movimientos de la
+ * propia valuación tienen fecha del cierre, así que no cuentan. Rechaza nombrando la
+ * primera tenencia por nombre y la fecha de su valuación posterior.
+ */
+async function assertNoLaterValuationTx(
+  tx: Tx,
+  holdingIds: string[],
+  closingDate: Date
+): Promise<void> {
+  if (holdingIds.length === 0) return;
+  const later = await tx.investmentMovement.findFirst({
+    where: {
+      holdingId: { in: holdingIds },
+      kind: 'VALUATION',
+      date: { gte: moment.utc(closingDate).startOf('day').add(1, 'day').toDate() },
+    },
+    orderBy: [{ holding: { name: 'asc' } }, { date: 'asc' }],
+    select: { date: true, holding: { select: { name: true } } },
+  });
+  if (later) {
+    throw new BusinessError(
+      `Hay una valuación posterior (al ${moment.utc(later.date).format('DD/MM/YYYY')}) para «${later.holding.name}». Deshacé primero esa valuación.`
+    );
+  }
+}
+
 async function findFiscalYearTx(tx: Tx, companyId: string, fiscalYearId: string) {
   const fiscalYear = await tx.fiscalYear.findFirst({
     where: { id: fiscalYearId, companyId },
@@ -164,7 +194,8 @@ export async function loadValuationCandidatesTx(
  *  1. El ejercicio es de la empresa y no está cerrado; el mes de cierre está abierto.
  *  2. No hay otra valuación para el ejercicio.
  *  3. Todas las tenencias candidatas tienen línea (y no hay líneas de otras).
- *  4. Ninguna tiene ventas confirmadas posteriores al cierre.
+ *  4. Ninguna tiene ventas confirmadas posteriores al cierre ni una valuación
+ *     posterior (ruling R7).
  *  5. El precio por nominal solo se admite con nominales > 0.
  * Después crea la valuación, un movimiento VALUATION por tenencia (aunque la
  * diferencia sea 0) y el asiento en borrador si hay alguna diferencia.
@@ -180,8 +211,9 @@ export async function generateInvestmentValuationTx(
     throw new BusinessError('El ejercicio ya está cerrado: no se puede valuar');
   }
   const closingDate = closingDayOf(fiscalYear.endDate);
-  // Toma el lock de Ajustes de la empresa: serializa con la confirmación de
-  // compras y ventas, que también generan asientos.
+  // Toma el lock de Ajustes de la empresa: serializa con otras valuaciones y con la
+  // creación de asientos. No cubre del todo la confirmación de una venta, que
+  // calcula su costo antes de tomar ese lock (ventana chica, ya existente).
   await assertPeriodOpen(tx, companyId, closingDate);
 
   const existing = await tx.investmentValuation.count({
@@ -207,6 +239,11 @@ export async function generateInvestmentValuationTx(
   }
   const withLaterSales = candidates.find((c) => c.laterSales.length > 0);
   if (withLaterSales) throw laterSalesError(withLaterSales.name, withLaterSales.laterSales);
+  await assertNoLaterValuationTx(
+    tx,
+    candidates.map((c) => c.id),
+    closingDate
+  );
 
   const valued = candidates.map((holding) => {
     const line = linesByHolding.get(holding.id);
@@ -302,7 +339,7 @@ export async function generateInvestmentValuationTx(
 /**
  * Deshace la valuación: el ejercicio no está cerrado, el asiento (si existe) está en
  * borrador y ninguna tenencia valuada tiene ventas confirmadas posteriores al
- * cierre. Borra el asiento y después la valuación; sus movimientos caen en cascada.
+ * cierre ni una valuación posterior (ruling R7). Borra el asiento y después la valuación; sus movimientos caen en cascada.
  */
 export async function undoInvestmentValuationTx(
   tx: Tx,
@@ -345,6 +382,11 @@ export async function undoInvestmentValuationTx(
     const labels = await laterSaleLabelsTx(tx, movement.holdingId, valuation.closingDate);
     if (labels.length > 0) throw laterSalesError(movement.holding.name, labels);
   }
+  await assertNoLaterValuationTx(
+    tx,
+    valuation.movements.map((m) => m.holdingId),
+    valuation.closingDate
+  );
 
   // Si el asiento ya no existe (lo borraron a mano), solo queda borrar la valuación.
   if (entry) await deleteDraftJournalEntryTx(tx, { companyId, entryId: entry.id });

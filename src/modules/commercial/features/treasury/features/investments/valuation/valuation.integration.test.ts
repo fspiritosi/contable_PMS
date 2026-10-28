@@ -54,6 +54,7 @@ import {
   getValuationCandidates,
   undoInvestmentValuation,
 } from './actions.server';
+import type { ValuationFormInput } from './validators';
 
 // Toda la suite corre en paralelo con mucha carga: los asientos tardan.
 vi.setConfig({ testTimeout: 30_000 });
@@ -476,5 +477,62 @@ describe.skipIf(!dbAvailable)('integración: valuación de inversiones al cierre
     expect(await prisma.investmentMovement.count({ where: { valuationId } })).toBe(0);
     expect(await position(holding.H1, '2026-01-01')).toEqual({ bookValue: 1000, nominals: 100 });
     expect(await position(holding.H2, '2026-01-01')).toEqual({ bookValue: 1000, nominals: 100 });
+  });
+
+  describe('ruling R7: las valuaciones de distintos ejercicios van en orden', () => {
+    let nextFiscalYearId: string;
+
+    // Ejercicio 2 (2026): lo creó el núcleo al confirmar la venta de febrero de 2026.
+    beforeAll(async () => {
+      nextFiscalYearId = (
+        await prisma.fiscalYear.findFirstOrThrow({
+          where: { companyId, number: 2 },
+          select: { id: true },
+        })
+      ).id;
+    });
+
+    const laterValuationMessage = `Hay una valuación posterior (al 31/12/2026) para «${PREFIX}H1». Deshacé primero esa valuación.`;
+
+    const generate = async (id: string, lines: ValuationFormInput['lines']) => {
+      const result = await generateInvestmentValuation({ fiscalYearId: id, lines });
+      if (!result.success) throw new Error(result.error);
+      return result.id;
+    };
+    const nextYearLines = () =>
+      Object.values(holding).map((holdingId) => ({ holdingId, valuedAmount: '1300' }));
+
+    it('deshacer la valuación de un ejercicio con otra posterior: rechazo; en orden inverso, se deshacen las dos', async () => {
+      const first = await generate(fiscalYearId, allLines());
+      const second = await generate(nextFiscalYearId, nextYearLines());
+
+      expect(await undoInvestmentValuation(first)).toEqual({
+        success: false,
+        error: laterValuationMessage,
+      });
+      expect(await prisma.investmentValuation.count({ where: { id: first } })).toBe(1);
+
+      expect(await undoInvestmentValuation(second)).toEqual({ success: true });
+      expect(await undoInvestmentValuation(first)).toEqual({ success: true });
+      expect(await prisma.investmentValuation.count({ where: { companyId } })).toBe(0);
+    });
+
+    it('valuar un ejercicio con una valuación posterior ya generada: rechazo y nada escrito', async () => {
+      await generate(nextFiscalYearId, nextYearLines());
+      const movementsBefore = await prisma.investmentMovement.count({
+        where: { companyId, kind: 'VALUATION' },
+      });
+
+      expect(await generateInvestmentValuation({ fiscalYearId, lines: allLines() })).toEqual({
+        success: false,
+        error: laterValuationMessage,
+      });
+      expect(await prisma.investmentValuation.count({ where: { companyId, fiscalYearId } })).toBe(
+        0
+      );
+      expect(
+        await prisma.investmentMovement.count({ where: { companyId, kind: 'VALUATION' } })
+      ).toBe(movementsBefore);
+    });
   });
 });
