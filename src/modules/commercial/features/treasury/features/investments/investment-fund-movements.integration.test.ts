@@ -393,6 +393,29 @@ describe.skipIf(!dbAvailable)('integración: compra y venta de inversión (TSK-7
     expect(await position(holdingId)).toEqual({ bookValue: 400, nominals: 40 });
   });
 
+  it('venta total con movimientos posteriores de la tenencia: se rechaza (R5)', async () => {
+    const holdingId = await mkHolding('H8');
+    await confirmed(compra(holdingId, '2026-06-10'));
+    await confirmed(compra(holdingId, '2026-06-20'));
+    const before = await bankBalance();
+
+    const result = await createFundMovement(
+      venta(holdingId, '2026-06-15', { isFullSale: true }),
+      true
+    );
+
+    expect(result).toEqual({
+      success: false,
+      error: `La venta total tiene que ser el último movimiento de la tenencia «${PREFIX}H8»: tiene movimientos posteriores al 15/06/2026.`,
+    });
+    expect(await bankBalance()).toBe(before);
+    const holding = await prisma.investmentHolding.findUniqueOrThrow({
+      where: { id: holdingId },
+      select: { status: true },
+    });
+    expect(holding.status).toBe('OPEN');
+  });
+
   it('(e) compra con comisión sin cuenta de comisiones configurada: mensaje exacto', async () => {
     const holdingId = await mkHolding('H4');
     await prisma.accountingSettings.update({

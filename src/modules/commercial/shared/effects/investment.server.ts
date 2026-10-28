@@ -175,6 +175,25 @@ export async function applyInvestmentSideTx(
     isFullSale: movement.isFullSale,
   });
 
+  // La venta total cierra la tenencia: si tuviera compras o ventas con fecha
+  // posterior, quedaría CLOSED con posición después del cierre (ruling R5). Se
+  // mira `closesHolding` y no solo la marca: vender todos los nominales también
+  // cierra. El movimiento propio todavía no existe, así que no se cuenta.
+  if (sale.closesHolding) {
+    const later = await tx.investmentMovement.count({
+      where: {
+        holdingId: holding.id,
+        kind: { in: ['PURCHASE', 'SALE'] },
+        date: { gte: moment.utc(movement.date).startOf('day').add(1, 'day').toDate() },
+      },
+    });
+    if (later > 0) {
+      throw new BusinessError(
+        `La venta total tiene que ser el último movimiento de la tenencia «${holding.name}»: tiene movimientos posteriores al ${formatDay(movement.date)}.`
+      );
+    }
+  }
+
   await tx.investmentMovement.create({
     data: {
       companyId,
