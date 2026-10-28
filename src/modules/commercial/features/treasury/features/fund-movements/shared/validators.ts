@@ -168,6 +168,13 @@ export const fundMovementSchema = z
             path: [field],
             message: 'Valor inválido (hasta 6 decimales)',
           });
+        } else if (v && !(Number(v) > 0)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [field],
+            message:
+              field === 'nominals' ? 'Los nominales deben ser mayores a 0' : 'El precio debe ser mayor a 0',
+          });
         }
       }
       const commissionOk = !data.commission || amountRegex.test(data.commission);

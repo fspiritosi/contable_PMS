@@ -1,3 +1,5 @@
+import moment from 'moment';
+
 import type { InvestmentMovementKind } from '@/generated/prisma/enums';
 import { BusinessError } from '@/shared/lib/action-result';
 
@@ -16,6 +18,10 @@ export interface PositionMovement {
   createdAt: Date;
 }
 
+// Día calendario UTC: las fechas vienen de columnas @db.Date (00:00Z) y de
+// movimientos de fondos (12:00Z), así que no se comparan por timestamp exacto.
+const dayKey = (d: Date) => moment.utc(d).format('YYYY-MM-DD');
+
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 const round6 = (n: number) => Math.round((n + Number.EPSILON) * 1_000_000) / 1_000_000;
 
@@ -28,7 +34,7 @@ export function positionAt(
   let nominals = 0;
   let hasNominals = false;
   for (const m of movements) {
-    if (asOf && m.date.getTime() > asOf.getTime()) continue;
+    if (asOf && dayKey(m.date) > dayKey(asOf)) continue;
     book += m.bookDelta;
     if (m.nominalsDelta !== null) {
       nominals += m.nominalsDelta;
@@ -48,7 +54,7 @@ const KIND_ORDER: Record<InvestmentMovementKind, number> = { PURCHASE: 0, SALE: 
 export function firstNegativePoint(movements: PositionMovement[]): PositionMovement | null {
   const sorted = [...movements].sort(
     (a, b) =>
-      a.date.getTime() - b.date.getTime() ||
+      dayKey(a.date).localeCompare(dayKey(b.date)) ||
       KIND_ORDER[a.kind] - KIND_ORDER[b.kind] ||
       a.createdAt.getTime() - b.createdAt.getTime()
   );
@@ -82,6 +88,10 @@ export function computeSaleCost(input: {
     result: round2(proceeds - bookValue),
     closesHolding: true,
   });
+
+  if (soldNominals !== null && soldNominals <= 0) {
+    throw new BusinessError('Los nominales vendidos deben ser mayores a 0');
+  }
 
   if (input.isFullSale) return fullSale();
 

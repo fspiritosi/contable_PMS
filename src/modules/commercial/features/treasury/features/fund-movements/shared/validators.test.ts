@@ -466,4 +466,13 @@ describe('compra y venta de inversiones (TSK-793)', () => {
   it('la comisión no puede ser negativa', () => {
     expect(fundMovementSchema.safeParse({ ...compra, commission: '-5' }).success).toBe(false);
   });
+
+  it('nominales y precio presentes deben ser mayores a 0', () => {
+    expect(mensajes({ ...compra, nominals: '0', unitPrice: '100' })).toContain(
+      'Los nominales deben ser mayores a 0'
+    );
+    expect(mensajes({ ...compra, amount: '0.00', nominals: '10', unitPrice: '0' })).toContain(
+      'El precio debe ser mayor a 0'
+    );
+  });
 });

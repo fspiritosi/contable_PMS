@@ -154,3 +154,27 @@ describe('firstNegativePoint', () => {
     expect(firstNegativePoint([compra, venta])).toBe(venta);
   });
 });
+
+describe('correcciones de la ronda 1', () => {
+  it('computeSaleCost rechaza nominales vendidos <= 0', () => {
+    expect(() =>
+      computeSaleCost({
+        bookValue: 1000,
+        nominals: 100,
+        soldNominals: 0,
+        proceeds: 500,
+        isFullSale: false,
+      })
+    ).toThrow(new BusinessError('Los nominales vendidos deben ser mayores a 0'));
+  });
+
+  it('positionAt compara por día calendario UTC', () => {
+    const medianoche = {
+      ...mov('PURCHASE', '2026-12-31', 100),
+      date: new Date('2026-12-31T00:00:00.000Z'),
+    };
+    const mediodia = mov('PURCHASE', '2026-12-31', 10);
+    expect(positionAt([medianoche], new Date('2026-12-31T12:00:00.000Z')).bookValue).toBe(100);
+    expect(positionAt([mediodia], new Date('2026-12-31T00:00:00.000Z')).bookValue).toBe(10);
+  });
+});
