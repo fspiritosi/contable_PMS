@@ -1,4 +1,4 @@
-import type { InvestmentInstrumentType } from '@/generated/prisma/enums';
+import type { InvestmentHoldingStatus, InvestmentInstrumentType } from '@/generated/prisma/enums';
 
 export const INSTRUMENT_TYPE_LABELS: Record<InvestmentInstrumentType, string> = {
   STOCK: 'Acciones',
@@ -35,4 +35,9 @@ export const INSTRUMENT_TYPE_TRAITS: Record<
   TRUST: { hasUnits: false, hasMaturity: false },
   REPO: { hasUnits: false, hasMaturity: true },
   FIXED_TERM: { hasUnits: false, hasMaturity: true },
+};
+
+export const HOLDING_STATUS_LABELS: Record<InvestmentHoldingStatus, string> = {
+  OPEN: 'Abierta',
+  CLOSED: 'Cerrada',
 };

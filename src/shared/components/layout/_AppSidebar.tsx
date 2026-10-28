@@ -255,6 +255,11 @@ const navMain: NavItemWithSub[] = [
             module: 'commercial.treasury.fund-movements',
           },
           {
+            title: 'Inversiones',
+            href: '/dashboard/commercial/treasury/investments',
+            module: 'commercial.treasury.investments',
+          },
+          {
             title: 'Tarjetas',
             href: '/dashboard/commercial/treasury/cards',
             module: 'commercial.treasury.cards',

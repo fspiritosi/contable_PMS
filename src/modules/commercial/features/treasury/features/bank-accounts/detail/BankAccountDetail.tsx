@@ -12,6 +12,9 @@ import {
   UrlTabsTrigger,
   UrlTabsContent,
 } from '@/shared/components/ui/url-tabs';
+import { getModulePermissions } from '@/shared/lib/permissions';
+import { getInvestmentHoldings } from '../../investments/list/actions.server';
+import { _InvestmentsTable } from '../../investments/list/components/_InvestmentsTable';
 import { getBankAccountById } from '../actions.server';
 import { getBankMovementsPaginated, getReconciliationStats, getBankMovementsTotals } from '../../bank-movements/actions.server';
 import { _BankMovementsTable } from './components/_BankMovementsTable';
@@ -40,6 +43,14 @@ export async function BankAccountDetail({ bankAccountId, searchParams }: Props) 
   if (!bankAccount) {
     notFound();
   }
+
+  // Tenencias en custodia de esta cuenta (TSK-793). Se consultan solo con permiso de
+  // Inversiones: la action redirige si falta.
+  const canViewInvestments = (await getModulePermissions('commercial.treasury.investments')).canView;
+  const holdings = canViewInvestments
+    ? await getInvestmentHoldings({ bankAccountId: bankAccountId })
+    : [];
+  const showHoldings = canViewInvestments && (bankAccount.accountType === 'BROKER' || holdings.length > 0);
 
   return (
     <PermissionGuard module="commercial.treasury.bank-accounts" action="view" redirect>
@@ -113,6 +124,18 @@ export async function BankAccountDetail({ bankAccountId, searchParams }: Props) 
           />
         </UrlTabsContent>
       </UrlTabs>
+
+      {showHoldings && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Tenencias</CardTitle>
+            <CardDescription>Instrumentos que custodia esta cuenta</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <_InvestmentsTable data={holdings} fixedBankAccountId={bankAccountId} />
+          </CardContent>
+        </Card>
+      )}
     </div>
     </PermissionGuard>
   );

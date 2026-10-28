@@ -6,6 +6,7 @@ import { PURCHASE_INVOICE_STATUS_LABELS } from '@/modules/commercial/features/pu
 import { INVOICE_STATUS_LABELS } from '@/modules/commercial/features/sales/features/invoices/shared/validators';
 import { FUND_MOVEMENT_TYPE_LABELS } from '@/modules/commercial/features/treasury/features/fund-movements/shared/validators';
 import { positionAt } from '@/modules/commercial/features/treasury/features/investments/shared/position';
+import { HOLDING_STATUS_LABELS } from '@/modules/commercial/features/treasury/features/investments/shared/types';
 import {
   BANK_MOVEMENT_TYPE_LABELS,
   CASH_MOVEMENT_TYPE_LABELS,
@@ -115,7 +116,6 @@ const DELIVERY_NOTE_STATUS = {
   CANCELLED: 'Anulado',
 };
 const PO_INSTALLMENT_STATUS = { PENDING: 'Sin facturar', INVOICED: 'Facturada', PAID: 'Pagada' };
-const HOLDING_STATUS = { OPEN: 'Abierta', CLOSED: 'Cerrada' };
 const PROJECTION_STATUS = { PENDING: 'Pendiente', PARTIAL: 'Parcial', CONFIRMED: 'Confirmada' };
 const PO_INVOICING_STATUS = {
   NOT_INVOICED: 'Sin facturar',
@@ -740,7 +740,7 @@ const TRACKED_LOADERS: Record<TrackedKind, TrackedLoader> = {
           'Valor en libros': money(position.bookValue),
           Nominales: position.nominals === null ? '—' : qty(position.nominals),
         },
-        status: HOLDING_STATUS[holding.status],
+        status: HOLDING_STATUS_LABELS[holding.status],
       });
     }
     return rows;
