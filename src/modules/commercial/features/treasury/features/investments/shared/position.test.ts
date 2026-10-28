@@ -56,6 +56,18 @@ describe('computeSaleCost', () => {
     expect(r.result).toBe(100);
   });
 
+  it('ruling R8: venta parcial sin nominales vendidos de una tenencia con nominales: error', () => {
+    expect(() =>
+      computeSaleCost({
+        bookValue: 1000,
+        nominals: 100,
+        soldNominals: null,
+        proceeds: 500,
+        isFullSale: false,
+      })
+    ).toThrow(new BusinessError('Indicá los nominales vendidos'));
+  });
+
   it('rechaza vender más nominales de los que hay', () => {
     expect(() =>
       computeSaleCost({

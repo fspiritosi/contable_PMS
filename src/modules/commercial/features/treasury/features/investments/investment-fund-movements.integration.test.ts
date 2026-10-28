@@ -33,12 +33,12 @@ import { loadHoldingMovementsTx } from '@/modules/commercial/shared/effects/inve
 import { getActiveCompanyId } from '@/shared/lib/company';
 import { getCurrentUserId } from '@/shared/lib/current-user';
 
-import { createFundMovement } from '../fund-movements/list/actions.server';
+import { confirmFundMovement, createFundMovement } from '../fund-movements/list/actions.server';
 import {
   fundMovementSchema,
   type FundMovementFormInput,
 } from '../fund-movements/shared/validators';
-import { positionAt } from './shared/position';
+import { firstNegativePoint, positionAt } from './shared/position';
 
 // Toda la suite corre en paralelo con mucha carga: los asientos tardan.
 vi.setConfig({ testTimeout: 30_000 });
@@ -551,6 +551,96 @@ describe.skipIf(!dbAvailable)('integración: compra y venta de inversión (TSK-7
       commission: null,
       isFullSale: false,
     });
+  });
+
+  it('venta total de una tenencia valuada a 0: el asiento no lleva línea de tenencia en 0', async () => {
+    const holdingId = await mkHolding('H9');
+    await confirmed(compra(holdingId, '2026-08-10'));
+    // Valuación a 0 (por ejemplo, un default): libros 0 con 100 nominales.
+    await prisma.investmentMovement.create({
+      data: {
+        companyId,
+        holdingId,
+        kind: 'VALUATION',
+        date: new Date('2026-08-31'),
+        bookDelta: -1000,
+        valuedAmount: 0,
+      },
+    });
+    const before = await bankBalance();
+
+    const id = await confirmed(venta(holdingId, '2026-09-10', { amount: '100', isFullSale: true }));
+
+    expect(await bankBalance()).toBe(before + 100);
+    expect(await entryLines(id)).toEqual(
+      [
+        { accountId: bankLedgerId, debit: 100, credit: 0 },
+        { accountId: gainId, debit: 0, credit: 100 },
+      ].sort(byAccount)
+    );
+    expect(await position(holdingId)).toEqual({ bookValue: 0, nominals: 0 });
+  });
+
+  it('ruling R8: venta parcial sin nominales de una tenencia que los lleva: se rechaza', async () => {
+    const holdingId = await mkHolding('H10');
+    await confirmed(compra(holdingId, '2026-08-10'));
+    const before = await bankBalance();
+
+    const result = await createFundMovement(venta(holdingId, '2026-08-20'), true);
+
+    expect(result).toEqual({ success: false, error: 'Indicá los nominales vendidos' });
+    expect(await bankBalance()).toBe(before);
+    expect(await position(holdingId)).toEqual({ bookValue: 1000, nominals: 100 });
+  });
+
+  it('venta total con nominales cargados: se ignoran (no se guardan) y vende todo', async () => {
+    const holdingId = await mkHolding('H11');
+    await confirmed(compra(holdingId, '2026-08-10'));
+
+    const id = await confirmed(
+      venta(holdingId, '2026-08-20', { nominals: '30', isFullSale: true })
+    );
+
+    const saved = await prisma.fundMovement.findUniqueOrThrow({
+      where: { id },
+      select: { nominals: true, isFullSale: true },
+    });
+    expect(saved).toEqual({ nominals: null, isFullSale: true });
+    expect(await position(holdingId)).toEqual({ bookValue: 0, nominals: 0 });
+  });
+
+  it('ruling R9: dos ventas de todo el saldo confirmadas a la vez: solo una pasa', async () => {
+    const holdingId = await mkHolding('H12');
+    // Sin nominales: la venta por el valor en libros no cierra la tenencia, así que
+    // nada más que el lock de la tenencia serializa las dos confirmaciones.
+    await confirmed(compra(holdingId, '2026-08-10', { nominals: '', unitPrice: '' }));
+    const drafts = await Promise.all(
+      ['A', 'B'].map(async (suffix) => {
+        const draft = await createFundMovement(
+          venta(holdingId, '2026-08-20', {
+            amount: '1000',
+            description: `${PREFIX}Venta ${suffix}`,
+          })
+        );
+        if (!draft.success || !draft.id) throw new Error('No se pudo crear el borrador');
+        return draft.id;
+      })
+    );
+    const before = await bankBalance();
+
+    const results = await Promise.all(drafts.map((id) => confirmFundMovement(id)));
+
+    expect(results.filter((r) => r.success)).toHaveLength(1);
+    expect(results.filter((r) => !r.success)).toEqual([
+      {
+        success: false,
+        error: `La operación deja la tenencia «${PREFIX}H12» con saldo negativo al 20/08/2026`,
+      },
+    ]);
+    const movements = await loadHoldingMovementsTx(prisma as unknown as Tx, holdingId);
+    expect(firstNegativePoint(movements)).toBeNull();
+    expect(positionAt(movements)).toEqual({ bookValue: 0, nominals: null });
+    expect(await bankBalance()).toBe(before + 1000);
   });
 
   it('el borrador rechaza una tenencia de otra empresa', async () => {

@@ -211,9 +211,9 @@ export async function generateInvestmentValuationTx(
     throw new BusinessError('El ejercicio ya está cerrado: no se puede valuar');
   }
   const closingDate = closingDayOf(fiscalYear.endDate);
-  // Toma el lock de Ajustes de la empresa: serializa con otras valuaciones y con la
-  // creación de asientos. No cubre del todo la confirmación de una venta, que
-  // calcula su costo antes de tomar ese lock (ventana chica, ya existente).
+  // Toma el lock de Ajustes de la empresa: serializa con otras valuaciones, con la
+  // creación de asientos y con las compras y ventas de tenencias, que lo toman antes
+  // de leer la posición (`lockHoldingOperationsTx`, ruling R9).
   await assertPeriodOpen(tx, companyId, closingDate);
 
   const existing = await tx.investmentValuation.count({

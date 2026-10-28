@@ -25,6 +25,7 @@ import type { Impediment } from '../correction/types';
 import {
   applyInvestmentSideTx,
   investmentEffectImpedimentsTx,
+  lockHoldingOperationsTx,
   requireInvestmentSetting,
 } from './investment.server';
 import type { EffectsCtx, EffectsResult } from './types';
@@ -593,13 +594,18 @@ async function applyInvestmentAndBuildEntryLinesTx(
     description,
   });
   const feesLine = feesAccountId ? [line(feesAccountId, commission.toNumber(), 0)] : [];
+  // El núcleo contable rechaza una línea sin Debe ni Haber. La venta de una tenencia
+  // con valor en libros 0 (valuada a 0) tiene costo 0: el asiento va sin la línea de
+  // la tenencia y todo el cobro es resultado.
+  const withAmount = (lines: JournalLineInput[]) =>
+    lines.filter((l) => l.debit !== 0 || l.credit !== 0);
 
   if (isPurchase) {
-    return [
+    return withAmount([
       line(investment.holdingAccountId, movement.amount.toNumber(), 0),
       ...feesLine,
       line(fund.accountId, 0, fundAmount.toNumber()),
-    ];
+    ]);
   }
   const resultLine = resultAccountId
     ? [
@@ -608,12 +614,12 @@ async function applyInvestmentAndBuildEntryLinesTx(
           : line(resultAccountId, -investment.result, 0),
       ]
     : [];
-  return [
+  return withAmount([
     line(fund.accountId, fundAmount.toNumber(), 0),
     ...feesLine,
     line(investment.holdingAccountId, 0, investment.cost),
     ...resultLine,
-  ];
+  ]);
 }
 
 /**
@@ -922,11 +928,14 @@ export async function revertFundMovementEffectsTx(
   const { companyId } = ctx;
   const movement = await tx.fundMovement.findFirst({
     where: { id: fundMovementId, companyId },
-    select: { status: true },
+    select: { status: true, date: true, holdingId: true },
   });
   if (!movement) throw new BusinessError('Movimiento no encontrado');
   if (!hasAppliedEffects(movement.status)) return;
 
+  // Compra o venta de inversión: se serializa con las demás operaciones sobre
+  // tenencias antes de leer sus movimientos (ruling R9).
+  if (movement.holdingId) await lockHoldingOperationsTx(tx, companyId, movement.date);
   const investmentMovements = await tx.investmentMovement.findMany({
     where: { companyId, fundMovementId },
     select: { id: true, holdingId: true, closesHolding: true },

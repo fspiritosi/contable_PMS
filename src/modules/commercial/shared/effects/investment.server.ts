@@ -3,7 +3,7 @@ import 'server-only';
 import moment from 'moment';
 
 import { Prisma } from '@/generated/prisma/client';
-import type { Tx } from '@/modules/accounting/features/integrations/core';
+import { assertPeriodOpen, type Tx } from '@/modules/accounting/features/integrations/core';
 import {
   computeSaleCost,
   firstNegativePoint,
@@ -284,7 +284,22 @@ export async function investmentEffectImpedimentsTx(
 }
 
 /**
+ * Ruling R9: las operaciones sobre tenencias se serializan con el lock de Ajustes
+ * contables de la empresa (FOR UPDATE de su fila, el que toma `assertPeriodOpen`). Es
+ * el mismo que toman la valuación al generar y deshacer y la creación del asiento,
+ * así que venta/venta, venta/corrección y venta/valuación esperan en un único orden:
+ * la segunda lee la posición con la primera ya confirmada. Sin él, dos ventas a la
+ * vez veían la misma posición y las dos pasaban el chequeo de saldo negativo.
+ * Reentrante dentro de la transacción. De paso valida el período de la fecha, que
+ * el asiento iba a validar igual.
+ */
+export async function lockHoldingOperationsTx(tx: Tx, companyId: string, date: Date) {
+  await assertPeriodOpen(tx, companyId, date);
+}
+
+/**
  * Aplica el lado tenencia de una compra o venta confirmada:
+ *  0. Toma el lock de las operaciones sobre tenencias (`lockHoldingOperationsTx`).
  *  1. La tenencia tiene que ser de la empresa y estar abierta.
  *  2. Sin valuación con fecha igual o posterior (`assertHoldingNotValuedTx`) ni
  *     venta confirmada posterior de la tenencia (`assertNoLaterSaleTx`, ruling R6).
@@ -312,6 +327,7 @@ export async function applyInvestmentSideTx(
   }
 ): Promise<{ holdingAccountId: string; cost: number; result: number }> {
   const { companyId } = ctx;
+  await lockHoldingOperationsTx(tx, companyId, movement.date);
   const holding = movement.holdingId
     ? await tx.investmentHolding.findFirst({
         where: { id: movement.holdingId, companyId, status: 'OPEN' },

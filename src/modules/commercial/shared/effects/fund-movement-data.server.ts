@@ -213,13 +213,16 @@ async function resolveInvestmentFields(
 
   const decimal = (value: string | undefined, places: number) =>
     value ? new Prisma.Decimal(value).toDecimalPlaces(places) : null;
+  // "Venta total" no aplica a la compra.
+  const isFullSale = data.type === 'INVESTMENT_SALE' && Boolean(data.isFullSale);
   return {
     holdingId: holding.id,
-    nominals: decimal(data.nominals, 6),
+    // La venta total vende todos los nominales: los cargados no se usan, así que
+    // tampoco se guardan (el formulario los limpia al marcarla).
+    nominals: isFullSale ? null : decimal(data.nominals, 6),
     unitPrice: decimal(data.unitPrice, 6),
     commission: decimal(data.commission, 2),
-    // "Venta total" no aplica a la compra.
-    isFullSale: data.type === 'INVESTMENT_SALE' && Boolean(data.isFullSale),
+    isFullSale,
   };
 }
 

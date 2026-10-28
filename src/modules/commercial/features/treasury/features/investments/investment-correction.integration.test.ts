@@ -343,6 +343,48 @@ describe.skipIf(!dbAvailable)(
       ]);
     });
 
+    it('anular una compra con comisión: el banco recupera bruto + comisión y la tenencia queda vacía', async () => {
+      const holdingId = await mkHolding('H9');
+      const bankBefore = await bankBalance();
+      const purchaseId = await confirmed(compra(holdingId, '2026-03-10', { commission: '5' }));
+      expect(await bankBalance()).toBe(bankBefore - 1005);
+
+      await previewAndApply({ mode: 'CANCEL', ref: ref(purchaseId) });
+
+      expect(await bankBalance()).toBe(bankBefore);
+      expect(await prisma.investmentMovement.count({ where: { fundMovementId: purchaseId } })).toBe(
+        0
+      );
+      expect(await position(holdingId)).toEqual({ bookValue: 0, nominals: null });
+      expect(
+        (await prisma.fundMovement.findUniqueOrThrow({ where: { id: purchaseId } })).status
+      ).toBe('CANCELLED');
+    });
+
+    it('ruling R8: editar una venta parcial quitándole los nominales: no se aplica', async () => {
+      const holdingId = await mkHolding('H10');
+      await confirmed(compra(holdingId, '2026-03-10'));
+      const saleId = await confirmed(venta(holdingId, '2026-04-10', { nominals: '40' }));
+      const bankBefore = await bankBalance();
+      const request: CorrectionRequest = {
+        mode: 'EDIT',
+        ref: ref(saleId),
+        data: venta(holdingId, '2026-04-10', { nominals: '' }),
+      };
+
+      const proposal = await preview(request);
+
+      expect(proposal.impediments).toEqual([
+        { code: 'SIMULATION_ERROR', severity: 'BLOCKED', message: 'Indicá los nominales vendidos' },
+      ]);
+      expect(await applyDocumentCorrection(request, proposal.fingerprint)).toMatchObject({
+        success: true,
+        applied: false,
+      });
+      expect(await position(holdingId)).toEqual({ bookValue: 600, nominals: 60 });
+      expect(await bankBalance()).toBe(bankBefore);
+    });
+
     it('(d) anular una compra con una valuación posterior: INVESTMENT_VALUED', async () => {
       const holdingId = await mkHolding('H6');
       const purchaseId = await confirmed(compra(holdingId, '2026-03-10'));

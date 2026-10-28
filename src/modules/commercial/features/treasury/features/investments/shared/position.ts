@@ -95,6 +95,13 @@ export function computeSaleCost(input: {
 
   if (input.isFullSale) return fullSale();
 
+  // Ruling R8: una venta parcial de una tenencia que lleva nominales tiene que decir
+  // cuántos vende. Sin ellos no hay costo proporcional ni resultado de la venta, y los
+  // nominales quedarían en la tenencia aunque ya no estén.
+  if (soldNominals === null && nominals !== null && nominals > 0) {
+    throw new BusinessError('Indicá los nominales vendidos');
+  }
+
   if (soldNominals !== null && nominals !== null && nominals > 0) {
     if (soldNominals > nominals) {
       throw new BusinessError('No podés vender más nominales de los que tiene la tenencia');
