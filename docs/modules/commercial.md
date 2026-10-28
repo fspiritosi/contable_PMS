@@ -266,7 +266,7 @@ Partner
 ├── Card[]                      # Tarjetas de las que es titular
 │
 └── FundMovement (por partnerId, SIN FK)
-    ├── type: PARTNER_CONTRIBUTION / PARTNER_WITHDRAWAL / ACCOUNT_TRANSFER / BANK_CHARGES
+    ├── type: PARTNER_CONTRIBUTION / PARTNER_WITHDRAWAL / ACCOUNT_TRANSFER / BANK_CHARGES / INVESTMENT_PURCHASE / INVESTMENT_SALE
     ├── status: DRAFT → CONFIRMED   # CANCELLED (Anulado) existe en el enum; ninguna acción lo produce hoy
     ├── partnerId, partnerName      # Obligatorio en aporte y retiro; snapshot del nombre
     ├── fundOut* / fundIn*          # Banco o caja de origen / destino
@@ -330,6 +330,11 @@ dentro de una única transacción. Confirmado no se edita ni se elimina.
 `MovementConcept` (ver `docs/modules/accounting.md` → Conceptos y `data-model.md`) y acá solo se elige el
 concepto; el servidor resuelve la cuenta con `resolveConceptForUsage` (`shared/lib/concepts`).
 
+- **Compra y venta de inversión (TSK-793)**: el formulario suma `holdingId`, `nominals`,
+  `unitPrice`, `commission` e `isFullSale`. `getFundMovementCatalogs` devuelve `holdings`
+  (tenencias abiertas con `hasUnits`, valor en libros y nominales, calculados con
+  `positionAt`) sin exigir el permiso de Inversiones. Estos tipos no usan socio ni concepto.
+  La compra con nominales calcula el importe (`nominales × precio`, solo lectura).
 - **Gastos e impuestos bancarios**: cada línea es `{ conceptId, description?, amount }`
   (`Elegí el concepto` si falta; el detalle es opcional y, vacío, el asiento usa el nombre del
   concepto). `getFundMovementCatalogs` devuelve `concepts` por tipo (`BANK_CHARGES`,

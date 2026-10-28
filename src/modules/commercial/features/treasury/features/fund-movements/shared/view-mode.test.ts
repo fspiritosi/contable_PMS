@@ -2,6 +2,7 @@ import moment from 'moment';
 import { describe, expect, it } from 'vitest';
 
 import type { FundMovementStatus } from '@/generated/prisma/enums';
+import { formatCurrency } from '@/shared/utils/formatters';
 
 import {
   buildFundOptions,
@@ -474,6 +475,46 @@ describe('getViewSummaryFacts', () => {
       journalEntryNumber: null,
     });
     expect(facts.map((f) => f.key)).toEqual(['confirmedAt']);
+  });
+
+  // TSK-793: compra/venta de inversión
+  it('compra de inversión → tenencia, nominales y comisión', () => {
+    const facts = getViewSummaryFacts({
+      confirmedAt: null,
+      journalEntryNumber: null,
+      type: 'INVESTMENT_PURCHASE',
+      holdingName: 'AL30',
+      nominals: 1500.5,
+      commission: 250,
+    });
+    expect(facts).toEqual([
+      { key: 'holding', label: 'Tenencia', value: 'AL30' },
+      { key: 'nominals', label: 'Nominales', value: '1.500,5' },
+      { key: 'commission', label: 'Comisión', value: formatCurrency(250) },
+    ]);
+  });
+
+  it('venta total de inversión → agrega "Venta total"', () => {
+    const facts = getViewSummaryFacts({
+      confirmedAt: null,
+      journalEntryNumber: null,
+      type: 'INVESTMENT_SALE',
+      holdingName: 'AL30',
+      isFullSale: true,
+    });
+    expect(facts.map((f) => f.label)).toEqual(['Tenencia', 'Venta total']);
+  });
+
+  it('aporte de socio → no muestra datos de inversión', () => {
+    const facts = getViewSummaryFacts({
+      confirmedAt: null,
+      journalEntryNumber: null,
+      type: 'PARTNER_CONTRIBUTION',
+      holdingName: null,
+      nominals: null,
+      commission: null,
+    });
+    expect(facts).toEqual([]);
   });
 });
 

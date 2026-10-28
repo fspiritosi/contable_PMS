@@ -1059,6 +1059,24 @@ export function _TreasuryGuide() {
               discriminar, etc. En vez de un monto único se cargan una o más{' '}
               <strong>líneas</strong>, cada una con su <strong>concepto</strong>.
             </li>
+            <li>
+              <strong>Compra de inversión</strong>: sale plata de un banco,
+              broker o caja y aumenta una <strong>tenencia</strong>. Si la
+              tenencia se lleva en unidades, cargás los{' '}
+              <strong>nominales</strong> y el <strong>precio</strong> y el
+              importe se calcula solo; si no, cargás el importe directo. La{' '}
+              <strong>comisión</strong> es opcional y se registra como gasto
+              aparte. No lleva socio ni concepto.
+            </li>
+            <li>
+              <strong>Venta de inversión</strong>: entra plata a un banco,
+              broker o caja y baja la tenencia. Elegís la tenencia (ves su valor
+              en libros y nominales actuales), los nominales vendidos y el{' '}
+              <strong>importe cobrado bruto</strong>. A la cuenta entra el bruto
+              menos la comisión. Si marcás <strong>Venta total</strong>, la
+              tenencia se cierra. Las tenencias se crean en{' '}
+              <strong>Tesorería → Inversiones</strong>.
+            </li>
           </ul>
           <p>
             <strong>Cómo registrar uno:</strong>

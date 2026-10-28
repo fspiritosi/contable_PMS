@@ -44,6 +44,8 @@ export interface UseFundMovementFormResult {
   isWithdrawal: boolean;
   isTransfer: boolean;
   isBankCharges: boolean;
+  isInvestmentPurchase: boolean;
+  isInvestmentSale: boolean;
   isPartnerMovement: boolean;
   isSubmitting: boolean;
   submit: (confirm: boolean) => Promise<void>;
@@ -119,6 +121,8 @@ export function useFundMovementForm({
   const isWithdrawal = type === 'PARTNER_WITHDRAWAL';
   const isTransfer = type === 'ACCOUNT_TRANSFER';
   const isBankCharges = type === 'BANK_CHARGES';
+  const isInvestmentPurchase = type === 'INVESTMENT_PURCHASE';
+  const isInvestmentSale = type === 'INVESTMENT_SALE';
   const isPartnerMovement = isContribution || isWithdrawal;
 
   // Al cambiar el tipo de movimiento, los campos que dejan de aplicar no
@@ -168,6 +172,21 @@ export function useFundMovementForm({
     if (isContribution && form.getValues('sourceFund')) {
       form.setValue('sourceFund', '');
     }
+    // TSK-793: la compra solo tiene origen y la venta solo destino; los demás
+    // tipos no llevan datos de inversión.
+    if (currentType === 'INVESTMENT_PURCHASE' && form.getValues('destinationFund')) {
+      form.setValue('destinationFund', '');
+    }
+    if (currentType === 'INVESTMENT_SALE' && form.getValues('sourceFund')) {
+      form.setValue('sourceFund', '');
+    }
+    if (currentType !== 'INVESTMENT_PURCHASE' && currentType !== 'INVESTMENT_SALE') {
+      if (form.getValues('holdingId')) form.setValue('holdingId', '');
+      if (form.getValues('nominals')) form.setValue('nominals', '');
+      if (form.getValues('unitPrice')) form.setValue('unitPrice', '');
+      if (form.getValues('commission')) form.setValue('commission', '');
+      if (form.getValues('isFullSale')) form.setValue('isFullSale', false);
+    }
   }, [mode, type, form]);
 
   const { isSubmitting, submit, correctionDialog } = useFundMovementSubmit({
@@ -187,6 +206,8 @@ export function useFundMovementForm({
     isWithdrawal,
     isTransfer,
     isBankCharges,
+    isInvestmentPurchase,
+    isInvestmentSale,
     isPartnerMovement,
     isSubmitting,
     submit,

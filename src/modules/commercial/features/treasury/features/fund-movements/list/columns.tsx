@@ -98,6 +98,12 @@ export function getColumns({ onView, onEdit, onConfirm, onDelete, onCancel, perm
       cell: ({ row }) => <span className="text-sm">{row.original.partnerName ?? '—'}</span>,
     },
     {
+      id: 'tenencia',
+      meta: { title: 'Tenencia' },
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Tenencia" />,
+      cell: ({ row }) => <span className="text-sm">{row.original.holdingName ?? '—'}</span>,
+    },
+    {
       accessorKey: 'amount',
       meta: { title: 'Monto' },
       header: ({ column }) => <DataTableColumnHeader column={column} title="Monto" />,

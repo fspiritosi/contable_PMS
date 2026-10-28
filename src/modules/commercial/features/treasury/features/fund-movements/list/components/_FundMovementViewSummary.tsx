@@ -13,7 +13,10 @@ interface FundMovementViewSummaryProps {
   movement: Pick<
     FundMovementListItem,
     'status' | 'confirmedAt' | 'journalEntryNumber' | 'conceptName'
-  >;
+  > &
+    Partial<
+      Pick<FundMovementListItem, 'type' | 'holdingName' | 'nominals' | 'commission' | 'isFullSale'>
+    >;
 }
 
 /**

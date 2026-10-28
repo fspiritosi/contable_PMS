@@ -18,6 +18,7 @@ import { conceptNamesById, getModalCopy, type FundMovementModalMode } from '../.
 import type {
   FundMovementAccountRef,
   FundMovementConceptCatalog,
+  FundMovementHoldingOption,
   FundMovementListItem,
   FundMovementPartnerOption,
   FundOption,
@@ -26,6 +27,7 @@ import { useFundMovementForm } from '../hooks/useFundMovementForm';
 import { _FundMovementAmountDateFields } from './_FundMovementAmountDateFields';
 import { _FundMovementDescriptionField } from './_FundMovementDescriptionField';
 import { _FundMovementFormFooter } from './_FundMovementFormFooter';
+import { _FundMovementInvestmentSection } from './_FundMovementInvestmentSection';
 import { _FundMovementLinesField } from './_FundMovementLinesField';
 import { _FundMovementPartnerSection } from './_FundMovementPartnerSection';
 import { _FundMovementTypeField } from './_FundMovementTypeField';
@@ -50,6 +52,8 @@ interface Props {
   defaultContributionsAccount: FundMovementAccountRef | null;
   /** Conceptos activos por tipo (TSK-791); Gestión no ve la cuenta de ninguno. */
   concepts: FundMovementConceptCatalog;
+  /** Tenencias abiertas para compra/venta de inversión (TSK-793). */
+  holdings: FundMovementHoldingOption[];
   /** Fuente de verdad del modo (antes se derivaba de `Boolean(movement)`). */
   mode: FundMovementModalMode;
   /** Requerido en 'edit' y 'view'. */
@@ -65,6 +69,7 @@ export function _CreateFundMovementModal({
   partners,
   defaultContributionsAccount,
   concepts,
+  holdings,
   mode,
   movement,
   onSuccess,
@@ -80,12 +85,15 @@ export function _CreateFundMovementModal({
     isWithdrawal,
     isTransfer,
     isBankCharges,
+    isInvestmentPurchase,
+    isInvestmentSale,
     isPartnerMovement,
     isSubmitting,
     submit,
     correctionDialog,
   } = useFundMovementForm({ open, mode, movement, concepts, onOpenChange, onSuccess });
 
+  const isInvestment = isInvestmentPurchase || isInvestmentSale;
   const noFundAccounts = banks.length === 0 && cashRegisters.length === 0;
   // TSK-791: gastos bancarios sin conceptos no se puede guardar ni confirmar.
   const noBankChargesConcepts = !isView && isBankCharges && concepts.BANK_CHARGES.length === 0;
@@ -130,7 +138,21 @@ export function _CreateFundMovementModal({
                 </div>
               )}
 
-              <_FundMovementAmountDateFields showAmount={!isBankCharges} />
+              {isInvestment ? (
+                <_FundMovementInvestmentSection
+                  isSale={isInvestmentSale}
+                  holdings={holdings}
+                  banks={banks}
+                  cashRegisters={cashRegisters}
+                  isView={isView}
+                  holdingSnapshot={snapshot(movement?.holdingName)}
+                  fundSnapshot={snapshot(
+                    isInvestmentSale ? movement?.fundInLabel : movement?.fundOutLabel
+                  )}
+                />
+              ) : (
+                <_FundMovementAmountDateFields showAmount={!isBankCharges} />
+              )}
 
               {(isContribution || isTransfer) && (
                 <_FundSelectField

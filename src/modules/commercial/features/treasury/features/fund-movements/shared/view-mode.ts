@@ -2,6 +2,7 @@ import moment from 'moment';
 
 import type { FundMovementStatus } from '@/generated/prisma/enums';
 import type { ModulePermissions } from '@/shared/lib/permissions';
+import { formatCurrency } from '@/shared/utils/formatters';
 
 import type { FundMovementListItem, FundMovementRecord, FundOption } from '../list/actions.server';
 import {
@@ -154,7 +155,11 @@ export type FundMovementFormSource = Pick<
   | 'fundInId'
   | 'partnerId'
   | 'conceptId'
->;
+> &
+  // TSK-793: datos de inversión (opcionales: solo los traen compra y venta).
+  Partial<
+    Pick<FundMovementListItem, 'holdingId' | 'nominals' | 'unitPrice' | 'commission' | 'isFullSale'>
+  >;
 export type FundMovementLineSource = Pick<
   FundMovementRecord['lines'][number],
   'conceptId' | 'description' | 'amount'
@@ -183,6 +188,15 @@ export function formValuesFromMovement(
       type === 'PARTNER_CONTRIBUTION' || type === 'PARTNER_WITHDRAWAL'
         ? (movement.conceptId ?? '')
         : '',
+    ...(type === 'INVESTMENT_PURCHASE' || type === 'INVESTMENT_SALE'
+      ? {
+          holdingId: movement.holdingId ?? '',
+          nominals: movement.nominals != null ? String(movement.nominals) : '',
+          unitPrice: movement.unitPrice != null ? String(movement.unitPrice) : '',
+          commission: movement.commission != null ? String(movement.commission) : '',
+          isFullSale: Boolean(movement.isFullSale),
+        }
+      : {}),
     lines:
       type === 'BANK_CHARGES' && lines
         ? lines.map((line) => ({
@@ -283,17 +297,42 @@ export function formResetKey(mode: FundMovementModalMode, movementId: string | n
 
 // ---------------------------------------------------------------- resumen de vista (D3)
 export interface ViewSummaryFact {
-  key: 'confirmedAt' | 'journalEntry' | 'concept';
+  key: 'confirmedAt' | 'journalEntry' | 'concept' | 'holding' | 'nominals' | 'commission' | 'fullSale';
   label: string;
   value: string;
+}
+
+/** Nominales con separadores es-AR y hasta 6 decimales (sin ceros de relleno). */
+export function formatNominals(value: number): string {
+  return new Intl.NumberFormat('es-AR', { maximumFractionDigits: 6 }).format(value);
 }
 
 /** Solo los hechos presentes, en orden. El estado va aparte (badge). */
 export function getViewSummaryFacts(
   movement: Pick<FundMovementListItem, 'confirmedAt' | 'journalEntryNumber'> &
-    Partial<Pick<FundMovementListItem, 'conceptName'>>
+    Partial<
+      Pick<
+        FundMovementListItem,
+        'conceptName' | 'type' | 'holdingName' | 'nominals' | 'commission' | 'isFullSale'
+      >
+    >
 ): ViewSummaryFact[] {
   const facts: ViewSummaryFact[] = [];
+  // TSK-793: compra/venta de inversión muestran tenencia, nominales y comisión.
+  if (movement.type === 'INVESTMENT_PURCHASE' || movement.type === 'INVESTMENT_SALE') {
+    if (movement.holdingName) {
+      facts.push({ key: 'holding', label: 'Tenencia', value: movement.holdingName });
+    }
+    if (movement.nominals != null) {
+      facts.push({ key: 'nominals', label: 'Nominales', value: formatNominals(movement.nominals) });
+    }
+    if (movement.commission != null) {
+      facts.push({ key: 'commission', label: 'Comisión', value: formatCurrency(movement.commission) });
+    }
+    if (movement.isFullSale) {
+      facts.push({ key: 'fullSale', label: 'Venta total', value: 'Cierra la tenencia' });
+    }
+  }
   // TSK-791: concepto del aporte/retiro (snapshot). Los gastos bancarios lo llevan por línea.
   if (movement.conceptName) {
     facts.push({ key: 'concept', label: 'Concepto', value: movement.conceptName });
