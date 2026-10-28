@@ -26,7 +26,7 @@ import { logger } from '@/shared/lib/logger';
 
 import { dedupeImpediments, impediments } from '../correction/impediments';
 import type { Impediment } from '../correction/types';
-import { applyInvestmentSideTx } from './investment.server';
+import { applyInvestmentSideTx, investmentEffectImpedimentsTx } from './investment.server';
 import type { EffectsCtx, EffectsResult } from './types';
 
 /**
@@ -999,7 +999,9 @@ export async function revertFundMovementEffectsTx(
  * - un movimiento de caja de una sesión ya cerrada (BLOCKED);
  * - un MF confirmado con menos movimientos vinculados que bancos o cajas que mueve
  *   (anterior a la trazabilidad y no vinculado por el backfill): revertir no los
- *   encontraría y reaplicar duplicaría el efecto (BLOCKED).
+ *   encontraría y reaplicar duplicaría el efecto (BLOCKED);
+ * - una compra o venta confirmada de una tenencia con valuación o venta posterior
+ *   (MANUAL, TSK-793: ver `investmentEffectImpedimentsTx`).
  *
  * Solo cuentan los movimientos de la empresa del MF. Cada impedimento aparece una
  * sola vez aunque lo causen varios registros.
@@ -1019,6 +1021,9 @@ export async function fundMovementEffectImpedimentsTx(
       fundOutId: true,
       fundInKind: true,
       fundInId: true,
+      holdingId: true,
+      date: true,
+      createdAt: true,
     },
   });
   if (!movement) return [];
@@ -1050,6 +1055,16 @@ export async function fundMovementEffectImpedimentsTx(
     const expected = countCreatedMovements(movement);
     if (bankMovements.length < expected.bank || cashMovements.length < expected.cash) {
       found.push(impediments.untraceable(docLabel));
+    }
+    if (movement.holdingId) {
+      found.push(
+        ...(await investmentEffectImpedimentsTx(tx, {
+          id: fundMovementId,
+          holdingId: movement.holdingId,
+          date: movement.date,
+          createdAt: movement.createdAt,
+        }))
+      );
     }
   }
 

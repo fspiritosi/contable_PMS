@@ -5,6 +5,7 @@ import type { Tx } from '@/modules/accounting/features/integrations/core';
 import { PURCHASE_INVOICE_STATUS_LABELS } from '@/modules/commercial/features/purchases/features/invoices/shared/validators';
 import { INVOICE_STATUS_LABELS } from '@/modules/commercial/features/sales/features/invoices/shared/validators';
 import { FUND_MOVEMENT_TYPE_LABELS } from '@/modules/commercial/features/treasury/features/fund-movements/shared/validators';
+import { positionAt } from '@/modules/commercial/features/treasury/features/investments/shared/position';
 import {
   BANK_MOVEMENT_TYPE_LABELS,
   CASH_MOVEMENT_TYPE_LABELS,
@@ -12,6 +13,8 @@ import {
   WITHHOLDING_TAX_TYPE_LABELS,
 } from '@/modules/commercial/features/treasury/shared/validators';
 import { formatCurrency, formatDateUtc } from '@/shared/utils/formatters';
+
+import { loadHoldingMovementsTx } from '../effects/investment.server';
 
 import {
   CHECK_KEY_PREFIX,
@@ -55,7 +58,8 @@ export type TrackedKind =
   | 'PO_INSTALLMENT'
   | 'PARTNER_INSTALLMENT'
   | 'PROJECTION'
-  | 'PURCHASE_ORDER';
+  | 'PURCHASE_ORDER'
+  | 'INVESTMENT_HOLDING';
 
 interface TrackedRef {
   kind: TrackedKind;
@@ -111,6 +115,7 @@ const DELIVERY_NOTE_STATUS = {
   CANCELLED: 'Anulado',
 };
 const PO_INSTALLMENT_STATUS = { PENDING: 'Sin facturar', INVOICED: 'Facturada', PAID: 'Pagada' };
+const HOLDING_STATUS = { OPEN: 'Abierta', CLOSED: 'Cerrada' };
 const PROJECTION_STATUS = { PENDING: 'Pendiente', PARTIAL: 'Parcial', CONFIRMED: 'Confirmada' };
 const PO_INVOICING_STATUS = {
   NOT_INVOICED: 'Sin facturar',
@@ -132,6 +137,7 @@ const SLOT = {
   cash: 20,
   check: 30,
   installment: 40,
+  holding: 45,
   stock: 50,
   purchaseOrder: 60,
   imputed: 70,
@@ -715,6 +721,30 @@ const TRACKED_LOADERS: Record<TrackedKind, TrackedLoader> = {
         ),
       },
     })),
+  // Tenencia de una compra o venta de inversión (TSK-793): su posición es la suma de
+  // sus movimientos, así que la propuesta muestra cómo la cambia la corrección. Se
+  // sigue por id para verla aunque el MF se elimine.
+  INVESTMENT_HOLDING: async (b, ids) => {
+    const holdings = await b.tx.investmentHolding.findMany({
+      where: { id: { in: ids }, companyId: b.companyId },
+      select: { id: true, name: true, status: true },
+      orderBy: { id: 'asc' },
+    });
+    const rows: TrackedRow[] = [];
+    for (const holding of holdings) {
+      const position = positionAt(await loadHoldingMovementsTx(b.tx, holding.id));
+      rows.push({
+        id: holding.id,
+        title: `Tenencia ${holding.name}`,
+        fields: {
+          'Valor en libros': money(position.bookValue),
+          Nominales: position.nominals === null ? '—' : qty(position.nominals),
+        },
+        status: HOLDING_STATUS[holding.status],
+      });
+    }
+    return rows;
+  },
 };
 
 /** Agrega los registros seguidos; quedan en el `scope` de la foto para la siguiente. */
@@ -961,6 +991,11 @@ async function addFundMovement(b: SnapshotBuilder, id: string, base: number): Pr
       fundInLabel: true,
       partnerName: true,
       conceptName: true,
+      holdingId: true,
+      holding: { select: { name: true } },
+      nominals: true,
+      commission: true,
+      isFullSale: true,
       journalEntryId: true,
       lines: {
         select: { conceptName: true, description: true, amount: true },
@@ -983,6 +1018,15 @@ async function addFundMovement(b: SnapshotBuilder, id: string, base: number): Pr
       'Entra a': movement.fundInLabel ?? '—',
       Socio: movement.partnerName ?? '—',
       Concepto: movement.conceptName ?? '—',
+      // Compra y venta de inversión (TSK-793).
+      ...(movement.holding
+        ? {
+            Tenencia: movement.holding.name,
+            Nominales: movement.nominals === null ? '—' : qty(movement.nominals),
+            Comisión: movement.commission === null ? '—' : money(movement.commission),
+            'Venta total': movement.isFullSale ? 'Sí' : 'No',
+          }
+        : {}),
       ...Object.fromEntries(
         movement.lines.map((l, i) => [
           `Gasto ${i + 1}`,
@@ -995,6 +1039,7 @@ async function addFundMovement(b: SnapshotBuilder, id: string, base: number): Pr
   await addEntry(b, movement.journalEntryId, base + SLOT.entry);
   await addBankMovements(b, docKey, { fundMovementId: id }, base + SLOT.bank);
   await addCashMovements(b, docKey, { fundMovementId: id }, base + SLOT.cash);
+  await addTracked(b, track('INVESTMENT_HOLDING', [movement.holdingId], base + SLOT.holding));
 }
 
 // ============================================================================

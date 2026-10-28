@@ -12,6 +12,8 @@ import {
 } from '@/modules/commercial/features/treasury/features/investments/shared/position';
 import { BusinessError } from '@/shared/lib/action-result';
 
+import { impediments } from '../correction/impediments';
+import type { Impediment } from '../correction/types';
 import type { EffectsCtx } from './types';
 
 /**
@@ -69,16 +71,15 @@ export async function assertHoldingNeverNegativeTx(tx: Tx, holdingId: string): P
 }
 
 /**
- * Una valuación al cierre fija el valor en libros de la tenencia a esa fecha. Un
- * movimiento con fecha igual o anterior la dejaría desactualizada, así que se
- * rechaza hasta que se deshaga la valuación. La comparación es por día calendario:
- * la valuación se guarda a las 00:00Z y el MF al mediodía UTC.
+ * Valuación de la tenencia con fecha igual o posterior a `date`, la más cercana, o
+ * null si no hay. La comparación es por día calendario: la valuación se guarda a las
+ * 00:00Z y el MF al mediodía UTC.
  */
-export async function assertHoldingNotValuedTx(
+async function findValuationFromTx(
   tx: Tx,
   holdingId: string,
   date: Date
-): Promise<void> {
+): Promise<{ date: Date; holdingName: string } | null> {
   const valuation = await tx.investmentMovement.findFirst({
     where: {
       holdingId,
@@ -89,11 +90,85 @@ export async function assertHoldingNotValuedTx(
     orderBy: { date: 'asc' },
     select: { date: true, holding: { select: { name: true } } },
   });
+  return valuation ? { date: valuation.date, holdingName: valuation.holding.name } : null;
+}
+
+/**
+ * Una valuación al cierre fija el valor en libros de la tenencia a esa fecha. Un
+ * movimiento con fecha igual o anterior la dejaría desactualizada, así que se
+ * rechaza hasta que se deshaga la valuación.
+ */
+export async function assertHoldingNotValuedTx(
+  tx: Tx,
+  holdingId: string,
+  date: Date
+): Promise<void> {
+  const valuation = await findValuationFromTx(tx, holdingId, date);
   if (valuation) {
     throw new BusinessError(
-      `La tenencia «${valuation.holding.name}» ya tiene valuación al cierre del ${formatDay(valuation.date)}. Deshacé esa valuación para registrar movimientos anteriores.`
+      `La tenencia «${valuation.holdingName}» ya tiene valuación al cierre del ${formatDay(valuation.date)}. Deshacé esa valuación para registrar movimientos anteriores.`
     );
   }
+}
+
+/**
+ * Impedimentos de corregir, anular o eliminar una compra o venta confirmada
+ * (TSK-793). El revert del MF solo borra su `InvestmentMovement`; no vuelve a mirar
+ * la historia de la tenencia, así que estos chequeos van antes de simular:
+ * - `INVESTMENT_VALUED`: una valuación con fecha igual o posterior a la del MF
+ *   quedaría calculada sobre un valor en libros que ya no es el real.
+ * - `INVESTMENT_LATER_SALE` (ruling P4): el costo de una venta queda fijo al
+ *   confirmarla; si cambia algo anterior de la tenencia deja de ser coherente. Es
+ *   posterior la venta de un día siguiente o la del mismo día cargada después (mismo
+ *   desempate que `firstNegativePoint`). La propia venta no cuenta.
+ */
+export async function investmentEffectImpedimentsTx(
+  tx: Tx,
+  movement: { id: string; holdingId: string; date: Date; createdAt: Date }
+): Promise<Impediment[]> {
+  const found: Impediment[] = [];
+
+  const valuation = await findValuationFromTx(tx, movement.holdingId, movement.date);
+  if (valuation) {
+    found.push(impediments.investmentValued(valuation.holdingName, formatDay(valuation.date)));
+  }
+
+  const own = await tx.investmentMovement.findMany({
+    where: { fundMovementId: movement.id },
+    select: { id: true, createdAt: true },
+  });
+  // Sin movimiento propio (no debería pasar en un MF confirmado), desempata la
+  // creación del MF.
+  const ownCreatedAt = own[0]?.createdAt ?? movement.createdAt;
+  const day = moment.utc(movement.date).format('YYYY-MM-DD');
+  const sales = await tx.investmentMovement.findMany({
+    where: {
+      holdingId: movement.holdingId,
+      kind: 'SALE',
+      id: { notIn: own.map((m) => m.id) },
+      date: { gte: moment.utc(movement.date).startOf('day').toDate() },
+    },
+    orderBy: [{ date: 'asc' }, { createdAt: 'asc' }],
+    select: {
+      date: true,
+      createdAt: true,
+      holding: { select: { name: true } },
+      fundMovement: { select: { description: true } },
+    },
+  });
+  const later = sales.find(
+    (sale) =>
+      moment.utc(sale.date).format('YYYY-MM-DD') > day ||
+      sale.createdAt.getTime() > ownCreatedAt.getTime()
+  );
+  if (later) {
+    const saleLabel = later.fundMovement
+      ? `«${later.fundMovement.description}» del ${formatDay(later.date)}`
+      : `del ${formatDay(later.date)}`;
+    found.push(impediments.investmentLaterSale(later.holding.name, saleLabel));
+  }
+
+  return found;
 }
 
 /**
