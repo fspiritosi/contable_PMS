@@ -19,8 +19,12 @@ import {
 import { formatCurrency } from '@/shared/utils/formatters';
 
 import type { FundMovementFormInput } from '../../shared/validators';
-import { formatNominals, withSnapshotOption } from '../../shared/view-mode';
-import type { FundMovementHoldingOption, FundOption } from '../actions.server';
+import { formatNominals, withMovementHolding } from '../../shared/view-mode';
+import type {
+  FundMovementHoldingOption,
+  FundMovementListItem,
+  FundOption,
+} from '../actions.server';
 import { _FundMovementAmountDateFields } from './_FundMovementAmountDateFields';
 import { _FundSelectField } from './_FundSelectField';
 import { _InvestmentAmountFields } from './_InvestmentAmountFields';
@@ -32,8 +36,9 @@ interface Props {
   banks: FundOption[];
   cashRegisters: FundOption[];
   isView: boolean;
-  /** Solo en vista: nombre guardado de la tenencia (puede haberse cerrado) y fondos. */
-  holdingSnapshot?: string | null;
+  /** Al ver o editar: su tenencia se ofrece aunque ya esté cerrada (`withMovementHolding`). */
+  movement?: Pick<FundMovementListItem, 'holdingId' | 'holdingLabel' | 'holdingHasUnits'> | null;
+  /** Solo en vista: etiqueta guardada del banco/caja (puede haberse desactivado). */
   fundSnapshot?: string | null;
 }
 
@@ -43,14 +48,15 @@ interface Props {
  */
 export function _FundMovementInvestmentSection({
   isSale,
-  holdings,
+  holdings: catalog,
   banks,
   cashRegisters,
   isView,
-  holdingSnapshot,
+  movement,
   fundSnapshot,
 }: Props) {
   const { control, setValue, watch } = useFormContext<FundMovementFormInput>();
+  const holdings = withMovementHolding(catalog, movement);
   const selectedHolding = holdings.find((h) => h.id === watch('holdingId'));
   // La compra con nominales y precio calcula el importe; sin unidades se carga directo.
   const amountIsComputed = !isSale && !isView && Boolean(selectedHolding?.hasUnits);
@@ -75,11 +81,6 @@ export function _FundMovementInvestmentSection({
       control={control}
       name="holdingId"
       render={({ field }) => {
-        const options = withSnapshotOption(
-          holdings.map((h) => ({ value: h.id, label: h.label })),
-          field.value,
-          holdingSnapshot
-        );
         const selected = holdings.find((h) => h.id === field.value);
         return (
           <FormItem>
@@ -102,20 +103,20 @@ export function _FundMovementInvestmentSection({
                 </SelectTrigger>
               </FormControl>
               <SelectContent>
-                {options.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
+                {holdings.map((h) => (
+                  <SelectItem key={h.id} value={h.id}>
+                    {h.label}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            {isSale && selected && !isView && (
+            {isSale && selected && !selected.isClosed && !isView && (
               <p className="text-xs text-muted-foreground">
                 Valor en libros: {formatCurrency(selected.bookValue)}
                 {selected.nominals !== null && ` · Nominales: ${formatNominals(selected.nominals)}`}
               </p>
             )}
-            {holdings.length === 0 && !isView && (
+            {holdings.every((h) => h.isClosed) && !isView && (
               <p className="text-xs text-muted-foreground">
                 No hay tenencias abiertas. Creá una en Inversiones antes de registrar la operación.
               </p>

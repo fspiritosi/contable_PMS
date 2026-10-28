@@ -21,6 +21,7 @@ import {
   isSnapshotOption,
   needsMovementDetail,
   shouldCleanupFieldsOnTypeChange,
+  withMovementHolding,
   withSnapshotOption,
   type FundMovementFormSource,
   type FundMovementLineSource,
@@ -234,6 +235,50 @@ describe('isSnapshotOption', () => {
     const result = withSnapshotOption(options, 'b', 'B');
     expect(isSnapshotOption(result[1])).toBe(true);
     expect(isSnapshotOption(result[0])).toBe(false);
+  });
+});
+
+describe('withMovementHolding', () => {
+  const open = {
+    id: 'h-abierta',
+    label: 'AL30 · Broker - 1',
+    hasUnits: true,
+    bookValue: 600,
+    nominals: 60,
+  };
+  const holdings = [open];
+
+  it('agrega la tenencia cerrada del movimiento con su etiqueta', () => {
+    const result = withMovementHolding(holdings, {
+      holdingId: 'h-cerrada',
+      holdingLabel: 'GD30 · Broker - 1',
+      holdingHasUnits: true,
+    });
+    expect(result).toEqual([
+      open,
+      {
+        id: 'h-cerrada',
+        label: 'GD30 · Broker - 1',
+        hasUnits: true,
+        bookValue: 0,
+        nominals: null,
+        isClosed: true,
+      },
+    ]);
+  });
+
+  it('sin cambios si la tenencia está en el catálogo, falta o no hay movimiento', () => {
+    expect(
+      withMovementHolding(holdings, {
+        holdingId: open.id,
+        holdingLabel: open.label,
+        holdingHasUnits: true,
+      })
+    ).toBe(holdings);
+    expect(
+      withMovementHolding(holdings, { holdingId: null, holdingLabel: null, holdingHasUnits: null })
+    ).toBe(holdings);
+    expect(withMovementHolding(holdings, undefined)).toBe(holdings);
   });
 });
 

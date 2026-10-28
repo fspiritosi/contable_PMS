@@ -4,6 +4,7 @@ import { useFormContext } from 'react-hook-form';
 
 import {
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -28,9 +29,13 @@ interface Props {
 /**
  * Nominales y precio de una compra, o nominales vendidos en una venta. En la
  * compra el importe se calcula (queda solo lectura); en la venta se carga el bruto.
+ * Se muestra solo en tenencias con unidades: ahí la venta parcial exige los
+ * nominales vendidos (ruling R8) y la venta total los vende todos, así que el
+ * campo queda deshabilitado (y vacío) mientras esté marcada.
  */
 export function _InvestmentAmountFields({ isSale }: Props) {
-  const { control, getValues, setValue } = useFormContext<FundMovementFormInput>();
+  const { control, getValues, setValue, watch } = useFormContext<FundMovementFormInput>();
+  const allSold = isSale && Boolean(watch('isFullSale'));
 
   const recalc = () => {
     if (isSale) return;
@@ -50,6 +55,7 @@ export function _InvestmentAmountFields({ isSale }: Props) {
             <MoneyInput
               placeholder="0"
               maxDecimals={6}
+              disabled={allSold}
               value={field.value ?? ''}
               onChange={(v) => {
                 field.onChange(v);
@@ -60,6 +66,9 @@ export function _InvestmentAmountFields({ isSale }: Props) {
               ref={field.ref}
             />
           </FormControl>
+          {allSold && (
+            <FormDescription>Con venta total se venden todos los nominales.</FormDescription>
+          )}
           <FormMessage />
         </FormItem>
       )}
@@ -68,7 +77,7 @@ export function _InvestmentAmountFields({ isSale }: Props) {
 
   return (
     <div className="grid gap-4 md:grid-cols-2">
-      {quantity('nominals', isSale ? 'Nominales vendidos' : 'Nominales')}
+      {quantity('nominals', isSale ? `Nominales vendidos${allSold ? '' : ' *'}` : 'Nominales')}
       {!isSale && quantity('unitPrice', 'Precio unitario')}
     </div>
   );

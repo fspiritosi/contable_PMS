@@ -132,10 +132,10 @@ export function _CreateFundMovementModal({
                 <_FundMovementInvestmentSection
                   isSale={isInvestmentSale}
                   holdings={holdings}
+                  movement={movement}
                   banks={banks}
                   cashRegisters={cashRegisters}
                   isView={isView}
-                  holdingSnapshot={snapshot(movement?.holdingName)}
                   fundSnapshot={snapshot(
                     isInvestmentSale ? movement?.fundInLabel : movement?.fundOutLabel
                   )}

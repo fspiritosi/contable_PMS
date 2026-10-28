@@ -4,7 +4,12 @@ import type { FundMovementStatus } from '@/generated/prisma/enums';
 import type { ModulePermissions } from '@/shared/lib/permissions';
 import { formatCurrency } from '@/shared/utils/formatters';
 
-import type { FundMovementListItem, FundMovementRecord, FundOption } from '../list/actions.server';
+import type {
+  FundMovementHoldingOption,
+  FundMovementListItem,
+  FundMovementRecord,
+  FundOption,
+} from '../list/actions.server';
 import {
   formatFundMovementDate,
   type FundMovementFormInput,
@@ -121,6 +126,34 @@ export function withSnapshotOption<T extends SelectOptionLike>(
 
 export function isSnapshotOption(option: SelectOptionLike): option is SnapshotOption {
   return 'isSnapshot' in option && option.isSnapshot === true;
+}
+
+/**
+ * Tenencias del selector al ver o editar un movimiento: el catálogo trae solo las
+ * abiertas, así que la del movimiento, si ya no lo está (corregir la venta total que
+ * la cerró), se agrega al final con la misma etiqueta y marcada `isClosed`. Sin ella
+ * el selector "Tenencia" quedaba en blanco. Devuelve la misma referencia si no hace falta.
+ */
+export function withMovementHolding(
+  holdings: readonly FundMovementHoldingOption[],
+  movement:
+    | Pick<FundMovementListItem, 'holdingId' | 'holdingLabel' | 'holdingHasUnits'>
+    | null
+    | undefined
+): readonly FundMovementHoldingOption[] {
+  const id = movement?.holdingId;
+  if (!id || !movement.holdingLabel || holdings.some((h) => h.id === id)) return holdings;
+  return [
+    ...holdings,
+    {
+      id,
+      label: movement.holdingLabel,
+      hasUnits: Boolean(movement.holdingHasUnits),
+      bookValue: 0,
+      nominals: null,
+      isClosed: true,
+    },
+  ];
 }
 
 // ---------------------------------------------------------------- valores del formulario

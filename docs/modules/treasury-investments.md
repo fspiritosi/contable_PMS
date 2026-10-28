@@ -17,7 +17,10 @@ Spec: `docs/superpowers/specs/2026-10-28-tsk-793-inversiones-design.md`. Alcance
 - Tipos con nominales: acciones, CEDEARs, bonos, opciones, letras, futuros, licitaciones, ONs. Sin nominales (importe): FCI, fideicomisos, cauciones, plazo fijo. Los nominales son opcionales aun en los tipos que los admiten. Con vencimiento: todos menos acciones, CEDEARs, FCI y fideicomisos.
 - **Comisión:** gasto aparte. Compra: sale del origen bruto + comisión. Venta: entra al destino bruto - comisión. El resultado se calcula sobre el bruto. Una comisión >= bruto es un error.
 - **Venta parcial (decisión del cliente, 2026-10-28):** con nominales, costo = valor en libros x vendidos / en tenencia (PPP) y el resultado se registra en ese momento (`computeSaleCost`, `shared/position.ts`). Sin nominales: baja el capital por lo cobrado, sin resultado hasta el cierre o la venta total.
-- **Venta total / vencimiento:** resultado = bruto - valor en libros; la tenencia pasa a `CLOSED`. Debe ser el último movimiento (R5).
+- **R8:** si la tenencia tiene nominales > 0 a la fecha, la venta parcial exige los nominales vendidos (`Indicá los nominales vendidos`, en `computeSaleCost`: cubre la confirmación y el motor de corrección). El formulario marca el campo con `*`.
+- **Venta total / vencimiento:** resultado = bruto - valor en libros; la tenencia pasa a `CLOSED`. Debe ser el último movimiento (R5). Los nominales cargados con "Venta total" no se usan ni se guardan (`nominals` null); el formulario deshabilita y limpia el campo al marcarla.
+- Una venta de una tenencia con valor en libros 0 (por ejemplo, valuada a 0) tiene costo 0: el asiento va sin línea de tenencia (los asientos de inversión nunca llevan líneas 0/0) y todo lo cobrado es resultado.
+- **R9 (concurrencia):** compra, venta y su revert toman primero el lock de Ajustes contables de la empresa (`lockHoldingOperationsTx` → `assertPeriodOpen`, `FOR UPDATE` de `accounting_settings`), el mismo que la valuación y la creación de asientos. Dos confirmaciones sobre la misma tenencia se serializan y la segunda ve la posición con la primera ya aplicada.
 - La posición nunca queda negativa en ningún punto de la historia (`assertHoldingNeverNegative`). No hay posiciones cortas.
 - R6: no se acepta compra ni venta con fecha anterior a una venta existente de la misma tenencia. Tampoco movimientos con fecha <= a una valuación de la tenencia.
 - Cuenta de custodia, cuenta contable y tipo de instrumento no se pueden cambiar si hay movimientos; una tenencia con movimientos no se elimina.
@@ -29,7 +32,8 @@ Spec: `docs/superpowers/specs/2026-10-28-tsk-793-inversiones-design.md`. Alcance
 2. Vista previa: diferencia por tenencia, total positivo y negativo, asiento.
 3. Generar: movimiento `VALUATION` por tenencia (`bookDelta` = valor - libros al cierre) y asiento en **borrador** fechado al fin del ejercicio contra las cuentas de resultado por tenencia. El valor cargado es el nuevo valor en libros.
 - Una por ejercicio; en orden entre ejercicios (R7); se rechaza si una tenencia tiene ventas posteriores a la fecha de cierre.
-- Deshacer: borra movimientos y asiento mientras el asiento esté en Borrador y el ejercicio abierto.
+- Deshacer: borra movimientos y asiento mientras el asiento esté en Borrador y el ejercicio abierto. Sin diferencias no hay asiento y se deshace igual.
+- El asiento pertenece a la valuación (`getEntryDocumentLink`, tipo `INVESTMENT_VALUATION`, columna `InvestmentValuation.journalEntryId` sin relación): Contabilidad › Asientos no lo elimina ni lo anula, y no figura entre los asientos sin documento. Volverlo a borrador sí está permitido (paso previo a deshacer).
 
 ## Permisos
 Módulo `commercial.treasury.investments`: view, create, update, delete; la valuación además pide `approve`. Cae en el prefijo `commercial.*` del mapeo de módulos activables: no se registra un módulo nuevo.

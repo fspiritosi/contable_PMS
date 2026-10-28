@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 
+import type { Prisma } from '@/generated/prisma/client';
 import type { FundMovementType } from '@/generated/prisma/enums';
 import {
   resolveFundMovementDataTx,
@@ -36,9 +37,26 @@ export type FundMovementActionResult = ActionResult<{ id?: string }>;
 // QUERIES
 // ============================================================================
 
+/** Lo que se lee de la tenencia de un movimiento para mostrarla en el formulario. */
+const HOLDING_SELECT = {
+  name: true,
+  instrumentType: true,
+  bankAccount: { select: { bankName: true, accountNumber: true } },
+} as const;
+
+/** Etiqueta de una tenencia en el selector del formulario: nombre · custodia. */
+function holdingOptionLabel(h: {
+  name: string;
+  bankAccount: { bankName: string; accountNumber: string };
+}): string {
+  return `${h.name} · ${h.bankAccount.bankName} - ${h.bankAccount.accountNumber}`;
+}
+
 /**
  * Campos de inversión (TSK-793) listos para el cliente: los `Decimal` de Prisma
- * no se serializan a Client Components, así que se pasan a number.
+ * no se serializan a Client Components, así que se pasan a number. La etiqueta y
+ * si lleva unidades sirven para mostrar la tenencia aunque ya no esté abierta (por
+ * ejemplo, al corregir la venta total que la cerró).
  */
 function investmentFieldsForClient(
   m: {
@@ -46,13 +64,15 @@ function investmentFieldsForClient(
     unitPrice: { toString(): string } | null;
     commission: { toString(): string } | null;
   },
-  holding: { name: string } | null
+  holding: Prisma.InvestmentHoldingGetPayload<{ select: typeof HOLDING_SELECT }> | null
 ) {
   return {
     nominals: m.nominals === null ? null : Number(m.nominals),
     unitPrice: m.unitPrice === null ? null : Number(m.unitPrice),
     commission: m.commission === null ? null : Number(m.commission),
     holdingName: holding?.name ?? null,
+    holdingLabel: holding ? holdingOptionLabel(holding) : null,
+    holdingHasUnits: holding ? INSTRUMENT_TYPE_TRAITS[holding.instrumentType].hasUnits : null,
   };
 }
 
@@ -73,7 +93,7 @@ export async function getFundMovements(searchParams: DataTableSearchParams) {
         skip,
         take,
         orderBy: orderBy || [{ date: 'desc' }, { createdAt: 'desc' }],
-        include: { holding: { select: { name: true } } },
+        include: { holding: { select: HOLDING_SELECT } },
       }),
       prisma.fundMovement.count({ where }),
     ]);
@@ -100,7 +120,7 @@ export async function getFundMovementById(id: string) {
 
   const movement = await prisma.fundMovement.findFirst({
     where: { id, companyId },
-    include: { lines: { orderBy: { position: 'asc' } }, holding: { select: { name: true } } },
+    include: { lines: { orderBy: { position: 'asc' } }, holding: { select: HOLDING_SELECT } },
   });
   if (!movement) return null;
   const { holding, ...rest } = movement;
@@ -210,7 +230,7 @@ export async function getFundMovementCatalogs() {
     );
     return {
       id: h.id,
-      label: `${h.name} · ${h.bankAccount.bankName} - ${h.bankAccount.accountNumber}`,
+      label: holdingOptionLabel(h),
       hasUnits: INSTRUMENT_TYPE_TRAITS[h.instrumentType].hasUnits,
       bookValue: position.bookValue,
       nominals: position.nominals,
@@ -400,6 +420,8 @@ export type FundMovementHoldingOption = {
   hasUnits: boolean;
   bookValue: number;
   nominals: number | null;
+  /** La tenencia del movimiento que se ve o edita, ya no abierta: su posición no se muestra. */
+  isClosed?: boolean;
 };
 /** Referencia mínima a una cuenta del plan, para mostrar `code - name` (TSK-717). */
 export type FundMovementAccountRef = { id: string; code: string; name: string };

@@ -21,7 +21,7 @@ interface Props {
 
 /** Comisión opcional (gasto aparte) y, en la venta, la marca de venta total. */
 export function _InvestmentCommissionFields({ isSale }: Props) {
-  const { control } = useFormContext<FundMovementFormInput>();
+  const { control, setValue } = useFormContext<FundMovementFormInput>();
 
   return (
     <>
@@ -57,7 +57,14 @@ export function _InvestmentCommissionFields({ isSale }: Props) {
           render={({ field }) => (
             <FormItem className="flex flex-row items-start gap-2 space-y-0">
               <FormControl>
-                <Checkbox checked={Boolean(field.value)} onCheckedChange={field.onChange} />
+                <Checkbox
+                  checked={Boolean(field.value)}
+                  onCheckedChange={(checked) => {
+                    field.onChange(checked);
+                    // La venta total vende todos los nominales: los cargados no se usan.
+                    if (checked) setValue('nominals', '');
+                  }}
+                />
               </FormControl>
               <FormLabel className="font-normal">Venta total (cierra la tenencia)</FormLabel>
             </FormItem>

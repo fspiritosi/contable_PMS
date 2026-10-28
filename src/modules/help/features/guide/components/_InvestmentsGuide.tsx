@@ -100,7 +100,7 @@ export function _InvestmentsGuide() {
             <strong>Venta de inversión</strong>. El origen es la tenencia y el
             destino un banco, caja o broker. Cargás lo cobrado (importe bruto),
             la comisión si hubo y, si la tenencia lleva nominales, cuántos
-            vendés.
+            vendés (obligatorio, salvo en la venta total).
           </p>
           <ul className="list-disc pl-6 space-y-1 text-muted-foreground">
             <li>
@@ -117,8 +117,8 @@ export function _InvestmentsGuide() {
             </li>
             <li>
               <strong>Venta total</strong> (o vencimiento): marcá{' '}
-              <strong>Venta total</strong>. El resultado es lo cobrado menos el
-              valor en libros, se asienta en el mismo asiento y la tenencia
+              <strong>Venta total</strong>: vende todos los nominales. El
+              resultado es lo cobrado menos el valor en libros y la tenencia
               queda cerrada.
             </li>
             <li>
@@ -179,9 +179,9 @@ export function _InvestmentsGuide() {
             Hay una valuación por ejercicio y se hacen en orden entre
             ejercicios. Se hace antes del cierre contable. Podés{' '}
             <strong>deshacerla</strong> mientras el asiento esté en Borrador (si
-            ya lo registraste, primero volvelo a borrador en Asientos). Si una
-            tenencia tiene ventas posteriores a la fecha de cierre, el sistema
-            no valúa y te dice cuáles son.
+            ya lo registraste, volvelo a borrador en Asientos; desde ahí no se
+            elimina ni se anula). Si una tenencia tiene ventas posteriores al
+            cierre, el sistema no valúa y te dice cuáles son.
           </p>
           <Alert>
             <AlertDescription>

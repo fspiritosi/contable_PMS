@@ -1073,7 +1073,8 @@ export function _TreasuryGuide() {
             <li>
               <strong>Venta de inversión</strong>: entra plata a un banco,
               broker o caja y baja la tenencia. Elegís la tenencia (ves su valor
-              en libros y nominales actuales), los nominales vendidos y el{' '}
+              en libros y nominales actuales), los nominales vendidos
+              (obligatorios en una venta parcial) y el{' '}
               <strong>importe cobrado bruto</strong>. A la cuenta entra el bruto
               menos la comisión. Si marcás <strong>Venta total</strong>, la
               tenencia se cierra. Las tenencias se crean en{' '}
