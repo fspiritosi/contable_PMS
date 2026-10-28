@@ -374,7 +374,9 @@ describe.skipIf(!dbAvailable)('integración: compra y venta de inversión (TSK-7
     expect(await position(holdingId)).toEqual({ bookValue: 1000, nominals: 100 });
   });
 
-  it('venta retroactiva que deja negativa una venta posterior ya confirmada: se rechaza', async () => {
+  // Desde el ruling R6 (Tarea 5) una venta con fecha anterior a otra venta confirmada
+  // se rechaza antes de mirar la historia: el costo de la venta posterior quedó fijo.
+  it('venta retroactiva anterior a una venta ya confirmada: se rechaza (R6)', async () => {
     const holdingId = await mkHolding('H3');
     await confirmed(compra(holdingId, '2026-06-10'));
     await confirmed(venta(holdingId, '2026-06-20', { nominals: '60', amount: '700' }));
@@ -387,7 +389,7 @@ describe.skipIf(!dbAvailable)('integración: compra y venta de inversión (TSK-7
 
     expect(result).toEqual({
       success: false,
-      error: `La operación deja la tenencia «${PREFIX}H3» con saldo negativo al 20/06/2026`,
+      error: `La tenencia «${PREFIX}H3» tiene una venta posterior (20/06/2026). Anulá primero esa venta, cargá este movimiento y volvé a cargarla.`,
     });
     expect(await bankBalance()).toBe(before);
     expect(await position(holdingId)).toEqual({ bookValue: 400, nominals: 40 });

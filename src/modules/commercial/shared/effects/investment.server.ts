@@ -112,6 +112,67 @@ export async function assertHoldingNotValuedTx(
 }
 
 /**
+ * Primera venta de la tenencia posterior a `date`, o null. Es posterior la de un día
+ * siguiente (día calendario UTC) o, en el mismo día, la creada después de
+ * `sameDayAfter`; con `sameDayAfter` null, ninguna del mismo día cuenta (un
+ * movimiento que se está aplicando es el último creado). `excludeIds` deja afuera
+ * los movimientos propios.
+ */
+async function findLaterSaleTx(
+  tx: Tx,
+  holdingId: string,
+  date: Date,
+  opts: { excludeIds: string[]; sameDayAfter: Date | null }
+): Promise<{ date: Date; holdingName: string; description: string | null } | null> {
+  const day = moment.utc(date).format('YYYY-MM-DD');
+  const sales = await tx.investmentMovement.findMany({
+    where: {
+      holdingId,
+      kind: 'SALE',
+      ...(opts.excludeIds.length > 0 ? { id: { notIn: opts.excludeIds } } : {}),
+      date: { gte: moment.utc(date).startOf('day').toDate() },
+    },
+    orderBy: [{ date: 'asc' }, { createdAt: 'asc' }],
+    select: {
+      date: true,
+      createdAt: true,
+      holding: { select: { name: true } },
+      fundMovement: { select: { description: true } },
+    },
+  });
+  const later = sales.find(
+    (sale) =>
+      moment.utc(sale.date).format('YYYY-MM-DD') > day ||
+      (opts.sameDayAfter !== null && sale.createdAt.getTime() > opts.sameDayAfter.getTime())
+  );
+  if (!later) return null;
+  return {
+    date: later.date,
+    holdingName: later.holding.name,
+    description: later.fundMovement?.description ?? null,
+  };
+}
+
+/**
+ * Ruling R6: una compra o venta no puede quedar antes de una venta ya confirmada de
+ * la misma tenencia, porque el costo de esa venta quedó fijo al confirmarla. Corre
+ * al crear y confirmar, al confirmar un borrador y en la reaplicación del motor de
+ * corrección (con el movimiento propio ya revertido), así que cubre también una
+ * edición que cambia la fecha o la tenencia.
+ */
+export async function assertNoLaterSaleTx(tx: Tx, holdingId: string, date: Date): Promise<void> {
+  const later = await findLaterSaleTx(tx, holdingId, date, {
+    excludeIds: [],
+    sameDayAfter: null,
+  });
+  if (later) {
+    throw new BusinessError(
+      `La tenencia «${later.holdingName}» tiene una venta posterior (${formatDay(later.date)}). Anulá primero esa venta, cargá este movimiento y volvé a cargarla.`
+    );
+  }
+}
+
+/**
  * Impedimentos de corregir, anular o eliminar una compra o venta confirmada
  * (TSK-793). El revert del MF solo borra su `InvestmentMovement`; no vuelve a mirar
  * la historia de la tenencia, así que estos chequeos van antes de simular:
@@ -139,33 +200,15 @@ export async function investmentEffectImpedimentsTx(
   });
   // Sin movimiento propio (no debería pasar en un MF confirmado), desempata la
   // creación del MF.
-  const ownCreatedAt = own[0]?.createdAt ?? movement.createdAt;
-  const day = moment.utc(movement.date).format('YYYY-MM-DD');
-  const sales = await tx.investmentMovement.findMany({
-    where: {
-      holdingId: movement.holdingId,
-      kind: 'SALE',
-      id: { notIn: own.map((m) => m.id) },
-      date: { gte: moment.utc(movement.date).startOf('day').toDate() },
-    },
-    orderBy: [{ date: 'asc' }, { createdAt: 'asc' }],
-    select: {
-      date: true,
-      createdAt: true,
-      holding: { select: { name: true } },
-      fundMovement: { select: { description: true } },
-    },
+  const later = await findLaterSaleTx(tx, movement.holdingId, movement.date, {
+    excludeIds: own.map((m) => m.id),
+    sameDayAfter: own[0]?.createdAt ?? movement.createdAt,
   });
-  const later = sales.find(
-    (sale) =>
-      moment.utc(sale.date).format('YYYY-MM-DD') > day ||
-      sale.createdAt.getTime() > ownCreatedAt.getTime()
-  );
   if (later) {
-    const saleLabel = later.fundMovement
-      ? `«${later.fundMovement.description}» del ${formatDay(later.date)}`
+    const saleLabel = later.description
+      ? `«${later.description}» del ${formatDay(later.date)}`
       : `del ${formatDay(later.date)}`;
-    found.push(impediments.investmentLaterSale(later.holding.name, saleLabel));
+    found.push(impediments.investmentLaterSale(later.holdingName, saleLabel));
   }
 
   return found;
@@ -174,7 +217,8 @@ export async function investmentEffectImpedimentsTx(
 /**
  * Aplica el lado tenencia de una compra o venta confirmada:
  *  1. La tenencia tiene que ser de la empresa y estar abierta.
- *  2. Sin valuación con fecha igual o posterior (`assertHoldingNotValuedTx`).
+ *  2. Sin valuación con fecha igual o posterior (`assertHoldingNotValuedTx`) ni
+ *     venta confirmada posterior de la tenencia (`assertNoLaterSaleTx`, ruling R6).
  *  3. Compra: valor en libros + bruto, nominales + los comprados (si vienen).
  *     Venta: el costo lo decide `computeSaleCost` con la posición a la fecha de la
  *     venta (precio promedio ponderado). Si la venta cierra la tenencia, pasa a CLOSED.
@@ -208,6 +252,7 @@ export async function applyInvestmentSideTx(
   if (!holding) throw new BusinessError('La tenencia seleccionada no es válida o está cerrada');
 
   await assertHoldingNotValuedTx(tx, holding.id, movement.date);
+  await assertNoLaterSaleTx(tx, holding.id, movement.date);
 
   const gross = Number(movement.amount);
   const nominals = movement.nominals === null ? null : Number(movement.nominals);

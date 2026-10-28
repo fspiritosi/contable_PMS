@@ -372,5 +372,57 @@ describe.skipIf(!dbAvailable)(
         (await prisma.fundMovement.findUniqueOrThrow({ where: { id: purchaseId } })).status
       ).toBe('CONFIRMED');
     });
+
+    it('R6: compra con fecha anterior a una venta confirmada: se rechaza y el banco no cambia', async () => {
+      const holdingId = await mkHolding('H7');
+      await confirmed(compra(holdingId, '2026-03-10'));
+      await confirmed(venta(holdingId, '2026-04-10', { nominals: '40' }));
+      const bankBefore = await bankBalance();
+
+      const result = await createFundMovement(compra(holdingId, '2026-04-01'), true);
+
+      expect(result).toEqual({
+        success: false,
+        error: `La tenencia «${PREFIX}H7» tiene una venta posterior (10/04/2026). Anulá primero esa venta, cargá este movimiento y volvé a cargarla.`,
+      });
+      expect(await bankBalance()).toBe(bankBefore);
+      expect(await position(holdingId)).toEqual({ bookValue: 600, nominals: 60 });
+    });
+
+    it('R6: editar una compra pasándola a otra tenencia con venta posterior: no se aplica', async () => {
+      const holdingA = await mkHolding('H8A');
+      const holdingB = await mkHolding('H8B');
+      const purchaseId = await confirmed(compra(holdingA, '2026-03-10'));
+      await confirmed(compra(holdingB, '2026-02-10'));
+      await confirmed(venta(holdingB, '2026-04-10', { nominals: '40' }));
+      const bankBefore = await bankBalance();
+      const request: CorrectionRequest = {
+        mode: 'EDIT',
+        ref: ref(purchaseId),
+        data: compra(holdingB, '2026-03-10'),
+      };
+
+      const proposal = await preview(request);
+
+      expect(proposal.impediments).toEqual([
+        {
+          code: 'SIMULATION_ERROR',
+          severity: 'BLOCKED',
+          message: `La tenencia «${PREFIX}H8B» tiene una venta posterior (10/04/2026). Anulá primero esa venta, cargá este movimiento y volvé a cargarla.`,
+        },
+      ]);
+      expect(await applyDocumentCorrection(request, proposal.fingerprint)).toMatchObject({
+        success: true,
+        applied: false,
+      });
+      expect(await position(holdingA)).toEqual({ bookValue: 1000, nominals: 100 });
+      expect(await position(holdingB)).toEqual({ bookValue: 600, nominals: 60 });
+      expect(await bankBalance()).toBe(bankBefore);
+      const movement = await prisma.fundMovement.findUniqueOrThrow({
+        where: { id: purchaseId },
+        select: { holdingId: true },
+      });
+      expect(movement.holdingId).toBe(holdingA);
+    });
   }
 );
