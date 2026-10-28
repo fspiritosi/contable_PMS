@@ -35,7 +35,8 @@ export function _InvestmentAmountFields({ isSale }: Props) {
   const recalc = () => {
     if (isSale) return;
     const amount = grossAmount(getValues('nominals'), getValues('unitPrice'));
-    if (amount) setValue('amount', amount, { shouldValidate: true });
+    // Si falta nominales o precio, el importe calculado ya no vale: se limpia.
+    setValue('amount', amount, { shouldValidate: Boolean(amount) });
   };
 
   const quantity = (name: 'nominals' | 'unitPrice', label: string) => (

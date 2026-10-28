@@ -1,7 +1,5 @@
 'use client';
 
-import { AlertTriangle } from 'lucide-react';
-
 import { _NoConceptsNotice } from '@/shared/components/common/_NoConceptsNotice';
 import {
   Dialog,
@@ -31,8 +29,9 @@ import { _FundMovementInvestmentSection } from './_FundMovementInvestmentSection
 import { _FundMovementLinesField } from './_FundMovementLinesField';
 import { _FundMovementPartnerSection } from './_FundMovementPartnerSection';
 import { _FundMovementTypeField } from './_FundMovementTypeField';
+import { _NoFundAccountsNotice } from './_NoFundAccountsNotice';
 import { _FundMovementViewSummary } from './_FundMovementViewSummary';
-import { _FundSelectField } from './_FundSelectField';
+import { _FundMovementFundFields } from './_FundMovementFundFields';
 
 /**
  * Vista (TSK-720a, D2): los controles van `disabled` pero el texto se lee al
@@ -81,9 +80,8 @@ export function _CreateFundMovementModal({
   const {
     form,
     movementDetail,
+    type,
     isContribution,
-    isWithdrawal,
-    isTransfer,
     isBankCharges,
     isInvestmentPurchase,
     isInvestmentSale,
@@ -128,15 +126,7 @@ export function _CreateFundMovementModal({
             >
               <_FundMovementTypeField disabled={isView} />
 
-              {!isView && noFundAccounts && (
-                <div className="flex items-start gap-2 rounded-md border border-orange-500/50 bg-orange-500/10 p-3 text-sm text-orange-600">
-                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                  <span>
-                    No hay cuentas bancarias ni cajas con sesión abierta disponibles. Creá una
-                    cuenta bancaria o abrí una caja antes de registrar movimientos de fondos.
-                  </span>
-                </div>
-              )}
+              {!isView && noFundAccounts && <_NoFundAccountsNotice />}
 
               {isInvestment ? (
                 <_FundMovementInvestmentSection
@@ -154,35 +144,14 @@ export function _CreateFundMovementModal({
                 <_FundMovementAmountDateFields showAmount={!isBankCharges} />
               )}
 
-              {(isContribution || isTransfer) && (
-                <_FundSelectField
-                  name="destinationFund"
-                  label={
-                    isContribution
-                      ? 'Banco/caja donde ingresan los fondos *'
-                      : 'Banco/caja destino *'
-                  }
-                  banks={banks}
-                  cashRegisters={cashRegisters}
-                  disabled={isView}
-                  snapshotLabel={snapshot(movement?.fundInLabel)}
-                />
-              )}
-
-              {(isWithdrawal || isTransfer || isBankCharges) && (
-                <_FundSelectField
-                  name="sourceFund"
-                  label={
-                    isWithdrawal || isBankCharges
-                      ? 'Banco/caja de donde salen los fondos *'
-                      : 'Banco/caja origen *'
-                  }
-                  banks={banks}
-                  cashRegisters={cashRegisters}
-                  disabled={isView}
-                  snapshotLabel={snapshot(movement?.fundOutLabel)}
-                />
-              )}
+              <_FundMovementFundFields
+                type={type}
+                banks={banks}
+                cashRegisters={cashRegisters}
+                isView={isView}
+                destinationSnapshot={snapshot(movement?.fundInLabel)}
+                sourceSnapshot={snapshot(movement?.fundOutLabel)}
+              />
 
               {isBankCharges && (
                 <_FundMovementLinesField
