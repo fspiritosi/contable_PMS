@@ -173,9 +173,60 @@ function resolveMovementAmount(
 }
 
 /**
+ * Datos de la compra o venta de inversión (TSK-793): tenencia, nominales, precio
+ * unitario, comisión y marca de venta total. Los demás tipos los guardan vacíos
+ * aunque el cliente los mande, como las líneas fuera de gastos bancarios.
+ *
+ * Acá solo se valida que la tenencia sea de la empresa. Que esté abierta se mira
+ * al confirmar (`applyInvestmentSideTx`): un borrador puede quedar apuntando a una
+ * tenencia que se cerró después, y se informa recién al confirmarlo.
+ */
+async function resolveInvestmentFields(
+  db: Tx,
+  companyId: string,
+  data: FundMovementFormInput
+): Promise<{
+  holdingId: string | null;
+  nominals: Prisma.Decimal | null;
+  unitPrice: Prisma.Decimal | null;
+  commission: Prisma.Decimal | null;
+  isFullSale: boolean;
+}> {
+  const isInvestment = data.type === 'INVESTMENT_PURCHASE' || data.type === 'INVESTMENT_SALE';
+  if (!isInvestment) {
+    return {
+      holdingId: null,
+      nominals: null,
+      unitPrice: null,
+      commission: null,
+      isFullSale: false,
+    };
+  }
+  // El schema exige la tenencia en los dos tipos de inversión.
+  const holding = data.holdingId
+    ? await db.investmentHolding.findFirst({
+        where: { id: data.holdingId, companyId },
+        select: { id: true },
+      })
+    : null;
+  if (!holding) throw new BusinessError('La tenencia seleccionada no es válida');
+
+  const decimal = (value: string | undefined, places: number) =>
+    value ? new Prisma.Decimal(value).toDecimalPlaces(places) : null;
+  return {
+    holdingId: holding.id,
+    nominals: decimal(data.nominals, 6),
+    unitPrice: decimal(data.unitPrice, 6),
+    commission: decimal(data.commission, 2),
+    // "Venta total" no aplica a la compra.
+    isFullSale: data.type === 'INVESTMENT_SALE' && Boolean(data.isFullSale),
+  };
+}
+
+/**
  * Resuelve los datos de un movimiento desde el form ya validado por
  * `fundMovementSchema`: etiquetas de banco/caja, socio, concepto, líneas con su
- * cuenta e importe. Valida que todo sea de la empresa (`BusinessError` si no).
+ * cuenta e importe, y los datos de inversión (TSK-793). Valida que todo sea de la empresa (`BusinessError` si no).
  * Lo usan el alta (`createFundMovement`) y `writeFundMovementDataTx`.
  */
 export async function resolveFundMovementDataTx(
@@ -192,6 +243,7 @@ export async function resolveFundMovementDataTx(
   const fundOut = sourceRef ? await resolveFundRefLabel(db, sourceRef, companyId) : null;
   const fundIn = destRef ? await resolveFundRefLabel(db, destRef, companyId) : null;
   const partnerName = await resolvePartnerName(db, data, companyId);
+  const investment = await resolveInvestmentFields(db, companyId, data);
 
   return {
     fields: {
@@ -209,6 +261,7 @@ export async function resolveFundMovementDataTx(
       partnerName,
       conceptId: concept.conceptId,
       conceptName: concept.conceptName,
+      ...investment,
     },
     lines,
   };

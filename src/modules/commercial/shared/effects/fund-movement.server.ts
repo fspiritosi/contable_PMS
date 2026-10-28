@@ -15,6 +15,10 @@ import {
 import type { FundSourceKind } from '@/modules/commercial/features/treasury/features/fund-movements/shared/validators';
 import { PARTNER_CONTRIBUTION_ACCOUNT_TYPES } from '@/modules/commercial/features/treasury/features/partners/shared/types';
 import { buildImputableAccountsWhere } from '@/shared/lib/accounts/imputable-accounts';
+import {
+  ACCOUNTING_SETTINGS_ACCOUNT_LABELS,
+  type AccountingSettingsAccountField,
+} from '@/shared/lib/accounts/settings-account-labels';
 import { BusinessError } from '@/shared/lib/action-result';
 import { countActiveConcepts, resolveConceptForUsage } from '@/shared/lib/concepts/concepts.server';
 import { fundMovementUsage } from '@/shared/lib/concepts/usages';
@@ -22,15 +26,16 @@ import { logger } from '@/shared/lib/logger';
 
 import { dedupeImpediments, impediments } from '../correction/impediments';
 import type { Impediment } from '../correction/types';
+import { applyInvestmentSideTx } from './investment.server';
 import type { EffectsCtx, EffectsResult } from './types';
 
 /**
  * Efectos de un movimiento de fondo (TSK-792): lo que el MF mueve fuera de sí mismo
  * al confirmarse (saldos de banco y caja y el asiento) y su inversa exacta.
  *
- * Los vínculos de trazabilidad (`BankMovement.fundMovementId` y
- * `CashMovement.fundMovementId`) los escribe `apply` y los usa `revert` para
- * encontrar exactamente lo que se creó.
+ * Los vínculos de trazabilidad (`BankMovement.fundMovementId`,
+ * `CashMovement.fundMovementId` e `InvestmentMovement.fundMovementId`) los escribe
+ * `apply` y los usa `revert` para encontrar exactamente lo que se creó.
  */
 
 // ============================================================================
@@ -56,8 +61,10 @@ const toFundRef = (kind: string | null, id: string | null): FundRef | null =>
 
 /**
  * Bancos o cajas que el MF mueve al confirmarse, según su tipo: de dónde salen los
- * fondos (retiro, gastos bancarios, transferencia) y a dónde entran (aporte,
- * transferencia). Un lado que el tipo no usa es `null` aunque el MF lo tenga cargado.
+ * fondos (retiro, gastos bancarios, transferencia, compra de inversión) y a dónde
+ * entran (aporte, transferencia, venta de inversión). Un lado que el tipo no usa es
+ * `null` aunque el MF lo tenga cargado. En la compra y la venta de inversión el otro
+ * lado es la tenencia (`holdingId`), que no es un banco ni una caja (TSK-793).
  *
  * Es el mismo criterio para aplicar los efectos y para contar los movimientos que
  * debería tener un MF confirmado (impedimento `untraceable`).
@@ -66,8 +73,11 @@ export function fundMovementSides(movement: FundSidesShape): {
   out: FundRef | null;
   in: FundRef | null;
 } {
-  const usesOut = movement.type !== 'PARTNER_CONTRIBUTION';
-  const usesIn = movement.type === 'PARTNER_CONTRIBUTION' || movement.type === 'ACCOUNT_TRANSFER';
+  const usesOut = movement.type !== 'PARTNER_CONTRIBUTION' && movement.type !== 'INVESTMENT_SALE';
+  const usesIn =
+    movement.type === 'PARTNER_CONTRIBUTION' ||
+    movement.type === 'ACCOUNT_TRANSFER' ||
+    movement.type === 'INVESTMENT_SALE';
   return {
     out: usesOut ? toFundRef(movement.fundOutKind, movement.fundOutId) : null,
     in: usesIn ? toFundRef(movement.fundInKind, movement.fundInId) : null,
@@ -518,6 +528,110 @@ async function createJournalEntryForFundMovement(
 /** El MF con sus líneas, tal como lo lee `applyFundMovementEffectsTx`. */
 type MovementWithLines = Prisma.FundMovementGetPayload<{ include: { lines: true } }>;
 
+/** Cuenta de un ajuste contable de inversiones, o el error que dice cuál configurar. */
+function requireInvestmentSetting(
+  accountId: string | null,
+  field: Extract<
+    AccountingSettingsAccountField,
+    'holdingGainAccountId' | 'holdingLossAccountId' | 'investmentFeesAccountId'
+  >
+): string {
+  if (!accountId) {
+    throw new BusinessError(
+      `Configurá la cuenta de ${ACCOUNTING_SETTINGS_ACCOUNT_LABELS[field].toLowerCase()} en Ajustes contables`
+    );
+  }
+  return accountId;
+}
+
+/**
+ * Compra y venta de inversión (TSK-793). El importe del MF es el BRUTO (nominales ×
+ * precio, o el importe); la comisión es un gasto aparte que también mueve el banco:
+ *
+ *  - Compra: del banco/caja sale bruto + comisión.
+ *      Debe tenencia (bruto) · Debe comisiones (comisión) / Haber banco/caja (total).
+ *  - Venta: al banco/caja entra bruto − comisión. El costo y el resultado
+ *    (bruto − costo) los decide `applyInvestmentSideTx` con la posición a la fecha.
+ *      Debe banco/caja (neto) · Debe comisiones / Haber tenencia (costo)
+ *      · Haber resultado positivo, o Debe resultado negativo (la diferencia).
+ *
+ * El lado tenencia (validaciones, `InvestmentMovement`, cierre) va ANTES de mover el
+ * banco/caja, y los ajustes faltantes se informan antes también.
+ */
+async function applyInvestmentAndBuildEntryLinesTx(
+  tx: Tx,
+  ctx: EffectsCtx,
+  movement: MovementWithLines & { type: 'INVESTMENT_PURCHASE' | 'INVESTMENT_SALE' },
+  settings: {
+    holdingGainAccountId: string | null;
+    holdingLossAccountId: string | null;
+    investmentFeesAccountId: string | null;
+  },
+  fundRef: FundRef,
+  sideCtx: Parameters<typeof applyFundSide>[3]
+): Promise<JournalLineInput[]> {
+  const isPurchase = movement.type === 'INVESTMENT_PURCHASE';
+  const commission = movement.commission ?? new Prisma.Decimal(0);
+  const feesAccountId = commission.gt(0)
+    ? requireInvestmentSetting(settings.investmentFeesAccountId, 'investmentFeesAccountId')
+    : null;
+
+  const investment = await applyInvestmentSideTx(tx, ctx, {
+    id: movement.id,
+    type: movement.type,
+    date: movement.date,
+    amount: movement.amount,
+    holdingId: movement.holdingId,
+    nominals: movement.nominals,
+    commission: movement.commission,
+    isFullSale: movement.isFullSale,
+  });
+  const resultAccountId =
+    investment.result > 0
+      ? requireInvestmentSetting(settings.holdingGainAccountId, 'holdingGainAccountId')
+      : investment.result < 0
+        ? requireInvestmentSetting(settings.holdingLossAccountId, 'holdingLossAccountId')
+        : null;
+
+  // Lo que mueve el banco/caja: el movimiento bancario guarda este total o neto,
+  // así que el revert lo deshace tal cual.
+  const fundAmount = isPurchase ? movement.amount.add(commission) : movement.amount.sub(commission);
+  const fund = await applyFundSide(tx, fundRef, isPurchase ? 'OUT' : 'IN', {
+    ...sideCtx,
+    amount: fundAmount,
+  });
+
+  const description = movement.description;
+  const line = (accountId: string, debit: number, credit: number): JournalLineInput => ({
+    accountId,
+    debit,
+    credit,
+    description,
+  });
+  const feesLine = feesAccountId ? [line(feesAccountId, commission.toNumber(), 0)] : [];
+
+  if (isPurchase) {
+    return [
+      line(investment.holdingAccountId, movement.amount.toNumber(), 0),
+      ...feesLine,
+      line(fund.accountId, 0, fundAmount.toNumber()),
+    ];
+  }
+  const resultLine = resultAccountId
+    ? [
+        investment.result > 0
+          ? line(resultAccountId, 0, investment.result)
+          : line(resultAccountId, -investment.result, 0),
+      ]
+    : [];
+  return [
+    line(fund.accountId, fundAmount.toNumber(), 0),
+    ...feesLine,
+    line(investment.holdingAccountId, 0, investment.cost),
+    ...resultLine,
+  ];
+}
+
 /**
  * Mueve los saldos de cada banco o caja del MF y arma las líneas del asiento según
  * su tipo. Resuelve la cuenta de capital y los conceptos ANTES de mover saldos.
@@ -531,6 +645,9 @@ async function applySidesAndBuildEntryLinesTx(
     partnerContributionsAccountId: string | null;
     defaultBankAccountId: string | null;
     defaultCashAccountId: string | null;
+    holdingGainAccountId: string | null;
+    holdingLossAccountId: string | null;
+    investmentFeesAccountId: string | null;
   }
 ): Promise<{
   entryLines: JournalLineInput[];
@@ -676,8 +793,14 @@ async function applySidesAndBuildEntryLinesTx(
     const dest = await applyFundSide(tx, destRef, 'IN', sideCtx);
     entryLines = parLineas(dest.accountId, src.accountId);
   } else if (movement.type === 'INVESTMENT_PURCHASE' || movement.type === 'INVESTMENT_SALE') {
-    // La Tarea 4 de TSK-793 reemplaza esta rama por el asiento real de compra/venta.
-    throw new BusinessError('Tipo de movimiento no soportado todavía');
+    entryLines = await applyInvestmentAndBuildEntryLinesTx(
+      tx,
+      ctx,
+      { ...movement, type: movement.type },
+      settings,
+      movement.type === 'INVESTMENT_PURCHASE' ? requireOut() : requireIn(),
+      sideCtx
+    );
   } else {
     // Descarte exhaustivo: si se agrega un quinto FundMovementType y no se
     // contempla acá, esto deja de tipar y rompe el build en vez de llegar
@@ -726,6 +849,10 @@ export async function applyFundMovementEffectsTx(
       partnerContributionsAccountId: true,
       defaultBankAccountId: true,
       defaultCashAccountId: true,
+      // Inversiones (TSK-793): resultado por tenencia y comisiones.
+      holdingGainAccountId: true,
+      holdingLossAccountId: true,
+      investmentFeesAccountId: true,
     },
   });
   // Sin Ajustes no hay asiento posible: se avisa antes de mover saldos.
@@ -790,6 +917,11 @@ const BANK_DECREMENTS: readonly BankMovementType[] = ['WITHDRAWAL', 'TRANSFER_OU
  *   (DEPOSIT/TRANSFER_IN se restan; WITHDRAWAL/TRANSFER_OUT se suman).
  * - Caja: borra los movimientos del MF y deshace su efecto en el saldo esperado de
  *   la sesión (INCOME se resta; EXPENSE se suma).
+ * - Tenencia (TSK-793): borra el `InvestmentMovement` de la compra o venta; si era la
+ *   venta que cerró la tenencia, la vuelve a abrir. La posición es la suma de los
+ *   movimientos, así que vuelve sola al valor previo. El movimiento bancario de la
+ *   inversión ya guarda el total (compra) o el neto (venta), y se deshace como
+ *   cualquier otro.
  *
  * Las líneas de gastos bancarios no se tocan: la cuenta y el nombre que fijó la
  * confirmación los vuelve a escribir la próxima escritura o aplicación.
@@ -810,6 +942,25 @@ export async function revertFundMovementEffectsTx(
   });
   if (!movement) throw new BusinessError('Movimiento no encontrado');
   if (!hasAppliedEffects(movement.status)) return;
+
+  const investmentMovements = await tx.investmentMovement.findMany({
+    where: { companyId, fundMovementId },
+    select: { id: true, holdingId: true, closesHolding: true },
+  });
+  if (investmentMovements.length > 0) {
+    await tx.investmentMovement.deleteMany({
+      where: { id: { in: investmentMovements.map((m) => m.id) } },
+    });
+    const reopened = [
+      ...new Set(investmentMovements.filter((m) => m.closesHolding).map((m) => m.holdingId)),
+    ];
+    if (reopened.length > 0) {
+      await tx.investmentHolding.updateMany({
+        where: { id: { in: reopened }, companyId },
+        data: { status: 'OPEN' },
+      });
+    }
+  }
 
   const bankMovements = await tx.bankMovement.findMany({
     where: {
