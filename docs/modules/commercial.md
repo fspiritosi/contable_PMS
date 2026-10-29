@@ -751,6 +751,14 @@ gastos, `budgetWarning?`.
 | Expense.status | Siempre | DRAFT → CONFIRMED |
 | Asiento Contable | Siempre | Dr: cuenta de la categoría (o "Cuenta de egresos por defecto") → Cr: Ctas por Pagar. Si el asiento falla, la confirmación se revierte (TSK-728) |
 
+### Cancelar Gasto (Egreso) — TSK-788
+
+`cancelExpense(id)` (permiso `commercial.expenses` `delete`, `ActionResult`): DRAFT o CONFIRMED sin
+pagos efectivos. En una transacción pasa el gasto a CANCELLED (UPDATE condicionado al estado leído) y
+deshace su asiento: el borrador se elimina (`deleteDraftJournalEntryTx`, `journalEntryId = null`) y el
+registrado se revierte con la fecha del gasto (`reverseJournalEntryTx`). Antes el asiento quedaba vivo;
+los que quedaron así se limpian desde Asientos ([Contabilidad](accounting.md#asientos-de-comprobantes-anulados-tsk-788)).
+
 ---
 
 ## Impacto en Stock

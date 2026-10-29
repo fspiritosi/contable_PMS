@@ -17,6 +17,10 @@ import {
   createJournalEntryForExpense,
   checkBudgetForExpense,
 } from '@/modules/accounting/features/integrations/commercial';
+import {
+  deleteDraftJournalEntryTx,
+  reverseJournalEntryTx,
+} from '@/modules/accounting/features/integrations/core';
 import moment from 'moment';
 import { checkPermission } from '@/shared/lib/permissions';
 import { EFFECTIVE_PAYMENT_ORDER_ITEM } from '@/shared/lib/effective-settlements';
@@ -828,9 +832,14 @@ export async function confirmExpense(
 }
 
 /**
- * Cancela un gasto (solo si DRAFT o CONFIRMED sin pagos)
+ * Cancela un gasto (solo si DRAFT o CONFIRMED sin pagos) y deshace su asiento, como la
+ * corrección en cadena con los demás comprobantes (TSK-788): el borrador se elimina y el
+ * registrado se revierte con la fecha del gasto. Antes el gasto quedaba anulado con el asiento
+ * vivo, que seguía sumando en los informes.
+ *
+ * Los errores esperables (pagos, período cerrado) vuelven como `{ success: false, error }`.
  */
-export async function cancelExpense(id: string) {
+export async function cancelExpense(id: string): Promise<ActionResult> {
   await checkPermission('commercial.expenses', 'delete', { redirect: true });
   const userId = await getCurrentUserId();
   if (!userId) throw new Error('No autenticado');
@@ -839,41 +848,48 @@ export async function cancelExpense(id: string) {
   if (!companyId) throw new Error('No hay empresa activa');
 
   try {
-    const expense = await prisma.expense.findFirst({
-      where: {
-        id,
-        companyId,
-        status: { in: ['DRAFT', 'CONFIRMED'] },
-      },
-      select: {
-        id: true,
-        status: true,
-        paymentOrderItems: {
-          where: EFFECTIVE_PAYMENT_ORDER_ITEM,
-          select: { id: true },
+    await prisma.$transaction(async (tx) => {
+      const expense = await tx.expense.findFirst({
+        where: { id, companyId, status: { in: ['DRAFT', 'CONFIRMED'] } },
+        select: {
+          date: true,
+          status: true,
+          journalEntry: { select: { id: true, status: true } },
+          paymentOrderItems: { where: EFFECTIVE_PAYMENT_ORDER_ITEM, select: { id: true } },
         },
-      },
+      });
+      if (!expense) throw new BusinessError('Gasto no encontrado o no se puede cancelar');
+      if (expense.paymentOrderItems.length > 0) {
+        throw new BusinessError('No se puede cancelar un gasto con pagos confirmados');
+      }
+
+      // UPDATE condicionado al estado leído: dos cancelaciones simultáneas no deshacen el asiento dos veces.
+      const { count } = await tx.expense.updateMany({
+        where: { id, companyId, status: expense.status },
+        data: { status: 'CANCELLED', ...(expense.journalEntry?.status === 'DRAFT' ? { journalEntryId: null } : {}) },
+      });
+      if (count === 0) throw new BusinessError('Gasto no encontrado o no se puede cancelar');
+
+      const entry = expense.journalEntry;
+      if (entry?.status === 'DRAFT') {
+        await deleteDraftJournalEntryTx(tx, { companyId, entryId: entry.id });
+      } else if (entry?.status === 'POSTED') {
+        await reverseJournalEntryTx(tx, {
+          companyId,
+          entryId: entry.id,
+          date: expense.date,
+          createdBy: userId,
+          source: `expense-cancel:${id}`,
+        });
+      }
     });
 
-    if (!expense) throw new Error('Gasto no encontrado o no se puede cancelar');
-
-    if (expense.paymentOrderItems.length > 0) {
-      throw new Error('No se puede cancelar un gasto con pagos confirmados');
-    }
-
-    await prisma.expense.update({
-      where: { id },
-      data: { status: 'CANCELLED' },
-    });
-
-    logger.info('Gasto cancelado', { data: { expenseId: id } });
+    logger.info('Gasto cancelado', { data: { expenseId: id, companyId, userId } });
     revalidatePath('/dashboard/commercial/expenses');
 
     return { success: true };
   } catch (error) {
-    logger.error('Error al cancelar gasto', { data: { error, id } });
-    if (error instanceof Error) throw error;
-    throw new Error('Error al cancelar gasto');
+    return toActionResult(error, 'Error al cancelar gasto');
   }
 }
 

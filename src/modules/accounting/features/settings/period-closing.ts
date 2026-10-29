@@ -15,7 +15,10 @@ import 'server-only';
 
 import { BusinessError } from '@/shared/lib/action-result';
 
-import { getEntryDocumentLink } from '../../shared/utils/entry-document-link';
+import {
+  assertNotCancelledDocumentDraftTx,
+  getEntryDocumentLink,
+} from '../../shared/utils/entry-document-link';
 import { postJournalEntryTx } from '../../shared/utils/journal-entry-tx';
 import type { IsoDay, Tx, YearMonth } from '../../shared/utils/journal-entry-types';
 import {
@@ -106,7 +109,10 @@ async function draftsOfMonthTx(tx: Tx, companyId: string, ym: YearMonth) {
   });
 }
 
-/** Sugerencia para un borrador manual trabado (C6): se puede eliminar desde Asientos. */
+/**
+ * Sugerencia para un borrador manual trabado (C6): se puede eliminar desde Asientos. El de un
+ * comprobante anulado ya trae la sugerencia en el motivo (TSK-788).
+ */
 async function deleteHintTx(tx: Tx, companyId: string, entry: { id: string; createdBy: string }) {
   if (entry.createdBy === 'system') return '';
   if (await getEntryDocumentLink(tx, companyId, entry.id)) return '';
@@ -146,6 +152,7 @@ export async function closeMonthTx(
   }
   for (const entry of drafts) {
     try {
+      await assertNotCancelledDocumentDraftTx(tx, companyId, entry.id);
       await postJournalEntryTx(tx, { companyId, entryId: entry.id, userId });
     } catch (error) {
       if (!(error instanceof BusinessError)) throw error;

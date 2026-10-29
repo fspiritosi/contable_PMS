@@ -16,6 +16,8 @@ import {
   revertJournalEntryToDraftTx,
 } from '../../shared/utils/journal-entry-tx';
 import {
+  assertNotCancelledDocumentDraftTx,
+  buildCancelledDocumentWarning,
   buildDocumentLinkedMessage,
   getEntryDocumentLink,
   type EntryDocumentLink,
@@ -86,7 +88,8 @@ export async function createJournalEntry(
 
 /**
  * Registra un asiento en borrador (DRAFT → POSTED) con `postJournalEntryTx`:
- * valida ejercicio cerrado, mes cerrado y bloqueo (B4) y el balance, dentro de la tx.
+ * valida ejercicio cerrado, mes cerrado y bloqueo (B4) y el balance, dentro de la tx. No
+ * registra el borrador de un comprobante anulado (TSK-788).
  */
 export async function postJournalEntry(entryId: string): Promise<ActionResult<{ number: number }>> {
   const userId = await getCurrentUserId();
@@ -96,7 +99,10 @@ export async function postJournalEntry(entryId: string): Promise<ActionResult<{ 
   if (!companyId) throw new Error('No hay empresa activa');
 
   try {
-    const posted = await prisma.$transaction((tx) => postJournalEntryTx(tx, { companyId, entryId, userId }));
+    const posted = await prisma.$transaction(async (tx) => {
+      await assertNotCancelledDocumentDraftTx(tx, companyId, entryId);
+      return postJournalEntryTx(tx, { companyId, entryId, userId });
+    });
 
     logger.info('Asiento contable registrado', { data: { entryId, number: posted.number, userId } });
     revalidateAccountingRoutes(companyId);
@@ -204,11 +210,14 @@ export async function getReversalCheck(entryId: string): Promise<ActionResult<Re
     if (!entry) throw new BusinessError('Asiento no encontrado.');
 
     const link = await getEntryDocumentLink(prisma, companyId, entryId);
+    let warning: string | null = null;
+    if (link?.cancelled) warning = buildCancelledDocumentWarning(link);
+    else if (!link && entry.createdBy === 'system') warning = SYSTEM_ENTRY_WARNING;
     return {
       success: true,
       link,
-      blockedMessage: link ? buildDocumentLinkedMessage(link) : null,
-      warning: !link && entry.createdBy === 'system' ? SYSTEM_ENTRY_WARNING : null,
+      blockedMessage: link && !link.cancelled ? buildDocumentLinkedMessage(link) : null,
+      warning,
       date: todayBusinessDay(),
     };
   } catch (error) {
@@ -220,7 +229,8 @@ export async function getReversalCheck(entryId: string): Promise<ActionResult<Re
  * Anula un asiento registrado desde Asientos (TSK-760, Fase 10: B10, D5, D6).
  *
  * Rechaza los asientos que pertenecen a un documento (8 tablas + refundición/apertura):
- * se anulan desde su comprobante. La reversión se registra con fecha de hoy (día
+ * se anulan desde su comprobante. Salvo que el comprobante ya esté anulado y el asiento
+ * haya quedado vivo (TSK-788): ese se anula desde acá. La reversión se registra con fecha de hoy (día
  * calendario de Argentina, `todayBusinessDayUtc`) y
  * `reverseJournalEntryTx` valida el período del original y el de hoy, y copia todas las
  * columnas de línea invertidas (auxiliares, centro de costo, moneda).
@@ -238,7 +248,7 @@ export async function reverseJournalEntry(input: {
   try {
     const result = await prisma.$transaction(async (tx) => {
       const link = await getEntryDocumentLink(tx, companyId, entryId);
-      if (link) throw new BusinessError(buildDocumentLinkedMessage(link));
+      if (link && !link.cancelled) throw new BusinessError(buildDocumentLinkedMessage(link));
       return reverseJournalEntryTx(tx, {
         companyId,
         entryId,
@@ -268,7 +278,8 @@ const ENTRY_STATUS_LABELS: Record<JournalEntryStatus, string> = {
 /**
  * Elimina un borrador manual (TSK-760, C6): para que un borrador imposible de
  * registrar no trabe el cierre de su mes (H9). Solo DRAFT de la empresa activa, sin
- * documento vinculado y no generado por el sistema. No valida período (su fin es
+ * documento vinculado y no generado por el sistema; o el borrador que quedó vivo de un
+ * comprobante anulado (TSK-788). No valida período (su fin es
  * justamente destrabar un mes). Las líneas caen por cascada.
  */
 export async function deleteDraftJournalEntry(entryId: string): Promise<ActionResult<{ number: number }>> {
@@ -292,8 +303,9 @@ export async function deleteDraftJournalEntry(entryId: string): Promise<ActionRe
         );
       }
       const link = await getEntryDocumentLink(tx, companyId, entryId);
-      if (link) throw new BusinessError(buildDocumentLinkedMessage(link, 'delete'));
-      if (entry.createdBy === 'system') {
+      if (link && !link.cancelled) throw new BusinessError(buildDocumentLinkedMessage(link, 'delete'));
+      // El borrador de un comprobante anulado lo generó el sistema, pero ya no lo corrige nadie (TSK-788).
+      if (entry.createdBy === 'system' && !link?.cancelled) {
         throw new BusinessError(
           `El borrador N° ${entry.number} lo generó el sistema (por ejemplo, un movimiento bancario): ` +
             'solo se eliminan borradores manuales.'

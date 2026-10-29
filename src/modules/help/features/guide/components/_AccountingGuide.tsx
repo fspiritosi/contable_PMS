@@ -206,6 +206,14 @@ export function _AccountingGuide() {
               <strong>Eliminar borrador</strong>: borra un asiento manual que
               todavía no se registró
             </li>
+            <li>
+              <strong>Asientos de comprobantes anulados</strong>: anular una factura,
+              un egreso u otro comprobante deshace su asiento (si era borrador se
+              borra; si estaba registrado se crea la anulación). Si quedó alguno de
+              antes, en borrador o registrado, ahora se puede eliminar o anular
+              desde Asientos. El borrador de un comprobante anulado ya no se
+              registra, ni a mano ni al cerrar el mes
+            </li>
           </ul>
 
           <p className="mt-3 text-sm text-muted-foreground">
