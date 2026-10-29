@@ -6,8 +6,20 @@ import { getActiveCompanyId } from '@/shared/lib/company';
 import { checkPermission } from '@/shared/lib/permissions';
 import moment from 'moment';
 import { VOUCHER_TYPE_MAP, IVA_RATE_MAP, DOC_TIPO_MAP } from '@/modules/commercial/features/arca/services/utils';
-import { formatVentasCabecera, formatComprasCabecera, formatAlicuota } from './formatters';
-import type { LibroIVACabecera, LibroIVAAlicuota, LibroIVAResult } from './types';
+import { formatVentasCabecera, formatComprasCabecera, formatAlicuota, formatComprasAlicuota } from './formatters';
+import type { LibroIVACabecera, LibroIVAResult } from './types';
+
+/** Comprobantes B y C: no discriminan IVA. */
+const NO_VAT_DETAIL = /_[BC]$/;
+
+/**
+ * Código de operación del diseño de ARCA: sin alícuota gravada, la operación es exenta
+ * ('E') o no gravada ('N'); con alícuotas, va en blanco.
+ */
+function operationCode(hasTaxedLines: boolean, netExempt: number): string {
+  if (hasTaxedLines) return ' ';
+  return netExempt > 0 ? 'E' : 'N';
+}
 
 // ============================================
 // GENERADOR DE LIBRO IVA DIGITAL
@@ -30,7 +42,9 @@ export async function generateLibroIVADigital(
     const salesInvoices = await prisma.salesInvoice.findMany({
       where: {
         companyId,
-        status: 'CONFIRMED',
+        // Cobrada o pagada (total o parcial) sigue siendo un comprobante del mes:
+        // solo quedan afuera el borrador y la anulada (TSK-796).
+        status: { in: ['CONFIRMED', 'PAID', 'PARTIAL_PAID'] },
         issueDate: { gte: startDate, lte: endDate },
       },
       select: {
@@ -93,13 +107,12 @@ export async function generateLibroIVADigital(
         importeTotal: Number(inv.total),
         importeNoGravado: Number(inv.netNonTaxed),
         importeExento: Number(inv.netExempt),
-        importePercepciones: percIva,
+        importePercepcionesIVA: percIva,
         importeImpuestosInternos: Number(inv.internalTaxes),
-        importeIVA: Number(inv.vatAmount),
         moneda: 'PES',
         tipoCambio: 1,
         cantidadAlicuotas: ivaByRate.size || 1,
-        codigoOperacion: ' ',
+        codigoOperacion: operationCode(ivaByRate.size > 0, Number(inv.netExempt)),
         importePercepcionesIIBB: percIIBB,
         importePercepcionesMunicipales: percMunicipal,
         importeCredFiscal: 0,
@@ -143,7 +156,7 @@ export async function generateLibroIVADigital(
     const purchaseInvoices = await prisma.purchaseInvoice.findMany({
       where: {
         companyId,
-        status: 'CONFIRMED',
+        status: { in: ['CONFIRMED', 'PAID', 'PARTIAL_PAID'] }, // Ver ventas (TSK-796).
         issueDate: { gte: startDate, lte: endDate },
       },
       select: {
@@ -194,6 +207,7 @@ export async function generateLibroIVADigital(
         ivaByRate.set(rate, existing);
       }
 
+      const noVatDetail = NO_VAT_DETAIL.test(inv.voucherType);
       const ptoVta = parseInt(inv.pointOfSale, 10) || 0;
       const nroComprobante = parseInt(inv.number, 10) || 0;
 
@@ -209,46 +223,44 @@ export async function generateLibroIVADigital(
         importeTotal: Number(inv.total),
         importeNoGravado: Number(inv.netNonTaxed),
         importeExento: Number(inv.netExempt),
-        importePercepciones: percIva,
+        importePercepcionesIVA: percIva,
         importeImpuestosInternos: Number(inv.internalTaxes),
-        importeIVA: Number(inv.vatAmount),
         moneda: 'PES',
         tipoCambio: 1,
-        cantidadAlicuotas: ivaByRate.size || 1,
-        codigoOperacion: ' ',
+        // Los comprobantes B y C no discriminan IVA: cero alícuotas y sin registros
+        // en el archivo de alícuotas (diseño de ARCA, campo 19).
+        cantidadAlicuotas: noVatDetail ? 0 : ivaByRate.size || 1,
+        codigoOperacion: operationCode(ivaByRate.size > 0, Number(inv.netExempt)),
         importePercepcionesIIBB: percIIBB,
         importePercepcionesMunicipales: percMunicipal,
-        importeCredFiscal: Number(inv.vatAmount) + percIva,
+        // Sin prorrateo, el crédito fiscal computable es el IVA liquidado del comprobante.
+        importeCredFiscal: noVatDetail ? 0 : Number(inv.vatAmount),
         // Ver la nota equivalente en la cabecera de ventas (TSK-644).
         otrosTributos: 0,
       };
 
       comprasCabecera.push(formatComprasCabecera(cabecera));
+      if (noVatDetail) continue;
 
-      if (ivaByRate.size === 0) {
+      const seller = { codigoDocumento: docTipo, numeroDocumento: cabecera.numeroDocumento };
+      const alicuotas =
+        ivaByRate.size === 0
+          ? [{ alicuotaIVA: 3, importeNeto: Number(inv.netTaxed), importeIVA: 0 }]
+          : [...ivaByRate].map(([rate, amounts]) => ({
+              alicuotaIVA: IVA_RATE_MAP[rate] ?? 5,
+              importeNeto: amounts.neto,
+              importeIVA: amounts.iva,
+            }));
+      for (const alicuota of alicuotas) {
         comprasAlicuotas.push(
-          formatAlicuota({
+          formatComprasAlicuota({
             tipoComprobante: cbteTipo,
             puntoVenta: ptoVta,
             numero: nroComprobante,
-            importeNeto: Number(inv.netTaxed),
-            alicuotaIVA: 3,
-            importeIVA: 0,
+            ...seller,
+            ...alicuota,
           })
         );
-      } else {
-        for (const [rate, amounts] of ivaByRate) {
-          comprasAlicuotas.push(
-            formatAlicuota({
-              tipoComprobante: cbteTipo,
-              puntoVenta: ptoVta,
-              numero: nroComprobante,
-              importeNeto: amounts.neto,
-              alicuotaIVA: IVA_RATE_MAP[rate] ?? 5,
-              importeIVA: amounts.iva,
-            })
-          );
-        }
       }
     }
 

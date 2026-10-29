@@ -517,6 +517,44 @@ total que ve el usuario mientras carga y el que se persiste no pueden divergir.
 Componente de carga: `@/modules/commercial/shared/components/_PerceptionsField`, montado tanto
 en `_PurchaseInvoiceForm` como en `_InvoiceForm`.
 
+### Exportaciones fiscales (Libro IVA Digital, SIRE, SIRCAR)
+
+Generadores de archivos TXT en `features/fiscal-exports/`, por mes de emisión:
+
+| Archivo | Acción | Comprobantes que toma | En pantalla |
+|---------|--------|-----------------------|-------------|
+| Libro IVA Digital | `generateLibroIVADigital(year, month)` | Facturas, NC y ND de venta y de compra en `CONFIRMED`, `PAID` o `PARTIAL_PAID` | Sí |
+| SIRE | `generateSIREFile(year, month)` | Órdenes de pago `CONFIRMED` con retenciones | No |
+| SIRCAR (IIBB) | `generateSIRCARFile(year, month, jurisdiction?)` | Órdenes de pago `CONFIRMED` con retenciones de IIBB | No |
+
+**Pantalla:** *Contabilidad → Archivos ARCA* (`/dashboard/company/accounting/fiscal-exports`,
+permiso `accounting.reports` view). Genera los cuatro archivos del Libro IVA Digital del mes
+(por defecto, el anterior) con los nombres oficiales (`LIBRO_IVA_DIGITAL_VENTAS_CBTE_AAAAMM.txt`,
+etc.). La descarga se codifica en Latin-1 (`components/download-txt.ts`): el diseño es de ancho
+fijo en bytes y en UTF-8 una "ñ" corre los campos. SIRE y SIRCAR no se ofrecen porque sus
+formatters no se validaron contra los diseños de ARCA y de la Comisión Arbitral.
+
+**TSK-796:**
+- Una factura cobrada o pagada, total o parcialmente, sigue siendo un comprobante del mes: solo
+  quedan afuera el borrador y la anulada. Antes se filtraba solo `CONFIRMED`.
+- Los formatters siguen el diseño de registro oficial
+  ([Anexo I RG 4597](https://www.afip.gob.ar/iva/documentos/libro-iva-digital-diseno-registros.pdf)):
+  ventas comprobantes 266 posiciones, ventas alícuotas 62, compras comprobantes 325, compras
+  alícuotas 84 (con el documento del vendedor). Antes medían 236, 62, 310 y 62, con campos
+  faltantes o corridos, y el tipo de cambio iba con 2 decimales en vez de 6.
+- Compras B y C: cantidad de alícuotas 0, crédito fiscal 0 y sin registros de alícuotas.
+- Crédito fiscal computable = IVA liquidado (opción "sin prorrateo"); antes sumaba las
+  percepciones de IVA, que ya viajan en su campo.
+- Código de operación: `E` (exenta) o `N` (no gravada) cuando el comprobante no tiene líneas
+  gravadas; en blanco si las tiene.
+
+Tests: `formatters.test.ts` (posición por posición) y `libro-iva-digital.integration.test.ts`
+(estados, largos de registro, compra B).
+
+**Pendiente, no cubierto:** ventas a consumidor final sin identificar (el diseño pide código
+99 y la leyenda "CONSUMIDOR FINAL"), moneda extranjera (hoy siempre `PES` con cambio 1) y
+comprobantes `GASTOS_BANCARIOS`, que no tienen código de ARCA y salen con tipo `000`.
+
 ### Tipos de Comprobante (VoucherType)
 
 | Tipo | Uso |

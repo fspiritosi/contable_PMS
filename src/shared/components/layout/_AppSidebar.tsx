@@ -108,6 +108,11 @@ const navMain: NavItemWithSub[] = [
         module: 'accounting.reports',
       },
       {
+        title: 'Archivos ARCA',
+        href: '/dashboard/company/accounting/fiscal-exports',
+        module: 'accounting.reports',
+      },
+      {
         title: 'Cierre Ejercicio',
         href: '/dashboard/company/accounting/fiscal-year-close',
         module: 'accounting.fiscal-year-close',
