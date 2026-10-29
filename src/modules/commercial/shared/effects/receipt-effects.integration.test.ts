@@ -304,6 +304,26 @@ describe.skipIf(!dbAvailable)('integración: efectos del recibo de cobro (TSK-79
     await prisma.$disconnect();
   });
 
+  it('dos confirmaciones simultáneas aplican los efectos una sola vez (TSK-812)', async () => {
+    const { id, invoiceId } = await draftReceipt([cash('200'), transfer('300')]);
+    const bankBefore = await bankBalance();
+    const cashBefore = await expectedBalance();
+    const lastNumberBefore = await readLastEntryNumber(companyId);
+
+    const results = await Promise.all([confirmReceipt(id), confirmReceipt(id)]);
+
+    expect(results.filter((r) => r.success)).toHaveLength(1);
+    expect(results.filter((r) => !r.success)).toEqual([
+      { success: false, error: 'Recibo no encontrado o ya confirmado' },
+    ]);
+    expect(await bankBalance()).toBe(bankBefore + 300);
+    expect(await expectedBalance()).toBe(cashBefore + 200);
+    expect(await prisma.cashMovement.count({ where: { receiptId: id } })).toBe(1);
+    expect(await prisma.bankMovement.count({ where: { receiptId: id } })).toBe(1);
+    expect(await invoiceStatus(invoiceId)).toBe('PAID');
+    expect(await readLastEntryNumber(companyId)).toBe(lastNumberBefore + 1);
+  });
+
   it('revert(apply) restaura banco, caja y cheques', async () => {
     const bankBefore = await bankBalance();
     const cashBefore = await expectedBalance();

@@ -276,15 +276,18 @@ export async function confirmReceipt(
 
     // Confirmar recibo y procesar en transacción
     await prisma.$transaction(async (tx) => {
-      // 1. Confirmar recibo
-      await tx.receipt.update({
-        where: { id: receiptId },
+      // 1. Confirmar recibo.
+      // El estado se leyó fuera de la tx: si otra confirmación ganó mientras tanto, el
+      // UPDATE condicionado no toca nada y los efectos no se aplican dos veces (TSK-812).
+      const { count } = await tx.receipt.updateMany({
+        where: { id: receiptId, companyId, status: 'DRAFT' },
         data: {
           status: 'CONFIRMED',
           confirmedBy: userId,
           confirmedAt: new Date(),
         },
       });
+      if (count === 0) throw new BusinessError('Recibo no encontrado o ya confirmado');
 
       // 2. Efectos: facturas, caja, banco, cheques y asiento (TSK-792)
       await applyReceiptEffectsTx(tx, { companyId, userId }, receiptId);

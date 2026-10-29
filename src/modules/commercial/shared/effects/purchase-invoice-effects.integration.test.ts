@@ -332,6 +332,21 @@ describe.skipIf(!dbAvailable)('integración: efectos de la factura de compra (TS
     await prisma.$disconnect();
   });
 
+  it('dos confirmaciones simultáneas aplican los efectos una sola vez (TSK-812)', async () => {
+    const { id } = await draftInvoice();
+    const lastNumberBefore = await readLastEntryNumber(companyId);
+
+    const results = await Promise.all([confirmPurchaseInvoice(id), confirmPurchaseInvoice(id)]);
+
+    expect(results.filter((r) => r.success)).toHaveLength(1);
+    expect(results.filter((r) => !r.success)).toEqual([
+      { success: false, error: 'Solo se pueden confirmar facturas en estado borrador' },
+    ]);
+    expect((await invoiceRow(id)).status).toBe('CONFIRMED');
+    expect((await invoiceRow(id)).journalEntryId).not.toBeNull();
+    expect(await readLastEntryNumber(companyId)).toBe(lastNumberBefore + 1);
+  });
+
   describe('orden de compra', () => {
     it('revert(apply) de FC con OC deja invoicedQty y estado de la OC como antes', async () => {
       const order = await purchaseOrder(companyId, supplierId, [10, 5]);

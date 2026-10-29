@@ -1176,10 +1176,15 @@ export async function confirmPurchaseInvoice(
     // NOTA: Las FC normales NO generan ingreso de stock. El stock solo ingresa vía Remitos de Recepción.
     // Las NC de compra SÍ decrementan stock (devoluciones al proveedor).
     await prisma.$transaction(async (tx) => {
-      await tx.purchaseInvoice.update({
-        where: { id },
+      // El estado se leyó fuera de la tx: si otra confirmación ganó mientras tanto, el
+      // UPDATE condicionado no toca nada y los efectos no se aplican dos veces (TSK-812).
+      const { count } = await tx.purchaseInvoice.updateMany({
+        where: { id, companyId, status: 'DRAFT' },
         data: { status: 'CONFIRMED' },
       });
+      if (count === 0) {
+        throw new BusinessError('Solo se pueden confirmar facturas en estado borrador');
+      }
 
       // Efectos: stock de NC, facturación de la OC, asiento y compensación de NC (TSK-792)
       await applyPurchaseInvoiceEffectsTx(tx, { companyId, userId }, id);

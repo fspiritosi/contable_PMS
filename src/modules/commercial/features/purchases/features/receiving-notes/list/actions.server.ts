@@ -658,11 +658,14 @@ export async function confirmReceivingNote(id: string) {
     }
 
     await prisma.$transaction(async (tx) => {
-      // 1. Actualizar estado
-      await tx.receivingNote.update({
-        where: { id },
+      // 1. Actualizar estado.
+      // El estado se leyó fuera de la tx: si otra confirmación ganó mientras tanto, el
+      // UPDATE condicionado no toca nada y los efectos no se aplican dos veces (TSK-812).
+      const { count } = await tx.receivingNote.updateMany({
+        where: { id, companyId, status: 'DRAFT' },
         data: { status: 'CONFIRMED' },
       });
+      if (count === 0) throw new Error('Solo se pueden confirmar remitos en borrador');
 
       // 2. Crear movimientos de stock y actualizar warehouse stock
       for (const line of note.lines) {

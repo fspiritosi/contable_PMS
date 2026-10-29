@@ -381,6 +381,21 @@ describe.skipIf(!dbAvailable)('integración e2e: asiento al confirmar un gasto (
     expect(again.error).toBe('Gasto no encontrado o ya confirmado');
   });
 
+  it('dos confirmaciones simultáneas aplican los efectos una sola vez (TSK-812)', async () => {
+    const id = await createDraft('Simultáneas');
+    const lastNumberBefore = await readLastEntryNumber(companyId);
+
+    const results = await Promise.all([confirmExpense(id), confirmExpense(id)]);
+
+    expect(results.filter((r) => r.success)).toHaveLength(1);
+    expect(results.filter((r) => !r.success)).toEqual([
+      { success: false, error: 'Gasto no encontrado o ya confirmado' },
+    ]);
+    expect((await readExpense(id)).status).toBe('CONFIRMED');
+    expect(await fetchEntryLines(id)).toHaveLength(2);
+    expect(await readLastEntryNumber(companyId)).toBe(lastNumberBefore + 1);
+  });
+
   describe('categorías con cuenta (TSK-757)', () => {
     let alqId: string;
     let alqViejaId: string;

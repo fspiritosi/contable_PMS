@@ -322,6 +322,26 @@ describe.skipIf(!dbAvailable)('integración: efectos de la factura de venta (TSK
     await prisma.$disconnect();
   });
 
+  it('dos confirmaciones simultáneas aplican los efectos una sola vez (TSK-812)', async () => {
+    const { id } = await draftInvoice({ lines: [line({ productId: stockProductId, quantity: '3' })] });
+    const stockBefore = await stockAt();
+    const lastNumberBefore = await readLastEntryNumber(companyId);
+
+    const results = await Promise.all([confirmInvoice(id), confirmInvoice(id)]);
+
+    expect(results.filter((r) => r.success)).toHaveLength(1);
+    expect(results.filter((r) => !r.success)).toEqual([
+      { success: false, error: 'Factura no encontrada o ya está confirmada' },
+    ]);
+    expect((await invoiceRow(id)).status).toBe('CONFIRMED');
+    expect(await stockAt()).toEqual({
+      quantity: stockBefore.quantity - 3,
+      available: stockBefore.available - 3,
+    });
+    expect((await movementsOf(id)).map((m) => [m.type, Number(m.quantity)])).toEqual([['SALE', 3]]);
+    expect(await readLastEntryNumber(companyId)).toBe(lastNumberBefore + 1);
+  });
+
   describe('stock de la factura', () => {
     it('revert(apply) de factura con dos líneas del mismo producto restaura todo el stock', async () => {
       const stockBefore = await stockAt();
