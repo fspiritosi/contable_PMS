@@ -63,7 +63,7 @@ export function _InvoicesTable({ data, totalRows, searchParams, facetCounts }: P
         toast.error(result.error);
         return;
       }
-      toast.success('Factura confirmada y stock descontado correctamente');
+      toast.success('Factura confirmada');
       setConfirmDialogOpen(false);
       router.refresh();
     } finally {
@@ -197,7 +197,7 @@ export function _InvoicesTable({ data, totalRows, searchParams, facetCounts }: P
             <AlertDialogDescription>
               Esta acción confirmará la factura{' '}
               <strong>{selectedInvoice?.fullNumber}</strong> y descontará el stock de los
-              ítems. Esta acción no se puede deshacer.
+              ítems que no hayan salido con un remito. Esta acción no se puede deshacer.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

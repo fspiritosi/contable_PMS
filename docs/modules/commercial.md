@@ -665,7 +665,7 @@ OC con 3 líneas:
 
 | Efecto | Condición | Detalle |
 |--------|-----------|---------|
-| Stock -qty | Si no es ND | Decrementa stock del depósito principal |
+| Stock -qty | Si no es ND | Decrementa stock del depósito principal. Si la factura viene de remitos de entrega, solo descuenta lo que exceda lo entregado por ellos, por producto: el remito ya descontó su mercadería al crearse (TSK-798) |
 | Stock +qty | Si es NC | Restaura stock (devolución del cliente) |
 | Asiento Contable | Siempre | Dr: Ctas por Cobrar → Cr: cuenta del ítem (`defaultIncomeAccountId`) o Ventas por defecto + IVA DF. Si el asiento falla, la confirmación se revierte (TSK-721) |
 | Validación de cuentas de línea | Siempre | Aborta si alguna línea no resuelve cuenta (ítem → Ventas por defecto) o la cuenta resuelta no es imputable (TSK-721) |
@@ -721,12 +721,14 @@ gastos, `budgetWarning?`.
 
 | Acción | Factura Regular | Nota de Crédito | Nota de Débito |
 |--------|----------------|-----------------|----------------|
-| **Confirmar Venta** | Stock -qty (SALE) | Stock +qty (RETURN) | Sin impacto |
+| **Confirmar Venta** | Stock -qty (SALE)** | Stock +qty (RETURN) | Sin impacto |
 | **Cancelar Venta** | Stock +qty (ADJUSTMENT) | Stock -qty (ADJUSTMENT) | Sin impacto |
 | **Confirmar Compra** | Stock +qty (PURCHASE)* | Stock -qty (RETURN) | Sin impacto |
 | **Cancelar Compra** | Stock -qty (ADJUSTMENT) | Stock +qty (ADJUSTMENT) | Sin impacto |
 
 *\* Solo si NO existen remitos de recepción confirmados. Si hay remitos, el stock ya fue gestionado por ellos.*
+
+*\*\* Una factura generada desde remitos de entrega no vuelve a descontar lo que entregaron los remitos; solo el excedente si el borrador se editó con más cantidad. Anularla tampoco lo devuelve: la mercadería salió con el remito (TSK-798). Diagnóstico de facturas ya confirmadas antes del fix: `prisma/scripts/tsk798-diagnostico-stock-fv-remitos.sql`.*
 
 ### Depósito utilizado
 
