@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>TSK-798 — Facturar remitos ya no descuenta el stock dos veces</title>
+<style>
+  @page {
+    size: A4;
+    margin: 0;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #1f2430;
+    font-size: 13px;
+    line-height: 1.55;
+    background: #ffffff;
+  }
+
+  .page {
+    padding: 4mm 2mm;
+  }
+
+  header.cover {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    text-align: left;
+    padding: 10mm 2mm 8mm 2mm;
+    border-bottom: 3px solid #2f6f4f;
+    margin-bottom: 10mm;
+  }
+
+  .eyebrow {
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 11px;
+    font-weight: 700;
+    color: #2f6f4f;
+    margin-bottom: 6px;
+  }
+
+  h1 {
+    font-size: 26px;
+    margin: 0 0 8px 0;
+    color: #14251c;
+  }
+
+  .subtitle {
+    font-size: 14px;
+    color: #4b5563;
+    margin: 0;
+  }
+
+  section {
+    margin-bottom: 9mm;
+    page-break-inside: avoid;
+  }
+
+  section.allow-break {
+    page-break-inside: auto;
+  }
+
+  section:last-of-type { margin-bottom: 2mm; }
+
+  h2 {
+    font-size: 16px;
+    color: #14251c;
+    border-left: 4px solid #2f6f4f;
+    padding-left: 8px;
+    margin: 0 0 6mm 0;
+    page-break-after: avoid;
+  }
+
+  h3.sub {
+    font-size: 13.5px;
+    color: #14251c;
+    margin: 6mm 0 3mm 0;
+    page-break-after: avoid;
+  }
+
+  .quote {
+    background: #f4f7f5;
+    border-left: 4px solid #2f6f4f;
+    padding: 10px 14px;
+    font-style: italic;
+    color: #2b3a33;
+    margin: 0 0 6px 0;
+  }
+
+  .quote cite {
+    display: block;
+    font-style: normal;
+    font-size: 11.5px;
+    color: #6b7280;
+    margin-top: 6px;
+  }
+
+  .before-after {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    page-break-inside: avoid;
+  }
+
+  .card {
+    border: 1px solid #e2e5e0;
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+
+  .card.before { background: #fbf7f2; border-color: #ecd9bd; }
+  .card.after { background: #f2f8f4; border-color: #bfe0cb; }
+
+  .card h3 {
+    margin: 0 0 6px 0;
+    font-size: 12.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .card.before h3 { color: #9a6a1f; }
+  .card.after h3 { color: #226240; }
+
+  .card p { margin: 0; }
+
+  ol.steps {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    counter-reset: step;
+  }
+
+  ol.steps > li {
+    counter-increment: step;
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+    page-break-inside: avoid;
+  }
+
+  ol.steps > li::before {
+    content: counter(step);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    border-radius: 50%;
+    background: #2f6f4f;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  ol.steps.letters > li::before {
+    content: counter(step, lower-alpha);
+  }
+
+  .step-body { flex: 1; }
+
+  .step-body strong { color: #14251c; }
+
+  figure {
+    margin: 8px 0 0 0;
+    page-break-inside: avoid;
+  }
+
+  figure img {
+    max-width: 100%;
+    border: 1px solid #d9dce0;
+    border-radius: 6px;
+    display: block;
+  }
+
+  figure.small img { max-width: 320px; }
+
+  figure.sidebar img { max-width: 150px; }
+
+  figure.modal img { max-width: 400px; }
+
+  figure.modal-sm img { max-width: 340px; }
+
+  ol.steps.long > li { page-break-inside: auto; }
+
+  figcaption {
+    font-size: 11px;
+    color: #6b7280;
+    margin-top: 4px;
+  }
+
+  .callout {
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin: 0 0 8px 0;
+    page-break-inside: avoid;
+  }
+
+  .callout.config {
+    background: #f2f6fb;
+    border: 1px solid #cddaeb;
+  }
+
+  .callout.warning {
+    background: #fdf5ec;
+    border: 1px solid #efd6a8;
+  }
+
+  .callout h3 {
+    margin: 0 0 4px 0;
+    font-size: 13px;
+  }
+
+  .callout p { margin: 0 0 6px 0; }
+  .callout p:last-child { margin-bottom: 0; }
+
+  ul.plain {
+    margin: 4px 0 0 0;
+    padding-left: 18px;
+  }
+
+  ul.plain li { margin-bottom: 4px; }
+
+  .no-change-list {
+    display: grid;
+    gap: 6px;
+  }
+
+  .no-change-item {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+  }
+
+  .check {
+    color: #2f6f4f;
+    font-weight: 700;
+  }
+
+  .side-by-side {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8mm;
+    align-items: start;
+    page-break-inside: avoid;
+  }
+
+  .side-by-side figure { margin-top: 0; }
+
+  .side-by-side.narrow-left {
+    grid-template-columns: 160px 1fr;
+  }
+
+  .ui-text {
+    font-style: italic;
+    color: #374151;
+  }
+
+  table.chain {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 6px 0 8px 0;
+    font-size: 12px;
+    page-break-inside: avoid;
+  }
+
+  table.chain th, table.chain td {
+    border: 1px solid #dfe3e0;
+    padding: 6px 8px;
+    text-align: left;
+    vertical-align: top;
+  }
+
+  table.chain th {
+    background: #f4f7f5;
+    color: #14251c;
+    font-weight: 700;
+  }
+
+  .entry {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 11.5px;
+    background: #f7f8f7;
+    border: 1px solid #e2e5e0;
+    border-radius: 6px;
+    padding: 8px 10px;
+    margin: 6px 0;
+    white-space: pre;
+  }
+
+  /* TSK-798 */
+  figure.dialog img { max-width: 420px; }
+  ol.steps figure img { max-width: 520px; }
+  ol.steps figure.dialog img { max-width: 400px; }
+  .keep-together { page-break-inside: avoid; }
+
+  footer.doc-footer {
+    text-align: center;
+    color: #9ca3af;
+    font-size: 10.5px;
+    margin-top: 2mm;
+  }
+</style>
+
+</head>
+<body>
+<div class="page">
+  <header class="cover">
+    <div class="eyebrow">Ticket 798 · Comercial · Remitos y facturas</div>
+    <h1>Al facturar remitos, el stock ya no baja dos veces</h1>
+    <p class="subtitle">Guía de presentación — qué pasaba, qué cambió, un ejemplo paso a paso y qué no cambia</p>
+  </header>
+
+  <section>
+    <h2>1. Qué pasaba</h2>
+    <div class="quote">
+      "Al facturar remitos el stock bajaba dos veces"
+      <cite>— ticket 798</cite>
+    </div>
+    <p>El remito de entrega descuenta el stock en el momento en que se crea: la mercadería sale del
+    depósito con el remito. Después, con <span class="ui-text">Facturar remitos</span> se arma una factura de
+    venta en borrador con esas mismas líneas. Al <strong>confirmar</strong> esa factura, el sistema volvía a
+    descontar la misma mercadería.</p>
+    <p>El resultado era un stock de menos que no existía en la realidad: lo que se había entregado se
+    descontaba dos veces.</p>
+  </section>
+
+  <section>
+    <h2>2. Qué cambió</h2>
+    <div class="before-after">
+      <div class="card before">
+        <h3>Antes</h3>
+        <p>Stock inicial: 100 unidades.</p>
+        <p>Remito de 30: el stock baja a <strong>70</strong>.</p>
+        <p>Se confirma la factura de esos 30: el stock bajaba otra vez, a <strong>40</strong>.</p>
+        <p>Total descontado: 60, para 30 entregadas.</p>
+      </div>
+      <div class="card after">
+        <h3>Ahora</h3>
+        <p>Stock inicial: 100 unidades.</p>
+        <p>Remito de 30: el stock baja a <strong>70</strong>.</p>
+        <p>Se confirma la factura de esos 30: el stock <strong>sigue en 70</strong>.</p>
+        <p>Total descontado: 30, para 30 entregadas.</p>
+      </div>
+    </div>
+    <p style="margin-top:8px">Cuando la factura viene de remitos, el stock que ya salió con el remito
+    se reconoce, y la factura solo descuenta lo que <strong>exceda</strong> lo entregado (ver el punto 4).</p>
+  </section>
+
+  <section class="allow-break">
+    <h2>3. Ejemplo paso a paso</h2>
+    <p>Un depósito con 100 resmas de papel A4. Se entregan 30 resmas a un cliente y se le factura esa entrega.</p>
+    <ol class="steps">
+      <li><div class="step-body"><strong>Stock de partida.</strong> En <span class="ui-text">Almacenes → Inventario</span>
+        el depósito tiene 100 resmas.
+        <figure><img src="assets/tsk798-01-stock-antes.png" alt="Inventario del depósito con 100 unidades de la resma" />
+        <figcaption>Stock antes: 100 unidades.</figcaption></figure></div></li>
+      <li><div class="step-body"><strong>Remito de entrega.</strong> Se crea el remito de 30 resmas para el cliente y se
+        acepta. El stock baja a 70 en este momento, como siempre.
+        <figure><img src="assets/tsk798-03-remito-aceptado.png" alt="Remito RE-00001 aceptado con 30 unidades" />
+        <figcaption>Remito RE-00001 aceptado: 30 resmas entregadas.</figcaption></figure></div></li>
+      <li><div class="step-body"><strong>Facturar remitos.</strong> En la lista de remitos, el botón
+        <span class="ui-text">Facturar Remitos</span> permite elegir el cliente y los remitos aceptados. Se genera la
+        factura en borrador, que todavía no mueve stock.
+        <figure class="dialog"><img src="assets/tsk798-05-facturar-remitos.png" alt="Diálogo Facturar Remitos Aceptados con el remito RE-00001 seleccionado" />
+        <figcaption>Se elige el remito y se factura.</figcaption></figure></div></li>
+      <li><div class="step-body"><strong>Confirmar la factura.</strong> Desde el menú de la factura en borrador,
+        <span class="ui-text">Confirmar</span>. La factura queda confirmada.
+        <figure><img src="assets/tsk798-06-factura-confirmada.png" alt="Lista de facturas con la factura 0001-00000003 confirmada" />
+        <figcaption>Factura confirmada.</figcaption></figure></div></li>
+      <li><div class="step-body"><strong>Stock después.</strong> El inventario sigue en 70: las 30 resmas se descontaron
+        una sola vez, con el remito.
+        <figure><img src="assets/tsk798-07-stock-despues.png" alt="Inventario del depósito con 70 unidades" />
+        <figcaption>Stock después de confirmar la factura: 70 unidades (antes de la corrección habría quedado en 40).</figcaption></figure></div></li>
+      <li><div class="step-body"><strong>Movimientos del ítem.</strong> En <span class="ui-text">Almacenes → Movimientos</span>,
+        filtrando por el ítem, hay un solo movimiento de salida: el del remito. La factura no agrega otro.
+        <figure><img src="assets/tsk798-08-movimientos-del-item.png" alt="Historial de movimientos con la carga inicial de 100 y una sola salida de 30 por el remito" />
+        <figcaption>Un único movimiento de salida (−30), referenciado al remito RE-00001.</figcaption></figure></div></li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>4. Si se edita la factura antes de confirmar</h2>
+    <p>La factura en borrador se puede editar. El descuento se calcula por ítem, contra lo que ya entregaron
+    los remitos de esa factura:</p>
+    <ul class="plain">
+      <li>Si se agrega a la factura una cantidad mayor que la remitida (por ejemplo 35 resmas facturadas con un
+      remito de 30), la factura descuenta solo la <strong>diferencia</strong> (5).</li>
+      <li>Si se agrega un ítem que no estaba en los remitos, ese ítem sí se descuenta completo.</li>
+      <li>Si se factura menos que lo remitido, no se devuelve nada al stock: la mercadería ya salió con el remito.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>5. Qué no cambia</h2>
+    <div class="no-change-list">
+      <div class="no-change-item"><span class="check">✓</span><span>El remito de entrega sigue descontando el stock
+      <strong>al crearse</strong>, igual que antes.</span></div>
+      <div class="no-change-item"><span class="check">✓</span><span><strong>Anular el remito</strong> sigue devolviendo
+      la mercadería al stock.</span></div>
+      <div class="no-change-item"><span class="check">✓</span><span><strong>Anular la factura</strong> generada desde remitos
+      no devuelve el stock de esos remitos, porque la mercadería salió con el remito y sigue entregada. Si hay que
+      reingresarla, se anula el remito.</span></div>
+      <div class="no-change-item"><span class="check">✓</span><span>Las facturas que no vienen de remitos se comportan como siempre:
+      confirmar descuenta el stock y anular lo devuelve.</span></div>
+      <div class="no-change-item"><span class="check">✓</span><span>No hace falta configurar nada.</span></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>6. Facturas confirmadas antes de la corrección</h2>
+    <div class="callout warning">
+      <h3>Para revisar con el cliente</h3>
+      <p>Las facturas generadas desde remitos y confirmadas <strong>antes</strong> de esta corrección ya descontaron
+      el stock de más, y la corrección no lo modifica retroactivamente.</p>
+      <p>Para saber cuáles y cuánto, el equipo de desarrollo corre un diagnóstico de solo lectura (no cambia ningún
+      dato) que lista por ítem el excedente descontado. El ajuste de stock de esas facturas se decide y se acuerda
+      con ustedes antes de aplicarlo.</p>
+    </div>
+  </section>
+
+  <footer class="doc-footer">Contable PMS · Ticket 798</footer>
+</div>
+</body>
+</html>

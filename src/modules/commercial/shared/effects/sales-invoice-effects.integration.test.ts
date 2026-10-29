@@ -37,6 +37,11 @@ import {
 } from '@/modules/commercial/features/sales/features/invoices/list/actions.server';
 import { createInvoiceSchema } from '@/modules/commercial/features/sales/features/invoices/shared/validators';
 import {
+  acceptDeliveryNote,
+  createDeliveryNote,
+  invoiceDeliveryNotes,
+} from '@/modules/commercial/features/sales/features/delivery-notes/list/actions.server';
+import {
   applySalesInvoiceEffectsTx,
   revertSalesInvoiceEffectsTx,
   salesInvoiceEffectImpedimentsTx,
@@ -295,6 +300,7 @@ describe.skipIf(!dbAvailable)('integración: efectos de la factura de venta (TSK
   afterAll(async () => {
     // Guarda: sin `companyId` Prisma omite el filtro y borraría tablas enteras.
     if (companyId) {
+      await prisma.deliveryNote.deleteMany({ where: { companyId } });
       await prisma.stockMovement.deleteMany({ where: { companyId } });
       await prisma.warehouseStock.deleteMany({ where: { warehouse: { companyId } } });
       await prisma.warehouse.deleteMany({ where: { companyId } });
@@ -490,6 +496,66 @@ describe.skipIf(!dbAvailable)('integración: efectos de la factura de venta (TSK
       await expect(
         inTx((tx) => revertSalesInvoiceEffectsTx(tx, { ...ctx, companyId: otherCompanyId }, id))
       ).rejects.toThrow(BusinessError);
+    });
+  });
+
+  describe('factura desde remitos (TSK-798)', () => {
+    /** Remito aceptado del ítem de stock: ya descontó el stock al crearse. */
+    async function acceptedNote(quantity: string) {
+      const note = await createDeliveryNote({
+        customerId,
+        warehouseId,
+        deliveryDate: ISSUE_DATE,
+        lines: [{ productId: stockProductId, description: `${PREFIX}remito`, quantity }],
+      });
+      await acceptDeliveryNote(note.id);
+      return note.id;
+    }
+
+    beforeAll(async () => {
+      // La FV desde remitos toma el precio de venta del ítem.
+      await prisma.product.update({ where: { id: stockProductId }, data: { salePrice: 1000 } });
+    });
+
+    it('confirmar la FV de un remito no vuelve a descontar el stock que movió el remito', async () => {
+      const before = await stockAt();
+      const noteId = await acceptedNote('4');
+      expect((await stockAt()).quantity).toBe(before.quantity - 4);
+
+      const invoice = await invoiceDeliveryNotes([noteId]);
+      expect(await confirmInvoice(invoice.id)).toEqual({ success: true, id: invoice.id });
+
+      expect((await stockAt()).quantity).toBe(before.quantity - 4);
+      expect(await movementsOf(invoice.id)).toEqual([]);
+      expect(await impedimentsOf(invoice.id)).toEqual([]);
+    });
+
+    it('revertir la FV de un remito no devuelve el stock: la mercadería salió con el remito', async () => {
+      const before = await stockAt();
+      const invoice = await invoiceDeliveryNotes([await acceptedNote('2')]);
+      await confirmInvoice(invoice.id);
+
+      await inTx((tx) => revertSalesInvoiceEffectsTx(tx, ctx, invoice.id));
+
+      expect((await stockAt()).quantity).toBe(before.quantity - 2);
+      expect(await movementsOf(invoice.id)).toEqual([]);
+    });
+
+    it('un borrador editado con más cantidad que el remito descuenta solo el excedente', async () => {
+      const before = await stockAt();
+      const invoice = await invoiceDeliveryNotes([await acceptedNote('3')]);
+      await updateInvoice(
+        invoice.id,
+        rawInput({ lines: [line({ productId: stockProductId, quantity: '5' })] })
+      );
+
+      expect(await confirmInvoice(invoice.id)).toEqual({ success: true, id: invoice.id });
+
+      expect((await stockAt()).quantity).toBe(before.quantity - 5);
+      expect(
+        (await movementsOf(invoice.id)).map((m) => [m.type, Number(m.quantity)])
+      ).toEqual([['SALE', 2]]);
+      expect(await impedimentsOf(invoice.id)).toEqual([]);
     });
   });
 

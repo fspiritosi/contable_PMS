@@ -1078,6 +1078,12 @@ export function _CommercialGuide() {
           </ol>
 
           <p className="text-sm text-muted-foreground mt-3">
+            El stock lo descuenta el remito al crearse. Al confirmar la factura
+            no se vuelve a descontar; si al editar el borrador agregas más
+            cantidad que la entregada, solo se descuenta la diferencia.
+          </p>
+
+          <p className="text-sm text-muted-foreground mt-3">
             También puedes ver los remitos de un cliente desde su ficha en{' '}
             <strong>Clientes → [Cliente] → Remitos</strong>.
           </p>

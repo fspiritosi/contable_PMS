@@ -35,6 +35,7 @@ import {
   perceptionAccountId,
 } from '../perceptions';
 import { isCreditNote, isDebitNote } from '../voucher-utils';
+import { stockQuantitiesToMove } from './sales-invoice-stock';
 import type { EffectsCtx, EffectsResult } from './types';
 
 export { isAfipLocked };
@@ -43,7 +44,8 @@ export { isAfipLocked };
  * Efectos de una factura de venta (FV, NC o ND) (TSK-792): lo que mueve fuera de sí
  * misma al confirmarse y su inversa exacta.
  *
- * - FV: descuenta el stock de cada línea con ítem de stock (`StockMovement` SALE).
+ * - FV: descuenta el stock de cada línea con ítem de stock (`StockMovement` SALE),
+ *   salvo lo que ya entregaron los remitos facturados en ella (TSK-798).
  * - NC: el cliente devuelve, suma el stock (`StockMovement` RETURN) y compensa las
  *   facturas pendientes del cliente (`SalesCreditNoteApplication`).
  * - ND: no mueve stock (ajuste financiero).
@@ -59,6 +61,39 @@ const STOCK_TYPES: ('SALE' | 'RETURN')[] = ['SALE', 'RETURN'];
 /** Una FV en borrador no aplicó efectos y una anulada ya los deshizo (corrección, TSK-792). */
 const hasAppliedEffects = (status: SalesInvoiceStatus) =>
   status !== 'DRAFT' && status !== 'CANCELLED';
+
+/**
+ * Lo que ya entregaron, por producto, los remitos facturados en esta factura: su
+ * stock salió al crear el remito (TSK-798).
+ */
+async function deliveredByProductTx(
+  tx: Tx,
+  companyId: string,
+  invoiceId: string
+): Promise<Map<string, Prisma.Decimal>> {
+  const rows = await tx.deliveryNoteLine.groupBy({
+    by: ['productId'],
+    where: { deliveryNote: { companyId, salesInvoiceId: invoiceId, status: 'INVOICED' } },
+    _sum: { quantity: true },
+  });
+  return new Map(
+    rows.map((row) => [row.productId, row._sum.quantity ?? new Prisma.Decimal(0)])
+  );
+}
+
+/** Líneas de la factura que mueven stock y cuánto (sin lo que ya movieron sus remitos). */
+async function stockToMoveTx<T extends { productId: string; quantity: Prisma.Decimal }>(
+  tx: Tx,
+  companyId: string,
+  invoiceId: string,
+  lines: (T & { product: { trackStock: boolean } })[]
+) {
+  const delivered = await deliveredByProductTx(tx, companyId, invoiceId);
+  return stockQuantitiesToMove(
+    lines.map((line) => ({ ...line, trackStock: line.product.trackStock })),
+    delivered
+  );
+}
 
 /**
  * Validación previa a confirmar (o a reaplicar los efectos tras editar): cuentas de
@@ -264,9 +299,8 @@ export async function applySalesInvoiceEffectsTx(
   const isNC = isCreditNote(invoice.voucherType);
 
   if (!isND) {
-    for (const line of invoice.lines) {
-      if (!line.product.trackStock) continue;
-
+    const toMove = await stockToMoveTx(tx, companyId, invoiceId, invoice.lines);
+    for (const { line, quantity: quantityToHandle } of toMove) {
       // Buscar almacén principal (o el primero disponible)
       const warehouse = await tx.warehouse.findFirst({
         where: { companyId, isActive: true },
@@ -278,7 +312,6 @@ export async function applySalesInvoiceEffectsTx(
         throw new BusinessError('No hay almacenes disponibles para gestionar stock');
       }
 
-      const quantityToHandle = line.quantity;
       const stockKey = {
         warehouseId_productId: { warehouseId: warehouse.id, productId: line.productId },
       };
@@ -475,7 +508,9 @@ export async function salesInvoiceEffectImpedimentsTx(
       voucherType: true,
       cae: true,
       pointOfSale: { select: { afipEnabled: true } },
-      lines: { select: { product: { select: { trackStock: true } } } },
+      lines: {
+        select: { productId: true, quantity: true, product: { select: { trackStock: true } } },
+      },
     },
   });
   if (!invoice) return [];
@@ -488,7 +523,7 @@ export async function salesInvoiceEffectImpedimentsTx(
   const expectsStock =
     hasAppliedEffects(invoice.status) &&
     !isDebitNote(invoice.voucherType) &&
-    invoice.lines.some((line) => line.product.trackStock);
+    (await stockToMoveTx(tx, invoice.companyId, invoiceId, invoice.lines)).length > 0;
   if (expectsStock) {
     const movements = await tx.stockMovement.count({
       where: {
