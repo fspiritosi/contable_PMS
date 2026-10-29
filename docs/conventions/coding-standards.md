@@ -197,6 +197,13 @@ moment(dateA).isBefore(dateB);           // Comparar
 
 Funciones de formateo reutilizables en `shared/utils/formatters.ts`.
 
+**Idioma:** el español queda fijo para toda la app en `shared/lib/moment-locale.ts`, que se
+carga en el layout raíz (servidor) y en `Providers` (SSR y navegador). Con eso,
+`format('MMMM YYYY')` da "octubre 2026", en minúscula: si el texto va al comienzo de una línea,
+usar la clase `capitalize`. No hace falta importar `moment/locale/es` en cada archivo. Antes del
+TSK-795 lo importaban archivos sueltos, y el idioma de una pantalla dependía de qué módulos se
+hubieran cargado. Para semanas usar `isoWeek`, que empieza el lunes y no depende del idioma.
+
 ---
 
 ## Data Fetching

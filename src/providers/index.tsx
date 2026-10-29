@@ -5,6 +5,8 @@ import { QueryProvider } from './QueryProvider';
 import { SessionProvider } from './SessionProvider';
 import { ThemeProvider } from './ThemeProvider';
 import { Toaster } from '@/shared/components/ui/sonner';
+// Idioma de moment en SSR y navegador (TSK-795); el layout raíz lo carga en el servidor.
+import '@/shared/lib/moment-locale';
 
 interface ProvidersProps {
   children: ReactNode;
