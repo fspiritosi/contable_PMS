@@ -505,11 +505,11 @@ describe.skipIf(!dbAvailable)('cierre anual (TSK-760, Fase 9)', () => {
 
     it('B18: Balance, Sumas y Saldos y saldos acumulados del FY 2 = saldos del cerrado (no el doble)', async () => {
       const sheet = await getBalanceSheet(c.companyId, day('2027-01-31'));
-      // `isBalanced` del Balance compara con signos opuestos (preexistente): se mira cada total.
       expect(sheet.totalAssets).toBe(2600);
-      expect(sheet.equity.total).toBe(-2600); // Capital 2000 + Resultado 600 (saldo acreedor)
+      expect(sheet.equity.total).toBe(2600); // Capital 2000 + Resultado 600 (saldo acreedor, TSK-761)
       expect(sheet.liabilities.total).toBe(0);
       expect(sheet.periodResult).toBe(0);
+      expect(sheet.isBalanced).toBe(true);
 
       const atClose = await getTrialBalance(c.companyId, day('2026-01-01'), day('2026-12-31'));
       const january = await getTrialBalance(c.companyId, day('2027-01-01'), day('2027-01-31'));
@@ -597,7 +597,8 @@ describe.skipIf(!dbAvailable)('cierre anual (TSK-760, Fase 9)', () => {
       );
       const sheet = await getBalanceSheet(c.companyId, day('2028-01-31'));
       expect(sheet.totalAssets).toBe(2900);
-      expect(sheet.equity.total).toBe(-2900);
+      expect(sheet.equity.total).toBe(2900);
+      expect(sheet.isBalanced).toBe(true);
       const income = await getIncomeStatement(c.companyId, day('2027-01-01'), day('2027-12-31'));
       expect(income.netIncome).toBe(300);
     });
@@ -669,7 +670,8 @@ describe.skipIf(!dbAvailable)('cierre anual (TSK-760, Fase 9)', () => {
 
       const sheet = await getBalanceSheet(c.companyId, day('2027-01-31'));
       expect(sheet.totalAssets).toBe(1010);
-      expect(sheet.equity.total).toBe(-1010);
+      expect(sheet.equity.total).toBe(1010);
+      expect(sheet.isBalanced).toBe(true);
     });
   });
 });

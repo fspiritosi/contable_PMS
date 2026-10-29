@@ -406,32 +406,38 @@ export async function getBalanceSheet(companyId: string, asOfDate: Date) {
     let revenueTotal = 0;
     let expenseTotal = 0;
 
+    // `balance` llega como débito − crédito. El activo y los gastos se presentan así; el
+    // pasivo, el patrimonio y los ingresos, con su saldo acreedor (crédito − débito) en
+    // positivo. Antes el pasivo y el patrimonio iban con signo negativo y el informe nunca
+    // daba equilibrado (TSK-761); y los ingresos sumaban `Math.abs`, así que una cuenta de
+    // ingresos con saldo deudor (devoluciones) sumaba en vez de restar.
     for (const account of accounts) {
       const balance = balancesMap.get(account.id);
       if (!balance || balance.balance === 0) continue;
 
-      const accountData: BalanceSheetAccount = {
+      const debitBalance = balance.balance;
+      const creditBalance = -balance.balance;
+      const accountData = (amount: number): BalanceSheetAccount => ({
         code: account.code,
         name: account.name,
-        balance: balance.balance,
-      };
+        balance: amount,
+      });
 
       switch (account.type) {
         case AccountType.ASSET:
-          assets.push(accountData);
+          assets.push(accountData(debitBalance));
           break;
         case AccountType.LIABILITY:
-          liabilities.push(accountData);
+          liabilities.push(accountData(creditBalance));
           break;
         case AccountType.EQUITY:
-          equity.push(accountData);
+          equity.push(accountData(creditBalance));
           break;
         case AccountType.REVENUE:
-          // balance = debit - credit; revenue normal es negativo (más créditos)
-          revenueTotal += Math.abs(balance.balance);
+          revenueTotal += creditBalance;
           break;
         case AccountType.EXPENSE:
-          expenseTotal += balance.balance;
+          expenseTotal += debitBalance;
           break;
       }
     }
