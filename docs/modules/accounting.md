@@ -273,7 +273,7 @@ equilibrado" en toda empresa con pasivo o patrimonio.
 | Reporte | Descripcion |
 |---------|-------------|
 | Balance de Sumas y Saldos | Debe/Haber/Saldo por cuenta, con verificacion de ecuacion contable |
-| Balance General | Activo = Pasivo + PN (solo cuentas ASSET, LIABILITY, EQUITY) |
+| Balance General | Activo = Pasivo + PN + resultado del ejercicio en curso. Signo por tipo de cuenta (TSK-761): activo y gastos en débito − crédito; pasivo, PN e ingresos en crédito − débito, así el saldo normal sale positivo y una cuenta regularizadora o con saldo contrario sale negativa. `isBalanced` compara Activo con Pasivo + PN + resultado (tolerancia 0,01). Test: `balance-sheet.integration.test.ts` |
 | Estado de Resultados | Ingresos - Egresos = Resultado Neto |
 | Libro Diario | Todos los asientos POSTED en rango de fecha |
 | Libro Mayor | Movimientos por cuenta con saldo acumulado |

@@ -457,7 +457,12 @@ export function _AccountingGuide() {
               créditos y saldos por cuenta
             </li>
             <li>
-              <strong>Balance General</strong>: Activo, Pasivo y Patrimonio
+              <strong>Balance General</strong>: Activo, Pasivo y Patrimonio a una
+              fecha, con el resultado del ejercicio en curso dentro del
+              Patrimonio. Cada saldo se muestra en positivo cuando es el normal
+              de la cuenta; uno negativo indica un saldo al revés (por ejemplo,
+              un banco en descubierto). Si Activo no es igual a Pasivo +
+              Patrimonio, el informe lo avisa con la diferencia
             </li>
             <li>
               <strong>Estado de Resultados</strong>: Ingresos menos Gastos =
