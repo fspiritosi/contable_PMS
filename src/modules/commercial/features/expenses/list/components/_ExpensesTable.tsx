@@ -83,11 +83,13 @@ export function _ExpensesTable({ data, totalRows, searchParams, facetCounts, cat
 
     setIsProcessing(true);
     try {
-      await cancelExpense(selectedExpense.id);
+      const result = await cancelExpense(selectedExpense.id);
+      if (!result.success) {
+        toast.error(result.error);
+        return;
+      }
       toast.success('Egreso cancelado correctamente');
       router.refresh();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Error al cancelar egreso');
     } finally {
       setIsProcessing(false);
       setCancelDialogOpen(false);

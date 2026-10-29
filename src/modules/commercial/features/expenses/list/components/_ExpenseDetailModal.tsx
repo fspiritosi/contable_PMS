@@ -124,14 +124,16 @@ export function _ExpenseDetailModal({ expenseId, open, onOpenChange, onSuccess }
 
     setIsProcessing(true);
     try {
-      await cancelExpense(expense.id);
+      const result = await cancelExpense(expense.id);
+      if (!result.success) {
+        toast.error(result.error);
+        return;
+      }
       toast.success('Egreso cancelado correctamente');
       setCancelDialogOpen(false);
       router.refresh();
       onSuccess?.();
       await loadExpense();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Error al cancelar egreso');
     } finally {
       setIsProcessing(false);
     }

@@ -24,8 +24,9 @@ interface DeleteDraftEntryDialogProps {
 
 /**
  * "Eliminar borrador" (TSK-760, C6): borra un asiento manual en borrador, por ejemplo
- * uno que ya no se puede registrar y traba el cierre de su mes. El servidor rechaza los
- * borradores de comprobantes o generados por el sistema con un mensaje que lo explica.
+ * uno que ya no se puede registrar y traba el cierre de su mes; o el que quedó vivo de un
+ * comprobante anulado (TSK-788). El servidor rechaza los demás borradores de comprobantes o
+ * generados por el sistema con un mensaje que lo explica.
  */
 export function _DeleteDraftEntryDialog({ entry, onClose }: DeleteDraftEntryDialogProps) {
   const router = useRouter();
@@ -51,8 +52,8 @@ export function _DeleteDraftEntryDialog({ entry, onClose }: DeleteDraftEntryDial
           <AlertDialogTitle>¿Eliminar el borrador N° {entry.number}?</AlertDialogTitle>
           <AlertDialogDescription>
             El asiento &quot;{entry.description}&quot; se borra junto con sus líneas y no se puede
-            recuperar. Su número queda sin usar. Solo se eliminan borradores manuales: los de
-            comprobantes se corrigen desde el comprobante.
+            recuperar. Su número queda sin usar. Solo se eliminan borradores manuales y los de
+            comprobantes ya anulados: los demás se corrigen desde el comprobante.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

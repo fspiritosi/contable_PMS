@@ -35,7 +35,8 @@ import { cleanupAccountingCompany } from '../../shared/test-utils/cleanup-accoun
 import { closeMonthForTest, readLastEntryNumber } from '../../shared/test-utils/period-test-helpers';
 import { entriesWithoutDocumentWhere } from '../../shared/utils/entry-document-link';
 import { createJournalEntryTx } from '../../shared/utils/journal-entry-tx';
-import { deleteDraftJournalEntry, getReversalCheck, reverseJournalEntry } from './actions.server';
+import { closeMonthTx } from '../settings/period-closing';
+import { deleteDraftJournalEntry, getReversalCheck, postJournalEntry, reverseJournalEntry } from './actions.server';
 
 const PREFIX = 'TSK760-RV-';
 const USER = 'test-user';
@@ -149,7 +150,11 @@ describe.skipIf(!dbAvailable)('anular y eliminar desde Asientos (TSK-760, Fase 1
     );
   }
 
-  const linkPurchaseInvoice = async (c: TestCompany, entryId: string) => {
+  const linkPurchaseInvoice = async (
+    c: TestCompany,
+    entryId: string,
+    status: 'CONFIRMED' | 'CANCELLED' = 'CONFIRMED'
+  ) => {
     docSeq += 1;
     const fullNumber = `0001-${String(docSeq).padStart(8, '0')}`;
     await prisma.purchaseInvoice.create({
@@ -161,7 +166,7 @@ describe.skipIf(!dbAvailable)('anular y eliminar desde Asientos (TSK-760, Fase 1
         number: String(docSeq),
         fullNumber,
         issueDate: MARCH_10,
-        status: 'CONFIRMED',
+        status,
         journalEntryId: entryId,
         createdBy: USER,
       },
@@ -169,11 +174,11 @@ describe.skipIf(!dbAvailable)('anular y eliminar desde Asientos (TSK-760, Fase 1
     return fullNumber;
   };
 
-  const linkFundMovement = (c: TestCompany, entryId: string) =>
+  const linkFundMovement = (c: TestCompany, entryId: string, status: 'CONFIRMED' | 'CANCELLED' = 'CONFIRMED') =>
     prisma.fundMovement.create({
       data: {
         companyId: c.companyId,
-        status: 'CONFIRMED',
+        status,
         date: MARCH_10,
         type: 'PARTNER_CONTRIBUTION',
         amount: 1500,
@@ -469,6 +474,64 @@ describe.skipIf(!dbAvailable)('anular y eliminar desde Asientos (TSK-760, Fase 1
         link: { kind: 'PURCHASE_INVOICE', label: `la factura de compra ${fullNumber}` },
         blockedMessage: expect.stringContaining(`la factura de compra ${fullNumber}`),
       });
+    });
+  });
+
+  describe('asiento que quedó vivo de un comprobante anulado (TSK-788)', () => {
+    it('se anula desde Asientos, con aviso en vez de bloqueo', async () => {
+      const original = await seedEntry(main, { createdBy: 'system' });
+      const fullNumber = await linkPurchaseInvoice(main, original.id, 'CANCELLED');
+
+      const check = await getReversalCheck(original.id);
+      expect(check).toMatchObject({
+        success: true,
+        link: { kind: 'PURCHASE_INVOICE', cancelled: true },
+        blockedMessage: null,
+        warning:
+          `Este asiento pertenece a la factura de compra ${fullNumber}, que ya se anuló, pero el ` +
+          'asiento quedó vivo. Anularlo deja sin efecto sus importes.',
+      });
+
+      expect((await reverseJournalEntry({ entryId: original.id })).success).toBe(true);
+      expect(await statusOf(original.id)).toBe('REVERSED');
+    });
+
+    it('su borrador (generado por el sistema) se elimina desde Asientos', async () => {
+      const draft = await seedEntry(main, { status: 'DRAFT', createdBy: 'system' });
+      await linkPurchaseInvoice(main, draft.id, 'CANCELLED');
+
+      expect(await deleteDraftJournalEntry(draft.id)).toEqual({ success: true, number: draft.number });
+      expect(await statusOf(draft.id)).toBeNull();
+      const invoice = await prisma.purchaseInvoice.findFirstOrThrow({
+        where: { companyId: main.companyId, journalEntryId: null, status: 'CANCELLED' },
+        select: { id: true },
+      });
+      expect(invoice.id).toBeDefined();
+    });
+
+    it('su borrador no se registra: ni desde Asientos ni al cerrar el mes', async () => {
+      const c = await setupCompany('Huérfano');
+      asCompany(c);
+      const draft = await seedEntry(c, { status: 'DRAFT', createdBy: 'system', date: new Date('2026-01-15T00:00:00.000Z') });
+      const fullNumber = await linkPurchaseInvoice(c, draft.id, 'CANCELLED');
+      const reason =
+        `Este asiento pertenece a la factura de compra ${fullNumber}, que ya se anuló: no se registra. ` +
+        'Eliminalo desde Asientos.';
+
+      expect(await postJournalEntry(draft.id)).toEqual({ success: false, error: reason });
+      await expect(
+        prisma.$transaction((tx) =>
+          closeMonthTx(tx, { companyId: c.companyId, userId: USER, year: 2026, month: 1, postDrafts: true })
+        )
+      ).rejects.toThrow(`No se cerró 01/2026: el borrador N° ${draft.number} no se puede registrar. ${reason}`);
+      expect(await statusOf(draft.id)).toBe('DRAFT');
+    });
+
+    it('también el de un movimiento de fondos anulado (columna sin relación)', async () => {
+      const draft = await seedEntry(main, { status: 'DRAFT', createdBy: 'system' });
+      await linkFundMovement(main, draft.id, 'CANCELLED');
+
+      expect(await deleteDraftJournalEntry(draft.id)).toEqual({ success: true, number: draft.number });
     });
   });
 

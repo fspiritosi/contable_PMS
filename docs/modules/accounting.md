@@ -85,6 +85,9 @@ Creados como `isAutomatic = true`, `createdBy = 'system'`.
    refundicion o apertura de ejercicio) se
    rechaza con "Este asiento pertenece a … y no se puede anular desde Asientos: anulá el
    comprobante." El dialogo lo consulta antes (`getReversalCheck`) y deshabilita el boton.
+   **Excepcion (TSK-788):** si el comprobante ya esta `CANCELLED` (`link.cancelled`), el asiento
+   quedo vivo sin nadie que lo corrija y se anula desde Asientos, con el aviso "pertenece a …, que
+   ya se anuló, pero el asiento quedó vivo". Ver [Asientos de comprobantes anulados](#asientos-de-comprobantes-anulados-tsk-788).
 2. Los asientos `createdBy = 'system'` sin vinculo persistido (bancos, transferencias, baja de
    equipo, IVA, inflacion) se anulan con aviso: no revierte el saldo bancario ni el estado del
    equipo.
@@ -95,8 +98,29 @@ Creados como `isAutomatic = true`, `createdBy = 'system'`.
    (trigger de inmutabilidad).
 
 `deleteDraftJournalEntry(entryId)` (permiso `accounting.entries` `delete`): borra un DRAFT manual de
-la empresa activa sin documento y no `'system'`. No valida periodo: su fin es destrabar el cierre
-de un mes con un borrador imposible de registrar. El numero queda como hueco.
+la empresa activa sin documento y no `'system'`, o el DRAFT de un comprobante anulado (TSK-788). No
+valida periodo: su fin es destrabar el cierre de un mes con un borrador imposible de registrar. El
+numero queda como hueco.
+
+#### Asientos de comprobantes anulados (TSK-788)
+
+Antes de TSK-792 (`cancelPurchaseInvoice` / `cancelInvoice`) y hasta TSK-788 (`cancelExpense`),
+anular un comprobante lo pasaba a `CANCELLED` sin tocar su asiento: quedaba en borrador o registrado,
+seguia apuntado por `journal_entry_id` y sumaba en los informes (lo reporto el cliente en
+Movimientos por Centro de Costo). Hoy:
+
+- **Prevencion.** Toda anulacion deshace el asiento: la correccion en cadena (TSK-792) para FC, FV,
+  OP, RC y MF, y `cancelExpense` para los gastos (borrador → `deleteDraftJournalEntryTx` y
+  `journalEntryId = null`; registrado → `reverseJournalEntryTx` con la fecha del gasto). `cancelExpense`
+  devuelve `ActionResult`: "período cerrado" llega legible.
+- **Limpieza de los que ya existen.** `getEntryDocumentLink` devuelve `cancelled: true` cuando el
+  comprobante esta anulado. Con eso, desde Asientos el registrado se anula (con aviso, no bloqueo) y el
+  borrador se elimina aunque sea `'system'`.
+- **No se registran.** `assertNotCancelledDocumentDraftTx` corre antes de `postJournalEntryTx` en
+  "Registrar" y en el cierre de mes con "registrar borradores": el borrador de un comprobante anulado
+  no se registra ("… que ya se anuló: no se registra. Eliminalo desde Asientos.").
+- **Diagnostico en produccion:** `prisma/scripts/tsk788-diagnostico-asientos-de-anulados.sql` (solo
+  lectura) lista los asientos DRAFT/POSTED de comprobantes anulados por empresa.
 
 ### Volver a borrador y reescritura de asientos (TSK-792)
 

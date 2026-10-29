@@ -38,6 +38,7 @@ vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 
 import { getActiveCompanyId } from '@/shared/lib/company';
 import { getCurrentUserId } from '@/shared/lib/current-user';
+import { cleanupAccountingCompany } from '@/modules/accounting/shared/test-utils/cleanup-accounting-company';
 import {
   closeMonthForTest,
   readEntryPeriod,
@@ -46,6 +47,7 @@ import {
 
 // Código real de producción.
 import {
+  cancelExpense,
   confirmExpense,
   createExpense,
   createExpenseCategory,
@@ -188,7 +190,8 @@ describe.skipIf(!dbAvailable)('integración e2e: asiento al confirmar un gasto (
     // Guarda: sin `companyId` Prisma omite el filtro y borraría tablas enteras.
     if (companyId) {
       await prisma.expense.deleteMany({ where: { companyId } });
-      await prisma.journalEntry.deleteMany({ where: { companyId } });
+      // Los cancelados con asiento registrado dejan asientos POSTED/REVERSED (TSK-788): inmutables por trigger.
+      await cleanupAccountingCompany(companyId);
       await prisma.budget.deleteMany({ where: { companyId } });
       await prisma.expenseCategory.deleteMany({ where: { companyId } });
       await prisma.supplier.deleteMany({ where: { companyId } });
@@ -394,6 +397,68 @@ describe.skipIf(!dbAvailable)('integración e2e: asiento al confirmar un gasto (
     expect((await readExpense(id)).status).toBe('CONFIRMED');
     expect(await fetchEntryLines(id)).toHaveLength(2);
     expect(await readLastEntryNumber(companyId)).toBe(lastNumberBefore + 1);
+  });
+
+  describe('cancelar un gasto deshace su asiento (TSK-788)', () => {
+    const entryStatus = async (entryId: string) =>
+      (await prisma.journalEntry.findUnique({ where: { id: entryId }, select: { status: true } }))?.status ?? null;
+
+    async function confirmed(description: string) {
+      const id = await createDraft(description);
+      expect((await confirmExpense(id)).success).toBe(true);
+      const { journalEntryId } = await readExpense(id);
+      return { id, entryId: journalEntryId! };
+    }
+
+    it('con el asiento en borrador: lo elimina y el gasto queda anulado sin asiento', async () => {
+      const { id, entryId } = await confirmed('Cancelar con borrador');
+
+      expect(await cancelExpense(id)).toEqual({ success: true });
+
+      expect(await readExpense(id)).toMatchObject({ status: 'CANCELLED', journalEntryId: null });
+      expect(await entryStatus(entryId)).toBeNull();
+    });
+
+    it('con el asiento registrado: lo revierte con la fecha del gasto', async () => {
+      const { id, entryId } = await confirmed('Cancelar con registrado');
+      await prisma.journalEntry.update({ where: { id: entryId }, data: { status: 'POSTED', postDate: new Date() } });
+
+      expect(await cancelExpense(id)).toEqual({ success: true });
+
+      expect(await readExpense(id)).toMatchObject({ status: 'CANCELLED', journalEntryId: entryId });
+      expect(await entryStatus(entryId)).toBe('REVERSED');
+      const reversal = await prisma.journalEntry.findFirstOrThrow({
+        where: { originalEntryId: entryId },
+        select: { status: true, date: true },
+      });
+      expect(reversal.status).toBe('POSTED');
+      expect(reversal.date.toISOString()).toBe('2026-03-10T00:00:00.000Z');
+    });
+
+    it('con el mes cerrado: error legible y el gasto sigue confirmado con su asiento', async () => {
+      const { id, entryId } = await confirmed('Cancelar con mes cerrado');
+      await prisma.journalEntry.update({ where: { id: entryId }, data: { status: 'POSTED', postDate: new Date() } });
+      const reopen = await closeMonthForTest(companyId, EXPENSE_DATE);
+      try {
+        const result = await cancelExpense(id);
+        expect(result).toEqual({ success: false, error: expect.stringContaining('el período está cerrado') });
+      } finally {
+        await reopen();
+      }
+
+      expect(await readExpense(id)).toMatchObject({ status: 'CONFIRMED', journalEntryId: entryId });
+      expect(await entryStatus(entryId)).toBe('POSTED');
+    });
+
+    it('un borrador se anula sin tocar asientos', async () => {
+      const id = await createDraft('Cancelar borrador');
+      const lastNumberBefore = await readLastEntryNumber(companyId);
+
+      expect(await cancelExpense(id)).toEqual({ success: true });
+
+      expect(await readExpense(id)).toMatchObject({ status: 'CANCELLED', journalEntryId: null });
+      expect(await readLastEntryNumber(companyId)).toBe(lastNumberBefore);
+    });
   });
 
   describe('categorías con cuenta (TSK-757)', () => {

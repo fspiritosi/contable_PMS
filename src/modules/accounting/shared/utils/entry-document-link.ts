@@ -15,6 +15,7 @@ import 'server-only';
 import moment from 'moment';
 
 import type { Prisma } from '@/generated/prisma/client';
+import { BusinessError } from '@/shared/lib/action-result';
 
 import type { Tx } from './journal-entry-types';
 
@@ -36,6 +37,13 @@ export interface EntryDocumentLink {
   documentId: string;
   /** Nombre del documento en minúscula, con artículo: "la factura de compra 0001-00000345". */
   label: string;
+  /**
+   * El comprobante está anulado y aun así sigue apuntando al asiento (TSK-788): las
+   * anulaciones anteriores a TSK-792 y `cancelExpense` hasta TSK-788 no tocaban el
+   * asiento. No hay comprobante desde donde corregirlo, así que no bloquea: se anula o
+   * se elimina desde Asientos.
+   */
+  cancelled: boolean;
 }
 
 type VehicleRef = { internNumber: string | null; domain: string | null } | null;
@@ -57,11 +65,11 @@ export async function getEntryDocumentLink(
   const entry = await tx.journalEntry.findFirst({
     where: { id: entryId, companyId },
     select: {
-      salesInvoices: { select: { id: true, fullNumber: true }, take: 1 },
-      purchaseInvoices: { select: { id: true, fullNumber: true }, take: 1 },
-      receipts: { select: { id: true, fullNumber: true }, take: 1 },
-      paymentOrders: { select: { id: true, fullNumber: true }, take: 1 },
-      expenses: { select: { id: true, fullNumber: true }, take: 1 },
+      salesInvoices: { select: { id: true, fullNumber: true, status: true }, take: 1 },
+      purchaseInvoices: { select: { id: true, fullNumber: true, status: true }, take: 1 },
+      receipts: { select: { id: true, fullNumber: true, status: true }, take: 1 },
+      paymentOrders: { select: { id: true, fullNumber: true, status: true }, take: 1 },
+      expenses: { select: { id: true, fullNumber: true, status: true }, take: 1 },
       depreciationEntries: {
         select: {
           id: true,
@@ -80,21 +88,26 @@ export async function getEntryDocumentLink(
   });
   if (!entry) return null;
 
+  const doc = (kind: EntryDocumentKind, document: { id: string; status: string }, label: string) => ({
+    kind,
+    documentId: document.id,
+    label,
+    cancelled: document.status === 'CANCELLED',
+  });
   const [sale] = entry.salesInvoices;
-  if (sale) return { kind: 'SALES_INVOICE', documentId: sale.id, label: `la factura de venta ${sale.fullNumber}` };
+  if (sale) return doc('SALES_INVOICE', sale, `la factura de venta ${sale.fullNumber}`);
   const [purchase] = entry.purchaseInvoices;
-  if (purchase) {
-    return { kind: 'PURCHASE_INVOICE', documentId: purchase.id, label: `la factura de compra ${purchase.fullNumber}` };
-  }
+  if (purchase) return doc('PURCHASE_INVOICE', purchase, `la factura de compra ${purchase.fullNumber}`);
   const [receipt] = entry.receipts;
-  if (receipt) return { kind: 'RECEIPT', documentId: receipt.id, label: `el recibo ${receipt.fullNumber}` };
+  if (receipt) return doc('RECEIPT', receipt, `el recibo ${receipt.fullNumber}`);
   const [order] = entry.paymentOrders;
-  if (order) return { kind: 'PAYMENT_ORDER', documentId: order.id, label: `la orden de pago ${order.fullNumber}` };
+  if (order) return doc('PAYMENT_ORDER', order, `la orden de pago ${order.fullNumber}`);
   const [expense] = entry.expenses;
-  if (expense) return { kind: 'EXPENSE', documentId: expense.id, label: `el egreso ${expense.fullNumber}` };
+  if (expense) return doc('EXPENSE', expense, `el egreso ${expense.fullNumber}`);
   const [depreciation] = entry.depreciationEntries;
   if (depreciation) {
     return {
+      cancelled: false,
       kind: 'DEPRECIATION',
       documentId: depreciation.id,
       label:
@@ -105,6 +118,7 @@ export async function getEntryDocumentLink(
   const [adjustment] = entry.valueAdjustments;
   if (adjustment) {
     return {
+      cancelled: false,
       kind: 'VALUE_ADJUSTMENT',
       documentId: adjustment.id,
       label: `el ajuste de valor del equipo ${vehicleLabel(adjustment.vehicle)}`,
@@ -112,20 +126,28 @@ export async function getEntryDocumentLink(
   }
   const closing = entry.fiscalYearAsClosingEntry;
   if (closing) {
-    return { kind: 'FISCAL_YEAR_CLOSING', documentId: closing.id, label: `la refundición del ejercicio N° ${closing.number}` };
+    return {
+      cancelled: false,
+      kind: 'FISCAL_YEAR_CLOSING',
+      documentId: closing.id,
+      label: `la refundición del ejercicio N° ${closing.number}`,
+    };
   }
   const opening = entry.fiscalYearAsOpeningEntry;
   if (opening) {
-    return { kind: 'FISCAL_YEAR_OPENING', documentId: opening.id, label: `la apertura del ejercicio N° ${opening.number}` };
+    return {
+      cancelled: false,
+      kind: 'FISCAL_YEAR_OPENING',
+      documentId: opening.id,
+      label: `la apertura del ejercicio N° ${opening.number}`,
+    };
   }
 
   const fund = await tx.fundMovement.findFirst({
     where: { companyId, journalEntryId: entryId },
-    select: { id: true, description: true },
+    select: { id: true, description: true, status: true },
   });
-  if (fund) {
-    return { kind: 'FUND_MOVEMENT', documentId: fund.id, label: `el movimiento de fondos "${fund.description}"` };
-  }
+  if (fund) return doc('FUND_MOVEMENT', fund, `el movimiento de fondos "${fund.description}"`);
 
   // Valuación de inversiones al cierre (TSK-793): se deshace desde Tesorería, que
   // borra el asiento junto con la valuación. Borrarlo o anularlo desde acá dejaría la
@@ -136,6 +158,7 @@ export async function getEntryDocumentLink(
   });
   if (valuation) {
     return {
+      cancelled: false,
       kind: 'INVESTMENT_VALUATION',
       documentId: valuation.id,
       label: `la valuación de inversiones al ${moment.utc(valuation.closingDate).format('DD/MM/YYYY')}`,
@@ -179,17 +202,38 @@ export async function entriesWithoutDocumentWhere(
   };
 }
 
+// "pertenece a el egreso" → "pertenece al egreso".
+const belongsTo = (link: EntryDocumentLink) =>
+  `pertenece ${link.label.startsWith('el ') ? `al ${link.label.slice(3)}` : `a ${link.label}`}`;
+
 /** Motivo del rechazo al anular (o eliminar) desde Asientos un asiento con documento (D6, §3.3.7). */
 export function buildDocumentLinkedMessage(
   link: EntryDocumentLink,
   action: 'reverse' | 'delete' = 'reverse'
 ): string {
-  // "pertenece a el egreso" → "pertenece al egreso".
-  const belongsTo = `pertenece ${link.label.startsWith('el ') ? `al ${link.label.slice(3)}` : `a ${link.label}`}`;
+  const belongs = belongsTo(link);
   if (action === 'delete') {
-    return `Este asiento ${belongsTo} y no se puede eliminar: solo se eliminan borradores manuales.`;
+    return `Este asiento ${belongs} y no se puede eliminar: solo se eliminan borradores manuales.`;
   }
   const isFiscalYear = link.kind === 'FISCAL_YEAR_CLOSING' || link.kind === 'FISCAL_YEAR_OPENING';
   if (isFiscalYear) return `Este asiento es ${link.label} y no se puede anular.`;
-  return `Este asiento ${belongsTo} y no se puede anular desde Asientos: anulá el comprobante.`;
+  return `Este asiento ${belongs} y no se puede anular desde Asientos: anulá el comprobante.`;
+}
+
+/** Aviso para el asiento que quedó vivo de un comprobante anulado (TSK-788). */
+export function buildCancelledDocumentWarning(link: EntryDocumentLink): string {
+  return `Este asiento ${belongsTo(link)}, que ya se anuló, pero el asiento quedó vivo. Anularlo deja sin efecto sus importes.`;
+}
+
+/**
+ * Rechaza registrar el borrador que quedó vivo de un comprobante anulado (TSK-788): registrarlo
+ * imputaría un comprobante que ya no existe. Lo usan "Registrar" en Asientos y el cierre de mes.
+ */
+export async function assertNotCancelledDocumentDraftTx(tx: Tx, companyId: string, entryId: string) {
+  const link = await getEntryDocumentLink(tx, companyId, entryId);
+  if (link?.cancelled) {
+    throw new BusinessError(
+      `Este asiento ${belongsTo(link)}, que ya se anuló: no se registra. Eliminalo desde Asientos.`
+    );
+  }
 }
