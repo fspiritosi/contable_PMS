@@ -34,6 +34,7 @@ import {
 
 import { _AccountingClosingGuide } from './_AccountingClosingGuide';
 import { _AccountingConceptsGuide } from './_AccountingConceptsGuide';
+import { _FiscalExportsGuide } from './_FiscalExportsGuide';
 
 export function _AccountingGuide() {
   return (
@@ -553,6 +554,9 @@ export function _AccountingGuide() {
           </p>
         </CardContent>
       </Card>
+
+      {/* Archivos ARCA: Libro IVA Digital, SIRE y SIRCAR (TSK-796) */}
+      <_FiscalExportsGuide />
 
       {/* Cierre de meses, cierre de ejercicio y anulación (TSK-760) */}
       <_AccountingClosingGuide />
