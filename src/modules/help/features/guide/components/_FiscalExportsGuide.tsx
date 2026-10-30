@@ -11,7 +11,8 @@ import {
 } from '@/shared/components/ui/card';
 
 /**
- * Guía de Archivos ARCA (TSK-796): el Libro IVA Digital del mes. Separada de
+ * Guía de Archivos ARCA: el Libro IVA Digital (TSK-796, TSK-814) y las retenciones de SIRE,
+ * SICORE y SIRCAR (TSK-813) del mes. Separada de
  * `_AccountingGuide` para no hacerla crecer.
  */
 export function _FiscalExportsGuide() {
@@ -22,7 +23,9 @@ export function _FiscalExportsGuide() {
           <FileDown className="h-5 w-5" />
           Archivos ARCA
         </CardTitle>
-        <CardDescription>Los TXT del Libro IVA Digital del mes para importar en ARCA</CardDescription>
+        <CardDescription>
+          Los TXT del mes para ARCA: Libro IVA Digital y retenciones (SIRE, SICORE y SIRCAR)
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
         <ol className="list-decimal space-y-2 pl-6 text-muted-foreground">
@@ -50,6 +53,25 @@ export function _FiscalExportsGuide() {
           <li>
             Las compras con comprobante <strong>B</strong> o <strong>C</strong> no discriminan
             IVA: van en comprobantes pero no en alícuotas.
+          </li>
+          <li>
+            Una venta a un <strong>consumidor final</strong> sin CUIT ni DNI sale como
+            &quot;CONSUMIDOR FINAL&quot;, sin documento. Los <strong>gastos bancarios</strong> salen
+            con el comprobante 099 (otros comprobantes), con su IVA como crédito fiscal.
+          </li>
+        </ul>
+        <p className="font-medium text-foreground">Retenciones</p>
+        <ul className="list-disc space-y-1 pl-6 text-muted-foreground">
+          <li>
+            Salen de las <strong>órdenes de pago confirmadas</strong> del mes, un archivo por
+            sistema: <strong>SIRE F.2005</strong> (IVA) y <strong>SIRE F.2004</strong> (Seguridad
+            Social) para emitir los certificados por lote, <strong>SICORE</strong> (Ganancias) para
+            importar en el aplicativo y <strong>SIRCAR</strong> (IIBB), uno por cada jurisdicción.
+          </li>
+          <li>
+            Cada retención necesita el <strong>régimen</strong> y la <strong>base imponible</strong>{' '}
+            (en IIBB, la <strong>jurisdicción</strong>), que se cargan en la orden de pago. Si
+            falta alguno, la retención no entra y la pantalla avisa en qué orden completarla.
           </li>
         </ul>
         <p className="text-sm text-muted-foreground">

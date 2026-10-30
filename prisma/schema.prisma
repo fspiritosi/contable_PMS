@@ -3565,6 +3565,12 @@ model PaymentOrderWithholding {
   rate              Decimal            @db.Decimal(5, 2)
   amount            Decimal            @db.Decimal(15, 2)
   certificateNumber String?            @map("certificate_number")
+  // Datos de los archivos de ARCA y de la Comisión Arbitral (TSK-813): código de régimen de
+  // SIRE/SICORE/SIRCAR, base sujeta a retención y jurisdicción del Convenio Multilateral
+  // (901-924, solo IIBB). Opcionales: las retenciones anteriores no los tienen.
+  regimeCode        String?            @map("regime_code")
+  taxableBase       Decimal?           @map("taxable_base") @db.Decimal(15, 2)
+  jurisdiction      String?
 
   paymentOrder PaymentOrder @relation(fields: [paymentOrderId], references: [id], onDelete: Cascade)
 

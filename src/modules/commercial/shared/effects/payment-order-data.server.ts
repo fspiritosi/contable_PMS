@@ -20,6 +20,26 @@ const endorsedCheckIdOf = (payment: CreatePaymentOrderFormData['payments'][numbe
   payment.checkOwnership === 'THIRD_PARTY' ? payment.endorsedCheckId || null : null;
 
 /**
+ * Filas de las retenciones de una OP, para el alta y para la edición. Régimen, base y
+ * jurisdicción (TSK-813) son opcionales; la jurisdicción solo aplica a IIBB.
+ */
+export function paymentOrderWithholdingRows(
+  paymentOrderId: string,
+  withholdings: CreatePaymentOrderFormData['withholdings']
+): Prisma.PaymentOrderWithholdingCreateManyInput[] {
+  return withholdings.map((w) => ({
+    paymentOrderId,
+    taxType: w.taxType,
+    rate: new Prisma.Decimal(w.rate),
+    amount: new Prisma.Decimal(w.amount),
+    certificateNumber: w.certificateNumber || null,
+    regimeCode: w.regimeCode || null,
+    taxableBase: w.taxableBase ? new Prisma.Decimal(w.taxableBase) : null,
+    jurisdiction: w.taxType === 'IIBB' ? w.jurisdiction || null : null,
+  }));
+}
+
+/**
  * Los datos llegan del cliente (edición de borrador o propuesta del motor): la OP, el
  * proveedor, las facturas, los gastos, las cajas, las cuentas bancarias, las
  * tarjetas y los cheques a endosar tienen que ser de la empresa, y las facturas, del
@@ -146,14 +166,6 @@ export async function writePaymentOrderDataTx(
   }
 
   if (input.withholdings && input.withholdings.length > 0) {
-    await tx.paymentOrderWithholding.createMany({
-      data: input.withholdings.map((w) => ({
-        paymentOrderId,
-        taxType: w.taxType,
-        rate: new Prisma.Decimal(w.rate),
-        amount: new Prisma.Decimal(w.amount),
-        certificateNumber: w.certificateNumber || null,
-      })),
-    });
+    await tx.paymentOrderWithholding.createMany({ data: paymentOrderWithholdingRows(paymentOrderId, input.withholdings) });
   }
 }

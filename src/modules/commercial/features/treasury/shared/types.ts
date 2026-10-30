@@ -372,6 +372,9 @@ export interface PaymentOrderWithDetails extends Record<string, unknown> {
     rate: number;
     amount: number;
     certificateNumber: string | null;
+    regimeCode: string | null;
+    taxableBase: number | null;
+    jurisdiction: string | null;
   }>;
   bankMovements?: Array<{
     id: string;

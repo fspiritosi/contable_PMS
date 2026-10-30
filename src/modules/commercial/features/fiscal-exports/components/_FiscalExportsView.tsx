@@ -7,36 +7,94 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 
 import { Button } from '@/shared/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/shared/components/ui/card';
 import { Label } from '@/shared/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/shared/components/ui/select';
 import { logger } from '@/shared/lib/logger';
 import { todayBusinessDay } from '@/shared/utils/business-day';
 
 import { generateLibroIVADigital } from '../libro-iva-digital/actions.server';
-import { countRecords } from './download-txt';
+import { generateWithholdingFiles } from '../withholdings/actions.server';
+import type { WithholdingFiles } from '../withholdings/build-files';
 import { _FiscalFileRow, type FiscalFile } from './_FiscalFileRow';
+import { _WithholdingFilesCard } from './_WithholdingFilesCard';
+import { countRecords } from './download-txt';
 
 const MONTH_NAMES = [
-  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
+  'Enero',
+  'Febrero',
+  'Marzo',
+  'Abril',
+  'Mayo',
+  'Junio',
+  'Julio',
+  'Agosto',
+  'Septiembre',
+  'Octubre',
+  'Noviembre',
+  'Diciembre',
 ];
 interface Period {
   year: number;
   month: number; // 1-12
 }
 
-// SIRE y SIRCAR también tienen generador, pero sus diseños de registro no se validaron
-// contra los de ARCA y la Comisión Arbitral: no se ofrecen hasta hacerlo (TSK-796).
-async function generateFiles({ year, month }: Period): Promise<FiscalFile[]> {
-  const libro = await generateLibroIVADigital(year, month);
-  const name = (file: string) => `LIBRO_IVA_DIGITAL_${file}_${year}${String(month).padStart(2, '0')}.txt`;
-  return [
-    { label: 'Ventas: comprobantes', description: 'Facturas, notas de crédito y de débito emitidas', filename: name('VENTAS_CBTE'), content: libro.ventas.cabecera, records: libro.ventas.registros },
-    { label: 'Ventas: alícuotas', description: 'Una línea por comprobante y alícuota de IVA', filename: name('VENTAS_ALICUOTAS'), content: libro.ventas.alicuotas, records: countRecords(libro.ventas.alicuotas) },
-    { label: 'Compras: comprobantes', description: 'Facturas, notas de crédito y de débito recibidas', filename: name('COMPRAS_CBTE'), content: libro.compras.cabecera, records: libro.compras.registros },
-    { label: 'Compras: alícuotas', description: 'Una línea por comprobante y alícuota de IVA (las B y C no llevan)', filename: name('COMPRAS_ALICUOTAS'), content: libro.compras.alicuotas, records: countRecords(libro.compras.alicuotas) },
-  ];
+const periodCode = ({ year, month }: Period) => `${year}${String(month).padStart(2, '0')}`;
+
+/** Libro IVA Digital (TSK-796) y archivos de retenciones (TSK-813) del mes. */
+async function generateFiles(
+  period: Period
+): Promise<{ libro: FiscalFile[]; withholdings: WithholdingFiles }> {
+  const [libro, withholdings] = await Promise.all([
+    generateLibroIVADigital(period.year, period.month),
+    generateWithholdingFiles(period.year, period.month),
+  ]);
+  const name = (file: string) => `LIBRO_IVA_DIGITAL_${file}_${periodCode(period)}.txt`;
+  return {
+    withholdings,
+    libro: [
+      {
+        label: 'Ventas: comprobantes',
+        description: 'Facturas, notas de crédito y de débito emitidas',
+        filename: name('VENTAS_CBTE'),
+        content: libro.ventas.cabecera,
+        records: libro.ventas.registros,
+      },
+      {
+        label: 'Ventas: alícuotas',
+        description: 'Una línea por comprobante y alícuota de IVA',
+        filename: name('VENTAS_ALICUOTAS'),
+        content: libro.ventas.alicuotas,
+        records: countRecords(libro.ventas.alicuotas),
+      },
+      {
+        label: 'Compras: comprobantes',
+        description: 'Facturas, notas de crédito y de débito recibidas',
+        filename: name('COMPRAS_CBTE'),
+        content: libro.compras.cabecera,
+        records: libro.compras.registros,
+      },
+      {
+        label: 'Compras: alícuotas',
+        description: 'Una línea por comprobante y alícuota de IVA (las B y C no llevan)',
+        filename: name('COMPRAS_ALICUOTAS'),
+        content: libro.compras.alicuotas,
+        records: countRecords(libro.compras.alicuotas),
+      },
+    ],
+  };
 }
 
 export function _FiscalExportsView() {
@@ -65,7 +123,8 @@ export function _FiscalExportsView() {
       <div>
         <h1 className="text-2xl font-bold">Archivos ARCA</h1>
         <p className="text-sm text-muted-foreground">
-          Generá los archivos TXT del Libro IVA Digital del mes para importar en ARCA
+          Generá los archivos TXT del mes para importar en ARCA: Libro IVA Digital, SIRE, SICORE y
+          SIRCAR
         </p>
       </div>
 
@@ -73,17 +132,25 @@ export function _FiscalExportsView() {
         <CardHeader>
           <CardTitle>Período</CardTitle>
           <CardDescription>
-            Entran los comprobantes del mes en cualquier estado salvo borrador y anulado
+            Entran los comprobantes del mes en cualquier estado salvo borrador y anulado, y las
+            órdenes de pago confirmadas
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap items-end gap-4">
           <div className="grid gap-2">
             <Label>Mes</Label>
-            <Select value={String(period.month)} onValueChange={(v) => update({ month: Number(v) })}>
-              <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
+            <Select
+              value={String(period.month)}
+              onValueChange={(v) => update({ month: Number(v) })}
+            >
+              <SelectTrigger className="w-[160px]">
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 {MONTH_NAMES.map((name, idx) => (
-                  <SelectItem key={name} value={String(idx + 1)}>{name}</SelectItem>
+                  <SelectItem key={name} value={String(idx + 1)}>
+                    {name}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -91,34 +158,49 @@ export function _FiscalExportsView() {
           <div className="grid gap-2">
             <Label>Año</Label>
             <Select value={String(period.year)} onValueChange={(v) => update({ year: Number(v) })}>
-              <SelectTrigger className="w-[100px]"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-[100px]">
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 {yearOptions.map((y) => (
-                  <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                  <SelectItem key={y} value={String(y)}>
+                    {y}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
           <Button onClick={() => generate.mutate(period)} disabled={generate.isPending}>
-            {generate.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileText className="mr-2 h-4 w-4" />}
+            {generate.isPending ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <FileText className="mr-2 h-4 w-4" />
+            )}
             Generar archivos
           </Button>
         </CardContent>
       </Card>
 
       {generate.data && (
-        <Card>
-          <CardHeader>
-            <CardTitle>
-              Libro IVA Digital de {MONTH_NAMES[period.month - 1]} {period.year}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {generate.data.map((file) => (
-              <_FiscalFileRow key={file.filename} file={file} />
-            ))}
-          </CardContent>
-        </Card>
+        <>
+          <Card>
+            <CardHeader>
+              <CardTitle>
+                Libro IVA Digital de {MONTH_NAMES[period.month - 1]} {period.year}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {generate.data.libro.map((file) => (
+                <_FiscalFileRow key={file.filename} file={file} />
+              ))}
+            </CardContent>
+          </Card>
+          <_WithholdingFilesCard
+            files={generate.data.withholdings}
+            title={`Retenciones de ${MONTH_NAMES[period.month - 1]} ${period.year}`}
+            period={periodCode(period)}
+          />
+        </>
       )}
     </div>
   );

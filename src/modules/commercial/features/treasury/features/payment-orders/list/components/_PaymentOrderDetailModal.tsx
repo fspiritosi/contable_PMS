@@ -12,6 +12,7 @@ import type { PaymentOrderWithDetails } from '../../../../shared/types';
 import moment from 'moment';
 import { logger } from '@/shared/lib/logger';
 import { _DocumentAttachment } from '@/modules/commercial/shared/components/_DocumentAttachment';
+import { jurisdictionLabel } from '@/modules/commercial/shared/convenio-multilateral';
 
 interface PaymentOrderDetailModalProps {
   paymentOrderId: string | null;
@@ -204,6 +205,10 @@ export function PaymentOrderDetailModal({ paymentOrderId, open, onOpenChange }: 
                           <p className="text-sm text-muted-foreground">
                             Alícuota: {w.rate}%
                             {w.certificateNumber && ` | Cert. N° ${w.certificateNumber}`}
+                            {w.regimeCode && ` | Régimen ${w.regimeCode}`}
+                            {w.taxableBase !== null &&
+                              ` | Base $${w.taxableBase.toLocaleString('es-AR', { minimumFractionDigits: 2 })}`}
+                            {w.jurisdiction && ` | ${jurisdictionLabel(w.jurisdiction)}`}
                           </p>
                         </div>
                         <div className="text-right">

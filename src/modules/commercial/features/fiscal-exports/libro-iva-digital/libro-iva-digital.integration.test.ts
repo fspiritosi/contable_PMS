@@ -227,3 +227,100 @@ describe.skipIf(!dbAvailable)('Libro IVA Digital: alícuotas de venta con descue
     ]);
   });
 });
+
+describe.skipIf(!dbAvailable)('Libro IVA Digital: consumidor final y gastos bancarios (TSK-814)', () => {
+  const PREFIX_814 = 'TSK814-LIBRO-';
+  let companyId: string;
+  const issueDate = new Date('2026-08-14T15:00:00.000Z');
+
+  beforeAll(async () => {
+    ({ id: companyId } = await prisma.company.create({
+      data: { name: `${PREFIX_814}Empresa`, isActive: true },
+      select: { id: true },
+    }));
+    vi.mocked(getActiveCompanyId).mockResolvedValue(companyId);
+    const [anonymous, withDni, pointOfSale, bank] = await Promise.all([
+      prisma.contractor.create({ data: { companyId, name: `${PREFIX_814}Mostrador` } }),
+      prisma.contractor.create({ data: { companyId, name: `${PREFIX_814}Gomez Ana`, taxId: '28111222' } }),
+      prisma.salesPointOfSale.create({ data: { companyId, number: 9814, name: `${PREFIX_814}PV`, createdBy: 'test' } }),
+      prisma.supplier.create({
+        data: {
+          companyId,
+          code: `${PREFIX_814}BANCO`,
+          businessName: `${PREFIX_814}Banco`,
+          taxId: '30500010912',
+          taxCondition: 'RESPONSABLE_INSCRIPTO',
+          createdBy: 'test',
+        },
+      }),
+    ]);
+    const amounts = { subtotal: 1000, netTaxed: 1000, vatAmount: 210, total: 1210 };
+    for (const [number, customer] of [anonymous, withDni].entries()) {
+      await prisma.salesInvoice.create({
+        data: {
+          companyId,
+          customerId: customer.id,
+          pointOfSaleId: pointOfSale.id,
+          voucherType: 'FACTURA_B',
+          number: number + 1,
+          fullNumber: `9814-${String(number + 1).padStart(8, '0')}`,
+          issueDate,
+          status: 'CONFIRMED',
+          ...amounts,
+          createdBy: 'test',
+        },
+      });
+    }
+    // Resumen bancario de agosto: comisiones con IVA discriminado.
+    await prisma.purchaseInvoice.create({
+      data: {
+        companyId,
+        supplierId: bank.id,
+        voucherType: 'GASTOS_BANCARIOS',
+        pointOfSale: '0001',
+        number: '00000815',
+        fullNumber: '0001-00000815',
+        issueDate,
+        status: 'CONFIRMED',
+        ...amounts,
+        createdBy: 'test',
+        lines: {
+          create: [
+            { description: 'Comisiones', quantity: 1, unitCost: 1000, vatRate: 21, vatAmount: 210, subtotal: 1000, total: 1210 },
+          ],
+        },
+      },
+    });
+  });
+
+  afterAll(async () => {
+    if (!companyId) return;
+    await prisma.salesInvoice.deleteMany({ where: { companyId } });
+    await prisma.purchaseInvoice.deleteMany({ where: { companyId } });
+    await prisma.salesPointOfSale.deleteMany({ where: { companyId } });
+    await prisma.supplier.deleteMany({ where: { companyId } });
+    await prisma.contractor.deleteMany({ where: { companyId } });
+    await prisma.company.deleteMany({ where: { id: companyId } });
+  });
+
+  it('venta a consumidor final sin identificar: código 99, número 0 y "CONSUMIDOR FINAL"', async () => {
+    const [anonymous, withDni] = (await generateLibroIVADigital(2026, 8)).ventas.cabecera.split('\r\n');
+
+    expect(anonymous.slice(56, 58)).toBe('99');
+    expect(anonymous.slice(58, 78)).toBe('0'.repeat(20));
+    expect(anonymous.slice(78, 108)).toBe('CONSUMIDOR FINAL'.padEnd(30));
+    // Identificado con DNI: va su documento y su nombre.
+    expect(withDni.slice(56, 58)).toBe('96');
+    expect(withDni.slice(78, 108)).toBe(`${PREFIX_814}Gomez Ana`.padEnd(30));
+  });
+
+  it('gastos bancarios: comprobante 099 con punto de venta en ceros, también en sus alícuotas', async () => {
+    const { compras } = await generateLibroIVADigital(2026, 8);
+
+    expect(compras.cabecera.slice(8, 11)).toBe('099');
+    expect(compras.cabecera.slice(11, 16)).toBe('00000');
+    expect(compras.cabecera.slice(16, 36)).toBe('815'.padStart(20, '0'));
+    expect(compras.alicuotas.slice(0, 3)).toBe('099');
+    expect(compras.alicuotas.slice(3, 8)).toBe('00000');
+  });
+});

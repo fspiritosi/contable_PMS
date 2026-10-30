@@ -24,7 +24,10 @@ import {
   type EntryPreflight,
 } from '../../shared/entry-preflight';
 import { applyPaymentOrderEffectsTx } from '@/modules/commercial/shared/effects/payment-order.server';
-import { writePaymentOrderDataTx } from '@/modules/commercial/shared/effects/payment-order-data.server';
+import {
+  paymentOrderWithholdingRows,
+  writePaymentOrderDataTx,
+} from '@/modules/commercial/shared/effects/payment-order-data.server';
 import { calculatePendingAmount, hasPendingBalance } from './shared/pending-invoices';
 
 /**
@@ -397,13 +400,7 @@ export async function createPaymentOrder(data: CreatePaymentOrderFormData) {
       // Crear retenciones
       if (data.withholdings && data.withholdings.length > 0) {
         await tx.paymentOrderWithholding.createMany({
-          data: data.withholdings.map((w) => ({
-            paymentOrderId: newPaymentOrder.id,
-            taxType: w.taxType,
-            rate: new Prisma.Decimal(w.rate),
-            amount: new Prisma.Decimal(w.amount),
-            certificateNumber: w.certificateNumber || null,
-          })),
+          data: paymentOrderWithholdingRows(newPaymentOrder.id, data.withholdings),
         });
       }
 
@@ -781,6 +778,9 @@ export async function getPaymentOrder(id: string): Promise<PaymentOrderWithDetai
             rate: true,
             amount: true,
             certificateNumber: true,
+            regimeCode: true,
+            taxableBase: true,
+            jurisdiction: true,
           },
         },
         bankMovements: {
@@ -827,6 +827,7 @@ export async function getPaymentOrder(id: string): Promise<PaymentOrderWithDetai
         ...w,
         rate: Number(w.rate),
         amount: Number(w.amount),
+        taxableBase: w.taxableBase === null ? null : Number(w.taxableBase),
       })),
       bankMovements: paymentOrder.bankMovements?.map((mov) => ({
         ...mov,
