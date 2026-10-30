@@ -16,6 +16,7 @@ import {
 import { revalidatePath } from 'next/cache';
 import moment from 'moment';
 import { isCreditNote } from '@/modules/commercial/shared/voucher-utils';
+import { salesVatByRate } from '@/shared/lib/sales-vat-by-rate';
 
 // ============================================
 // SOLICITAR CAE
@@ -49,6 +50,8 @@ export async function requestCAE(invoiceId: string): Promise<RequestCAEResult> {
         netNonTaxed: true,
         netExempt: true,
         vatAmount: true,
+        globalDiscountPercent: true,
+        globalDiscountAmount: true,
         otherTaxes: true,
         total: true,
         cae: true,
@@ -124,21 +127,12 @@ export async function requestCAE(invoiceId: string): Promise<RequestCAEResult> {
       );
     }
 
-    // Mapear IVA por alícuota
-    const ivaByRate = new Map<number, { baseImp: number; importe: number }>();
-    for (const line of invoice.lines) {
-      if (line.lineType !== 'TAXED') continue;
-      const rate = Number(line.vatRate);
-      const existing = ivaByRate.get(rate) ?? { baseImp: 0, importe: 0 };
-      existing.baseImp += Number(line.subtotal);
-      existing.importe += Number(line.vatAmount);
-      ivaByRate.set(rate, existing);
-    }
-
-    const ivaLines = Array.from(ivaByRate.entries()).map(([rate, amounts]) => ({
+    // IVA por alícuota. ARCA exige que las AlicIva sumen ImpNeto e ImpIVA, que salen de la
+    // cabecera: las líneas guardan neto e IVA antes del descuento global (TSK-762).
+    const ivaLines = salesVatByRate(invoice).map(({ rate, base, vat }) => ({
       id: IVA_RATE_MAP[rate] ?? 5,
-      baseImp: amounts.baseImp,
-      importe: amounts.importe,
+      baseImp: base,
+      importe: vat,
     }));
 
     // Mapear percepciones e impuestos internos como tributos.

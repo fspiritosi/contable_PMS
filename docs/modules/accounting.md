@@ -58,7 +58,9 @@ DRAFT ──(post)──> POSTED ──(reverse)──> REVERSED
 Se generan al confirmar documentos comerciales (ver [Modulo Comercial](commercial.md#integracion-contable)):
 - Facturas de venta/compra (incluyen una linea por percepcion y otra por impuestos internos, TSK-644;
   la cuenta de cada linea es la del item o la "por defecto" de configuracion, y si falta la
-  confirmacion se bloquea, TSK-721 — ver [Resolucion de la cuenta de linea](#resolucion-de-la-cuenta-de-linea-tsk-721))
+  confirmacion se bloquea, TSK-721 — ver [Resolucion de la cuenta de linea](#resolucion-de-la-cuenta-de-linea-tsk-721);
+  con descuento global en venta, neto e IVA van con el descuento y el centro de costo se reparte sobre el
+  neto descontado, TSK-762 — ver [Descuento global](commercial.md#descuento-global-de-la-factura-de-venta-tsk-762))
 - Recibos de cobro, ordenes de pago y gastos (desde TSK-728 la confirmacion se bloquea si falta
   una cuenta; los medios de pago sin cuenta se omiten con aviso — ver
   [Asientos de recibos, OP y gastos](#asientos-de-recibos-op-y-gastos-tsk-728))

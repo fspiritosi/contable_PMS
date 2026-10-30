@@ -498,6 +498,31 @@ Facturas de compra y de venta pueden registrar tributos no-IVA que el comprobant
 
 `total = subtotal + vatAmount + otherTaxes`.
 
+### Descuento global de la factura de venta (TSK-762)
+
+`globalDiscountPercent` / `globalDiscountAmount` (cabecera) se prorratean por línea en proporción a su
+neto (`buildSalesInvoiceAmounts`, `invoices/shared/totals.ts`). La **cabecera** (`subtotal`/`netTaxed`,
+`vatAmount`, `total`) guarda los importes **con** descuento; cada **línea** guarda su neto e IVA **antes**
+del descuento global (los descuentos por línea, en cambio, sí reducen el `subtotal` de la línea).
+
+Por eso nada que desglose el IVA por alícuota suma las líneas: usa
+`salesVatByRate` (`src/shared/lib/sales-vat-by-rate.ts`), que escala cada línea por
+`netTaxed / Σ subtotal de línea` y ajusta al centavo a la cabecera (bases = neto gravado, IVA = IVA del
+comprobante; la diferencia de redondeo va a la alícuota de mayor importe, hasta un centavo por línea).
+Lo usan:
+
+| Dónde | Por qué |
+|-------|---------|
+| Emisión a ARCA (`requestCAE`, `AlicIva`) | ARCA exige que las `AlicIva` sumen `ImpNeto` e `ImpIVA`, que salen de la cabecera |
+| Asiento de la FV (`createJournalEntryForSalesInvoice`) | Deudores va por el total con descuento; neto e IVA también (antes quedaba descuadrado por el descuento y no se confirmaba) |
+| Libro IVA Digital (alícuotas de ventas) | El registro de alícuotas tiene que cerrar con el comprobante |
+| Posición mensual de IVA (desglose por alícuota) | El desglose suma los totales de ventas |
+| PDF de la factura A (cuadro de IVA) y Libro IVA Ventas (Reportes de Ventas) | Muestran el IVA del comprobante |
+
+Criterio contable: igual que el descuento por línea, el global **reduce el neto** de cada línea (no hay
+cuenta de descuentos otorgados) y el reparto por centro de costo va sobre el neto con descuento. El
+reporte de ventas por producto sigue sumando las líneas sin el descuento global.
+
 **Por qué `otherTaxes` incluye las percepciones:** es la definición de AFIP para "Otros
 Tributos", y es lo que la emisión electrónica informa como `ImpTrib` — AFIP valida
 `ImpTrib == Σ Tributos.Importe`, así que percepciones e impuestos internos deben viajar juntos
@@ -705,7 +730,7 @@ OC con 3 líneas:
 |--------|-----------|---------|
 | Stock -qty | Si no es ND | Decrementa stock del depósito principal. Si la factura viene de remitos de entrega, solo descuenta lo que exceda lo entregado por ellos, por producto: el remito ya descontó su mercadería al crearse (TSK-798) |
 | Stock +qty | Si es NC | Restaura stock (devolución del cliente) |
-| Asiento Contable | Siempre | Dr: Ctas por Cobrar → Cr: cuenta del ítem (`defaultIncomeAccountId`) o Ventas por defecto + IVA DF. Si el asiento falla, la confirmación se revierte (TSK-721) |
+| Asiento Contable | Siempre | Dr: Ctas por Cobrar → Cr: cuenta del ítem (`defaultIncomeAccountId`) o Ventas por defecto + IVA DF. Con descuento global, neto e IVA van con el descuento ([TSK-762](#descuento-global-de-la-factura-de-venta-tsk-762)). Si el asiento falla, la confirmación se revierte (TSK-721) |
 | Validación de cuentas de línea | Siempre | Aborta si alguna línea no resuelve cuenta (ítem → Ventas por defecto) o la cuenta resuelta no es imputable (TSK-721) |
 | Auto-compensación NC | Si es NC | Aplica NC contra facturas pendientes |
 

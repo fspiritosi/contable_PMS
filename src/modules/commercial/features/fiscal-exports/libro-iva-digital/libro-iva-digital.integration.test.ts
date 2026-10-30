@@ -156,3 +156,74 @@ describe.skipIf(!dbAvailable)('Libro IVA Digital: estados que entran al libro (T
     expect(result.compras.alicuotas.split('\r\n')).toHaveLength(3);
   });
 });
+
+describe.skipIf(!dbAvailable)('Libro IVA Digital: alícuotas de venta con descuento global (TSK-762)', () => {
+  const PREFIX_762 = 'TSK762-LIBRO-';
+  let companyId: string;
+
+  beforeAll(async () => {
+    ({ id: companyId } = await prisma.company.create({
+      data: { name: `${PREFIX_762}Empresa`, isActive: true },
+      select: { id: true },
+    }));
+    vi.mocked(getActiveCompanyId).mockResolvedValue(companyId);
+    const [customer, pointOfSale, product] = await Promise.all([
+      prisma.contractor.create({ data: { companyId, name: `${PREFIX_762}Cliente`, taxId: '20111111112' } }),
+      prisma.salesPointOfSale.create({ data: { companyId, number: 9762, name: `${PREFIX_762}PV`, createdBy: 'test' } }),
+      prisma.product.create({
+        data: { companyId, code: `${PREFIX_762}P`, name: `${PREFIX_762}Producto`, usage: 'SALE', trackStock: false, createdBy: 'test' },
+      }),
+    ]);
+    // Neto 1000 (21%) + 500 (10,5%) con 10% de descuento global: la cabecera guarda neto 1350 e IVA
+    // 236,25; las líneas, sus importes antes del descuento.
+    await prisma.salesInvoice.create({
+      data: {
+        companyId,
+        customerId: customer.id,
+        pointOfSaleId: pointOfSale.id,
+        voucherType: 'FACTURA_A',
+        number: 1,
+        fullNumber: '9762-00000001',
+        issueDate: new Date('2026-07-15T12:00:00.000Z'),
+        status: 'CONFIRMED',
+        subtotal: 1350,
+        netTaxed: 1350,
+        vatAmount: 236.25,
+        total: 1586.25,
+        globalDiscountPercent: 10,
+        totalBeforeDiscount: 1500,
+        discountTotal: 150,
+        createdBy: 'test',
+        lines: {
+          create: [
+            { productId: product.id, description: '21', quantity: 1, unitPrice: 1000, vatRate: 21, vatAmount: 210, subtotal: 1000, total: 1210 },
+            { productId: product.id, description: '10,5', quantity: 1, unitPrice: 500, vatRate: 10.5, vatAmount: 52.5, subtotal: 500, total: 552.5 },
+          ],
+        },
+      },
+    });
+  });
+
+  afterAll(async () => {
+    if (!companyId) return;
+    await prisma.salesInvoice.deleteMany({ where: { companyId } });
+    await prisma.product.deleteMany({ where: { companyId } });
+    await prisma.salesPointOfSale.deleteMany({ where: { companyId } });
+    await prisma.contractor.deleteMany({ where: { companyId } });
+    await prisma.company.deleteMany({ where: { id: companyId } });
+  });
+
+  it('cada alícuota va con su base e IVA ya descontados y suman la cabecera', async () => {
+    const result = await generateLibroIVADigital(2026, 7);
+    const rows = result.ventas.alicuotas.split('\r\n').map((line) => ({
+      neto: Number(line.slice(28, 43)) / 100,
+      codigo: Number(line.slice(43, 47)),
+      iva: Number(line.slice(47, 62)) / 100,
+    }));
+
+    expect(rows).toEqual([
+      { neto: 900, codigo: 5, iva: 189 },
+      { neto: 450, codigo: 4, iva: 47.25 },
+    ]);
+  });
+});

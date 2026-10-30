@@ -20,6 +20,7 @@ import {
 import { entriesWithoutDocumentWhere } from '../../shared/utils/entry-document-link';
 import { isCreditNote } from '@/modules/commercial/shared/voucher-utils';
 import { getActiveCompanyId } from '@/shared/lib/company';
+import { salesVatByRate } from '@/shared/lib/sales-vat-by-rate';
 import {
   groupByCostCenter,
   summarizeDrafts,
@@ -1419,8 +1420,11 @@ export async function getMonthlyVATReport(
       select: {
         voucherType: true,
         subtotal: true,
+        netTaxed: true,
         vatAmount: true,
         total: true,
+        globalDiscountPercent: true,
+        globalDiscountAmount: true,
         lines: {
           select: {
             vatRate: true,
@@ -1490,13 +1494,14 @@ export async function getMonthlyVATReport(
     // Agrupar IVA por alícuota (con signo para NC)
     const rateMap = new Map<number, { salesBase: number; salesVAT: number; purchasesBase: number; purchasesVAT: number }>();
 
+    // Ventas: con el descuento global y ajustado a la cabecera (TSK-762), así el desglose suma
+    // los totales de arriba; las líneas guardan neto e IVA antes del descuento.
     for (const inv of salesInvoices) {
       const sign = isCreditNote(inv.voucherType) ? -1 : 1;
-      for (const line of inv.lines) {
-        const rate = Number(line.vatRate);
+      for (const { rate, base, vat } of salesVatByRate(inv)) {
         const existing = rateMap.get(rate) || { salesBase: 0, salesVAT: 0, purchasesBase: 0, purchasesVAT: 0 };
-        existing.salesBase += Number(line.subtotal) * sign;
-        existing.salesVAT += Number(line.vatAmount) * sign;
+        existing.salesBase += base * sign;
+        existing.salesVAT += vat * sign;
         rateMap.set(rate, existing);
       }
     }

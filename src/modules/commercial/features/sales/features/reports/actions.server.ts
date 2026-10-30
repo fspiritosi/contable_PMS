@@ -6,6 +6,7 @@ import { logger } from '@/shared/lib/logger';
 import { getActiveCompanyId } from '@/shared/lib/company';
 import { checkPermission } from '@/shared/lib/permissions';
 import moment from 'moment';
+import { salesVatByRate } from '@/shared/lib/sales-vat-by-rate';
 
 // ============================================
 // VENTAS POR PERÍODO
@@ -293,8 +294,11 @@ export async function getVATSalesBook(startDate: Date, endDate: Date) {
         voucherType: true,
         issueDate: true,
         subtotal: true,
+        netTaxed: true,
         vatAmount: true,
         total: true,
+        globalDiscountPercent: true,
+        globalDiscountAmount: true,
         cae: true,
         customer: {
           select: {
@@ -317,27 +321,9 @@ export async function getVATSalesBook(startDate: Date, endDate: Date) {
       ],
     });
 
-    // Procesar cada factura con detalle de IVA por alícuota
+    // Procesar cada factura con detalle de IVA por alícuota: con el descuento global y ajustado a
+    // la cabecera (TSK-762); las líneas guardan neto e IVA antes del descuento.
     const vatBook = invoices.map((invoice) => {
-      // Agrupar IVA por alícuota
-      const vatByRate = new Map<number, { base: number; amount: number }>();
-
-      for (const line of invoice.lines) {
-        const rate = Number(line.vatRate);
-        const subtotal = Number(line.subtotal);
-        const vatAmount = Number(line.vatAmount);
-
-        if (vatByRate.has(rate)) {
-          const existing = vatByRate.get(rate)!;
-          vatByRate.set(rate, {
-            base: existing.base + subtotal,
-            amount: existing.amount + vatAmount,
-          });
-        } else {
-          vatByRate.set(rate, { base: subtotal, amount: vatAmount });
-        }
-      }
-
       return {
         id: invoice.id,
         fullNumber: invoice.fullNumber,
@@ -350,12 +336,8 @@ export async function getVATSalesBook(startDate: Date, endDate: Date) {
         vatAmount: Number(invoice.vatAmount),
         total: Number(invoice.total),
         cae: invoice.cae,
-        vatByRate: Array.from(vatByRate.entries())
-          .map(([rate, data]) => ({
-            rate,
-            base: data.base,
-            amount: data.amount,
-          }))
+        vatByRate: salesVatByRate(invoice)
+          .map(({ rate, base, vat }) => ({ rate, base, amount: vat }))
           .sort((a, b) => b.rate - a.rate),
       };
     });
