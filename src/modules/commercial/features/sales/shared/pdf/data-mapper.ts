@@ -7,6 +7,7 @@ import type { PdfTemplateConfig } from '@/shared/utils/pdf-themes';
 import { FALLBACK_THEME_CONFIG } from '@/shared/utils/pdf-themes';
 import { customerTaxConditionLabels } from '@/shared/utils/mappers';
 import { perceptionLabel } from '@/modules/commercial/shared/perceptions';
+import { salesVatByRate } from '@/shared/lib/sales-vat-by-rate';
 
 /**
  * Un `Decimal` de Prisma tal como llega acá: lo único que se le hace es
@@ -106,31 +107,23 @@ function extractInvoiceType(voucherType: string): 'A' | 'B' | 'C' {
 }
 
 /**
- * Agrupa IVA por alícuota
+ * IVA por alícuota del cuadro de la factura A: con el descuento global y ajustado a la cabecera
+ * (TSK-762). Las líneas guardan neto e IVA antes del descuento global; sumarlas mostraba un IVA
+ * por alícuota que no cerraba con el IVA del comprobante. En venta el subtotal es el neto gravado.
  */
-function groupVATByRate(
-  lines: InvoiceData['lines']
-): Array<{ rate: number; base: number; amount: number }> {
-  const vatMap = new Map<number, { base: number; amount: number }>();
-
-  for (const line of lines) {
-    const rate = Number(line.vatRate);
-    const subtotal = Number(line.subtotal);
-    const vatAmount = Number(line.vatAmount);
-
-    if (vatMap.has(rate)) {
-      const existing = vatMap.get(rate)!;
-      vatMap.set(rate, {
-        base: existing.base + subtotal,
-        amount: existing.amount + vatAmount,
-      });
-    } else {
-      vatMap.set(rate, { base: subtotal, amount: vatAmount });
-    }
-  }
-
-  return Array.from(vatMap.entries())
-    .map(([rate, data]) => ({ rate, ...data }))
+function groupVATByRate(invoice: InvoiceData): Array<{ rate: number; base: number; amount: number }> {
+  return salesVatByRate({
+    netTaxed: Number(invoice.subtotal),
+    vatAmount: Number(invoice.vatAmount),
+    globalDiscountPercent: invoice.globalDiscountPercent == null ? null : Number(invoice.globalDiscountPercent),
+    globalDiscountAmount: invoice.globalDiscountAmount == null ? null : Number(invoice.globalDiscountAmount),
+    lines: invoice.lines.map((line) => ({
+      vatRate: Number(line.vatRate),
+      subtotal: Number(line.subtotal),
+      vatAmount: Number(line.vatAmount),
+    })),
+  })
+    .map(({ rate, base, vat }) => ({ rate, base, amount: vat }))
     .sort((a, b) => b.rate - a.rate);
 }
 
@@ -215,7 +208,7 @@ export function mapInvoiceDataForPDF(
         amount: Number(p.amount),
       })),
       total: Number(invoice.total),
-      vatByRate: invoiceType === 'A' ? groupVATByRate(invoice.lines) : undefined,
+      vatByRate: invoiceType === 'A' ? groupVATByRate(invoice) : undefined,
       totalBeforeDiscount: invoice.totalBeforeDiscount ? Number(invoice.totalBeforeDiscount) : undefined,
       discountTotal: invoice.discountTotal ? Number(invoice.discountTotal) : undefined,
     },

@@ -7,6 +7,7 @@ import { checkPermission } from '@/shared/lib/permissions';
 import moment from 'moment';
 import { VOUCHER_TYPE_MAP, IVA_RATE_MAP, DOC_TIPO_MAP } from '@/modules/commercial/features/arca/services/utils';
 import { formatVentasCabecera, formatComprasCabecera, formatAlicuota, formatComprasAlicuota } from './formatters';
+import { salesVatByRate } from '@/shared/lib/sales-vat-by-rate';
 import type { LibroIVACabecera, LibroIVAResult } from './types';
 
 /** Comprobantes B y C: no discriminan IVA. */
@@ -56,6 +57,8 @@ export async function generateLibroIVADigital(
         netNonTaxed: true,
         netExempt: true,
         vatAmount: true,
+        globalDiscountPercent: true,
+        globalDiscountAmount: true,
         internalTaxes: true,
         otherTaxes: true,
         pointOfSale: { select: { number: true } },
@@ -85,15 +88,9 @@ export async function generateLibroIVADigital(
         .filter((p) => p.type === 'MUNICIPAL')
         .reduce((s, p) => s + Number(p.amount), 0);
 
-      const ivaByRate = new Map<number, { neto: number; iva: number }>();
-      for (const line of inv.lines) {
-        if (line.lineType !== 'TAXED') continue;
-        const rate = Number(line.vatRate);
-        const existing = ivaByRate.get(rate) ?? { neto: 0, iva: 0 };
-        existing.neto += Number(line.subtotal);
-        existing.iva += Number(line.vatAmount);
-        ivaByRate.set(rate, existing);
-      }
+      // Con el descuento global y ajustado a la cabecera (TSK-762): las líneas guardan neto e IVA
+      // antes del descuento.
+      const ivaByRate = new Map(salesVatByRate(inv).map(({ rate, base, vat }) => [rate, { neto: base, iva: vat }]));
 
       const cabecera: LibroIVACabecera = {
         fechaComprobante: moment(inv.issueDate).format('YYYYMMDD'),

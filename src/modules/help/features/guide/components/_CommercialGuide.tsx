@@ -417,6 +417,13 @@ export function _CommercialGuide() {
               El sistema calcula automáticamente subtotal, IVA y total
             </li>
             <li>
+              Si aplicás un <strong>descuento global</strong> (porcentaje o
+              monto), se reparte entre las líneas según su importe: baja el
+              neto y el IVA de cada una. Así lo informa a ARCA, así sale en el
+              asiento (también el reparto por centro de costo), en el Libro IVA,
+              en la Posición de IVA y en el PDF
+            </li>
+            <li>
               Haz clic en <strong>Guardar</strong> (queda en Borrador)
             </li>
           </ol>

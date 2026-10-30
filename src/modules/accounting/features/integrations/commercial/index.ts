@@ -46,6 +46,7 @@ import { BudgetStatus, AccountNature } from '@/generated/prisma/enums';
 import { prisma } from '@/shared/lib/prisma';
 import { logger } from '@/shared/lib/logger';
 import { BusinessError } from '@/shared/lib/action-result';
+import { salesGlobalDiscountFactor, salesVatByRate } from '@/shared/lib/sales-vat-by-rate';
 import {
   createJournalEntryTx,
   rewriteDraftJournalEntryTx,
@@ -338,6 +339,9 @@ export async function createJournalEntryForSalesInvoice(
         subtotal: true,
         vatAmount: true,
         total: true,
+        netTaxed: true,
+        globalDiscountPercent: true,
+        globalDiscountAmount: true,
         customer: { select: { name: true } },
         lines: {
           select: {
@@ -383,6 +387,9 @@ export async function createJournalEntryForSalesInvoice(
     }
 
     const docLabel = isNC ? 'Nota de crédito' : 'Factura de venta';
+    // Las líneas guardan neto e IVA antes del descuento global; la cabecera ya lo descuenta
+    // (TSK-762). Neto e IVA del asiento van con descuento, como el comprobante.
+    const discountFactor = salesGlobalDiscountFactor(invoice);
 
     const lines: JournalEntryLineInput[] = [
       {
@@ -401,6 +408,8 @@ export async function createJournalEntryForSalesInvoice(
     // una misma cuenta repartida entre varios centros genere una imputación
     // por cada uno: agrupando solo por cuenta, el reparto (o el centro
     // predeterminado del ítem) se perdía y sobrevivía un único centro.
+    // Con descuento global, el neto de cada línea ya descontado (TSK-762): así el reparto por
+    // centro también va sobre el neto con descuento.
     const expanded = expandByCostCenter(
       invoice.lines.map((line) => ({
         // El `!` está cubierto por findLinesMissingAccount, justo arriba.
@@ -408,7 +417,7 @@ export async function createJournalEntryForSalesInvoice(
           line.product.defaultIncomeAccountId,
           settings.salesAccountId
         )!,
-        subtotal: parseFloat(line.subtotal.toString()),
+        subtotal: parseFloat(line.subtotal.toString()) * discountFactor,
         allocations: line.costCenterAllocations.map((a) => ({
           costCenterId: a.costCenterId,
           percentage: Number(a.percentage),
@@ -417,8 +426,12 @@ export async function createJournalEntryForSalesInvoice(
       }))
     );
 
-    // IVA discriminado por alícuota
-    const vatByRate = groupVatByRate(invoice.lines);
+    // IVA discriminado por alícuota, con el descuento global y ajustado al IVA del comprobante
+    const vatByRate = new Map(
+      salesVatByRate(invoice)
+        .filter(({ vat }) => vat > 0)
+        .map(({ rate, vat }) => [rate, vat])
+    );
     for (const [rate] of vatByRate) {
       if (!getVatAccountId(settings, rate, 'DEBIT')) {
         // Antes: warn + continue → asiento descuadrado que moría en
