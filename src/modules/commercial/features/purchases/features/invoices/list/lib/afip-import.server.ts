@@ -10,6 +10,7 @@ import ExcelJS from 'exceljs';
 import moment from 'moment';
 import type { VoucherType, SupplierTaxCondition, InvoiceLineType } from '@/generated/prisma/enums';
 import { padPointOfSale, padVoucherNumber } from '@/modules/commercial/shared/voucher-number';
+import { purchaseVoucherMismatchMessage } from '../../shared/voucher-rules';
 
 // Mapeo de códigos AFIP a VoucherType del sistema
 const AFIP_VOUCHER_MAP: Record<number, VoucherType> = {
@@ -73,6 +74,12 @@ export interface AFIPImportResult {
   skipped: number;
   suppliersCreated: number;
   errors: Array<{ row: number; error: string }>;
+  /**
+   * Comprobantes importados cuya letra no corresponde a la condición IVA cargada del proveedor
+   * (TSK-787). El comprobante de AFIP es el dato real: se importa igual y se avisa para corregir la
+   * ficha del proveedor.
+   */
+  warnings: Array<{ row: number; warning: string }>;
   message: string;
 }
 
@@ -103,6 +110,7 @@ export async function importPurchaseInvoicesFromAFIP(
         skipped: 0,
         suppliersCreated: 0,
         errors: [{ row: 0, error: 'El archivo no contiene hojas de cálculo' }],
+        warnings: [],
         message: 'Archivo inválido',
       };
     }
@@ -117,6 +125,7 @@ export async function importPurchaseInvoicesFromAFIP(
         skipped: 0,
         suppliersCreated: 0,
         errors: [{ row: 0, error: 'El archivo no parece ser un export de "Mis Comprobantes Recibidos" de AFIP. Se espera "Fecha" en la primera columna de la fila 2.' }],
+        warnings: [],
         message: 'Formato de archivo no reconocido',
       };
     }
@@ -124,9 +133,11 @@ export async function importPurchaseInvoicesFromAFIP(
     // Cachear proveedores existentes por CUIT
     const existingSuppliers = await prisma.supplier.findMany({
       where: { companyId },
-      select: { id: true, taxId: true },
+      select: { id: true, taxId: true, taxCondition: true },
     });
     const supplierByCuit = new Map(existingSuppliers.map((s) => [s.taxId, s.id]));
+    const conditionBySupplier = new Map(existingSuppliers.map((s) => [s.id, s.taxCondition]));
+    const warnings: AFIPImportResult['warnings'] = [];
 
     // Obtener último código de proveedor para auto-incrementar
     const lastSupplier = await prisma.supplier.findFirst({
@@ -256,6 +267,7 @@ export async function importPurchaseInvoicesFromAFIP(
         skipped: 0,
         suppliersCreated: 0,
         errors: [{ row: 0, error: 'No se encontraron comprobantes para importar' }],
+        warnings: [],
         message: 'El archivo no contiene datos',
       };
     }
@@ -414,6 +426,16 @@ export async function importPurchaseInvoicesFromAFIP(
 
         existingInvoiceKeys.add(invoiceKey);
         imported++;
+
+        // Proveedor ya cargado con una condición que no corresponde a la letra (TSK-787). Los que
+        // se crean en esta importación toman la condición de la letra, así que no entran acá.
+        const mismatch = purchaseVoucherMismatchMessage(rowData.voucherType, conditionBySupplier.get(supplierId));
+        if (mismatch) {
+          warnings.push({
+            row: rowData.rowNumber,
+            warning: `${rowData.businessName} (${fullNumber}): ${mismatch} Revisá su condición IVA en la ficha del proveedor.`,
+          });
+        }
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
         errors.push({ row: rowData.rowNumber, error: msg });
@@ -433,6 +455,7 @@ export async function importPurchaseInvoicesFromAFIP(
       skipped,
       suppliersCreated,
       errors,
+      warnings,
       message: `Importación completada: ${imported} comprobantes importados, ${skipped} duplicados omitidos${suppliersCreated > 0 ? `, ${suppliersCreated} proveedores creados` : ''}`,
     };
   } catch (error) {

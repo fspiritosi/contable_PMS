@@ -30,6 +30,7 @@ import {
 } from '@/modules/commercial/shared/effects/purchase-invoice.server';
 import { writePurchaseInvoiceDataTx } from '@/modules/commercial/shared/effects/purchase-invoice-data.server';
 import { selectConfirmableInvoices, type BulkConfirmFailure } from '../shared/bulk-confirm';
+import { purchaseVoucherMismatchMessage } from '../shared/voucher-rules';
 import {
   calculateOtherTaxes,
   parseInternalTaxes,
@@ -972,6 +973,16 @@ export async function createPurchaseInvoice(rawInput: PurchaseInvoiceFormInput) 
     const otherTaxes = calculateOtherTaxes(perceptionsData, internalTaxes);
 
     const total = subtotal + vatAmount + otherTaxes;
+
+    // La letra del comprobante la define la condición IVA del proveedor (TSK-787). El formulario
+    // ya ofrece solo las válidas: esto es la defensa del servidor.
+    const supplier = await prisma.supplier.findFirst({
+      where: { id: input.supplierId, companyId },
+      select: { taxCondition: true },
+    });
+    if (!supplier) throw new BusinessError('El proveedor no existe en la empresa');
+    const mismatch = purchaseVoucherMismatchMessage(input.voucherType as VoucherType, supplier.taxCondition);
+    if (mismatch) throw new BusinessError(mismatch);
 
     // Verificar que no exista factura duplicada
     const fullNumber = `${input.pointOfSale}-${input.number}`;

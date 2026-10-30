@@ -1108,6 +1108,14 @@ Tanto Recibos como Órdenes de Pago soportan retenciones impositivas:
 
 ### Factura de Compra
 - No duplicar fullNumber por proveedor
+- La letra del comprobante sigue la condición IVA del proveedor (TSK-787,
+  `purchases/features/invoices/shared/voucher-rules.ts`): Responsable Inscripto → A o B;
+  Monotributista, Exento, No Responsable y Consumidor Final → C; sin condición → todas; Gastos
+  Bancarios siempre. El formulario ofrece solo las válidas (`_PurchaseVoucherTypeField`) y, al cambiar
+  de proveedor, pasa a la misma clase con la letra válida (Factura A → Factura C). El servidor lo
+  valida en `createPurchaseInvoice` y en `writePurchaseInvoiceDataTx` (edición del borrador y
+  corrección en cadena) con `BusinessError`. La importación de AFIP **no** rechaza: el comprobante es
+  el dato real, se importa y vuelve un aviso en `warnings` para corregir la condición del proveedor
 - Solo editar si DRAFT
 - No cancelar si PAID o PARTIAL_PAID
 - Si tiene remitos confirmados, stock ya manejado

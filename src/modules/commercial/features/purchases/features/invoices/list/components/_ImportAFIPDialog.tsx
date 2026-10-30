@@ -200,6 +200,26 @@ export function _ImportAFIPDialog() {
                 </span>
               </div>
             )}
+            {result.warnings.length > 0 && (
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-amber-700 dark:text-amber-300">
+                  {result.warnings.length} comprobantes con una letra que no corresponde a la condición IVA del
+                  proveedor (se importaron igual):
+                </p>
+                <div className="max-h-40 overflow-auto rounded-lg bg-amber-50 p-3 dark:bg-amber-950">
+                  {result.warnings.slice(0, 20).map((warning, i) => (
+                    <p key={i} className="text-sm text-amber-800 dark:text-amber-200">
+                      Fila {warning.row}: {warning.warning}
+                    </p>
+                  ))}
+                  {result.warnings.length > 20 && (
+                    <p className="text-sm text-amber-800 dark:text-amber-200">
+                      ...y {result.warnings.length - 20} más
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
             {result.errors.length > 0 && (
               <div className="space-y-1">
                 <p className="text-sm font-medium text-destructive">
