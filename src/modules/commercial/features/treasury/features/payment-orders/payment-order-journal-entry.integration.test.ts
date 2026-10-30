@@ -39,7 +39,9 @@ import {
   confirmPaymentOrder,
   createPartnerRepaymentOrder,
   createPaymentOrder,
+  getPaymentOrder,
   getPaymentOrderEntryPreview,
+  updatePaymentOrder,
 } from './actions.server';
 
 const PREFIX = 'TSK728-OP-';
@@ -745,6 +747,47 @@ describe.skipIf(!dbAvailable)(
         select: { paymentOrderInstallmentId: true },
       });
       expect(projections).toEqual([{ paymentOrderInstallmentId: installments[0].id }]);
+    });
+
+    it('la retención guarda régimen, base y jurisdicción; al editar se reemplazan (TSK-813)', async () => {
+      const iibb: WithholdingInput = {
+        taxType: 'IIBB',
+        rate: '1.5',
+        amount: '15',
+        certificateNumber: null,
+        regimeCode: '011',
+        taxableBase: '1000',
+        jurisdiction: '904',
+      };
+      const { id, invoiceId } = await createDraft([cashPayment('985')], [iibb]);
+
+      const read = async () =>
+        (await getPaymentOrder(id)).withholdings.map((w) => ({
+          taxType: w.taxType,
+          rate: w.rate,
+          amount: w.amount,
+          certificateNumber: w.certificateNumber,
+          regimeCode: w.regimeCode,
+          taxableBase: w.taxableBase,
+          jurisdiction: w.jurisdiction,
+        }));
+      expect(await read()).toEqual([
+        { taxType: 'IIBB', rate: 1.5, amount: 15, certificateNumber: null, regimeCode: '011', taxableBase: 1000, jurisdiction: '904' },
+      ]);
+
+      // La jurisdicción solo aplica a IIBB: en una retención de Ganancias no se guarda.
+      const result = await updatePaymentOrder(id, {
+        supplierId,
+        date: ORDER_DATE,
+        notes: `${PREFIX}orden`,
+        items: [{ invoiceId, amount: '1000' }],
+        payments: [cashPayment('980')],
+        withholdings: [{ ...iibb, taxType: 'GANANCIAS', amount: '20', regimeCode: '78', taxableBase: '', jurisdiction: '904' }],
+      });
+      expect(result.success).toBe(true);
+      expect(await read()).toEqual([
+        { taxType: 'GANANCIAS', rate: 1.5, amount: 20, certificateNumber: null, regimeCode: '78', taxableBase: null, jurisdiction: null },
+      ]);
     });
   }
 );

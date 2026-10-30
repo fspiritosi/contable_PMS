@@ -453,7 +453,11 @@ export function _TreasuryGuide() {
               </ul>
             </li>
             <li>
-              Agrega <strong>retenciones</strong> si corresponde
+              Agrega <strong>retenciones</strong> si corresponde. Para que entren en los
+              archivos de <strong>Contabilidad → Archivos ARCA</strong>, cargá también el{' '}
+              <strong>régimen</strong> (el código de 3 dígitos de SIRE, SICORE o SIRCAR) y la{' '}
+              <strong>base imponible</strong>; en las de IIBB, además, la{' '}
+              <strong>jurisdicción</strong>
             </li>
             <li>
               Al confirmar, se registra el pago y se genera el asiento

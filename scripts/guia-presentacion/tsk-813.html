@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>TSK-813 y TSK-814 · Archivos ARCA de retenciones y Libro IVA</title>
+<style>
+  @page {
+    size: A4;
+    margin: 0;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #1f2430;
+    font-size: 13px;
+    line-height: 1.55;
+    background: #ffffff;
+  }
+
+  .page {
+    padding: 4mm 2mm;
+  }
+
+  header.cover {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    text-align: left;
+    padding: 10mm 2mm 8mm 2mm;
+    border-bottom: 3px solid #2f6f4f;
+    margin-bottom: 10mm;
+  }
+
+  .eyebrow {
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 11px;
+    font-weight: 700;
+    color: #2f6f4f;
+    margin-bottom: 6px;
+  }
+
+  h1 {
+    font-size: 26px;
+    margin: 0 0 8px 0;
+    color: #14251c;
+  }
+
+  .subtitle {
+    font-size: 14px;
+    color: #4b5563;
+    margin: 0;
+  }
+
+  section {
+    margin-bottom: 9mm;
+    page-break-inside: avoid;
+  }
+
+  section.allow-break {
+    page-break-inside: auto;
+  }
+
+  section:last-of-type { margin-bottom: 2mm; }
+
+  h2 {
+    font-size: 16px;
+    color: #14251c;
+    border-left: 4px solid #2f6f4f;
+    padding-left: 8px;
+    margin: 0 0 6mm 0;
+    page-break-after: avoid;
+  }
+
+  h3.sub {
+    font-size: 13.5px;
+    color: #14251c;
+    margin: 6mm 0 3mm 0;
+    page-break-after: avoid;
+  }
+
+  .quote {
+    background: #f4f7f5;
+    border-left: 4px solid #2f6f4f;
+    padding: 10px 14px;
+    font-style: italic;
+    color: #2b3a33;
+    margin: 0 0 6px 0;
+  }
+
+  .quote cite {
+    display: block;
+    font-style: normal;
+    font-size: 11.5px;
+    color: #6b7280;
+    margin-top: 6px;
+  }
+
+  .before-after {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    page-break-inside: avoid;
+  }
+
+  .card {
+    border: 1px solid #e2e5e0;
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+
+  .card.before { background: #fbf7f2; border-color: #ecd9bd; }
+  .card.after { background: #f2f8f4; border-color: #bfe0cb; }
+
+  .card h3 {
+    margin: 0 0 6px 0;
+    font-size: 12.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .card.before h3 { color: #9a6a1f; }
+  .card.after h3 { color: #226240; }
+
+  .card p { margin: 0; }
+
+  ol.steps {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    counter-reset: step;
+  }
+
+  ol.steps > li {
+    counter-increment: step;
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+    page-break-inside: avoid;
+  }
+
+  ol.steps > li::before {
+    content: counter(step);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    border-radius: 50%;
+    background: #2f6f4f;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  ol.steps.letters > li::before {
+    content: counter(step, lower-alpha);
+  }
+
+  .step-body { flex: 1; }
+
+  .step-body strong { color: #14251c; }
+
+  figure {
+    margin: 8px 0 0 0;
+    page-break-inside: avoid;
+  }
+
+  figure img {
+    max-width: 100%;
+    border: 1px solid #d9dce0;
+    border-radius: 6px;
+    display: block;
+  }
+
+  figure.small img { max-width: 320px; }
+
+  figure.sidebar img { max-width: 150px; }
+
+  figure.modal img { max-width: 400px; }
+
+  figure.modal-sm img { max-width: 340px; }
+
+  ol.steps.long > li { page-break-inside: auto; }
+
+  figcaption {
+    font-size: 11px;
+    color: #6b7280;
+    margin-top: 4px;
+  }
+
+  .callout {
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin: 0 0 8px 0;
+    page-break-inside: avoid;
+  }
+
+  .callout.config {
+    background: #f2f6fb;
+    border: 1px solid #cddaeb;
+  }
+
+  .callout.warning {
+    background: #fdf5ec;
+    border: 1px solid #efd6a8;
+  }
+
+  .callout h3 {
+    margin: 0 0 4px 0;
+    font-size: 13px;
+  }
+
+  .callout p { margin: 0 0 6px 0; }
+  .callout p:last-child { margin-bottom: 0; }
+
+  ul.plain {
+    margin: 4px 0 0 0;
+    padding-left: 18px;
+  }
+
+  ul.plain li { margin-bottom: 4px; }
+
+  .no-change-list {
+    display: grid;
+    gap: 6px;
+  }
+
+  .no-change-item {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+  }
+
+  .check {
+    color: #2f6f4f;
+    font-weight: 700;
+  }
+
+  .side-by-side {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8mm;
+    align-items: start;
+    page-break-inside: avoid;
+  }
+
+  .side-by-side figure { margin-top: 0; }
+
+  .side-by-side.narrow-left {
+    grid-template-columns: 160px 1fr;
+  }
+
+  .ui-text {
+    font-style: italic;
+    color: #374151;
+  }
+
+  table.chain {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 6px 0 8px 0;
+    font-size: 12px;
+    page-break-inside: avoid;
+  }
+
+  table.chain th, table.chain td {
+    border: 1px solid #dfe3e0;
+    padding: 6px 8px;
+    text-align: left;
+    vertical-align: top;
+  }
+
+  table.chain th {
+    background: #f4f7f5;
+    color: #14251c;
+    font-weight: 700;
+  }
+
+  .entry {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 11.5px;
+    background: #f7f8f7;
+    border: 1px solid #e2e5e0;
+    border-radius: 6px;
+    padding: 8px 10px;
+    margin: 6px 0;
+    white-space: pre;
+  }
+
+  /* TSK-798 */
+  figure.dialog img { max-width: 420px; }
+  ol.steps figure img { max-width: 520px; }
+  ol.steps figure.dialog img { max-width: 400px; }
+  .keep-together { page-break-inside: avoid; }
+
+  footer.doc-footer {
+    text-align: center;
+    color: #9ca3af;
+    font-size: 10.5px;
+    margin-top: 2mm;
+  }
+</style>
+
+</head>
+<body>
+<div class="page">
+  <header class="cover">
+    <div class="eyebrow">Tickets 813 y 814 · Contabilidad · Archivos ARCA</div>
+    <h1>Archivos de retenciones para SIRE, SICORE y SIRCAR, y un Libro IVA Digital más completo</h1>
+    <p class="subtitle">Guía de presentación: qué pasaba, qué cambió y cómo se usa</p>
+  </header>
+
+  <section>
+    <h2>1. Qué pasaba</h2>
+    <p>En <span class="ui-text">Contabilidad → Archivos ARCA</span> solo se podía generar el Libro IVA Digital. Las
+    retenciones que la empresa practica al pagar a proveedores había que cargarlas a mano en SIRE, SICORE y SIRCAR:
+    el sistema tenía generadores, pero no seguían los diseños oficiales y no tenían pantalla.</p>
+    <p>Además, el Libro IVA Digital informaba con el nombre del cliente las ventas a consumidor final sin
+    identificar, y los gastos bancarios salían con un código de comprobante que ARCA rechaza.</p>
+  </section>
+
+  <section class="allow-break">
+    <h2>2. Qué cambió en la pantalla</h2>
+    <figure><img src="assets/tsk813-00-archivos-antes.png" alt="Archivos ARCA con solo el Libro IVA Digital" />
+      <figcaption>Antes: solo los cuatro archivos del Libro IVA Digital.</figcaption></figure>
+    <figure><img src="assets/tsk813-01-archivos-despues.png" alt="Bloque de retenciones con sus archivos" />
+      <figcaption>Ahora, debajo del Libro IVA: un archivo por sistema y, en IIBB, uno por provincia. Si a una
+      retención le falta un dato, no entra y la pantalla dice en qué orden de pago completarla.</figcaption></figure>
+  </section>
+
+  <section>
+    <h2>3. Qué archivo va a cada sistema</h2>
+    <table class="chain">
+      <tr><th>Retención</th><th>Archivo</th><th>Dónde se usa</th></tr>
+      <tr><td>IVA</td><td>SIRE F.2005</td><td>SIRE: emisión de certificados por lote</td></tr>
+      <tr><td>Seguridad Social</td><td>SIRE F.2004</td><td>SIRE: emisión de certificados por lote</td></tr>
+      <tr><td>Ganancias</td><td>SICORE</td><td>Importación en el aplicativo SICORE</td></tr>
+      <tr><td>Ingresos Brutos</td><td>SIRCAR, uno por jurisdicción</td><td>Declaración jurada de cada provincia en SIRCAR</td></tr>
+    </table>
+    <p>Los formatos siguen la especificación de SIRE de ARCA y la Resolución General 2/2011 de la Comisión Arbitral.</p>
+  </section>
+
+  <section>
+    <h2>4. Cómo se usa</h2>
+    <ol class="steps">
+      <li><div class="step-body">Al cargar una <strong>orden de pago</strong> con retenciones, completar además el
+        <strong>régimen</strong> (el código de 3 dígitos) y la <strong>base imponible</strong>. En las de IIBB, también la
+        <strong>jurisdicción</strong>.
+        <figure><img src="assets/tsk813-02-retencion-op.png" alt="Retención de IIBB con régimen, base y jurisdicción" />
+          <figcaption>Retención de IIBB de Córdoba en la orden de pago.</figcaption></figure></div></li>
+      <li><div class="step-body">En <span class="ui-text">Contabilidad → Archivos ARCA</span>, elegir el mes y tocar
+        <strong>Generar archivos</strong>. Entran las retenciones de las órdenes de pago confirmadas del mes.</div></li>
+      <li><div class="step-body">Descargar cada archivo e importarlo en su sistema. Si la pantalla avisa que una
+        retención no entró, completar lo que falta en esa orden de pago y volver a generar.</div></li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>5. Libro IVA Digital</h2>
+    <div class="no-change-list">
+      <div class="no-change-item"><span class="check">✓</span><div><strong>Consumidor final sin identificar:</strong>
+        una venta a un cliente sin CUIT ni DNI sale como "CONSUMIDOR FINAL", sin número de documento, como pide ARCA.
+        Si el cliente tiene DNI, sale con su documento y su nombre.</div></div>
+      <div class="no-change-item"><span class="check">✓</span><div><strong>Gastos bancarios:</strong> salen con el
+        comprobante 099 ("otros comprobantes"), con el punto de venta en ceros, y su IVA queda como crédito fiscal.
+        Antes salían con un código que ARCA rechazaba.</div></div>
+      <div class="no-change-item"><span class="check">✓</span><div><strong>Moneda:</strong> los comprobantes del
+        sistema se registran en pesos, así que el libro los sigue informando en pesos.</div></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>6. A tener en cuenta</h2>
+    <div class="callout warning">
+      <p>Las órdenes de pago cargadas antes de este cambio no tienen régimen ni base imponible: sus retenciones
+      aparecen en el aviso hasta que se completen.</p>
+      <p>Conviene hacer una primera prueba importando el archivo de SICORE en el aplicativo, y confirmar que la
+      provincia esté adherida a SIRCAR antes de presentar su archivo: Buenos Aires y CABA tienen sus propios
+      sistemas.</p>
+    </div>
+  </section>
+</div>
+</body>
+</html>

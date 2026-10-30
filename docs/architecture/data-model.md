@@ -365,7 +365,7 @@ Reglas:
 | `PaymentOrder` | Orden de pago (supplierId, status, total) |
 | `PaymentOrderItem` | Facturas aplicadas a la OP |
 | `PaymentOrderPayment` | Medios de pago de la OP |
-| `PaymentOrderWithholding` | Retenciones de la OP |
+| `PaymentOrderWithholding` | Retenciones de la OP; régimen, base imponible y jurisdicción del Convenio Multilateral para SIRE, SICORE y SIRCAR (TSK-813) |
 | `CashRegister` | Caja registradora |
 | `CashRegisterSession` | Sesion de caja (apertura/cierre) |
 | `CashMovement` | Movimiento de caja; receiptId? / paymentOrderId? / fundMovementId? (comprobante de tesorería que lo creó, TSK-792) |

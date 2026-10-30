@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { CONVENIO_MULTILATERAL_JURISDICTIONS } from '@/modules/commercial/shared/convenio-multilateral';
+
 // ====================================
 // CASH REGISTER SCHEMAS
 // ====================================
@@ -324,6 +326,29 @@ export const withholdingSchema = z.object({
 
 export type WithholdingFormData = z.infer<typeof withholdingSchema>;
 
+/**
+ * Retención practicada en una orden de pago: suma los datos de los archivos de ARCA y de la
+ * Comisión Arbitral (TSK-813). Son opcionales: sin ellos la retención se guarda igual y
+ * Archivos ARCA avisa cuál falta completar.
+ */
+export const paymentOrderWithholdingSchema = withholdingSchema.extend({
+  regimeCode: z
+    .string()
+    .regex(/^\d{0,3}$/, 'El régimen es un código de hasta 3 dígitos')
+    .optional()
+    .nullable(),
+  taxableBase: z
+    .string()
+    .regex(/^(\d+(\.\d{1,2})?)?$/, 'Base inválida (máximo 2 decimales)')
+    .optional()
+    .nullable(),
+  jurisdiction: z
+    .string()
+    .refine((code) => code in CONVENIO_MULTILATERAL_JURISDICTIONS, 'Jurisdicción inválida')
+    .optional()
+    .nullable(),
+});
+
 // ====================================
 // LABELS Y MAPPERS - WITHHOLDINGS
 // ====================================
@@ -573,7 +598,7 @@ export const createPaymentOrderSchema = z
     notes: z.string().max(500, 'Las notas no pueden exceder 500 caracteres').optional().nullable(),
     items: z.array(paymentOrderItemSchema).min(1, 'Debe agregar al menos un item a pagar'),
     payments: z.array(paymentOrderPaymentSchema),
-    withholdings: z.array(withholdingSchema).default([]),
+    withholdings: z.array(paymentOrderWithholdingSchema).default([]),
   })
   .refine(
     (data) => {

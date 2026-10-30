@@ -542,22 +542,22 @@ total que ve el usuario mientras carga y el que se persiste no pueden divergir.
 Componente de carga: `@/modules/commercial/shared/components/_PerceptionsField`, montado tanto
 en `_PurchaseInvoiceForm` como en `_InvoiceForm`.
 
-### Exportaciones fiscales (Libro IVA Digital, SIRE, SIRCAR)
+### Exportaciones fiscales (Libro IVA Digital, SIRE, SICORE, SIRCAR)
 
 Generadores de archivos TXT en `features/fiscal-exports/`, por mes de emisión:
 
 | Archivo | Acción | Comprobantes que toma | En pantalla |
 |---------|--------|-----------------------|-------------|
 | Libro IVA Digital | `generateLibroIVADigital(year, month)` | Facturas, NC y ND de venta y de compra en `CONFIRMED`, `PAID` o `PARTIAL_PAID` | Sí |
-| SIRE | `generateSIREFile(year, month)` | Órdenes de pago `CONFIRMED` con retenciones | No |
-| SIRCAR (IIBB) | `generateSIRCARFile(year, month, jurisdiction?)` | Órdenes de pago `CONFIRMED` con retenciones de IIBB | No |
+| SIRE F.2005 (IVA), SIRE F.2004 (SUSS), SICORE (Ganancias), SIRCAR (IIBB, uno por jurisdicción) | `generateWithholdingFiles(year, month)` | Retenciones de las órdenes de pago `CONFIRMED` del mes | Sí |
 
 **Pantalla:** *Contabilidad → Archivos ARCA* (`/dashboard/company/accounting/fiscal-exports`,
 permiso `accounting.reports` view). Genera los cuatro archivos del Libro IVA Digital del mes
 (por defecto, el anterior) con los nombres oficiales (`LIBRO_IVA_DIGITAL_VENTAS_CBTE_AAAAMM.txt`,
-etc.). La descarga se codifica en Latin-1 (`components/download-txt.ts`): el diseño es de ancho
-fijo en bytes y en UTF-8 una "ñ" corre los campos. SIRE y SIRCAR no se ofrecen porque sus
-formatters no se validaron contra los diseños de ARCA y de la Comisión Arbitral.
+etc.) y, debajo, los de retenciones (`SIRE_F2005_IVA_AAAAMM.txt`, `SIRE_F2004_SUSS_AAAAMM.txt`,
+`SICORE_GANANCIAS_AAAAMM.txt`, `SIRCAR_RETENCIONES_<jurisdicción>_AAAAMM.txt`). La descarga se
+codifica en Latin-1 (`components/download-txt.ts`): el diseño es de ancho fijo en bytes y en
+UTF-8 una "ñ" corre los campos.
 
 **TSK-796:**
 - Una factura cobrada o pagada, total o parcialmente, sigue siendo un comprobante del mes: solo
@@ -576,9 +576,56 @@ formatters no se validaron contra los diseños de ARCA y de la Comisión Arbitra
 Tests: `formatters.test.ts` (posición por posición) y `libro-iva-digital.integration.test.ts`
 (estados, largos de registro, compra B).
 
-**Pendiente, no cubierto:** ventas a consumidor final sin identificar (el diseño pide código
-99 y la leyenda "CONSUMIDOR FINAL"), moneda extranjera (hoy siempre `PES` con cambio 1) y
-comprobantes `GASTOS_BANCARIOS`, que no tienen código de ARCA y salen con tipo `000`.
+**TSK-814:**
+- Venta a consumidor final sin identificar (cliente sin CUIT ni DNI): código de documento 99,
+  número 0 y denominación `CONSUMIDOR FINAL`, como pide el campo 8 de la especificación. Con DNI
+  sale su documento y su nombre.
+- `GASTOS_BANCARIOS` (TSK-585) sale como comprobante 099 "Otros comprobantes que no cumplen con la
+  R.G. 1415" (el código que usan los bancos en su Libro IVA Ventas), con punto de venta `00000`
+  como pide la especificación para el 099, y sus alícuotas: el IVA de las comisiones queda como
+  crédito fiscal. Antes salía con tipo `000`, que ARCA rechaza.
+- Moneda: los comprobantes no guardan moneda ni cotización, así que todo sale en `PES` con tipo
+  de cambio 1. Si se agrega moneda extranjera a los comprobantes, completar los campos 17 y 18.
+
+Tests: `formatters.test.ts` y `libro-iva-digital.integration.test.ts`.
+
+#### Retenciones: SIRE, SICORE y SIRCAR (TSK-813)
+
+Cada impuesto va al sistema que lo recibe:
+
+| Retención | Archivo | Diseño | Largo |
+|-----------|---------|--------|-------|
+| IVA | SIRE F.2005, impuesto 216 | [Especificación de SIRE para emisión por lote](https://www.arca.gob.ar/sire/documentos/SIRE-especificacion-para-emision-por-lote.pdf) (11/07/2022) | 305 |
+| Seguridad Social | SIRE F.2004, impuesto 353 | Ídem | 191 |
+| Ganancias | SICORE, impuesto 217 (no pasó a SIRE) | Formato estándar de importación del instructivo de SICORE | 144 |
+| IIBB | SIRCAR, un archivo por jurisdicción | [RG CA 2/2011, Anexo II](https://www.ca.gob.ar/descargas/sircar/resoluciones/rg.n02_sircar_modificacion_diseno_de_registro_ddjj.pdf): once campos separados por comas | — |
+
+- Antes había un único "SIRE" de largo fijo que mezclaba los impuestos, con códigos 767, 787
+  y 351, y un SIRCAR de largo fijo con una sola jurisdicción para todo el archivo (y la tabla de
+  códigos corrida desde Córdoba). Los dos generadores se reemplazaron por
+  `withholdings/actions.server.ts` (consulta) y `withholdings/build-files.ts` (armado puro).
+- La retención de la OP (`PaymentOrderWithholding`) guarda ahora `regimeCode`, `taxableBase` y
+  `jurisdiction` (código del Convenio Multilateral, 901-924, solo IIBB:
+  `shared/convenio-multilateral.ts`). Se cargan en el modal de la OP
+  (`_PaymentOrderWithholdingFields`) y son opcionales.
+- Una retención sin los datos que pide su archivo no se informa a medias: queda afuera y la
+  pantalla la lista con lo que falta. Piden régimen y base: IVA y Ganancias; régimen: SUSS (y la
+  CUIT de la empresa); jurisdicción y base: IIBB (sin régimen va `001`, como dice la RG CA 2/2011).
+  Todas, la CUIT del proveedor.
+- La retención se informa sobre la orden de pago: tipo de comprobante 6, número de la OP, importe
+  total de la OP, fecha de la OP en el día de Argentina. En SIRCAR, el número es el del
+  certificado si tiene dígitos; si no, el de la OP.
+- Condición del retenido (SICORE y el régimen 831 de SIRE): inscripto si el proveedor es
+  Responsable Inscripto en IVA; si no, no inscripto.
+- SICORE: el orden, la alineación y los formatos son los del instructivo; las posiciones salen de
+  ese orden y de sus ejemplos, sin una tabla oficial de posiciones. Importes con punto, el
+  separador por defecto desde el Release 23. Conviene probar la importación con un archivo real.
+- SIRCAR: Buenos Aires (ARBA), CABA (AGIP) y Tucumán tienen sus propios sistemas de agentes;
+  verificar la adhesión antes de presentar el archivo de esas jurisdicciones.
+
+Tests: `sire/formatters.test.ts`, `sicore/formatters.test.ts`, `iibb/formatters.test.ts`
+(posición por posición), `withholdings/build-files.test.ts` y
+`withholdings/withholding-files.integration.test.ts`.
 
 ### Tipos de Comprobante (VoucherType)
 

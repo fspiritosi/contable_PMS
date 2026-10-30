@@ -10,6 +10,19 @@ import { formatVentasCabecera, formatComprasCabecera, formatAlicuota, formatComp
 import { salesVatByRate } from '@/shared/lib/sales-vat-by-rate';
 import type { LibroIVACabecera, LibroIVAResult } from './types';
 
+/**
+ * Código de comprobante de la tabla de ARCA. El resumen bancario (GASTOS_BANCARIOS, TSK-585) no
+ * tiene código propio: va como 099 "Otros comprobantes que no cumplen con la R.G. 1415", el que
+ * usan los bancos en su libro (TSK-814).
+ */
+const LIBRO_VOUCHER_CODES: Record<string, number> = { ...VOUCHER_TYPE_MAP, GASTOS_BANCARIOS: 99 };
+
+/** Con el comprobante 099 el punto de venta se informa en ceros (especificación, campo 3). */
+const ZERO_POINT_OF_SALE_CODES = [99];
+
+/** Venta a consumidor final sin identificar: leyenda del campo 8 de la especificación (TSK-814). */
+const CONSUMIDOR_FINAL = 'CONSUMIDOR FINAL';
+
 /** Comprobantes B y C: no discriminan IVA. */
 const NO_VAT_DETAIL = /_[BC]$/;
 
@@ -100,7 +113,7 @@ export async function generateLibroIVADigital(
         numeroHasta: inv.number,
         codigoDocumento: docTipo,
         numeroDocumento: (inv.customer.taxId ?? '0').replace(/-/g, ''),
-        denominacion: inv.customer.name,
+        denominacion: docTipo === DOC_TIPO_MAP.SIN_IDENTIFICAR ? CONSUMIDOR_FINAL : inv.customer.name,
         importeTotal: Number(inv.total),
         importeNoGravado: Number(inv.netNonTaxed),
         importeExento: Number(inv.netExempt),
@@ -179,7 +192,7 @@ export async function generateLibroIVADigital(
     const comprasAlicuotas: string[] = [];
 
     for (const inv of purchaseInvoices) {
-      const cbteTipo = VOUCHER_TYPE_MAP[inv.voucherType] ?? 0;
+      const cbteTipo = LIBRO_VOUCHER_CODES[inv.voucherType] ?? 0;
       const docTipo = inv.supplier.taxId
         ? (inv.supplier.taxId.length === 11 ? DOC_TIPO_MAP.CUIT : DOC_TIPO_MAP.DNI)
         : DOC_TIPO_MAP.SIN_IDENTIFICAR;
@@ -205,7 +218,7 @@ export async function generateLibroIVADigital(
       }
 
       const noVatDetail = NO_VAT_DETAIL.test(inv.voucherType);
-      const ptoVta = parseInt(inv.pointOfSale, 10) || 0;
+      const ptoVta = ZERO_POINT_OF_SALE_CODES.includes(cbteTipo) ? 0 : parseInt(inv.pointOfSale, 10) || 0;
       const nroComprobante = parseInt(inv.number, 10) || 0;
 
       const cabecera: LibroIVACabecera = {

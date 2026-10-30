@@ -132,6 +132,9 @@ export function EditPaymentOrderModal({
       rate: w.rate.toString(),
       amount: w.amount.toString(),
       certificateNumber: w.certificateNumber,
+      regimeCode: w.regimeCode,
+      taxableBase: w.taxableBase?.toString() ?? null,
+      jurisdiction: w.jurisdiction,
     })
   );
 

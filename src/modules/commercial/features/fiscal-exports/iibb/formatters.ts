@@ -1,43 +1,38 @@
 /**
- * Formateador de archivos SIRCAR para retenciones/percepciones IIBB provinciales.
- * Formato estándar SIRCAR (Comisión Arbitral) de longitud fija.
+ * Archivo de retenciones de IIBB para SIRCAR (TSK-813), según el Anexo II de la RG 2/2011 de la
+ * Comisión Arbitral: un registro por retención, once campos separados por comas. Fechas
+ * dd/mm/aaaa; importes y alícuota con punto decimal y sin separador de miles. La declaración
+ * jurada se presenta por jurisdicción: cada archivo lleva una sola.
  */
+import { digits, integer } from '../shared/fixed-width';
 
-function padRight(str: string, len: number): string {
-  return str.substring(0, len).padEnd(len, ' ');
+export interface SIRCARRetencion {
+  renglon: number;               // único por archivo
+  numeroComprobante: string;     // se informan solo sus dígitos
+  cuit: string;
+  fechaRetencion: string;        // dd/mm/aaaa
+  montoSujeto: number;
+  alicuota: number;
+  montoRetenido: number;
+  regimen: string | null;        // tabla de la jurisdicción
+  jurisdiccion: string;          // código del Convenio Multilateral (901-924)
 }
 
-function padLeft(num: number | string, len: number, char: string = '0'): string {
-  return String(num).padStart(len, char);
-}
+/** Régimen a informar cuando la jurisdicción no definió ninguno. */
+const NO_REGIME = '001';
 
-function formatAmount(amount: number, len: number): string {
-  const cents = Math.round(Math.abs(amount) * 100);
-  return padLeft(cents, len);
-}
-
-export interface SIRCARRecord {
-  jurisdiccion: string;          // 3 chars (901=BA, 902=CABA, etc.)
-  cuit: string;                  // 11 chars
-  fechaRetencion: string;        // DDMMYYYY
-  numeroSucursal: string;        // 4 chars
-  numeroCertificado: string;     // 8 chars
-  tipoComprobante: string;       // 1 char (R=Retención)
-  letraComprobante: string;      // 1 char
-  numeroComprobanteOrigen: string; // 20 chars
-  importeRetenido: number;
-}
-
-export function formatSIRCARRecord(row: SIRCARRecord): string {
+export function formatSIRCARRetencion(row: SIRCARRetencion): string {
   return [
-    padRight(row.jurisdiccion, 3),                  // Jurisdicción (3)
-    padLeft(row.cuit.replace(/-/g, ''), 11),        // CUIT (11)
-    row.fechaRetencion,                              // Fecha retención (8)
-    padLeft(row.numeroSucursal, 4),                  // Nro sucursal (4)
-    padLeft(row.numeroCertificado, 8),               // Nro certificado (8)
-    padRight(row.tipoComprobante, 1),                // Tipo comprobante (1)
-    padRight(row.letraComprobante, 1),               // Letra (1)
-    padRight(row.numeroComprobanteOrigen, 20),       // Nro comprobante origen (20)
-    formatAmount(row.importeRetenido, 11),           // Importe retenido (11)
-  ].join('');
+    integer(row.renglon, 5),                         // 1 Número de renglón
+    '1',                                             // 2 Origen: software propio del agente
+    '1',                                             // 3 Tipo: comprobante de retención
+    integer(digits(row.numeroComprobante), 12),      // 4 Número de comprobante
+    integer(digits(row.cuit), 11),                   // 5 CUIT del retenido
+    row.fechaRetencion,                              // 6 Fecha de retención
+    row.montoSujeto.toFixed(2),                      // 7 Monto sujeto a retención
+    row.alicuota.toFixed(2),                         // 8 Alícuota
+    row.montoRetenido.toFixed(2),                    // 9 Monto retenido
+    row.regimen ? integer(row.regimen, 3) : NO_REGIME, // 10 Tipo de régimen
+    integer(row.jurisdiccion, 3),                    // 11 Jurisdicción
+  ].join(',');
 }

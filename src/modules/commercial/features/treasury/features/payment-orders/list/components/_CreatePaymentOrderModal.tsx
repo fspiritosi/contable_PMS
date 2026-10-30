@@ -18,7 +18,7 @@ import {
 } from '@/shared/components/ui/select';
 import { Plus, Trash2, ArrowDownToLine } from 'lucide-react';
 import { toast } from 'sonner';
-import { createPaymentOrderSchema, type CreatePaymentOrderFormData, PAYMENT_METHOD_LABELS, WITHHOLDING_TAX_TYPE_LABELS } from '../../../../shared/validators';
+import { createPaymentOrderSchema, type CreatePaymentOrderFormData, PAYMENT_METHOD_LABELS } from '../../../../shared/validators';
 import { createPaymentOrder, getActiveCardsForPayment, getPendingPurchaseInvoices, getPortfolioChecks, updatePaymentOrder } from '../../actions.server';
 import { getAvailableCashRegisters, getAvailableBankAccounts } from '../../../receipts/actions.server';
 import { getSuppliersForSelect } from '@/modules/commercial/features/purchases/features/invoices/list/actions.server';
@@ -32,6 +32,7 @@ import moment from 'moment';
 import { formatCurrency } from '@/shared/utils/formatters';
 import { businessToday } from '@/shared/utils/date-input';
 import { useDocumentCorrection } from '@/modules/commercial/shared/hooks/useDocumentCorrection';
+import { _PaymentOrderWithholdingFields } from './_PaymentOrderWithholdingFields';
 
 type ActiveCard = Awaited<ReturnType<typeof getActiveCardsForPayment>>[number];
 
@@ -294,7 +295,15 @@ export function CreatePaymentOrderModal({
   };
 
   const addWithholding = () => {
-    appendWithholding({ taxType: 'IVA', rate: '', amount: '', certificateNumber: null });
+    appendWithholding({
+      taxType: 'IVA',
+      rate: '',
+      amount: '',
+      certificateNumber: null,
+      regimeCode: null,
+      taxableBase: null,
+      jurisdiction: null,
+    });
   };
 
   const calculateTotals = () => {
@@ -1019,84 +1028,12 @@ export function CreatePaymentOrderModal({
               )}
 
               {withholdingFields.map((field, index) => (
-                <div key={field.id} className="rounded-md border p-3 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">Retención {index + 1}</span>
-                    <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={() => removeWithholding(index)}>
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                    <FormField
-                      control={form.control}
-                      name={`withholdings.${index}.taxType`}
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel className="text-xs">Tipo *</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {Object.entries(WITHHOLDING_TAX_TYPE_LABELS).map(([value, label]) => (
-                                <SelectItem key={value} value={value}>{label}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name={`withholdings.${index}.rate`}
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel className="text-xs">Alícuota %</FormLabel>
-                          <FormControl>
-                            <Input type="number" step="0.01" placeholder="0.00" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name={`withholdings.${index}.amount`}
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel className="text-xs">Monto *</FormLabel>
-                          <FormControl>
-                            <MoneyInput
-                              placeholder="0,00"
-                              value={field.value}
-                              onChange={field.onChange}
-                              onBlur={field.onBlur}
-                              name={field.name}
-                              ref={field.ref}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name={`withholdings.${index}.certificateNumber`}
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel className="text-xs">N° Certificado</FormLabel>
-                          <FormControl>
-                            <Input placeholder="Opcional" {...field} value={field.value || ''} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                </div>
+                <_PaymentOrderWithholdingFields
+                  key={field.id}
+                  control={form.control}
+                  index={index}
+                  onRemove={() => removeWithholding(index)}
+                />
               ))}
             </section>
 
