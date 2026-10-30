@@ -489,13 +489,22 @@ export function _CommercialGuide() {
           </p>
           <ul className="list-disc pl-6 space-y-1 text-muted-foreground">
             <li>Se vinculan a un <strong>proveedor</strong></li>
-            <li>Mismos tipos de comprobante (A, B, C, NC, ND)</li>
+            <li>Mismos tipos de comprobante (A, B, C, NC, ND), según la condición IVA del proveedor</li>
             <li>Mismo flujo: Borrador → Confirmada → Pagada</li>
             <li>Se puede indicar el <strong>número de comprobante</strong> del proveedor</li>
             <li>Al confirmar, genera asiento contable automático</li>
           </ul>
           <p className="font-medium mt-3">Al cargar la factura</p>
           <ul className="list-disc pl-6 space-y-1 text-muted-foreground">
+            <li>
+              El <strong>tipo de comprobante</strong> depende de la condición
+              IVA del proveedor: a un <strong>Monotributista</strong> o{' '}
+              <strong>Exento</strong> solo se le cargan comprobantes C, y a un{' '}
+              <strong>Responsable Inscripto</strong>, A o B. Al elegir el
+              proveedor, el tipo se ajusta solo. Si al importar desde AFIP llega
+              un comprobante con otra letra, se importa igual y se avisa para
+              revisar la condición IVA del proveedor
+            </li>
             <li>
               El <strong>punto de venta</strong> y el <strong>número</strong> se
               completan solos con los ceros que faltan: si escribís 1 y 123, al

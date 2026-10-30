@@ -44,12 +44,11 @@ import {
   getPurchaseOrderLinesForInvoicing,
 } from '../../list/actions.server';
 import { isCreditNote, isDebitNote } from '@/modules/commercial/shared/voucher-utils';
+import type { VoucherType } from '@/generated/prisma/enums';
+import { equivalentPurchaseVoucher, purchaseVoucherMismatchMessage } from '../../shared/voucher-rules';
+import { _PurchaseVoucherTypeField } from './_PurchaseVoucherTypeField';
 import { addProductToSupplier } from '@/modules/commercial/features/suppliers/features/detail/actions.server';
-import {
-  purchaseInvoiceFormSchema,
-  VOUCHER_TYPE_LABELS,
-  type PurchaseInvoiceFormInput,
-} from '../../shared/validators';
+import { purchaseInvoiceFormSchema, type PurchaseInvoiceFormInput } from '../../shared/validators';
 import moment from 'moment';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useDocumentCorrection } from '@/modules/commercial/shared/hooks/useDocumentCorrection';
@@ -274,6 +273,7 @@ export function _PurchaseInvoiceForm({
   // Cargar facturas originales cuando se selecciona NC/ND
   const watchedVoucherType = form.watch('voucherType');
   const watchedSupplierId = form.watch('supplierId');
+  const selectedSupplier = suppliers.find((s) => s.id === watchedSupplierId);
   const showOriginalInvoice = watchedVoucherType && (isCreditNote(watchedVoucherType) || isDebitNote(watchedVoucherType));
 
   // Ordenar ítems: primero los del proveedor seleccionado
@@ -386,6 +386,16 @@ export function _PurchaseInvoiceForm({
   }, [isRegularInvoice]);
 
   const onSubmit = async (data: PurchaseInvoiceFormInput) => {
+    // La letra tiene que corresponder a la condición IVA del proveedor (TSK-787).
+    const voucherMismatch = purchaseVoucherMismatchMessage(
+      data.voucherType as VoucherType,
+      suppliers.find((s) => s.id === data.supplierId)?.taxCondition
+    );
+    if (voucherMismatch) {
+      form.setError('voucherType', { type: 'manual', message: voucherMismatch });
+      return;
+    }
+
     // Validar cantidades contra líneas de OC pendientes
     if (watchedPurchaseOrderId && watchedPurchaseOrderId !== '' && poLines.length > 0) {
       let hasError = false;
@@ -514,7 +524,17 @@ export function _PurchaseInvoiceForm({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Proveedor *</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
+                  <Select
+                    onValueChange={(value) => {
+                      field.onChange(value);
+                      // Misma clase de comprobante con la letra del nuevo proveedor (TSK-787).
+                      const condition = suppliers.find((s) => s.id === value)?.taxCondition;
+                      const current = form.getValues('voucherType') as VoucherType;
+                      const next = equivalentPurchaseVoucher(current, condition);
+                      if (next !== current) form.setValue('voucherType', next, { shouldValidate: true });
+                    }}
+                    value={field.value}
+                  >
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue placeholder="Selecciona un proveedor" />
@@ -533,31 +553,8 @@ export function _PurchaseInvoiceForm({
               )}
             />
 
-            {/* Tipo de Comprobante */}
-            <FormField
-              control={form.control}
-              name="voucherType"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Tipo de Comprobante *</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecciona un tipo" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {Object.entries(VOUCHER_TYPE_LABELS).map(([value, label]) => (
-                        <SelectItem key={value} value={value}>
-                          {label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            {/* Tipo de Comprobante: letras según la condición IVA del proveedor (TSK-787) */}
+            <_PurchaseVoucherTypeField control={form.control} taxCondition={selectedSupplier?.taxCondition} />
 
             {/* Factura Original (solo para NC/ND) */}
             {showOriginalInvoice && (

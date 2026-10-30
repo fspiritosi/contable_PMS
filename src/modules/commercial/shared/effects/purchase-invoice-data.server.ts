@@ -3,6 +3,7 @@ import 'server-only';
 import type { VoucherType } from '@/generated/prisma/enums';
 import type { Tx } from '@/modules/accounting/features/integrations/core';
 import type { PurchaseInvoiceFormInput } from '@/modules/commercial/features/purchases/features/invoices/shared/validators';
+import { purchaseVoucherMismatchMessage } from '@/modules/commercial/features/purchases/features/invoices/shared/voucher-rules';
 import { BusinessError } from '@/shared/lib/action-result';
 
 import { calculateOtherTaxes, parseInternalTaxes, toPerceptionRecords } from '../perceptions';
@@ -36,9 +37,9 @@ async function assertPurchaseInvoiceReferencesTx(
     input.lines.flatMap((line) => (line.costCenterAllocations ?? []).map((a) => a.costCenterId))
   );
 
-  const [invoices, suppliers, orders, orderLines, products, costCenters] = await Promise.all([
+  const [invoices, supplier, orders, orderLines, products, costCenters] = await Promise.all([
     tx.purchaseInvoice.count({ where: { id: invoiceId, companyId } }),
-    tx.supplier.count({ where: { id: input.supplierId, companyId } }),
+    tx.supplier.findFirst({ where: { id: input.supplierId, companyId }, select: { taxCondition: true } }),
     purchaseOrderId
       ? tx.purchaseOrder.count({
           where: { id: purchaseOrderId, companyId, supplierId: input.supplierId },
@@ -55,7 +56,10 @@ async function assertPurchaseInvoiceReferencesTx(
   ]);
 
   if (invoices === 0) throw new BusinessError('Factura de compra no encontrada');
-  if (suppliers === 0) throw new BusinessError('El proveedor no existe en la empresa');
+  if (!supplier) throw new BusinessError('El proveedor no existe en la empresa');
+  // La letra del comprobante la define la condición IVA del proveedor (TSK-787).
+  const mismatch = purchaseVoucherMismatchMessage(input.voucherType as VoucherType, supplier.taxCondition);
+  if (mismatch) throw new BusinessError(mismatch);
   if (orders === 0) {
     throw new BusinessError('La orden de compra no es del proveedor de la factura o no existe');
   }
