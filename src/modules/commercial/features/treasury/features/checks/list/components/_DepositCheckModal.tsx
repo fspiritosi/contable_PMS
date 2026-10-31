@@ -15,6 +15,7 @@ import {
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -43,6 +44,10 @@ interface Props {
   onOpenChange: (open: boolean) => void;
 }
 
+/**
+ * Depositar un cheque de tercero en cartera. Un e-cheq ya registrado en un banco
+ * (`lockedBankAccountId`, TSK-735) solo se deposita en esa cuenta: el selector queda fijo.
+ */
 export function _DepositCheckModal({ check, open, onOpenChange }: Props) {
   const router = useRouter();
 
@@ -50,7 +55,7 @@ export function _DepositCheckModal({ check, open, onOpenChange }: Props) {
     resolver: zodResolver(depositCheckSchema),
     defaultValues: {
       checkId: check.id,
-      bankAccountId: '',
+      bankAccountId: check.lockedBankAccountId ?? '',
       depositDate: businessToday(),
     },
   });
@@ -66,11 +71,11 @@ export function _DepositCheckModal({ check, open, onOpenChange }: Props) {
   const handleClose = useCallback(() => {
     form.reset({
       checkId: check.id,
-      bankAccountId: '',
+      bankAccountId: check.lockedBankAccountId ?? '',
       depositDate: businessToday(),
     });
     onOpenChange(false);
-  }, [form, check.id, onOpenChange]);
+  }, [form, check.id, check.lockedBankAccountId, onOpenChange]);
 
   const onSubmit = async (values: DepositCheckFormData) => {
     const result = await depositCheck(values);
@@ -108,7 +113,11 @@ export function _DepositCheckModal({ check, open, onOpenChange }: Props) {
                   {loadingAccounts ? (
                     <Skeleton className="h-10 w-full" />
                   ) : (
-                    <Select onValueChange={field.onChange} value={field.value}>
+                    <Select
+                      onValueChange={field.onChange}
+                      value={field.value}
+                      disabled={Boolean(check.lockedBankAccountId)}
+                    >
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Seleccionar cuenta" />
@@ -125,6 +134,11 @@ export function _DepositCheckModal({ check, open, onOpenChange }: Props) {
                         ))}
                       </SelectContent>
                     </Select>
+                  )}
+                  {check.lockedBankAccountId && (
+                    <FormDescription>
+                      El e-cheq ya se registró en esta cuenta: solo se puede depositarlo acá.
+                    </FormDescription>
                   )}
                   <FormMessage />
                 </FormItem>

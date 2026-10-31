@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildCheckEventLines, type CheckEventInput } from './check-entry-lines';
+import {
+  buildCheckEventLines,
+  checkOrigin,
+  checkRegisteredIn,
+  type CheckEventInput,
+  type CheckOriginRow,
+} from './check-entry-lines';
 
 /**
  * Reglas del asiento de cada evento del ciclo de vida del cheque (TSK-735): un caso por
@@ -24,6 +30,8 @@ const thirdParty = (over: Partial<CheckShape> = {}): CheckShape => ({
   customerId: 'cli',
   supplierId: null,
   fromDocument: true,
+  fundsAtOrigin: false,
+  partnerRepayment: null,
   checkNumber: '123',
   depositEntered: false,
   ...over,
@@ -38,6 +46,8 @@ const own = (over: Partial<CheckShape> = {}): CheckShape => ({
   customerId: null,
   supplierId: 'prov',
   fromDocument: true,
+  fundsAtOrigin: false,
+  partnerRepayment: null,
   checkNumber: '777',
   depositEntered: false,
   ...over,
@@ -300,5 +310,167 @@ describe('buildCheckEventLines', () => {
         warning: `La anulación del cheque N° 123 (${label}) no genera asiento: registralo en Contabilidad si corresponde.`,
       });
     });
+  });
+
+  describe('físico histórico con caja/banco en el pago de origen (F6): como el e-cheq histórico', () => {
+    const conFondos = (over: Partial<CheckShape> = {}) =>
+      thirdParty({ accountId: null, fundsAtOrigin: true, ...over });
+
+    it('DEPOSIT → sin asiento, con aviso de caja o banco', () => {
+      expect(buildCheckEventLines(input('DEPOSIT', conFondos()))).toEqual({
+        skip: true,
+        warning:
+          'El cheque N° 123 ya se registró en caja o banco al confirmar el recibo: el depósito no genera asiento.',
+      });
+    });
+
+    it('DEBIT de un propio → sin asiento, con aviso de caja o banco', () => {
+      expect(
+        buildCheckEventLines(input('DEBIT', own({ accountId: null, fundsAtOrigin: true })))
+      ).toEqual({
+        skip: true,
+        warning:
+          'El cheque N° 777 ya se registró en caja o banco al confirmar la orden de pago: el débito no genera asiento.',
+      });
+    });
+
+    it('REJECT → Debe Cheques rechazados / Haber banco (aunque el depósito no asentó)', () => {
+      expect(
+        buildCheckEventLines(input('REJECT', conFondos({ status: 'DEPOSITED' })))
+      ).toMatchObject({
+        lines: [
+          { accountId: 'rech', debit: 500, customerId: 'cli' },
+          { accountId: 'bco', credit: 500 },
+        ],
+      });
+    });
+
+    it('VOID en cartera → Debe Cuentas por Cobrar / Haber banco', () => {
+      expect(buildCheckEventLines(input('VOID', conFondos()))).toMatchObject({
+        lines: [
+          { accountId: 'cobrar', debit: 500, customerId: 'cli' },
+          { accountId: 'bco', credit: 500 },
+        ],
+      });
+    });
+
+    it('VOID de un propio entregado → Debe banco / Haber Cuentas por Pagar', () => {
+      expect(
+        buildCheckEventLines(input('VOID', own({ accountId: null, fundsAtOrigin: true })))
+      ).toMatchObject({
+        lines: [
+          { accountId: 'bco', debit: 500 },
+          { accountId: 'pagar', credit: 500, supplierId: 'prov' },
+        ],
+      });
+    });
+
+    it('con cuenta registrada, la caja/banco del origen no cambia nada', () => {
+      expect(checkRegisteredIn(thirdParty({ fundsAtOrigin: true }))).toBe('account');
+      expect(checkRegisteredIn(conFondos())).toBe('bank');
+    });
+  });
+
+  describe('propio de una devolución a socio (F5)', () => {
+    const socio = (hadEntry: boolean, over: Partial<CheckShape> = {}) =>
+      own({
+        supplierId: null,
+        partnerRepayment: { orderNumber: 'OP-00042', hadEntry },
+        ...over,
+      });
+
+    it('con asiento: DEBIT → Debe la cuenta del cheque / Haber banco', () => {
+      expect(buildCheckEventLines(input('DEBIT', socio(true)))).toMatchObject({
+        lines: [
+          { accountId: 'vdp', debit: 500 },
+          { accountId: 'bco', credit: 500 },
+        ],
+      });
+    });
+
+    it('con asiento: VOID entregado → bloqueado, hay que corregir la devolución', () => {
+      expect(buildCheckEventLines(input('VOID', socio(true)))).toEqual({
+        blocked:
+          'El cheque N° 777 pagó la devolución al socio OP-00042: para anularlo, corregí esa orden de pago.',
+      });
+      // El e-cheq propio (sin cuenta, va por banco) de una devolución con asiento, también.
+      expect(
+        buildCheckEventLines(input('VOID', socio(true, { accountId: null, isElectronic: true })))
+      ).toMatchObject({ blocked: expect.stringContaining('OP-00042') });
+    });
+
+    it('histórica sin asiento: DEBIT y VOID → sin asiento, con aviso', () => {
+      const historica = socio(false, { accountId: null });
+      expect(buildCheckEventLines(input('DEBIT', historica))).toEqual({
+        skip: true,
+        warning: 'La devolución al socio OP-00042 no tenía asiento: el débito no genera asiento.',
+      });
+      expect(buildCheckEventLines(input('VOID', historica))).toEqual({
+        skip: true,
+        warning:
+          'La devolución al socio OP-00042 no tenía asiento: la anulación no genera asiento.',
+      });
+    });
+  });
+});
+
+describe('checkOrigin', () => {
+  const row = (over: Partial<CheckOriginRow> = {}): CheckOriginRow => ({
+    type: 'THIRD_PARTY',
+    accountId: null,
+    receiptPaymentId: null,
+    paymentOrderPaymentId: null,
+    receiptPayment: null,
+    paymentOrderPayment: null,
+    ...over,
+  });
+  const order = (partnerId: string | null, journalEntryId: string | null) => ({
+    cashRegisterId: null,
+    bankAccountId: null,
+    paymentOrder: { partnerId, fullNumber: 'OP-00042', journalEntryId },
+  });
+
+  it('cargado a mano: sin documento ni fondos', () => {
+    expect(checkOrigin(row())).toEqual({
+      fromDocument: false,
+      fundsAtOrigin: false,
+      partnerRepayment: null,
+    });
+  });
+
+  it('tercero: los fondos salen del pago del RC, no del pago de la OP que lo endosó', () => {
+    expect(
+      checkOrigin(
+        row({
+          receiptPaymentId: 'rp',
+          receiptPayment: { cashRegisterId: 'caja', bankAccountId: null },
+          paymentOrderPaymentId: 'op',
+          paymentOrderPayment: { ...order(null, null), bankAccountId: 'banco' },
+        })
+      )
+    ).toMatchObject({ fromDocument: true, fundsAtOrigin: true, partnerRepayment: null });
+    expect(
+      checkOrigin(
+        row({
+          paymentOrderPaymentId: 'op',
+          paymentOrderPayment: { ...order('socio', 'je'), bankAccountId: 'banco' },
+        })
+      )
+    ).toMatchObject({ fundsAtOrigin: false, partnerRepayment: null });
+  });
+
+  it('propio de una devolución a socio: tuvo asiento si el cheque tiene cuenta o la OP asiento', () => {
+    const propio = (accountId: string | null, journalEntryId: string | null) =>
+      checkOrigin(
+        row({
+          type: 'OWN',
+          accountId,
+          paymentOrderPaymentId: 'op',
+          paymentOrderPayment: order('socio', journalEntryId),
+        })
+      ).partnerRepayment;
+    expect(propio('vdp', null)).toEqual({ orderNumber: 'OP-00042', hadEntry: true });
+    expect(propio(null, 'je')).toEqual({ orderNumber: 'OP-00042', hadEntry: true });
+    expect(propio(null, null)).toEqual({ orderNumber: 'OP-00042', hadEntry: false });
   });
 });

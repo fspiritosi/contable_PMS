@@ -25,15 +25,26 @@ vi.mock('@/shared/lib/permissions', async (importOriginal) => ({
 }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 
+import { closeMonthForTest } from '@/modules/accounting/shared/test-utils/period-test-helpers';
+import { cleanupAccountingCompany } from '@/modules/accounting/shared/test-utils/cleanup-accounting-company';
+import { UNEXPECTED_ERROR_MESSAGE } from '@/shared/lib/action-result';
 import { getActiveCompanyId } from '@/shared/lib/company';
 import { getCurrentUserId } from '@/shared/lib/current-user';
-import { UNEXPECTED_ERROR_MESSAGE } from '@/shared/lib/action-result';
-import { closeMonthForTest } from '@/modules/accounting/shared/test-utils/period-test-helpers';
 
 // Código real de producción.
-import { confirmReceipt, createReceipt } from '../receipts/actions.server';
+import { postJournalEntryTx } from '@/modules/accounting/features/integrations/core';
 import { confirmPaymentOrder, createPaymentOrder } from '../payment-orders/actions.server';
-import { createCheck, debitCheck, depositCheck, rejectCheck, voidCheck } from './actions.server';
+import { confirmReceipt, createReceipt } from '../receipts/actions.server';
+import {
+  createCheck,
+  debitCheck,
+  deleteCheck,
+  depositCheck,
+  endorseCheck,
+  getChecksPaginated,
+  rejectCheck,
+  voidCheck,
+} from './actions.server';
 
 const PREFIX = 'TSK735-CHK-';
 const DOC_DATE = new Date('2026-03-10');
@@ -72,7 +83,10 @@ describe.skipIf(!dbAvailable)('integración e2e: asientos del ciclo del cheque (
   let nextNumber = 1;
   let depositedCheckId: string;
 
-  async function confirmedReceiptCheck(checkNumber: string): Promise<string> {
+  async function confirmedReceiptCheck(
+    checkNumber: string,
+    method: 'CHECK' | 'ECHEQ' = 'CHECK'
+  ): Promise<string> {
     const number = nextNumber++;
     const invoice = await prisma.salesInvoice.create({
       data: {
@@ -101,9 +115,10 @@ describe.skipIf(!dbAvailable)('integración e2e: asientos del ciclo del cheque (
       items: [{ invoiceId: invoice.id, amount: '1000' }],
       payments: [
         {
-          paymentMethod: 'CHECK',
+          paymentMethod: method,
           amount: '1000',
           checkNumber,
+          bankAccountId: method === 'ECHEQ' ? bankAccountId : undefined,
           checkBankName: 'Banco Emisor',
           checkIssueDate: DOC_DATE,
           checkDueDate: new Date('2026-04-10'),
@@ -197,10 +212,34 @@ describe.skipIf(!dbAvailable)('integración e2e: asientos del ciclo del cheque (
       },
     });
 
+  /** Cheque cargado a mano en Tesorería (sin RC/OP ni cuenta). */
+  async function manualThirdPartyCheck(checkNumber: string): Promise<string> {
+    const created = await createCheck({
+      type: 'THIRD_PARTY',
+      checkNumber,
+      bankName: 'Banco Emisor',
+      amount: '700',
+      issueDate: DOC_DATE,
+      dueDate: new Date('2026-04-10'),
+      drawerName: 'Librador a mano',
+      customerId,
+    });
+    return created.id;
+  }
+
+  async function listedCheck(checkId: string) {
+    const { checkNumber } = await prisma.check.findUniqueOrThrow({
+      where: { id: checkId },
+      select: { checkNumber: true },
+    });
+    const { data } = await getChecksPaginated({ checkNumber });
+    const row = data.find((c) => c.id === checkId);
+    if (!row) throw new Error('El cheque no aparece en el listado');
+    return row;
+  }
+
   const bankBalance = async () =>
-    Number(
-      (await prisma.bankAccount.findUniqueOrThrow({ where: { id: bankAccountId } })).balance
-    );
+    Number((await prisma.bankAccount.findUniqueOrThrow({ where: { id: bankAccountId } })).balance);
 
   beforeAll(async () => {
     const company = await prisma.company.create({
@@ -292,14 +331,13 @@ describe.skipIf(!dbAvailable)('integración e2e: asientos del ciclo del cheque (
       await prisma.bankAccount.deleteMany({ where: { companyId } });
       await prisma.receipt.deleteMany({ where: { companyId } });
       await prisma.paymentOrder.deleteMany({ where: { companyId } });
-      await prisma.journalEntry.deleteMany({ where: { companyId } });
       await prisma.salesInvoice.deleteMany({ where: { companyId } });
       await prisma.purchaseInvoice.deleteMany({ where: { companyId } });
       await prisma.salesPointOfSale.deleteMany({ where: { companyId } });
       await prisma.contractor.deleteMany({ where: { companyId } });
       await prisma.supplier.deleteMany({ where: { companyId } });
-      await prisma.accountingPeriod.deleteMany({ where: { fiscalYear: { companyId } } });
-      await prisma.fiscalYear.deleteMany({ where: { companyId } });
+      // Hay asientos REGISTRADOS/ANULADOS (F11): el trigger no deja borrarlos directo.
+      await cleanupAccountingCompany(companyId);
       await prisma.accountingSettings.deleteMany({ where: { companyId } });
       await prisma.account.deleteMany({ where: { companyId } });
       await prisma.company.deleteMany({ where: { id: companyId } });
@@ -531,5 +569,190 @@ describe.skipIf(!dbAvailable)('integración e2e: asientos del ciclo del cheque (
     expect(check.bankMovementId).toBeNull();
     expect(await bankBalance()).toBe(before);
     expect(await prisma.bankMovement.count({ where: { companyId } })).toBe(movementsBefore);
+  });
+
+  // ==========================================================================
+  // Revisión final de TSK-735
+  // ==========================================================================
+
+  it('F3: un cheque nacido de un RC no se elimina (y el listado no ofrece "Eliminar"); uno cargado a mano sí', async () => {
+    const checkId = await confirmedReceiptCheck('T735C-F3-RC');
+    const { receiptPayment } = await prisma.check.findUniqueOrThrow({
+      where: { id: checkId },
+      select: { receiptPayment: { select: { receipt: { select: { fullNumber: true } } } } },
+    });
+
+    expect((await listedCheck(checkId)).fromDocument).toBe(true);
+    expect(await deleteCheck(checkId)).toEqual({
+      success: false,
+      error: `El cheque N° T735C-F3-RC lo generó el recibo ${receiptPayment?.receipt.fullNumber}: anulalo o corregí el comprobante.`,
+    });
+    expect((await readCheck(checkId)).status).toBe('PORTFOLIO');
+
+    const manualId = await manualThirdPartyCheck('T735C-F3-MAN');
+    expect((await listedCheck(manualId)).fromDocument).toBe(false);
+    expect(await deleteCheck(manualId)).toEqual({ success: true });
+    expect(await prisma.check.count({ where: { id: manualId } })).toBe(0);
+  });
+
+  it('F3: un cheque propio nacido de una OP tampoco se elimina', async () => {
+    const checkId = await confirmedOrderCheck('T735C-F3-OP');
+    const result = await deleteCheck(checkId);
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.error).toMatch(
+      /^El cheque N° T735C-F3-OP lo generó la orden de pago OP-\d+: anulalo o corregí el comprobante\.$/
+    );
+    expect((await readCheck(checkId)).status).toBe('DELIVERED');
+  });
+
+  it('F4: endoso manual de un cheque registrado en Valores a depositar → bloqueado; uno cargado a mano → endosado con aviso', async () => {
+    const endorse = (checkId: string) =>
+      endorseCheck({
+        checkId,
+        endorsedToName: 'Proveedor a mano',
+        endorsedToTaxId: null,
+        supplierId: null,
+        endorsedDate: DEPOSIT_DATE,
+      });
+
+    const registeredId = await confirmedReceiptCheck('T735C-F4-RC');
+    expect(await endorse(registeredId)).toEqual({
+      success: false,
+      error:
+        `El cheque N° T735C-F4-RC está registrado en T735C-VAD - ${PREFIX}Valores a depositar: ` +
+        'endosalo desde una orden de pago para que el asiento lo descargue.',
+    });
+    expect((await readCheck(registeredId)).status).toBe('PORTFOLIO');
+
+    const manualId = await manualThirdPartyCheck('T735C-F4-MAN');
+    expect(await endorse(manualId)).toEqual({
+      success: true,
+      warnings: [
+        'El endoso manual no genera asiento: el endoso contable se hace con una orden de pago.',
+      ],
+    });
+    expect((await readCheck(manualId)).status).toBe('ENDORSED');
+  });
+
+  it('F7: e-cheq propio → solo se debita en el banco en que se registró; el listado fija ese banco', async () => {
+    const checkId = await confirmedOrderCheck('T735C-F7-OP', 'ECHEQ');
+    const otherBank = await prisma.bankAccount.create({
+      data: {
+        companyId,
+        bankName: `${PREFIX}Otro banco`,
+        accountNumber: 'T735C-0002',
+        accountType: 'CHECKING',
+        balance: 100000,
+        status: 'ACTIVE',
+        accountId: bancoId,
+      },
+      select: { id: true },
+    });
+    expect((await listedCheck(checkId)).lockedBankAccountId).toBe(bankAccountId);
+
+    const wrong = await debitCheck({ checkId, date: DEPOSIT_DATE, bankAccountId: otherBank.id });
+    expect(wrong).toEqual({
+      success: false,
+      error: `El e-cheq N° T735C-F7-OP se registró en ${PREFIX}Banco T735C-0001: debitalo en esa cuenta.`,
+    });
+    expect((await readCheck(checkId)).status).toBe('DELIVERED');
+
+    const right = await debitCheck({ checkId, date: DEPOSIT_DATE, bankAccountId });
+    expect(right.success).toBe(true);
+    expect((await readCheck(checkId)).status).toBe('CASHED');
+  });
+
+  it('F7: e-cheq histórico de un RC → solo se deposita en su banco; uno con cuenta se deposita en cualquiera', async () => {
+    const historicId = await confirmedReceiptCheck('T735C-F7-RC', 'ECHEQ');
+    await prisma.check.update({ where: { id: historicId }, data: { accountId: null } });
+    const otherBank = await prisma.bankAccount.findFirstOrThrow({
+      where: { companyId, accountNumber: 'T735C-0002' },
+      select: { id: true },
+    });
+    expect((await listedCheck(historicId)).lockedBankAccountId).toBe(bankAccountId);
+
+    const wrong = await depositCheck({
+      checkId: historicId,
+      bankAccountId: otherBank.id,
+      depositDate: DEPOSIT_DATE,
+    });
+    expect(wrong).toEqual({
+      success: false,
+      error: `El e-cheq N° T735C-F7-RC se registró en ${PREFIX}Banco T735C-0001: depositalo en esa cuenta.`,
+    });
+    expect((await readCheck(historicId)).status).toBe('PORTFOLIO');
+
+    // Registrado en Valores a depositar: el depósito asienta, el banco es libre.
+    const registeredId = await confirmedReceiptCheck('T735C-F7-RC2', 'ECHEQ');
+    expect((await listedCheck(registeredId)).lockedBankAccountId).toBeNull();
+    const ok = await depositCheck({
+      checkId: registeredId,
+      bankAccountId: otherBank.id,
+      depositDate: DEPOSIT_DATE,
+    });
+    expect(ok).toEqual({ success: true, warnings: [] });
+  });
+
+  it('F11: anular un depositado con el depósito REGISTRADO → reversa del depósito + asiento de anulación', async () => {
+    const checkId = await confirmedReceiptCheck('T735C-F11-DEP');
+    expect(
+      (await depositCheck({ checkId, bankAccountId, depositDate: DEPOSIT_DATE })).success
+    ).toBe(true);
+    const { depositEntryId } = await readCheck(checkId);
+    if (!depositEntryId) throw new Error('El depósito no generó asiento');
+    await postJournalEntryTx(prisma, { companyId, entryId: depositEntryId, userId: 'test-user' });
+    const before = await bankBalance();
+
+    const result = await voidCheck(checkId);
+    expect(result).toEqual({ success: true, warnings: [] });
+
+    const check = await readCheck(checkId);
+    expect(check.status).toBe('VOIDED');
+    const deposit = await prisma.journalEntry.findUniqueOrThrow({
+      where: { id: depositEntryId },
+      select: { status: true, reversalEntryId: true },
+    });
+    expect(deposit.status).toBe('REVERSED');
+    const reversal = await prisma.journalEntry.findUniqueOrThrow({
+      where: { id: deposit.reversalEntryId ?? '' },
+      select: { status: true, originalEntryId: true },
+    });
+    expect(reversal).toEqual({ status: 'POSTED', originalEntryId: depositEntryId });
+    expect(await entryLines(deposit.reversalEntryId)).toEqual([
+      { accountId: valoresId, debit: 1000, credit: 0, customerId: null, supplierId: null },
+      { accountId: bancoId, debit: 0, credit: 1000, customerId: null, supplierId: null },
+    ]);
+    expect(await entryLines(check.voidEntryId)).toEqual([
+      { accountId: cobrarId, debit: 1000, credit: 0, customerId, supplierId: null },
+      { accountId: valoresId, debit: 0, credit: 1000, customerId: null, supplierId: null },
+    ]);
+    expect(await bankBalance()).toBe(before - 1000);
+  });
+
+  it('F11: anular un propio entregado con cuenta → Debe Valores diferidos / Haber Cuentas por Pagar con el proveedor', async () => {
+    const checkId = await confirmedOrderCheck('T735C-F11-OWN');
+    const result = await voidCheck(checkId);
+    expect(result).toEqual({ success: true, warnings: [] });
+
+    const check = await readCheck(checkId);
+    expect(check.status).toBe('VOIDED');
+    expect(await entryLines(check.voidEntryId)).toEqual([
+      { accountId: diferidosId, debit: 1000, credit: 0, customerId: null, supplierId: null },
+      { accountId: pagarId, debit: 0, credit: 1000, customerId: null, supplierId },
+    ]);
+  });
+
+  it('F11: anular un e-cheq propio entregado → Debe Banco / Haber Cuentas por Pagar con el proveedor', async () => {
+    const checkId = await confirmedOrderCheck('T735C-F11-ECH', 'ECHEQ');
+    const result = await voidCheck(checkId);
+    expect(result).toEqual({ success: true, warnings: [] });
+
+    const check = await readCheck(checkId);
+    expect(check.status).toBe('VOIDED');
+    expect(await entryLines(check.voidEntryId)).toEqual([
+      { accountId: bancoId, debit: 1000, credit: 0, customerId: null, supplierId: null },
+      { accountId: pagarId, debit: 0, credit: 1000, customerId: null, supplierId },
+    ]);
   });
 });

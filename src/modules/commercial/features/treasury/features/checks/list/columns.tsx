@@ -172,7 +172,10 @@ export function getColumns({
                   Anular
                 </DropdownMenuItem>
               )}
-              {canDeleteProp && ['PORTFOLIO', 'DELIVERED'].includes(check.status) && (
+              {/* Un cheque de un RC/OP no se elimina: se anula o se corrige el comprobante (TSK-735). */}
+              {canDeleteProp &&
+                !check.fromDocument &&
+                ['PORTFOLIO', 'DELIVERED'].includes(check.status) && (
                 <DropdownMenuItem onClick={() => onDelete(check)} className="text-destructive">
                   <Trash2 className="mr-2 h-4 w-4" />
                   Eliminar

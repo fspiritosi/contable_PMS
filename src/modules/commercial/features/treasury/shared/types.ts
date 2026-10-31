@@ -427,6 +427,10 @@ export interface CheckListItem extends Record<string, unknown> {
   customer: { id: string; name: string } | null;
   supplier: { id: string; businessName: string } | null;
   bankAccount: { id: string; bankName: string; accountNumber: string } | null;
+  /** Nació de un recibo u orden de pago (TSK-735): no se puede eliminar, se anula o corrige el comprobante. */
+  fromDocument: boolean;
+  /** Banco en el que ya quedó registrado (e-cheq): depositar/debitar solo en esa cuenta (TSK-735). */
+  lockedBankAccountId: string | null;
 }
 
 export interface CheckWithDetails extends Record<string, unknown> {

@@ -8,8 +8,15 @@
  * - `accountId` si lo tiene;
  * - si es null y vino de un recibo/OP (histórico): el físico quedó abierto en
  *   Cuentas por Cobrar/Pagar del tercero, y el e-cheq ya fue al banco (el del
- *   recibo histórico y todo e-cheq propio de una OP);
+ *   recibo histórico y todo e-cheq propio de una OP). Un físico cuyo pago de origen
+ *   tenía caja o banco (arrastrados de otro medio en el formulario) también fue a
+ *   fondos con la regla vieja: se trata como el e-cheq histórico en todas las filas;
  * - si es null y no vino de un documento: se cargó a mano y no se asienta.
+ *
+ * Cheque propio de una devolución a socio: si la devolución tuvo asiento, debitar
+ * asienta como cualquier propio y anularlo entregado se bloquea (hay que corregir la
+ * devolución, si no se descuadran Deudas con socios y las cuotas pagadas); si es una
+ * devolución histórica sin asiento, debitar y anular no generan asiento.
  *
  * | Evento  | Cheque                                   | Asiento                                   |
  * |---------|------------------------------------------|-------------------------------------------|
@@ -31,6 +38,10 @@
  * | VOID    | DELIVERED, histórico físico              | sin asiento, aviso (Pagar seguía abierto) |
  * | VOID    | DELIVERED, e-cheq propio                 | Banco / Pagar (proveedor)                 |
  * | VOID    | ENDORSED o REJECTED                      | sin asiento, aviso                        |
+ * | DEBIT   | propio de devolución a socio con asiento | como cualquier propio                     |
+ * | VOID    | propio de devolución a socio con asiento | bloqueado: corregir la devolución         |
+ * | DEBIT,  | propio de devolución a socio histórica   | sin asiento, aviso                        |
+ * | VOID    | (sin asiento)                            |                                           |
  *
  * ¹ DEPOSITED: el llamador revierte antes el asiento del depósito (`applyCheckEventTx`).
  * ² Depositado antes de TSK-735: ni el recibo ni el depósito debitaron Banco en libros y el
@@ -57,6 +68,13 @@ export interface CheckEventInput {
     supplierId: string | null;
     /** `Boolean(receiptPaymentId || paymentOrderPaymentId)`. */
     fromDocument: boolean;
+    /**
+     * El pago del comprobante de origen (el RC del tercero, la OP del propio) tenía caja o
+     * banco: con la regla vieja el asiento lo mandó a fondos.
+     */
+    fundsAtOrigin: boolean;
+    /** Propio que pagó una devolución a socio: su OP y si esa devolución tuvo asiento. */
+    partnerRepayment: { orderNumber: string; hadEntry: boolean } | null;
     checkNumber: string;
     /** El depósito generó asiento (`Boolean(depositEntryId)`): el banco quedó debitado en libros. */
     depositEntered: boolean;
@@ -82,7 +100,9 @@ export interface CheckEntryLine {
 export type CheckEventLinesResult =
   | { lines: CheckEntryLine[] }
   | { skip: true; warning: string }
-  | { missing: AccountingSettingsAccountField | 'bank' };
+  | { missing: AccountingSettingsAccountField | 'bank' }
+  /** El evento no se puede registrar desde Tesorería: el mensaje dice qué corregir. */
+  | { blocked: string };
 
 /** Una cuenta del asiento con su auxiliar, o la falta que bloquea. */
 type Side =
@@ -90,7 +110,7 @@ type Side =
   | { missing: AccountingSettingsAccountField | 'bank' };
 
 /** Dónde quedó registrado el cheque (ver docblock). */
-type Registered = 'account' | 'legacyCounterparty' | 'bank' | 'manual';
+export type CheckRegistered = 'account' | 'legacyCounterparty' | 'bank' | 'manual';
 
 const EVENT_LABELS: Record<CheckEvent, string> = {
   DEPOSIT: 'Depósito',
@@ -117,10 +137,78 @@ export function checkEventDescription(
   return `${EVENT_LABELS[event]} de ${checkLabel(check)}`;
 }
 
-function registeredAccount(check: CheckEventInput['check']): Registered {
+/**
+ * Dónde quedó registrado el cheque. `'bank'`: el asiento del comprobante ya movió el banco
+ * (o la caja), así que depositar/debitar no asientan y tienen que hacerse en el banco del
+ * cheque.
+ */
+export function checkRegisteredIn(
+  check: Pick<CheckEventInput['check'], 'accountId' | 'fromDocument' | 'isElectronic' | 'fundsAtOrigin'>
+): CheckRegistered {
   if (check.accountId) return 'account';
   if (!check.fromDocument) return 'manual';
-  return check.isElectronic ? 'bank' : 'legacyCounterparty';
+  return check.isElectronic || check.fundsAtOrigin ? 'bank' : 'legacyCounterparty';
+}
+
+/** Lo que el cheque guarda de su comprobante de origen (select de `CHECK_ORIGIN_SELECT`). */
+export interface CheckOriginRow {
+  type: CheckType;
+  accountId: string | null;
+  receiptPaymentId: string | null;
+  paymentOrderPaymentId: string | null;
+  receiptPayment: { cashRegisterId: string | null; bankAccountId: string | null } | null;
+  paymentOrderPayment: {
+    cashRegisterId: string | null;
+    bankAccountId: string | null;
+    paymentOrder: { partnerId: string | null; fullNumber: string; journalEntryId: string | null };
+  } | null;
+}
+
+/**
+ * Origen del cheque para la regla: el pago de origen es el del RC para un tercero y el de
+ * la OP para un propio (el `paymentOrderPaymentId` de un tercero es el de su endoso). Una
+ * devolución a socio "tuvo asiento" si el cheque quedó con cuenta o la OP tiene asiento
+ * (el e-cheq propio nunca tiene cuenta: va por banco).
+ */
+export function checkOrigin(
+  row: CheckOriginRow
+): Pick<CheckEventInput['check'], 'fromDocument' | 'fundsAtOrigin' | 'partnerRepayment'> {
+  const originPayment = row.type === 'THIRD_PARTY' ? row.receiptPayment : row.paymentOrderPayment;
+  const order = row.type === 'OWN' ? row.paymentOrderPayment?.paymentOrder : null;
+  return {
+    fromDocument: Boolean(row.receiptPaymentId || row.paymentOrderPaymentId),
+    fundsAtOrigin: Boolean(originPayment?.cashRegisterId || originPayment?.bankAccountId),
+    partnerRepayment: order?.partnerId
+      ? {
+          orderNumber: order.fullNumber,
+          hadEntry: Boolean(row.accountId || order.journalEntryId),
+        }
+      : null,
+  };
+}
+
+/** Propio de una devolución a socio: sin asiento si la devolución no lo tuvo, bloqueo al anular. */
+function partnerRepaymentRule(input: CheckEventInput): CheckEventLinesResult | null {
+  const { event, check } = input;
+  if (!check.partnerRepayment || (event !== 'DEBIT' && event !== 'VOID')) return null;
+  const { orderNumber, hadEntry } = check.partnerRepayment;
+  if (!hadEntry) {
+    const subject = event === 'DEBIT' ? 'el débito' : 'la anulación';
+    return skip(
+      `La devolución al socio ${orderNumber} no tenía asiento: ${subject} no genera asiento.`
+    );
+  }
+  if (event === 'VOID' && check.status === 'DELIVERED') {
+    return {
+      blocked: `El cheque N° ${check.checkNumber} pagó la devolución al socio ${orderNumber}: para anularlo, corregí esa orden de pago.`,
+    };
+  }
+  return null;
+}
+
+/** «en el banco» (e-cheq) o «en caja o banco» (físico con caja/banco en el pago de origen). */
+function fundsLabel(check: CheckEventInput['check']): string {
+  return check.isElectronic ? 'en el banco' : 'en caja o banco';
 }
 
 const skip = (warning: string): CheckEventLinesResult => ({ skip: true, warning });
@@ -141,7 +229,7 @@ function pair(input: CheckEventInput, debit: Side, credit: Side): CheckEventLine
 
 export function buildCheckEventLines(input: CheckEventInput): CheckEventLinesResult {
   const { event, check, settings } = input;
-  const registered = registeredAccount(check);
+  const registered = checkRegisteredIn(check);
   const number = `N° ${check.checkNumber}`;
 
   const bank: Side = input.bankAccountId ? { accountId: input.bankAccountId } : { missing: 'bank' };
@@ -159,6 +247,9 @@ export function buildCheckEventLines(input: CheckEventInput): CheckEventLinesRes
     );
   }
 
+  const partnerResult = partnerRepaymentRule(input);
+  if (partnerResult) return partnerResult;
+
   if (event === 'REJECT') {
     const rejected: Side = settings.checksRejectedAccountId
       ? { accountId: settings.checksRejectedAccountId, customerId: check.customerId }
@@ -172,7 +263,7 @@ export function buildCheckEventLines(input: CheckEventInput): CheckEventLinesRes
   if (event === 'DEPOSIT') {
     if (registered === 'bank') {
       return skip(
-        `El e-cheq ${number} ya se registró en el banco al confirmar el recibo: el depósito no genera asiento.`
+        `El ${checkLabel(check)} ya se registró ${fundsLabel(check)} al confirmar el recibo: el depósito no genera asiento.`
       );
     }
     return pair(input, bank, registered === 'account' ? own : receivables);
@@ -181,7 +272,7 @@ export function buildCheckEventLines(input: CheckEventInput): CheckEventLinesRes
   if (event === 'DEBIT') {
     if (registered === 'bank') {
       return skip(
-        `El e-cheq ${number} ya se registró en el banco al confirmar la orden de pago: el débito no genera asiento.`
+        `El ${checkLabel(check)} ya se registró ${fundsLabel(check)} al confirmar la orden de pago: el débito no genera asiento.`
       );
     }
     return pair(input, registered === 'account' ? own : payables, bank);

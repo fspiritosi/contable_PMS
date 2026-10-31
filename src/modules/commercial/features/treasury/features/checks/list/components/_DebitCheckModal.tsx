@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/shared/compo
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -40,8 +41,9 @@ interface Props {
 
 /**
  * Debitar un cheque propio entregado (TSK-735): fecha y cuenta bancaria del débito (por
- * defecto, la del cheque). El llamador lo monta con `key` = id del cheque para que los
- * valores por defecto sigan al cheque elegido.
+ * defecto, la del cheque; fija si el e-cheq ya se registró en ese banco, TSK-735). El
+ * llamador lo monta con `key` = id del cheque para que los valores por defecto sigan al
+ * cheque elegido.
  */
 export function _DebitCheckModal({ check, open, onOpenChange }: Props) {
   const router = useRouter();
@@ -49,10 +51,10 @@ export function _DebitCheckModal({ check, open, onOpenChange }: Props) {
   const defaults = useCallback(
     (): DebitCheckFormData => ({
       checkId: check.id,
-      bankAccountId: check.bankAccount?.id ?? '',
+      bankAccountId: check.lockedBankAccountId ?? check.bankAccount?.id ?? '',
       date: businessToday(),
     }),
-    [check.id, check.bankAccount?.id]
+    [check.id, check.lockedBankAccountId, check.bankAccount?.id]
   );
 
   const form = useForm<DebitCheckFormData>({
@@ -108,7 +110,11 @@ export function _DebitCheckModal({ check, open, onOpenChange }: Props) {
                   {loadingAccounts ? (
                     <Skeleton className="h-10 w-full" />
                   ) : (
-                    <Select onValueChange={field.onChange} value={field.value}>
+                    <Select
+                      onValueChange={field.onChange}
+                      value={field.value}
+                      disabled={Boolean(check.lockedBankAccountId)}
+                    >
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Seleccionar cuenta" />
@@ -125,6 +131,11 @@ export function _DebitCheckModal({ check, open, onOpenChange }: Props) {
                         ))}
                       </SelectContent>
                     </Select>
+                  )}
+                  {check.lockedBankAccountId && (
+                    <FormDescription>
+                      El e-cheq ya se registró en esta cuenta: solo se puede debitarlo acá.
+                    </FormDescription>
                   )}
                   <FormMessage />
                 </FormItem>

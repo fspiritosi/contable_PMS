@@ -17,6 +17,8 @@ import {
   buildCheckEventLines,
   checkEventDescription,
   checkLabel,
+  checkOrigin,
+  checkRegisteredIn,
   type CheckEvent,
   type CheckEventLinesResult,
 } from '../check-entry-lines';
@@ -37,6 +39,25 @@ const ENTRY_COLUMN = {
   DEBIT: 'debitEntryId',
   VOID: 'voidEntryId',
 } as const satisfies Record<CheckEvent, string>;
+
+/**
+ * Comprobante de origen del cheque (`checkOrigin`): pago del RC/OP con su caja/banco y,
+ * para el propio, la OP (devolución a socio y si tuvo asiento).
+ */
+export const CHECK_ORIGIN_SELECT = {
+  type: true,
+  accountId: true,
+  receiptPaymentId: true,
+  paymentOrderPaymentId: true,
+  receiptPayment: { select: { cashRegisterId: true, bankAccountId: true } },
+  paymentOrderPayment: {
+    select: {
+      cashRegisterId: true,
+      bankAccountId: true,
+      paymentOrder: { select: { partnerId: true, fullNumber: true, journalEntryId: true } },
+    },
+  },
+} satisfies Prisma.CheckSelect;
 
 /** «el depósito del cheque N° 123», para el prefijo «No se puede confirmar …». */
 const EVENT_SUBJECT: Record<CheckEvent, string> = {
@@ -123,7 +144,9 @@ async function undoDepositEntryTx(
  * Arma y crea (DRAFT, `system`) el asiento del evento y guarda su id en la columna
  * del evento. Se llama ANTES de cambiar el estado del cheque: la anulación decide
  * por el estado previo. Sin asiento (cheque cargado a mano, e-cheq ya en banco) →
- * `entryId: null` con el aviso.
+ * `entryId: null` con el aviso. Lanza `BusinessError` si el evento está bloqueado
+ * (anular el propio de una devolución a socio) o si un cheque ya registrado en un banco
+ * se deposita/debita en otro.
  */
 export async function applyCheckEventTx(
   tx: Tx,
@@ -136,21 +159,37 @@ export async function applyCheckEventTx(
   const check = await tx.check.findFirst({
     where: { id: input.checkId, companyId },
     select: {
-      type: true,
+      ...CHECK_ORIGIN_SELECT,
       status: true,
       amount: true,
       isElectronic: true,
-      accountId: true,
       customerId: true,
       supplierId: true,
-      receiptPaymentId: true,
-      paymentOrderPaymentId: true,
       checkNumber: true,
       bankAccountId: true,
+      bankAccount: { select: { bankName: true, accountNumber: true } },
       depositEntryId: true,
     },
   });
   if (!check) throw new BusinessError('Cheque no encontrado');
+  const origin = checkOrigin(check);
+
+  // Sin asiento porque el banco ya se movió en libros con el comprobante (e-cheq): el
+  // depósito/débito tiene que ser en ese banco, si no Tesorería y libros quedan en bancos
+  // distintos (TSK-735).
+  const registeredBank =
+    checkRegisteredIn({ ...check, ...origin }) === 'bank' ? check.bankAccount : null;
+  if (
+    (event === 'DEPOSIT' || event === 'DEBIT') &&
+    registeredBank &&
+    input.bankAccountId &&
+    input.bankAccountId !== check.bankAccountId
+  ) {
+    const verb = event === 'DEPOSIT' ? 'depositalo' : 'debitalo';
+    throw new BusinessError(
+      `El ${checkLabel(check)} se registró en ${registeredBank.bankName} ${registeredBank.accountNumber}: ${verb} en esa cuenta.`
+    );
+  }
 
   const settings = await tx.accountingSettings.findUnique({
     where: { companyId },
@@ -185,7 +224,7 @@ export async function applyCheckEventTx(
       accountId: check.accountId,
       customerId: check.customerId,
       supplierId: check.supplierId,
-      fromDocument: Boolean(check.receiptPaymentId || check.paymentOrderPaymentId),
+      ...origin,
       checkNumber: check.checkNumber,
       depositEntered: Boolean(check.depositEntryId),
     },
@@ -197,6 +236,7 @@ export async function applyCheckEventTx(
     },
   });
 
+  if ('blocked' in result) throw new BusinessError(result.blocked);
   if ('skip' in result) return { entryId: null, warnings: [result.warning] };
   if ('missing' in result) {
     const subject = `${EVENT_SUBJECT[event]} ${checkLabel(check)}`;

@@ -73,12 +73,14 @@ export function _ChecksTable({ data, totalRows, searchParams, facetCounts }: Pro
     if (!selectedCheck) return;
     setIsProcessing(true);
     try {
-      await deleteCheck(selectedCheck.id);
+      const result = await deleteCheck(selectedCheck.id);
+      if (!result.success) {
+        toast.error(result.error);
+        return;
+      }
       toast.success('Cheque eliminado correctamente');
       setDeleteDialogOpen(false);
       router.refresh();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Error al eliminar cheque');
     } finally {
       setIsProcessing(false);
     }
@@ -218,6 +220,7 @@ export function _ChecksTable({ data, totalRows, searchParams, facetCounts }: Pro
             checkId={selectedCheck.id}
           />
           <_DepositCheckModal
+            key={`deposit-${selectedCheck.id}`}
             open={depositOpen}
             onOpenChange={setDepositOpen}
             check={selectedCheck}
