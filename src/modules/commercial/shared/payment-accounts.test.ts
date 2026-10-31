@@ -310,6 +310,29 @@ describe('resolución de la cuenta de un pago', () => {
     );
   });
 
+  it('tarjeta de crédito en un recibo → omitida (cobro de un cliente)', () => {
+    const cobro = pago({ paymentMethod: 'CREDIT_CARD' });
+    expect(resolve(cobro, { creditCardsPayableAccountId: 'tc' }, 'receipt')).toEqual({
+      kind: 'omitted',
+      reason: 'CUSTOMER_CREDIT_CARD',
+    });
+    expect(classify([cobro], CON_DEFAULTS, 'receipt').omittedAmount).toBe(1000);
+  });
+
+  it('tarjeta de crédito de un socio en una OP → Deudas con socios (gana sobre la fila 8)', () => {
+    const socio = pago({
+      paymentMethod: 'CREDIT_CARD',
+      card: { name: 'Visa Socio', ownerType: 'PARTNER' },
+    });
+    expect(
+      resolve(
+        socio,
+        { partnerDebtsAccountId: 'SOC', creditCardsPayableAccountId: 'tc' },
+        'paymentOrder'
+      )
+    ).toEqual({ kind: 'resolved', accountId: 'SOC', source: 'partnerDebts' });
+  });
+
   it('"Cuenta Corriente" → omitido', () => {
     expect(resolve(pago({ paymentMethod: 'ACCOUNT' }), CON_DEFAULTS)).toEqual({
       kind: 'omitted',
@@ -490,10 +513,10 @@ describe('asiento de una sola línea', () => {
   it('recibo: lista los pagos omitidos y qué agregar', () => {
     expect(
       buildSingleLineEntryMessage('el recibo R-00012', 'receipt', [
-        { payment: pago({ paymentMethod: 'CHECK', checkNumber: '123' }), reason: 'ACCOUNT' },
+        { payment: pago({ paymentMethod: 'ACCOUNT' }), reason: 'ACCOUNT' },
       ])
     ).toBe(
-      'No se puede confirmar el recibo R-00012: ningún pago genera línea contable (Cheque N° 123 ' +
+      'No se puede confirmar el recibo R-00012: ningún pago genera línea contable (Cuenta Corriente ' +
         'por $\u00a01.000,00) y no hay retenciones, así que el asiento quedaría con una sola línea. ' +
         'Agregá un pago en efectivo, transferencia o cheque, o una retención.'
     );
@@ -502,12 +525,12 @@ describe('asiento de una sola línea', () => {
   it('OP: suma el débito de la empresa y separa varios pagos con coma', () => {
     expect(
       buildSingleLineEntryMessage('la orden de pago OP-00003', 'paymentOrder', [
-        { payment: pago({ paymentMethod: 'CHECK', checkNumber: '9' }), reason: 'ACCOUNT' },
+        { payment: pago({ paymentMethod: 'ACCOUNT', amount: 9 }), reason: 'ACCOUNT' },
         { payment: pago({ paymentMethod: 'ACCOUNT', amount: 50 }), reason: 'ACCOUNT' },
       ])
     ).toBe(
       'No se puede confirmar la orden de pago OP-00003: ningún pago genera línea contable ' +
-        '(Cheque N° 9 por $\u00a01.000,00, Cuenta Corriente por $\u00a050,00) y no hay retenciones, así que ' +
+        '(Cuenta Corriente por $\u00a09,00, Cuenta Corriente por $\u00a050,00) y no hay retenciones, así que ' +
         'el asiento quedaría con una sola línea. Agregá un pago en efectivo, transferencia, ' +
         'cheque o tarjeta, o una retención.'
     );

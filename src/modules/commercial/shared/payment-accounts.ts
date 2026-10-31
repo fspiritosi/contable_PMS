@@ -10,7 +10,8 @@
  * - `missing`: el medio mueve fondos o valores y NO se pudo resolver cuenta:
  *   obligatoria, la confirmación se bloquea con un mensaje que nombra el medio
  *   y dónde configurarlo.
- * - `omitted`: solo "Cuenta Corriente", que no es un movimiento de fondos. El
+ * - `omitted`: "Cuenta Corriente" (no es un movimiento de fondos) y el cobro con
+ *   tarjeta de crédito en un recibo (sin cuenta definida todavía). El
  *   pago queda fuera del asiento con aviso y la línea de Cuentas por
  *   Cobrar/Pagar va por el importe contabilizable (total − omitidos).
  *
@@ -19,7 +20,7 @@
  * Orden de resolución: tarjeta de socio → cheque recibido (RC) → cheque
  * endosado (OP; con cuenta registrada, histórico físico a Cuentas por Cobrar o
  * e-cheq al banco del cheque) → cheque propio (OP) → tarjeta de crédito de la
- * empresa → "Cuenta Corriente" → cadena de caja/banco.
+ * empresa (solo OP) → "Cuenta Corriente" → cadena de caja/banco.
  *
  * Funciones puras: sin Prisma, sin React, sin importar de features.
  */
@@ -86,7 +87,7 @@ export type MissingPaymentAccountVia =
   | 'settings:creditCardsPayableAccountId'
   | 'settings:partnerDebtsAccountId'
   | 'settings:receivablesAccountId';
-export type OmittedPaymentReason = 'ACCOUNT';
+export type OmittedPaymentReason = 'ACCOUNT' | 'CUSTOMER_CREDIT_CARD';
 
 export type PaymentAccountResolution =
   | {
@@ -217,6 +218,9 @@ export function resolvePaymentAccount(
       );
     }
     // E-cheq propio: sigue la cadena de banco de abajo.
+  }
+  if (payment.paymentMethod === 'CREDIT_CARD' && kind === 'receipt') {
+    return { kind: 'omitted', reason: 'CUSTOMER_CREDIT_CARD' };
   }
   if (payment.paymentMethod === 'CREDIT_CARD') {
     return fromSettings(
@@ -352,6 +356,8 @@ export function buildMissingPaymentAccountMessage(
 }
 
 const OMITTED_REASON_TEXT: Record<OmittedPaymentReason, string> = {
+  CUSTOMER_CREDIT_CARD:
+    'el cobro con tarjeta de crédito todavía no tiene cuenta asignada en el sistema',
   ACCOUNT: '"Cuenta Corriente" no representa un movimiento de fondos',
 };
 
