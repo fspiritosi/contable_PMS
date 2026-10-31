@@ -16,8 +16,8 @@
  * | DEPOSIT | con cuenta                               | Banco / cuenta del cheque                 |
  * | DEPOSIT | histórico físico                         | Banco / Cobrar (cliente)                  |
  * | DEPOSIT | histórico electrónico                    | sin asiento, aviso                        |
- * | DEPOSIT, DEBIT, VOID | cargado a mano              | sin asiento, aviso                        |
- * | REJECT  | cualquiera                               | Cheques rechazados (cliente) / Banco      |
+ * | todos   | cargado a mano                           | sin asiento, aviso                        |
+ * | REJECT  | con cuenta o histórico de documento      | Cheques rechazados (cliente) / Banco      |
  * | DEBIT   | propio con cuenta                        | cuenta del cheque / Banco                 |
  * | DEBIT   | propio histórico físico                  | Pagar (proveedor) / Banco                 |
  * | DEBIT   | e-cheq propio (va por banco)             | sin asiento, aviso                        |
@@ -146,17 +146,18 @@ export function buildCheckEventLines(input: CheckEventInput): CheckEventLinesRes
     ? { accountId: settings.payablesAccountId, supplierId: check.supplierId }
     : { missing: 'payablesAccountId' };
 
+  if (registered === 'manual') {
+    return skip(
+      `El cheque ${number} se cargó a mano: registrá el asiento en Contabilidad si corresponde.`
+    );
+  }
+
+  // Histórico de documento también: el RC o el depósito legado ya debitó el banco.
   if (event === 'REJECT') {
     const rejected: Side = settings.checksRejectedAccountId
       ? { accountId: settings.checksRejectedAccountId, customerId: check.customerId }
       : { missing: 'checksRejectedAccountId' };
     return pair(input, rejected, bank);
-  }
-
-  if (registered === 'manual') {
-    return skip(
-      `El cheque ${number} se cargó a mano: registrá el asiento en Contabilidad si corresponde.`
-    );
   }
 
   if (event === 'DEPOSIT') {

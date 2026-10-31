@@ -7,7 +7,11 @@ import { buildCheckEventLines, type CheckEventInput } from './check-entry-lines'
  * fila de la tabla del brief, más el e-cheq propio (va por banco desde la OP).
  */
 
-const SETTINGS = { receivablesAccountId: 'cobrar', payablesAccountId: 'pagar', checksRejectedAccountId: 'rech' };
+const SETTINGS = {
+  receivablesAccountId: 'cobrar',
+  payablesAccountId: 'pagar',
+  checksRejectedAccountId: 'rech',
+};
 
 type CheckShape = CheckEventInput['check'];
 
@@ -95,12 +99,17 @@ describe('buildCheckEventLines', () => {
     const manualWarning =
       'El cheque N° 123 se cargó a mano: registrá el asiento en Contabilidad si corresponde.';
 
-    it.each(['DEPOSIT', 'VOID'] as const)('%s de un tercero → sin asiento, con aviso', (event) => {
-      const result = buildCheckEventLines(
-        input(event, thirdParty({ accountId: null, fromDocument: false }), { bankAccountId: null })
-      );
-      expect(result).toEqual({ skip: true, warning: manualWarning });
-    });
+    it.each(['DEPOSIT', 'REJECT', 'VOID'] as const)(
+      '%s de un tercero → sin asiento, con aviso',
+      (event) => {
+        const result = buildCheckEventLines(
+          input(event, thirdParty({ accountId: null, fromDocument: false }), {
+            bankAccountId: null,
+          })
+        );
+        expect(result).toEqual({ skip: true, warning: manualWarning });
+      }
+    );
 
     it('DEBIT de un propio → sin asiento, con aviso', () => {
       const result = buildCheckEventLines(
@@ -120,6 +129,24 @@ describe('buildCheckEventLines', () => {
         ],
       });
     });
+
+    it.each([
+      ['físico', false],
+      ['electrónico', true],
+    ] as const)(
+      'histórico %s de documento → Debe Cheques rechazados / Haber banco',
+      (_label, isElectronic) => {
+        const result = buildCheckEventLines(
+          input('REJECT', thirdParty({ status: 'DEPOSITED', accountId: null, isElectronic }))
+        );
+        expect(result).toMatchObject({
+          lines: [
+            { accountId: 'rech', debit: 500, credit: 0, customerId: 'cli' },
+            { accountId: 'bco', debit: 0, credit: 500 },
+          ],
+        });
+      }
+    );
 
     it('sin "Cheques rechazados" configurada → missing checksRejectedAccountId', () => {
       const result = buildCheckEventLines(

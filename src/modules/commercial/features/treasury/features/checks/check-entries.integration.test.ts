@@ -417,7 +417,7 @@ describe.skipIf(!dbAvailable)('integración e2e: asientos del ciclo del cheque (
     expect(await bankBalance()).toBe(before - 1000);
   });
 
-  it('Review Focus 2: cheque cargado a mano → el depósito sale bien con aviso y sin asiento', async () => {
+  it('Review Focus 2: cheque cargado a mano → depósito y rechazo salen bien con aviso y sin asiento', async () => {
     const created = await createCheck({
       type: 'THIRD_PARTY',
       checkNumber: 'T735C-MAN-1',
@@ -446,6 +446,20 @@ describe.skipIf(!dbAvailable)('integración e2e: asientos del ciclo del cheque (
     expect(check.status).toBe('DEPOSITED');
     expect(check.depositEntryId).toBeNull();
     expect(await bankBalance()).toBe(before + 700);
+
+    // Rechazarlo tampoco asienta: su depósito no debitó el banco en los libros.
+    const rejected = await rejectCheck(created.id, 'Sin fondos');
+    expect(rejected).toEqual({
+      success: true,
+      warnings: [
+        'El cheque N° T735C-MAN-1 se cargó a mano: registrá el asiento en Contabilidad si corresponde.',
+      ],
+    });
+    const afterReject = await readCheck(created.id);
+    expect(afterReject.status).toBe('REJECTED');
+    expect(afterReject.rejectionEntryId).toBeNull();
+    expect(afterReject.bankMovementId).toBeNull();
+    expect(await bankBalance()).toBe(before);
   });
 
   it('Review Focus 3: mes cerrado → error legible; el cheque sigue en cartera y el saldo no cambia', async () => {
