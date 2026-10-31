@@ -374,11 +374,20 @@ export const receiptItemSchema = z.object({
     .refine((val) => parseFloat(val) > 0, 'El monto debe ser mayor a 0'),
 });
 
+export const ACCOUNT_METHOD_REJECTED_MESSAGE =
+  'El medio "Cuenta Corriente" ya no se usa: elegí otro medio o registrá una nota de crédito/débito';
+
 // Campos base de una forma de pago (compartidos por recibos y órdenes de pago)
 const basePaymentFields = {
-  paymentMethod: z.enum(['CASH', 'CHECK', 'ECHEQ', 'TRANSFER', 'DEBIT_CARD', 'CREDIT_CARD', 'ACCOUNT'], {
-    message: 'Debe seleccionar una forma de pago',
-  }),
+  // ACCOUNT queda en el enum solo por compatibilidad con registros existentes: no mueve fondos
+  // y ya no se acepta en altas ni ediciones (TSK-735)
+  paymentMethod: z
+    .enum(['CASH', 'CHECK', 'ECHEQ', 'TRANSFER', 'DEBIT_CARD', 'CREDIT_CARD', 'ACCOUNT'], {
+      message: 'Debe seleccionar una forma de pago',
+    })
+    .refine((method): boolean => method !== 'ACCOUNT', {
+      message: ACCOUNT_METHOD_REJECTED_MESSAGE,
+    }),
   amount: z
     .string()
     .min(1, 'El monto es requerido')
@@ -533,6 +542,17 @@ export const PAYMENT_METHOD_LABELS = {
   DEBIT_CARD: 'Tarjeta de Débito',
   CREDIT_CARD: 'Tarjeta de Crédito',
   ACCOUNT: 'Cuenta Corriente',
+} as const;
+
+// Medios que se ofrecen al crear/editar un recibo u orden de pago (sin "Cuenta Corriente", TSK-735).
+// Detalle, listados y filtros siguen con PAYMENT_METHOD_LABELS para mostrar registros históricos.
+export const SELECTABLE_PAYMENT_METHOD_LABELS = {
+  CASH: PAYMENT_METHOD_LABELS.CASH,
+  CHECK: PAYMENT_METHOD_LABELS.CHECK,
+  ECHEQ: PAYMENT_METHOD_LABELS.ECHEQ,
+  TRANSFER: PAYMENT_METHOD_LABELS.TRANSFER,
+  DEBIT_CARD: PAYMENT_METHOD_LABELS.DEBIT_CARD,
+  CREDIT_CARD: PAYMENT_METHOD_LABELS.CREDIT_CARD,
 } as const;
 
 export const RECEIPT_STATUS_LABELS = {

@@ -18,7 +18,7 @@ import {
 } from '@/shared/components/ui/select';
 import { Plus, Trash2, ArrowDownToLine } from 'lucide-react';
 import { toast } from 'sonner';
-import { createPaymentOrderSchema, type CreatePaymentOrderFormData, PAYMENT_METHOD_LABELS } from '../../../../shared/validators';
+import { createPaymentOrderSchema, type CreatePaymentOrderFormData, SELECTABLE_PAYMENT_METHOD_LABELS } from '../../../../shared/validators';
 import { createPaymentOrder, getActiveCardsForPayment, getPendingPurchaseInvoices, getPortfolioChecks, updatePaymentOrder } from '../../actions.server';
 import { getAvailableCashRegisters, getAvailableBankAccounts } from '../../../receipts/actions.server';
 import { getSuppliersForSelect } from '@/modules/commercial/features/purchases/features/invoices/list/actions.server';
@@ -655,7 +655,7 @@ export function CreatePaymentOrderModal({
                                 </SelectTrigger>
                               </FormControl>
                               <SelectContent>
-                                {Object.entries(PAYMENT_METHOD_LABELS).map(([value, label]) => (
+                                {Object.entries(SELECTABLE_PAYMENT_METHOD_LABELS).map(([value, label]) => (
                                   <SelectItem key={value} value={value}>{label}</SelectItem>
                                 ))}
                               </SelectContent>

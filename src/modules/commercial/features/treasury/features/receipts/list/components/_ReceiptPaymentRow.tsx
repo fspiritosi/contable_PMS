@@ -21,7 +21,7 @@ import {
   SelectValue,
 } from '@/shared/components/ui/select';
 
-import { PAYMENT_METHOD_LABELS } from '../../../../shared/validators';
+import { SELECTABLE_PAYMENT_METHOD_LABELS } from '../../../../shared/validators';
 import { _ReceiptBankAccountField } from './_ReceiptBankAccountField';
 import { _ReceiptCheckFields } from './_ReceiptCheckFields';
 import {
@@ -68,7 +68,7 @@ export function _ReceiptPaymentRow({ form, index, onRemove, cashRegisters, bankA
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
-                  {Object.entries(PAYMENT_METHOD_LABELS).map(([value, label]) => (
+                  {Object.entries(SELECTABLE_PAYMENT_METHOD_LABELS).map(([value, label]) => (
                     <SelectItem key={value} value={value}>
                       {label}
                     </SelectItem>

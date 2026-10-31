@@ -602,6 +602,25 @@ describe.skipIf(!dbAvailable)(
       expect(lines.find((l) => l.accountId === cobrarId)?.credit).toBe(1000);
     });
 
+    it('TSK-735 (Review Focus 5): borrador histórico con un pago "Cuenta Corriente" (insertado con Prisma) confirma con el aviso de omitido, sin bloquear', async () => {
+      const { id } = await createDraft([cashPayment('400', cajaPrincipalId)]);
+      await prisma.receiptPayment.create({
+        data: { receiptId: id, paymentMethod: 'ACCOUNT', amount: 600 },
+      });
+
+      const result = await confirmReceipt(id);
+      expect(result.success).toBe(true);
+      if (!result.success) return;
+      expect(result.warnings).toHaveLength(1);
+      expect(result.warnings[0]).toContain('Cuenta Corriente');
+
+      const lines = await fetchEntryLines(id);
+      expect(lines).toHaveLength(2);
+      expect(lines.find((l) => l.accountId === cajaId)?.debit).toBe(400);
+      expect(lines.find((l) => l.accountId === cobrarId)?.credit).toBe(400);
+      expect((await readReceipt(id)).status).toBe('CONFIRMED');
+    });
+
     it('caso 8: sin pagos ni retenciones → bloqueado con "Agregá un pago"', async () => {
       const { id } = await createDraft([]);
 
