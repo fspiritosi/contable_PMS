@@ -25,6 +25,8 @@ import { _CheckDetailModal } from './_CheckDetailModal';
 import { _EditCheckModal } from './_EditCheckModal';
 import { _DepositCheckModal } from './_DepositCheckModal';
 import { _EndorseCheckModal } from './_EndorseCheckModal';
+import { _DebitCheckModal } from './_DebitCheckModal';
+import { notifyCheckActionResult } from '../check-action-result';
 import { usePermissions } from '@/shared/hooks/usePermissions';
 
 interface FacetCounts {
@@ -46,6 +48,7 @@ export function _ChecksTable({ data, totalRows, searchParams, facetCounts }: Pro
   const [editOpen, setEditOpen] = useState(false);
   const [depositOpen, setDepositOpen] = useState(false);
   const [endorseOpen, setEndorseOpen] = useState(false);
+  const [debitOpen, setDebitOpen] = useState(false);
   const [voidDialogOpen, setVoidDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedCheck, setSelectedCheck] = useState<CheckListItem | null>(null);
@@ -56,12 +59,11 @@ export function _ChecksTable({ data, totalRows, searchParams, facetCounts }: Pro
     if (!selectedCheck) return;
     setIsProcessing(true);
     try {
-      await voidCheck(selectedCheck.id);
-      toast.success('Cheque anulado correctamente');
-      setVoidDialogOpen(false);
-      router.refresh();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Error al anular cheque');
+      const result = await voidCheck(selectedCheck.id);
+      if (notifyCheckActionResult(result, 'Cheque anulado correctamente')) {
+        setVoidDialogOpen(false);
+        router.refresh();
+      }
     } finally {
       setIsProcessing(false);
     }
@@ -85,6 +87,7 @@ export function _ChecksTable({ data, totalRows, searchParams, facetCounts }: Pro
   const canCreate = hasPermission('commercial.treasury.checks', 'create');
   const canUpdate = hasPermission('commercial.treasury.checks', 'update');
   const canDelete = hasPermission('commercial.treasury.checks', 'delete');
+  const canApprove = hasPermission('commercial.treasury.checks', 'approve');
 
   const facetedFilters: DataTableFacetedFilterConfig[] = useMemo(
     () => [
@@ -157,6 +160,10 @@ export function _ChecksTable({ data, totalRows, searchParams, facetCounts }: Pro
           setSelectedCheck(check);
           setEndorseOpen(true);
         },
+        onDebit: (check) => {
+          setSelectedCheck(check);
+          setDebitOpen(true);
+        },
         onVoid: (check) => {
           setSelectedCheck(check);
           setVoidDialogOpen(true);
@@ -168,10 +175,11 @@ export function _ChecksTable({ data, totalRows, searchParams, facetCounts }: Pro
         canDeposit: canUpdate,
         canEndorse: canUpdate,
         canUpdate,
+        canDebit: canApprove,
         canVoid: canDelete,
         canDelete,
       }),
-    [canUpdate, canDelete]
+    [canUpdate, canDelete, canApprove]
   );
 
   return (
@@ -219,6 +227,12 @@ export function _ChecksTable({ data, totalRows, searchParams, facetCounts }: Pro
             onOpenChange={setEndorseOpen}
             check={selectedCheck}
           />
+          <_DebitCheckModal
+            key={selectedCheck.id}
+            open={debitOpen}
+            onOpenChange={setDebitOpen}
+            check={selectedCheck}
+          />
         </>
       )}
 
@@ -228,7 +242,8 @@ export function _ChecksTable({ data, totalRows, searchParams, facetCounts }: Pro
             <AlertDialogTitle>¿Anular cheque?</AlertDialogTitle>
             <AlertDialogDescription>
               Esta acción anulará el cheque N° <strong>{selectedCheck?.checkNumber}</strong>.
-              Si estaba depositado, se eliminará el movimiento bancario asociado.
+              Si estaba depositado, se eliminará el movimiento bancario asociado. Si corresponde,
+              se generará el asiento de la anulación.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

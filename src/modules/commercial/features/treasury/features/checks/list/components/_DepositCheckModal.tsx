@@ -5,7 +5,6 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { toast } from 'sonner';
 import moment from 'moment';
 import {
   Dialog,
@@ -32,10 +31,11 @@ import {
 import { Button } from '@/shared/components/ui/button';
 import { Skeleton } from '@/shared/components/ui/skeleton';
 import { formatCurrency } from '@/shared/utils/formatters';
-import { businessToday } from '@/shared/utils/date-input';
+import { businessToday, fromDateInputValue, toDateInputValue } from '@/shared/utils/date-input';
 import { depositCheckSchema, type DepositCheckFormData } from '../../../../shared/validators';
 import { depositCheck, getActiveBankAccounts } from '../../actions.server';
 import type { CheckListItem } from '../../../../shared/types';
+import { notifyCheckActionResult } from '../check-action-result';
 
 interface Props {
   check: CheckListItem;
@@ -73,13 +73,10 @@ export function _DepositCheckModal({ check, open, onOpenChange }: Props) {
   }, [form, check.id, onOpenChange]);
 
   const onSubmit = async (values: DepositCheckFormData) => {
-    try {
-      await depositCheck(values);
-      toast.success('Cheque depositado correctamente');
+    const result = await depositCheck(values);
+    if (notifyCheckActionResult(result, 'Cheque depositado correctamente')) {
       handleClose();
       router.refresh();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Error al depositar cheque');
     }
   };
 
@@ -144,10 +141,8 @@ export function _DepositCheckModal({ check, open, onOpenChange }: Props) {
                   <FormControl>
                     <Input
                       type="date"
-                      value={field.value ? moment(field.value).format('YYYY-MM-DD') : ''}
-                      onChange={(e) =>
-                        field.onChange(e.target.value ? new Date(e.target.value) : null)
-                      }
+                      value={toDateInputValue(field.value)}
+                      onChange={(e) => field.onChange(fromDateInputValue(e.target.value))}
                     />
                   </FormControl>
                   <FormMessage />

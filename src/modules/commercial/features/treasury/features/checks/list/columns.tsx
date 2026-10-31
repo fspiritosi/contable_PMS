@@ -9,7 +9,16 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/shared/components/ui/dropdown-menu';
-import { MoreHorizontal, Eye, Pencil, Landmark, ArrowRightLeft, Ban, Trash2 } from 'lucide-react';
+import {
+  MoreHorizontal,
+  Eye,
+  Pencil,
+  Landmark,
+  ArrowRightLeft,
+  Ban,
+  Trash2,
+  Banknote,
+} from 'lucide-react';
 import { formatCurrency } from '@/shared/utils/formatters';
 import moment from 'moment';
 import type { CheckListItem } from '../../../shared/types';
@@ -24,10 +33,13 @@ interface ColumnsProps {
   onEdit: (check: CheckListItem) => void;
   onDeposit: (check: CheckListItem) => void;
   onEndorse: (check: CheckListItem) => void;
+  onDebit: (check: CheckListItem) => void;
   onVoid: (check: CheckListItem) => void;
   onDelete: (check: CheckListItem) => void;
   canDeposit?: boolean;
   canEndorse?: boolean;
+  /** Debitar un cheque propio entregado: `commercial.treasury.checks` + `approve`, como Acreditar. */
+  canDebit?: boolean;
   canUpdate?: boolean;
   canVoid?: boolean;
   canDelete?: boolean;
@@ -38,10 +50,12 @@ export function getColumns({
   onEdit,
   onDeposit,
   onEndorse,
+  onDebit,
   onVoid,
   onDelete,
   canDeposit = true,
   canEndorse = true,
+  canDebit = false,
   canUpdate = true,
   canVoid = true,
   canDelete: canDeleteProp = true,
@@ -145,6 +159,12 @@ export function getColumns({
                     </DropdownMenuItem>
                   )}
                 </>
+              )}
+              {canDebit && check.type === 'OWN' && check.status === 'DELIVERED' && (
+                <DropdownMenuItem onClick={() => onDebit(check)}>
+                  <Banknote className="mr-2 h-4 w-4" />
+                  Debitar
+                </DropdownMenuItem>
               )}
               {canVoid && !['CLEARED', 'CASHED', 'VOIDED'].includes(check.status) && (
                 <DropdownMenuItem onClick={() => onVoid(check)} className="text-destructive">

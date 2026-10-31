@@ -12,14 +12,24 @@ import {
   buildFiltersWhere,
   buildDateRangeFiltersWhere,
 } from '@/shared/components/common/DataTable/helpers';
-import type {
-  CreateCheckFormData,
-  DepositCheckFormData,
-  EndorseCheckFormData,
-  UpdateCheckFormData,
+import {
+  debitCheckSchema,
+  type CreateCheckFormData,
+  type DebitCheckFormData,
+  type DepositCheckFormData,
+  type EndorseCheckFormData,
+  type UpdateCheckFormData,
 } from '../../shared/validators';
 import type { CheckListItem, CheckWithDetails } from '../../shared/types';
 import { checkPermission } from '@/shared/lib/permissions';
+import { BusinessError, toActionResult, type ActionResult } from '@/shared/lib/action-result';
+import { businessToday } from '@/shared/utils/date-input';
+import { applyCheckEventTx } from '@/modules/commercial/shared/effects/check.server';
+import type { Tx } from '@/modules/accounting/features/integrations/core';
+import type { Prisma } from '@/generated/prisma/client';
+
+/** Resultado de las acciones del ciclo del cheque que generan asiento (TSK-735). */
+type CheckEventResult = ActionResult<{ warnings: string[] }>;
 
 // ============================================
 // CONSULTAS
@@ -283,7 +293,7 @@ export async function updateCheck(data: UpdateCheckFormData) {
 // DEPOSITAR CHEQUE (PORTFOLIO → DEPOSITED)
 // ============================================
 
-export async function depositCheck(data: DepositCheckFormData) {
+export async function depositCheck(data: DepositCheckFormData): Promise<CheckEventResult> {
   await checkPermission('commercial.treasury.checks', 'update', { redirect: true });
   const userId = await getCurrentUserId();
   if (!userId) throw new Error('No autenticado');
@@ -296,10 +306,29 @@ export async function depositCheck(data: DepositCheckFormData) {
       where: { id: data.checkId, companyId },
     });
 
-    if (!check) throw new Error('Cheque no encontrado');
-    if (check.status !== 'PORTFOLIO') throw new Error('Solo se pueden depositar cheques en cartera');
+    if (!check) throw new BusinessError('Cheque no encontrado');
+    if (check.status !== 'PORTFOLIO') {
+      throw new BusinessError('Solo se pueden depositar cheques en cartera');
+    }
+    const bankAccount = await prisma.bankAccount.findFirst({
+      where: { id: data.bankAccountId, companyId },
+      select: { id: true },
+    });
+    if (!bankAccount) throw new BusinessError('Cuenta bancaria no encontrada');
 
-    await prisma.$transaction(async (tx) => {
+    const { warnings } = await prisma.$transaction(async (tx) => {
+      // Asiento Banco / cuenta del cheque (TSK-735): si falla, no se mueve nada.
+      const entry = await applyCheckEventTx(
+        tx,
+        { companyId, userId },
+        {
+          checkId: check.id,
+          event: 'DEPOSIT',
+          date: data.depositDate,
+          bankAccountId: data.bankAccountId,
+        }
+      );
+
       // Crear movimiento bancario tipo CHECK
       const bankMovement = await tx.bankMovement.create({
         data: {
@@ -331,14 +360,15 @@ export async function depositCheck(data: DepositCheckFormData) {
           depositedAt: data.depositDate,
         },
       });
+
+      return entry;
     });
 
     revalidatePath('/dashboard/commercial/treasury/checks');
     revalidatePath('/dashboard/commercial/treasury/bank-accounts');
-    return { success: true };
+    return { success: true, warnings };
   } catch (error) {
-    logger.error('Error al depositar cheque', { data: { error, companyId } });
-    throw new Error(error instanceof Error ? error.message : 'Error al depositar cheque');
+    return toActionResult(error, 'Error al depositar cheque');
   }
 }
 
@@ -399,7 +429,7 @@ export async function clearCheck(checkId: string) {
 // RECHAZAR CHEQUE (DEPOSITED → REJECTED)
 // ============================================
 
-export async function rejectCheck(checkId: string, reason: string) {
+export async function rejectCheck(checkId: string, reason: string): Promise<CheckEventResult> {
   await checkPermission('commercial.treasury.checks', 'approve', { redirect: true });
   const userId = await getCurrentUserId();
   if (!userId) throw new Error('No autenticado');
@@ -412,35 +442,144 @@ export async function rejectCheck(checkId: string, reason: string) {
       where: { id: checkId, companyId },
     });
 
-    if (!check) throw new Error('Cheque no encontrado');
-    if (check.status !== 'DEPOSITED') throw new Error('Solo se pueden rechazar cheques depositados');
+    if (!check) throw new BusinessError('Cheque no encontrado');
+    if (check.status !== 'DEPOSITED') {
+      throw new BusinessError('Solo se pueden rechazar cheques depositados');
+    }
 
-    await prisma.$transaction(async (tx) => {
-      // Eliminar movimiento bancario asociado
-      if (check.bankMovementId) {
-        await tx.bankMovement.delete({
-          where: { id: check.bankMovementId },
-        });
-      }
+    const today = businessToday();
+    const { warnings } = await prisma.$transaction(async (tx) => {
+      // Asiento Cheques rechazados / Banco (TSK-735), con fecha de hoy en Argentina.
+      const entry = await applyCheckEventTx(
+        tx,
+        { companyId, userId },
+        { checkId: check.id, event: 'REJECT', date: today }
+      );
+
+      await removeDepositMovementTx(tx, check);
 
       // Actualizar cheque
       await tx.check.update({
         where: { id: check.id },
         data: {
           status: 'REJECTED',
-          rejectedAt: new Date(),
+          rejectedAt: today,
           rejectionReason: reason,
           bankMovementId: null,
         },
       });
+
+      return entry;
     });
 
     revalidatePath('/dashboard/commercial/treasury/checks');
     revalidatePath('/dashboard/commercial/treasury/bank-accounts');
-    return { success: true };
+    return { success: true, warnings };
   } catch (error) {
-    logger.error('Error al rechazar cheque', { data: { error, companyId } });
-    throw new Error(error instanceof Error ? error.message : 'Error al rechazar cheque');
+    return toActionResult(error, 'Error al rechazar cheque');
+  }
+}
+
+/**
+ * Deshace el movimiento bancario del depósito y su ingreso en el saldo (el depósito
+ * lo sumó al saldo; borrar solo el movimiento lo dejaba inflado).
+ */
+async function removeDepositMovementTx(
+  tx: Tx,
+  check: { bankMovementId: string | null; bankAccountId: string | null; amount: Prisma.Decimal }
+): Promise<void> {
+  if (!check.bankMovementId) return;
+  await tx.bankMovement.delete({ where: { id: check.bankMovementId } });
+  if (check.bankAccountId) {
+    await tx.bankAccount.update({
+      where: { id: check.bankAccountId },
+      data: { balance: { decrement: check.amount } },
+    });
+  }
+}
+
+// ============================================
+// DEBITAR CHEQUE PROPIO (DELIVERED → CASHED)
+// ============================================
+
+/**
+ * El banco debitó un cheque propio entregado (TSK-735): egreso bancario como el
+ * pago bancario de una OP (WITHDRAWAL, resta el saldo) y asiento cuenta del cheque /
+ * Banco. El e-cheq propio ya fue al banco en el asiento de la OP pero no en el saldo
+ * (la OP no crea movimiento para el e-cheq): el egreso se registra igual, sin asiento.
+ */
+export async function debitCheck(data: DebitCheckFormData): Promise<CheckEventResult> {
+  await checkPermission('commercial.treasury.checks', 'approve', { redirect: true });
+  const userId = await getCurrentUserId();
+  if (!userId) throw new Error('No autenticado');
+
+  const companyId = await getActiveCompanyId();
+  if (!companyId) throw new Error('No hay empresa activa');
+
+  try {
+    const parsed = debitCheckSchema.safeParse(data);
+    if (!parsed.success) throw new BusinessError(parsed.error.issues[0]?.message ?? 'Datos inválidos');
+    const { checkId, date, bankAccountId } = parsed.data;
+
+    const check = await prisma.check.findFirst({
+      where: { id: checkId, companyId },
+      select: { id: true, type: true, status: true, amount: true, checkNumber: true },
+    });
+    if (!check) throw new BusinessError('Cheque no encontrado');
+    if (check.type !== 'OWN' || check.status !== 'DELIVERED') {
+      throw new BusinessError('Solo se pueden debitar cheques propios entregados');
+    }
+    const bankAccount = await prisma.bankAccount.findFirst({
+      where: { id: bankAccountId, companyId },
+      select: { id: true },
+    });
+    if (!bankAccount) throw new BusinessError('Cuenta bancaria no encontrada');
+
+    const { warnings } = await prisma.$transaction(async (tx) => {
+      const entry = await applyCheckEventTx(
+        tx,
+        { companyId, userId },
+        { checkId: check.id, event: 'DEBIT', date, bankAccountId }
+      );
+
+      const bankMovement = await tx.bankMovement.create({
+        data: {
+          companyId,
+          bankAccountId,
+          type: 'WITHDRAWAL',
+          amount: check.amount,
+          date,
+          description: `Débito cheque N° ${check.checkNumber}`,
+          reference: check.checkNumber,
+          reconciled: true,
+          reconciledAt: new Date(),
+          reconciledBy: userId,
+          createdBy: userId,
+        },
+      });
+      await tx.bankAccount.update({
+        where: { id: bankAccountId },
+        data: { balance: { decrement: check.amount } },
+      });
+
+      await tx.check.update({
+        where: { id: check.id },
+        data: {
+          status: 'CASHED',
+          bankAccountId,
+          bankMovementId: bankMovement.id,
+          clearedAt: date,
+        },
+      });
+
+      return entry;
+    });
+
+    revalidatePath('/dashboard/commercial/treasury/checks');
+    revalidatePath('/dashboard/commercial/treasury/bank-accounts');
+    return { success: true, warnings };
+  } catch (error) {
+    return toActionResult(error, 'Error al debitar cheque');
   }
 }
 
@@ -487,7 +626,7 @@ export async function endorseCheck(data: EndorseCheckFormData) {
 // ANULAR CHEQUE (→ VOIDED)
 // ============================================
 
-export async function voidCheck(checkId: string) {
+export async function voidCheck(checkId: string): Promise<CheckEventResult> {
   await checkPermission('commercial.treasury.checks', 'delete', { redirect: true });
   const userId = await getCurrentUserId();
   if (!userId) throw new Error('No autenticado');
@@ -500,17 +639,23 @@ export async function voidCheck(checkId: string) {
       where: { id: checkId, companyId },
     });
 
-    if (!check) throw new Error('Cheque no encontrado');
+    if (!check) throw new BusinessError('Cheque no encontrado');
     if (['CLEARED', 'CASHED', 'VOIDED'].includes(check.status)) {
-      throw new Error('No se puede anular un cheque acreditado, cobrado o ya anulado');
+      throw new BusinessError('No se puede anular un cheque acreditado, cobrado o ya anulado');
     }
 
-    await prisma.$transaction(async (tx) => {
-      // Si estaba depositado, eliminar movimiento bancario
-      if (check.status === 'DEPOSITED' && check.bankMovementId) {
-        await tx.bankMovement.delete({
-          where: { id: check.bankMovementId },
-        });
+    const { warnings } = await prisma.$transaction(async (tx) => {
+      // Asiento de anulación (TSK-735); un depositado revierte antes el del depósito.
+      // Va antes del cambio de estado: la regla depende del estado previo.
+      const entry = await applyCheckEventTx(
+        tx,
+        { companyId, userId },
+        { checkId: check.id, event: 'VOID', date: businessToday() }
+      );
+
+      // Si estaba depositado, deshacer el movimiento bancario y el saldo
+      if (check.status === 'DEPOSITED') {
+        await removeDepositMovementTx(tx, check);
       }
 
       await tx.check.update({
@@ -520,13 +665,15 @@ export async function voidCheck(checkId: string) {
           bankMovementId: null,
         },
       });
+
+      return entry;
     });
 
     revalidatePath('/dashboard/commercial/treasury/checks');
-    return { success: true };
+    revalidatePath('/dashboard/commercial/treasury/bank-accounts');
+    return { success: true, warnings };
   } catch (error) {
-    logger.error('Error al anular cheque', { data: { error, companyId } });
-    throw new Error(error instanceof Error ? error.message : 'Error al anular cheque');
+    return toActionResult(error, 'Error al anular cheque');
   }
 }
 

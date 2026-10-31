@@ -718,6 +718,13 @@ export const depositCheckSchema = z.object({
   depositDate: z.date({ message: 'La fecha de depósito es requerida' }),
 });
 
+/** Debitar un cheque propio entregado (DELIVERED → CASHED, TSK-735). */
+export const debitCheckSchema = z.object({
+  checkId: z.string().uuid('Cheque inválido'),
+  date: z.date({ message: 'La fecha de débito es requerida' }),
+  bankAccountId: z.string().uuid('Cuenta bancaria requerida'),
+});
+
 export const endorseCheckSchema = z.object({
   checkId: z.string().uuid('Cheque inválido'),
   endorsedToName: z
@@ -737,6 +744,7 @@ export type CreateCheckFormData = z.infer<typeof createCheckSchema>;
 export type UpdateCheckFormData = z.infer<typeof updateCheckSchema>;
 export type DepositCheckFormData = z.infer<typeof depositCheckSchema>;
 export type EndorseCheckFormData = z.infer<typeof endorseCheckSchema>;
+export type DebitCheckFormData = z.infer<typeof debitCheckSchema>;
 
 // ====================================
 // LABELS Y MAPPERS - CHECKS
