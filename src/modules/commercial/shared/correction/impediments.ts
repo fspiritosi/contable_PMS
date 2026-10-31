@@ -98,6 +98,15 @@ export const impediments = {
       message: `${docLabel} tiene cuotas ya pagadas y no se puede corregir.`,
     };
   },
+  /** Cuotas de tarjeta de socio que reservó una devolución en borrador (TSK-735). */
+  installmentReserved(repaymentLabel: string): Impediment {
+    return {
+      code: 'INSTALLMENT_RESERVED',
+      severity: 'MANUAL',
+      message: `Las cuotas de esta orden de pago están reservadas por la devolución al socio ${repaymentLabel}: eliminá o editá esa devolución antes.`,
+      action: `Eliminá o editá la devolución ${repaymentLabel} y reintentá.`,
+    };
+  },
   bankMovementManualLink(docLabel: string): Impediment {
     return {
       code: 'BANK_MOVEMENT_MANUAL_LINK',

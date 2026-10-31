@@ -79,6 +79,8 @@ import {
   buildPartnerRepaymentOmittedMessage,
   buildSingleLineEntryMessage,
   classifyPayments,
+  findPaymentDataError,
+  partnerRepaymentTotalsError,
   type EntryDocumentKind,
   type PaymentAccountCheck,
   type ResolvedPaymentSource,
@@ -839,9 +841,13 @@ export async function createJournalEntryForReceipt(
       throw new BusinessError(buildMissingSettingsAccountsMessage(documentLabel, missingSettings));
     }
 
-    // Clasificar → bloquear por caja/banco sin cuenta → recién ahí restar los omitidos.
+    // Dato faltante (cheque sin número) → clasificar → bloquear por caja/banco sin cuenta →
+    // recién ahí restar los omitidos.
+    const payments = receipt.payments.map((p) => ({ ...p, amount: Number(p.amount) }));
+    const dataError = findPaymentDataError(documentLabel, payments);
+    if (dataError) throw new BusinessError(dataError);
     const { resolved, missing, omitted, omittedAmount } = classifyPayments(
-      receipt.payments.map((p) => ({ ...p, amount: Number(p.amount) })),
+      payments,
       settings,
       'receipt'
     );
@@ -969,14 +975,19 @@ export async function createJournalEntryForPaymentOrder(
       throw new BusinessError(buildMissingSettingsAccountsMessage(documentLabel, missingSettings));
     }
 
-    // Clasificar → bloquear por cuenta faltante → recién ahí restar los omitidos.
-    // La tarjeta de socio se decide antes que el banco: la empresa no mueve fondos ahora.
+    // Dato faltante (cheque sin número, endoso por otro importe) → clasificar → bloquear por
+    // cuenta faltante → recién ahí restar los omitidos (Cuenta Corriente, cheque cargado a
+    // mano endosado). La tarjeta de socio se decide antes que el banco: la empresa no mueve
+    // fondos ahora.
+    const payments = await withEndorsedChecks(
+      tx,
+      companyId,
+      paymentOrder.payments.map((p) => ({ ...p, amount: Number(p.amount) }))
+    );
+    const dataError = findPaymentDataError(documentLabel, payments);
+    if (dataError) throw new BusinessError(dataError);
     const { resolved, missing, omitted, omittedAmount } = classifyPayments(
-      await withEndorsedChecks(
-        tx,
-        companyId,
-        paymentOrder.payments.map((p) => ({ ...p, amount: Number(p.amount) }))
-      ),
+      payments,
       settings,
       'paymentOrder'
     );
@@ -991,8 +1002,8 @@ export async function createJournalEntryForPaymentOrder(
     const lines: JournalEntryLineInput[] = [];
 
     // Debe: Cuentas por Pagar (pasivo disminuye) por el importe contabilizable.
-    // Solo "Cuenta Corriente" queda fuera del asiento (TSK-735): la cuenta por pagar queda
-    // con ese saldo hasta regularizar (TSK-728, plan 2.4-1).
+    // Solo "Cuenta Corriente" y el endoso de un cheque cargado a mano quedan fuera del asiento
+    // (TSK-735): la cuenta por pagar queda con ese saldo hasta regularizar (TSK-728, plan 2.4-1).
     lines.push({
       accountId: settings.payablesAccountId,
       debit: Math.round((total - omittedAmount) * 100) / 100,
@@ -1127,16 +1138,21 @@ export async function createJournalEntryForPartnerRepayment(
       );
     }
 
-    // Haber: los pagos. Uno sin línea (Cuenta Corriente) descuadraría el asiento: bloquea.
-    const { resolved, missing, omitted } = classifyPayments(
-      await withEndorsedChecks(
-        tx,
-        companyId,
-        order.payments.map((p) => ({ ...p, amount: Number(p.amount) }))
-      ),
-      settings,
-      'paymentOrder'
+    // Haber: los pagos. Uno sin línea (Cuenta Corriente) o que no sume lo mismo que las
+    // cuotas descuadraría el asiento: bloquea.
+    const payments = await withEndorsedChecks(
+      tx,
+      companyId,
+      order.payments.map((p) => ({ ...p, amount: Number(p.amount) }))
     );
+    const totalsError = partnerRepaymentTotalsError(
+      order.settledInstallments.map((i) => Number(i.amount)),
+      payments.map((p) => p.amount)
+    );
+    if (totalsError) throw new BusinessError(totalsError);
+    const dataError = findPaymentDataError(documentLabel, payments);
+    if (dataError) throw new BusinessError(dataError);
+    const { resolved, missing, omitted } = classifyPayments(payments, settings, 'paymentOrder');
     if (missing.length > 0) {
       throw new BusinessError(buildMissingPaymentAccountMessage(documentLabel, missing[0]));
     }

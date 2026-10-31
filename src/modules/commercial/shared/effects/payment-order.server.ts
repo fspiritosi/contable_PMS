@@ -14,6 +14,10 @@ import { BusinessError } from '@/shared/lib/action-result';
 import { logger } from '@/shared/lib/logger';
 
 import { dedupeImpediments, impediments } from '../correction/impediments';
+import {
+  buildEndorsedAmountMismatchMessage,
+  isEndorsedAmountMismatch,
+} from '../payment-accounts';
 import type { Impediment } from '../correction/types';
 import {
   recomputeExpenseStatusTx,
@@ -215,11 +219,23 @@ export async function applyPaymentOrderEffectsTx(
             type: 'THIRD_PARTY',
             status: 'PORTFOLIO',
           },
-          select: { id: true },
+          select: { id: true, amount: true, checkNumber: true },
         });
         if (!endorsed) {
           throw new BusinessError(
             'El cheque de tercero seleccionado ya no está disponible en cartera'
+          );
+        }
+        // El endoso es por el importe completo: si no, la diferencia queda colgada en la
+        // cuenta del cheque (TSK-735). La pre-validación ya lo anticipa.
+        const checkAmount = Number(endorsed.amount);
+        if (isEndorsedAmountMismatch(checkAmount, Number(payment.amount))) {
+          throw new BusinessError(
+            buildEndorsedAmountMismatchMessage(
+              `la orden de pago ${paymentOrder.fullNumber}`,
+              { checkNumber: endorsed.checkNumber, amount: checkAmount },
+              Number(payment.amount)
+            )
           );
         }
         await tx.check.update({
@@ -532,6 +548,7 @@ export async function paymentOrderEffectImpedimentsTx(
       where: { paymentOrderId },
       select: {
         status: true,
+        settledBy: { select: { fullNumber: true } },
         projection: { select: { status: true, _count: { select: { documentLinks: true } } } },
       },
     }),
@@ -568,6 +585,13 @@ export async function paymentOrderEffectImpedimentsTx(
         (i.projection.status !== 'PENDING' || i.projection._count.documentLinks > 0))
   );
   if (installmentUsed) found.push(impediments.installmentPaid(docLabel));
+  // Cuota pendiente reservada por una devolución a socio en borrador (TSK-735): revertir la
+  // borraría y la devolución quedaría sin cuotas que devolver.
+  for (const installment of installments) {
+    if (installment.status === 'PENDING' && installment.settledBy) {
+      found.push(impediments.installmentReserved(installment.settledBy.fullNumber));
+    }
+  }
 
   if (bankMovements.some((m) => m.documentLink === 'MANUAL_LINK')) {
     found.push(impediments.bankMovementManualLink(docLabel));

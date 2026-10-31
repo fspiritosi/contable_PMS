@@ -10,7 +10,10 @@ import {
   buildSingleLineEntryMessage,
   classifyPayments,
   endorsedEcheqLabel,
+  findPaymentDataError,
+  partnerRepaymentTotalsError,
   paymentBankLabel,
+  paymentCashRegisterName,
   type EntryDocumentKind,
   type PaymentAccountCheck,
   type ResolvedPaymentSource,
@@ -145,7 +148,8 @@ function paymentAccountOrigin(resolved: {
 }): AccountOrigin {
   switch (resolved.source) {
     case 'cashRegister': {
-      const caja = `"${resolved.payment.cashRegister?.name ?? ''}"`;
+      // En un cheque endosado histórico la caja es la del pago del RC con el que ingresó.
+      const caja = `"${paymentCashRegisterName(resolved.payment)}"`;
       return {
         concept: `Caja ${caja}`,
         origin: `de la caja ${caja}`,
@@ -246,7 +250,7 @@ async function checkAccounts(
   };
 }
 
-/** Los cuatro chequeos en orden; el primero que falla es el `error`. */
+/** Los chequeos en orden; el primero que falla es el `error`. */
 async function runPreflight<T extends PaymentAccountCheck>(
   input: PreflightInput<T>
 ): Promise<EntryPreflight> {
@@ -278,7 +282,11 @@ async function runPreflight<T extends PaymentAccountCheck>(
   }
   toCheck.push(...(input.documentAccounts ?? []));
 
-  // (b) Pago sin cuenta resoluble (caja/banco, cuenta de Ajustes, cheque endosado): bloquea.
+  // (b) Pago al que le falta un dato (número de cheque, endoso por otro importe): bloquea.
+  const dataError = findPaymentDataError(documentLabel, input.payments);
+  if (dataError) return fail(dataError);
+
+  // (c) Pago sin cuenta resoluble (caja/banco, cuenta de Ajustes, cheque endosado): bloquea.
   const classification = classifyPayments(input.payments, settings, kind);
   if (classification.missing.length > 0) {
     return fail(buildMissingPaymentAccountMessage(documentLabel, classification.missing[0]));
@@ -287,12 +295,12 @@ async function runPreflight<T extends PaymentAccountCheck>(
     return fail(buildPartnerRepaymentOmittedMessage(documentLabel, classification.omitted[0]));
   }
 
-  // (c) Ningún pago con cuenta ni retención: el asiento quedaría con una sola línea.
+  // (d) Ningún pago con cuenta ni retención: el asiento quedaría con una sola línea.
   if (classification.resolved.length === 0 && input.withholdings.length === 0) {
     return fail(buildSingleLineEntryMessage(documentLabel, kind, classification.omitted));
   }
 
-  // (d) Imputabilidad de todo lo que el asiento va a usar.
+  // (e) Imputabilidad de todo lo que el asiento va a usar.
   for (const resolved of classification.resolved) {
     toCheck.push({ accountId: resolved.accountId, ...paymentAccountOrigin(resolved) });
   }
@@ -385,7 +393,7 @@ export async function loadPaymentOrderEntryPreflight(
         },
       },
       withholdings: { select: { taxType: true } },
-      settledInstallments: { select: { accountId: true } },
+      settledInstallments: { select: { accountId: true, amount: true } },
     },
   });
   if (!order) {
@@ -426,6 +434,13 @@ export async function loadPaymentOrderEntryPreflight(
   );
 
   const isPartnerRepayment = Boolean(order.partnerId);
+  if (isPartnerRepayment) {
+    const totalsError = partnerRepaymentTotalsError(
+      order.settledInstallments.map((i) => Number(i.amount)),
+      payments.map((p) => p.amount)
+    );
+    if (totalsError) return { documentLabel, error: totalsError, warnings: [], accounts: [] };
+  }
   const installmentAccountIds = isPartnerRepayment
     ? [...new Set(order.settledInstallments.flatMap((i) => (i.accountId ? [i.accountId] : [])))]
     : [];

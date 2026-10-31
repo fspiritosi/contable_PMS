@@ -28,15 +28,17 @@ vi.mock('@/shared/lib/permissions', async (importOriginal) => ({
 }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 
-import { getActiveCompanyId } from '@/shared/lib/company';
-import { getCurrentUserId } from '@/shared/lib/current-user';
 import {
   closeMonthForTest,
   readEntryPeriod,
   readLastEntryNumber,
 } from '@/modules/accounting/shared/test-utils/period-test-helpers';
+import { getActiveCompanyId } from '@/shared/lib/company';
+import { getCurrentUserId } from '@/shared/lib/current-user';
 
 // Código real de producción.
+import { paymentOrderEffectImpedimentsTx } from '@/modules/commercial/shared/effects/payment-order.server';
+import { debitCheck, voidCheck } from '../checks/actions.server';
 import {
   confirmPaymentOrder,
   createPartnerRepaymentOrder,
@@ -100,6 +102,7 @@ describe.skipIf(!dbAvailable)(
     /** Cheques de tercero de antes de TSK-735 (sin cuenta registrada). */
     let chequeHistoricoId: string;
     let echeqHistoricoId: string;
+    let chequeConCajaId: string;
     /** Cuota del socio generada en el caso 8 y devuelta en el caso 10. */
     let partnerInstallmentId: string;
 
@@ -124,6 +127,32 @@ describe.skipIf(!dbAvailable)(
       checkIssueDate: ORDER_DATE,
       checkDueDate: new Date('2026-04-10'),
     });
+
+    let nextReceiptNumber = 1;
+    /** Pago de $1000 de un RC histórico (confirmado sin asiento), con la caja/banco que guardó. */
+    async function historicReceiptPayment(payment: {
+      paymentMethod: 'CHECK' | 'ECHEQ';
+      cashRegisterId?: string;
+      bankAccountId?: string;
+    }): Promise<string> {
+      const number = nextReceiptNumber++;
+      const receipt = await prisma.receipt.create({
+        data: {
+          companyId,
+          customerId,
+          number,
+          fullNumber: `R-9735${number}`,
+          date: new Date('2026-02-01'),
+          totalAmount: 1000,
+          status: 'CONFIRMED',
+          notes: `${PREFIX}recibo histórico`,
+          createdBy: 'test',
+          payments: { create: { amount: 1000, ...payment } },
+        },
+        select: { payments: { select: { id: true } } },
+      });
+      return receipt.payments[0].id;
+    }
 
     /** Factura de compra CONFIRMED de $1000 creada directo con Prisma (una por caso). */
     async function createConfirmedInvoice(): Promise<string> {
@@ -343,7 +372,12 @@ describe.skipIf(!dbAvailable)(
 
       const mkThirdPartyCheck = (
         checkNumber: string,
-        extra: { accountId?: string; isElectronic?: boolean; bankAccountId?: string } = {}
+        extra: {
+          accountId?: string;
+          isElectronic?: boolean;
+          bankAccountId?: string;
+          receiptPaymentId?: string;
+        } = {}
       ) =>
         prisma.check.create({
           data: {
@@ -364,11 +398,29 @@ describe.skipIf(!dbAvailable)(
         });
       // Ingresó por un RC de TSK-735: registrado en Valores a depositar.
       chequeTerceroId = (await mkThirdPartyCheck('T728O-CH-001', { accountId: valoresId })).id;
-      chequeHistoricoId = (await mkThirdPartyCheck('T735-CH-HIST')).id;
+      // Históricos: ingresaron por un RC de antes de TSK-735 (sin cuenta registrada).
+      chequeHistoricoId = (
+        await mkThirdPartyCheck('T735-CH-HIST', {
+          receiptPaymentId: await historicReceiptPayment({ paymentMethod: 'CHECK' }),
+        })
+      ).id;
       echeqHistoricoId = (
         await mkThirdPartyCheck('T735-ECH-HIST', {
           isElectronic: true,
           bankAccountId: bancoConCuentaId,
+          receiptPaymentId: await historicReceiptPayment({
+            paymentMethod: 'ECHEQ',
+            bankAccountId: bancoConCuentaId,
+          }),
+        })
+      ).id;
+      // Revisión final: físico histórico cuyo pago del RC tenía la caja arrastrada de otro medio.
+      chequeConCajaId = (
+        await mkThirdPartyCheck('T735-CH-CAJA', {
+          receiptPaymentId: await historicReceiptPayment({
+            paymentMethod: 'CHECK',
+            cashRegisterId: cajaPrincipalId,
+          }),
         })
       ).id;
 
@@ -387,8 +439,9 @@ describe.skipIf(!dbAvailable)(
         await prisma.cashRegister.deleteMany({ where: { companyId } });
         await prisma.bankMovement.deleteMany({ where: { companyId } });
         await prisma.bankAccount.deleteMany({ where: { companyId } });
-        // items/payments/withholdings caen en cascada con la OP.
+        // items/payments/withholdings caen en cascada con la OP (y los pagos con el RC).
         await prisma.paymentOrder.deleteMany({ where: { companyId } });
+        await prisma.receipt.deleteMany({ where: { companyId } });
         await prisma.card.deleteMany({ where: { companyId } });
         await prisma.partner.deleteMany({ where: { companyId } });
         await prisma.journalEntry.deleteMany({ where: { companyId } });
@@ -614,6 +667,157 @@ describe.skipIf(!dbAvailable)(
       if (result.success) return;
       expect(result.error).toBe(expected);
       expect((await readOrder(id)).status).toBe('DRAFT');
+    });
+
+    /** Cheque de tercero en cartera creado directo (cargado a mano si no se pasa recibo ni cuenta). */
+    const portfolioCheck = (checkNumber: string, amount: number, accountId?: string) =>
+      prisma.check.create({
+        data: {
+          companyId,
+          type: 'THIRD_PARTY',
+          status: 'PORTFOLIO',
+          checkNumber,
+          bankName: 'Banco del Cliente',
+          amount,
+          issueDate: new Date('2026-02-01'),
+          dueDate: new Date('2026-05-01'),
+          drawerName: `${PREFIX}Cliente librador`,
+          customerId,
+          accountId,
+          createdBy: 'test',
+        },
+        select: { id: true },
+      });
+
+    const endorsedPayment = (amount: string, endorsedCheckId: string): PaymentInput => ({
+      paymentMethod: 'CHECK',
+      amount,
+      checkOwnership: 'THIRD_PARTY',
+      endorsedCheckId,
+    });
+
+    it('revisión final F1: endoso de un cheque cargado a mano → omitido con aviso; Proveedores queda abierto por ese importe', async () => {
+      const manual = await portfolioCheck('T735-CH-MANUAL', 400);
+      const { id } = await createDraft([endorsedPayment('400', manual.id), cashPayment('600')]);
+      const warning =
+        'Cheque N° T735-CH-MANUAL por $\u00a0400,00 no genera línea en el asiento contable: el ' +
+        'cheque se cargó a mano en Tesorería y no tiene asiento de origen. Ese importe queda ' +
+        'pendiente en Cuentas por Pagar hasta que se regularice.';
+
+      const preview = await getPaymentOrderEntryPreview(id);
+      expect(preview.error).toBeNull();
+      expect(preview.warnings).toEqual([warning]);
+
+      const result = await confirmPaymentOrder(id);
+      expect(result.success).toBe(true);
+      if (!result.success) return;
+      expect(result.warnings).toEqual([warning]);
+
+      const lines = await fetchEntryLines(id);
+      expect(lines).toHaveLength(2);
+      expect(lines.find((l) => l.accountId === pagarId)?.debit).toBe(600);
+      expect(lines.find((l) => l.accountId === cajaId)?.credit).toBe(600);
+      expect(lines.some((l) => l.accountId === cobrarId || l.accountId === valoresId)).toBe(false);
+      const check = await prisma.check.findUniqueOrThrow({
+        where: { id: manual.id },
+        select: { status: true },
+      });
+      expect(check.status).toBe('ENDORSED');
+    });
+
+    it('revisión final F6: endoso de un físico histórico cuyo pago del RC tenía caja → Haber esa caja (el RC viejo la debitó)', async () => {
+      const { id } = await createDraft([endorsedPayment('1000', chequeConCajaId)]);
+
+      const preview = await getPaymentOrderEntryPreview(id);
+      expect(preview.error).toBeNull();
+      expect(preview.accounts.map((a) => a.concept)).toEqual([
+        'Cuentas por Pagar',
+        `Caja "${PREFIX}Caja principal"`,
+      ]);
+
+      const result = await confirmPaymentOrder(id);
+      expect(result.success).toBe(true);
+      if (!result.success) return;
+      expect(result.warnings).toEqual([]);
+      const lines = await fetchEntryLines(id);
+      expect(lines).toHaveLength(2);
+      expect(lines.find((l) => l.accountId === pagarId)?.debit).toBe(1000);
+      expect(lines.find((l) => l.accountId === cajaId)?.credit).toBe(1000);
+    });
+
+    it('revisión final F2: el pago con un cheque endosado por otro importe → bloqueado en la vista previa y al confirmar', async () => {
+      const check = await portfolioCheck('T735-CH-F2', 1000, valoresId);
+      const { id } = await createDraft([endorsedPayment('900', check.id), cashPayment('100')]);
+      const expected =
+        `No se puede confirmar la orden de pago ${(await readOrder(id)).fullNumber}: el pago con ` +
+        'el cheque endosado N° T735-CH-F2 es de $\u00a0900,00 pero el cheque es de ' +
+        '$\u00a01.000,00. Un cheque se endosa por su importe completo.';
+
+      expect((await getPaymentOrderEntryPreview(id)).error).toBe(expected);
+      const result = await confirmPaymentOrder(id);
+      expect(result).toEqual({ success: false, error: expected });
+      expect((await readOrder(id)).status).toBe('DRAFT');
+      const after = await prisma.check.findUniqueOrThrow({
+        where: { id: check.id },
+        select: { status: true },
+      });
+      expect(after.status).toBe('PORTFOLIO');
+    });
+
+    it('revisión final F9: borrador viejo con un cheque propio sin número → bloqueado, no se crea un cheque fantasma', async () => {
+      const { id } = await createDraft([ownCheckPayment('400', 'T735-F9-OWN'), cashPayment('600')]);
+      await prisma.paymentOrderPayment.updateMany({
+        where: { paymentOrderId: id, paymentMethod: 'CHECK' },
+        data: { checkNumber: null },
+      });
+      const expected =
+        `No se puede confirmar la orden de pago ${(await readOrder(id)).fullNumber}: el pago con ` +
+        'cheque de $\u00a0400,00 no tiene número de cheque. Editá el comprobante y cargalo.';
+
+      expect((await getPaymentOrderEntryPreview(id)).error).toBe(expected);
+      expect(await confirmPaymentOrder(id)).toEqual({ success: false, error: expected });
+      expect((await readOrder(id)).status).toBe('DRAFT');
+    });
+
+    it('revisión final F6: crear y editar una OP no guarda la caja/banco arrastrados de otro medio', async () => {
+      const dragged = { cashRegisterId: cajaPrincipalId, bankAccountId: bancoConCuentaId };
+      const { id, invoiceId } = await createDraft([
+        { ...ownCheckPayment('400', 'T735-F6-OWN'), ...dragged },
+        {
+          paymentMethod: 'CREDIT_CARD',
+          amount: '600',
+          cardId: creditCardEmpresaId,
+          installmentsCount: 1,
+          ...dragged,
+        },
+      ]);
+      const funds = () =>
+        prisma.paymentOrderPayment.findMany({
+          where: { paymentOrderId: id },
+          select: { paymentMethod: true, cashRegisterId: true, bankAccountId: true },
+          orderBy: { paymentMethod: 'asc' },
+        });
+      expect(await funds()).toEqual([
+        { paymentMethod: 'CHECK', cashRegisterId: null, bankAccountId: null },
+        { paymentMethod: 'CREDIT_CARD', cashRegisterId: null, bankAccountId: null },
+      ]);
+
+      const updated = await updatePaymentOrder(id, {
+        supplierId,
+        date: ORDER_DATE,
+        notes: `${PREFIX}orden`,
+        items: [{ invoiceId, amount: '1000' }],
+        payments: [
+          { ...ownCheckPayment('400', 'T735-F6-OWN'), ...dragged },
+          { ...transferPayment('600', bancoConCuentaId), cashRegisterId: cajaPrincipalId },
+        ],
+        withholdings: [],
+      });
+      expect(updated.success).toBe(true);
+      expect(await funds()).toEqual([
+        { paymentMethod: 'CHECK', cashRegisterId: null, bankAccountId: null },
+        { paymentMethod: 'TRANSFER', cashRegisterId: null, bankAccountId: bancoConCuentaId },
+      ]);
     });
 
     it('caso 7 (TSK-735): solo tarjeta de crédito de la empresa en 3 cuotas → confirma; Haber Tarjetas de crédito a pagar; 3 cuotas con su cuenta', async () => {
@@ -851,6 +1055,114 @@ describe.skipIf(!dbAvailable)(
       }
     });
 
+    /** Cuota de la socia nueva (Deudas con socios), de una OP con su tarjeta de débito. */
+    async function partnerInstallment(amount: string): Promise<{ id: string; originId: string }> {
+      const origen = await createDraft([
+        { paymentMethod: 'DEBIT_CARD', amount, cardId: debitCardSocioId },
+        cashPayment(String(1000 - Number(amount))),
+      ]);
+      expect((await confirmPaymentOrder(origen.id)).success).toBe(true);
+      const cuota = await prisma.paymentOrderInstallment.findFirstOrThrow({
+        where: { paymentOrderId: origen.id },
+        select: { id: true },
+      });
+      return { id: cuota.id, originId: origen.id };
+    }
+
+    it('revisión final F5: devolución a socio con cheque propio → anular está bloqueado; debitar asienta', async () => {
+      const cuota = await partnerInstallment('300');
+      const created = await createPartnerRepaymentOrder({
+        partnerId,
+        date: ORDER_DATE,
+        notes: `${PREFIX}devolución con cheque`,
+        installmentIds: [cuota.id],
+        // F6: el banco arrastrado de otro medio no se guarda en el cheque propio.
+        payments: [{ ...ownCheckPayment('300', 'T735-F5-OWN'), bankAccountId: bancoConCuentaId }],
+      });
+      const stored = await prisma.paymentOrderPayment.findFirstOrThrow({
+        where: { paymentOrderId: created.id },
+        select: { bankAccountId: true },
+      });
+      expect(stored.bankAccountId).toBeNull();
+
+      const confirmed = await confirmPaymentOrder(created.id);
+      expect(confirmed.success).toBe(true);
+      const { fullNumber } = await readOrder(created.id);
+      const check = await prisma.check.findFirstOrThrow({
+        where: { companyId, checkNumber: 'T735-F5-OWN' },
+        select: { id: true, type: true, status: true, accountId: true },
+      });
+      expect(check).toMatchObject({ type: 'OWN', status: 'DELIVERED', accountId: diferidosId });
+
+      expect(await voidCheck(check.id)).toEqual({
+        success: false,
+        error: `El cheque N° T735-F5-OWN pagó la devolución al socio ${fullNumber}: para anularlo, corregí esa orden de pago.`,
+      });
+      const afterVoid = await prisma.check.findUniqueOrThrow({
+        where: { id: check.id },
+        select: { status: true, voidEntryId: true },
+      });
+      expect(afterVoid).toEqual({ status: 'DELIVERED', voidEntryId: null });
+
+      const debited = await debitCheck({
+        checkId: check.id,
+        date: ORDER_DATE,
+        bankAccountId: bancoConCuentaId,
+      });
+      expect(debited).toEqual({ success: true, warnings: [] });
+      const { debitEntryId } = await prisma.check.findUniqueOrThrow({
+        where: { id: check.id },
+        select: { debitEntryId: true },
+      });
+      const debitLines = await prisma.journalEntryLine.findMany({
+        where: { entryId: debitEntryId ?? '' },
+        select: { accountId: true, debit: true, credit: true },
+      });
+      expect(
+        debitLines.map((l) => [l.accountId, Number(l.debit), Number(l.credit)]).sort()
+      ).toEqual(
+        [
+          [diferidosId, 300, 0],
+          [bancoId, 0, 300],
+        ].sort()
+      );
+    });
+
+    it('revisión final F8: cuotas reservadas por una devolución en borrador → impedimento al corregir la OP de origen; cuotas ≠ pagos → error claro', async () => {
+      const cuota = await partnerInstallment('100');
+      const created = await createPartnerRepaymentOrder({
+        partnerId,
+        date: ORDER_DATE,
+        notes: `${PREFIX}devolución en borrador`,
+        installmentIds: [cuota.id],
+        payments: [cashPayment('100')],
+      });
+      const { fullNumber } = await readOrder(created.id);
+
+      const found = await paymentOrderEffectImpedimentsTx(
+        prisma,
+        cuota.originId,
+        'la OP de origen'
+      );
+      expect(found).toContainEqual({
+        code: 'INSTALLMENT_RESERVED',
+        severity: 'MANUAL',
+        message: `Las cuotas de esta orden de pago están reservadas por la devolución al socio ${fullNumber}: eliminá o editá esa devolución antes.`,
+        action: `Eliminá o editá la devolución ${fullNumber} y reintentá.`,
+      });
+
+      // La cuota cambió después de armar la devolución: el asiento descuadraría.
+      await prisma.paymentOrderInstallment.update({
+        where: { id: cuota.id },
+        data: { amount: 80 },
+      });
+      const expected =
+        'El total de las cuotas a devolver ($\u00a080,00) no coincide con los pagos ($\u00a0100,00).';
+      expect((await getPaymentOrderEntryPreview(created.id)).error).toBe(expected);
+      expect(await confirmPaymentOrder(created.id)).toEqual({ success: false, error: expected });
+      expect((await readOrder(created.id)).status).toBe('DRAFT');
+    });
+
     it('caso 11: caja sin sesión abierta → error legible con el nombre de la caja', async () => {
       const { id } = await createDraft([cashPayment('1000')]);
       await prisma.cashRegisterSession.update({
@@ -1021,7 +1333,15 @@ describe.skipIf(!dbAvailable)(
           jurisdiction: w.jurisdiction,
         }));
       expect(await read()).toEqual([
-        { taxType: 'IIBB', rate: 1.5, amount: 15, certificateNumber: null, regimeCode: '011', taxableBase: 1000, jurisdiction: '904' },
+        {
+          taxType: 'IIBB',
+          rate: 1.5,
+          amount: 15,
+          certificateNumber: null,
+          regimeCode: '011',
+          taxableBase: 1000,
+          jurisdiction: '904',
+        },
       ]);
 
       // La jurisdicción solo aplica a IIBB: en una retención de Ganancias no se guarda.
@@ -1031,11 +1351,28 @@ describe.skipIf(!dbAvailable)(
         notes: `${PREFIX}orden`,
         items: [{ invoiceId, amount: '1000' }],
         payments: [cashPayment('980')],
-        withholdings: [{ ...iibb, taxType: 'GANANCIAS', amount: '20', regimeCode: '78', taxableBase: '', jurisdiction: '904' }],
+        withholdings: [
+          {
+            ...iibb,
+            taxType: 'GANANCIAS',
+            amount: '20',
+            regimeCode: '78',
+            taxableBase: '',
+            jurisdiction: '904',
+          },
+        ],
       });
       expect(result.success).toBe(true);
       expect(await read()).toEqual([
-        { taxType: 'GANANCIAS', rate: 1.5, amount: 20, certificateNumber: null, regimeCode: '78', taxableBase: null, jurisdiction: null },
+        {
+          taxType: 'GANANCIAS',
+          rate: 1.5,
+          amount: 20,
+          certificateNumber: null,
+          regimeCode: '78',
+          taxableBase: null,
+          jurisdiction: null,
+        },
       ]);
     });
   }

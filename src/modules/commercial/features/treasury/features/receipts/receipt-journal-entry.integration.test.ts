@@ -31,20 +31,25 @@ vi.mock('@/shared/lib/permissions', async (importOriginal) => ({
 }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 
-import { getActiveCompanyId } from '@/shared/lib/company';
-import { getCurrentUserId } from '@/shared/lib/current-user';
 import {
   closeMonthForTest,
   readEntryPeriod,
   readLastEntryNumber,
 } from '@/modules/accounting/shared/test-utils/period-test-helpers';
+import { getActiveCompanyId } from '@/shared/lib/company';
+import { getCurrentUserId } from '@/shared/lib/current-user';
 
 // Código real de producción.
 import {
   applyCorrection,
   previewCorrection,
 } from '@/modules/commercial/shared/correction/engine.server';
-import { confirmReceipt, createReceipt, getReceiptEntryPreview } from './actions.server';
+import {
+  confirmReceipt,
+  createReceipt,
+  getReceiptEntryPreview,
+  updateReceipt,
+} from './actions.server';
 
 const PREFIX = 'TSK728-REC-';
 const RECEIPT_DATE = new Date('2026-03-10');
@@ -619,6 +624,46 @@ describe.skipIf(!dbAvailable)(
       expect(lines.find((l) => l.accountId === cajaId)?.debit).toBe(400);
       expect(lines.find((l) => l.accountId === cobrarId)?.credit).toBe(400);
       expect((await readReceipt(id)).status).toBe('CONFIRMED');
+    });
+
+    it('revisión final F6: crear y editar un RC no guarda la caja/banco arrastrados al cheque; al confirmar no mueve la caja', async () => {
+      const dragged = { cashRegisterId: cajaPrincipalId, bankAccountId: bancoConCuentaId };
+      const { id, invoiceId } = await createDraft([
+        { ...checkPayment('1000', 'T735R-F6-CH'), ...dragged },
+      ]);
+      const funds = () =>
+        prisma.receiptPayment.findMany({
+          where: { receiptId: id },
+          select: { paymentMethod: true, cashRegisterId: true, bankAccountId: true },
+          orderBy: { paymentMethod: 'asc' },
+        });
+      expect(await funds()).toEqual([
+        { paymentMethod: 'CHECK', cashRegisterId: null, bankAccountId: null },
+      ]);
+
+      const updated = await updateReceipt(id, {
+        customerId,
+        date: RECEIPT_DATE,
+        notes: `${PREFIX}recibo`,
+        items: [{ invoiceId, amount: '1000' }],
+        payments: [
+          { ...checkPayment('400', 'T735R-F6-CH'), ...dragged },
+          { ...cashPayment('600', cajaPrincipalId), bankAccountId: bancoConCuentaId },
+        ],
+        withholdings: [],
+      });
+      expect(updated.success).toBe(true);
+      expect(await funds()).toEqual([
+        { paymentMethod: 'CASH', cashRegisterId: cajaPrincipalId, bankAccountId: null },
+        { paymentMethod: 'CHECK', cashRegisterId: null, bankAccountId: null },
+      ]);
+
+      expect((await confirmReceipt(id)).success).toBe(true);
+      const movements = await prisma.cashMovement.findMany({
+        where: { receiptId: id },
+        select: { amount: true },
+      });
+      expect(movements.map((m) => Number(m.amount))).toEqual([600]);
     });
 
     it('caso 8: sin pagos ni retenciones → bloqueado con "Agregá un pago"', async () => {

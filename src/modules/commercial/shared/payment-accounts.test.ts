@@ -10,8 +10,11 @@ import {
   classifyPayments,
   describePayment,
   endorsedEcheqLabel,
+  findPaymentDataError,
+  partnerRepaymentTotalsError,
   paymentBankLabel,
   resolvePaymentAccount,
+  type EndorsedCheckInfo,
   type EntryDocumentKind,
   type PaymentAccountCheck,
   type PaymentAccountSettings,
@@ -32,6 +35,11 @@ const CAJA_SIN_CUENTA = { name: 'Caja principal', accountId: null };
 const BANCO = { bankName: 'Banco Galicia', accountNumber: '123-456', accountId: 'CTA-BANCO' };
 const BANCO_SIN_CUENTA = { bankName: 'Banco Galicia', accountNumber: '123-456', accountId: null };
 const SIN_DEFAULTS = { defaultCashAccountId: null, defaultBankAccountId: null };
+/** Cheque endosado que ingresó por un recibo, por $ 1.000, sin caja ni banco en ese pago. */
+const DE_RECIBO = {
+  amount: 1000,
+  receiptPayment: { cashRegister: null, bankAccount: null },
+} satisfies Partial<EndorsedCheckInfo>;
 const CON_DEFAULTS = { defaultCashAccountId: 'DC', defaultBankAccountId: 'DB' };
 
 const resolve = (
@@ -205,7 +213,13 @@ describe('resolución de la cuenta de un pago', () => {
     const endosado = pago({
       paymentMethod: 'CHECK',
       endorsedCheckId: 'chk',
-      endorsedCheck: { accountId: 'REG', customerId: 'c1', isElectronic: false, bankAccount: null },
+      endorsedCheck: {
+        ...DE_RECIBO,
+        accountId: 'REG',
+        customerId: 'c1',
+        isElectronic: false,
+        bankAccount: null,
+      },
     });
     expect(resolve(endosado, {}, 'paymentOrder')).toEqual({
       kind: 'resolved',
@@ -218,7 +232,13 @@ describe('resolución de la cuenta de un pago', () => {
     const historico = pago({
       paymentMethod: 'CHECK',
       endorsedCheckId: 'chk',
-      endorsedCheck: { accountId: null, customerId: 'c1', isElectronic: false, bankAccount: null },
+      endorsedCheck: {
+        ...DE_RECIBO,
+        accountId: null,
+        customerId: 'c1',
+        isElectronic: false,
+        bankAccount: null,
+      },
     });
     expect(resolve(historico, { receivablesAccountId: 'cobrar' }, 'paymentOrder')).toEqual({
       kind: 'resolved',
@@ -238,6 +258,7 @@ describe('resolución de la cuenta de un pago', () => {
         paymentMethod: 'ECHEQ',
         endorsedCheckId: 'chk',
         endorsedCheck: {
+          ...DE_RECIBO,
           accountId: null,
           customerId: 'c1',
           isElectronic: true,
@@ -595,6 +616,7 @@ describe('cheque endosado inexistente o e-cheq endosado sin banco (TSK-735)', ()
       paymentMethod: 'ECHEQ',
       endorsedCheckId: 'chk',
       endorsedCheck: {
+        ...DE_RECIBO,
         accountId: null,
         customerId: 'c1',
         isElectronic: true,
@@ -636,6 +658,150 @@ describe('cheque endosado inexistente o e-cheq endosado sin banco (TSK-735)', ()
   it('pago con banco propio: la etiqueta es la de la línea', () => {
     expect(paymentBankLabel(pago({ bankAccountId: 'b', bankAccount: BANCO }))).toBe(
       'Banco Galicia 123-456'
+    );
+  });
+});
+
+describe('revisión final TSK-735: endosos, datos del pago y devolución a socio', () => {
+  const endoso = (check: Partial<EndorsedCheckInfo>, amount = 1000) =>
+    pago({
+      paymentMethod: 'CHECK',
+      amount,
+      endorsedCheckId: 'chk',
+      endorsedCheck: {
+        ...DE_RECIBO,
+        accountId: null,
+        customerId: 'c1',
+        isElectronic: false,
+        checkNumber: '555',
+        bankAccount: null,
+        ...check,
+      },
+    });
+
+  it('F1: endoso de un cheque cargado a mano → omitido con aviso; Proveedores queda abierto', () => {
+    const manual = endoso({ receiptPayment: null });
+    expect(
+      resolve(manual, { receivablesAccountId: 'cobrar', ...CON_DEFAULTS }, 'paymentOrder')
+    ).toEqual({
+      kind: 'omitted',
+      reason: 'MANUAL_ENDORSED_CHECK',
+    });
+    // También el e-cheq cargado a mano: no va al banco que nada debitó.
+    expect(
+      resolve(
+        endoso({ receiptPayment: null, isElectronic: true, bankAccount: { accountId: 'BCH' } }),
+        CON_DEFAULTS,
+        'paymentOrder'
+      )
+    ).toEqual({ kind: 'omitted', reason: 'MANUAL_ENDORSED_CHECK' });
+
+    const { omitted, omittedAmount } = classify([manual], CON_DEFAULTS, 'paymentOrder');
+    expect(omittedAmount).toBe(1000);
+    expect(buildOmittedPaymentWarning(omitted[0], 'paymentOrder')).toBe(
+      'Cheque N° 555 por $\u00a01.000,00 no genera línea en el asiento contable: el cheque se ' +
+        'cargó a mano en Tesorería y no tiene asiento de origen. Ese importe queda pendiente en ' +
+        'Cuentas por Pagar hasta que se regularice.'
+    );
+  });
+
+  it('F1: con cuenta registrada sigue yendo a esa cuenta aunque no tenga recibo', () => {
+    expect(resolve(endoso({ accountId: 'REG', receiptPayment: null }), {}, 'paymentOrder')).toEqual(
+      {
+        kind: 'resolved',
+        accountId: 'REG',
+        source: 'endorsedCheck',
+      }
+    );
+  });
+
+  it('F6: endoso de un físico histórico cuyo pago del RC tenía caja → la caja, luego Caja por Defecto', () => {
+    const conCaja = (accountId: string | null) =>
+      endoso({
+        receiptPayment: { cashRegister: { name: 'Caja RC', accountId }, bankAccount: null },
+      });
+    expect(resolve(conCaja('CTA-CAJA'), CON_DEFAULTS, 'paymentOrder')).toEqual({
+      kind: 'resolved',
+      accountId: 'CTA-CAJA',
+      source: 'cashRegister',
+    });
+    expect(resolve(conCaja(null), CON_DEFAULTS, 'paymentOrder')).toEqual({
+      kind: 'resolved',
+      accountId: 'DC',
+      source: 'defaultCash',
+    });
+    const sinCuenta = conCaja(null);
+    expect(resolve(sinCuenta, SIN_DEFAULTS, 'paymentOrder')).toEqual({
+      kind: 'missing',
+      via: 'cashRegister',
+    });
+    expect(
+      buildMissingPaymentAccountMessage('la orden de pago OP-00009', {
+        payment: sinCuenta,
+        via: 'cashRegister',
+      })
+    ).toContain('la caja "Caja RC" no tiene cuenta contable asociada');
+  });
+
+  it('F6: endoso de un físico histórico cuyo pago del RC tenía banco → el banco, luego Banco por Defecto', () => {
+    const conBanco = (accountId: string | null) =>
+      endoso({
+        receiptPayment: {
+          cashRegister: null,
+          bankAccount: { bankName: 'Banco RC', accountNumber: '42', accountId },
+        },
+      });
+    expect(resolve(conBanco('CTA-BRC'), SIN_DEFAULTS, 'paymentOrder')).toEqual({
+      kind: 'resolved',
+      accountId: 'CTA-BRC',
+      source: 'bankAccount',
+    });
+    expect(resolve(conBanco(null), CON_DEFAULTS, 'paymentOrder')).toEqual({
+      kind: 'resolved',
+      accountId: 'DB',
+      source: 'defaultBank',
+    });
+    expect(resolve(conBanco(null), SIN_DEFAULTS, 'paymentOrder')).toEqual({
+      kind: 'missing',
+      via: 'bankAccount',
+    });
+    expect(paymentBankLabel(conBanco(null))).toBe('Banco RC 42');
+  });
+
+  it('F2: endoso por un importe distinto del cheque → bloquea con los dos importes', () => {
+    expect(findPaymentDataError('la orden de pago OP-00004', [endoso({}, 900)])).toBe(
+      'No se puede confirmar la orden de pago OP-00004: el pago con el cheque endosado N° 555 es ' +
+        'de $\u00a0900,00 pero el cheque es de $\u00a01.000,00. Un cheque se endosa por su ' +
+        'importe completo.'
+    );
+    // Mismo importe en centavos (flotantes): no bloquea.
+    expect(findPaymentDataError('la OP', [endoso({ amount: 0.3 }, 0.1 + 0.2)])).toBeNull();
+  });
+
+  it('F9: cheque o e-cheq (no endoso) sin número → bloquea; con número o endosado, no', () => {
+    expect(
+      findPaymentDataError('el recibo R-00002', [pago({ paymentMethod: 'CHECK', amount: 250 })])
+    ).toBe(
+      'No se puede confirmar el recibo R-00002: el pago con cheque de $\u00a0250,00 no tiene ' +
+        'número de cheque. Editá el comprobante y cargalo.'
+    );
+    expect(findPaymentDataError('la OP', [pago({ paymentMethod: 'ECHEQ' })])).toMatch(
+      /no tiene número de cheque/
+    );
+    expect(
+      findPaymentDataError('la OP', [
+        pago({ paymentMethod: 'CHECK', checkNumber: '1' }),
+        endoso({}),
+      ])
+    ).toBeNull();
+    expect(findPaymentDataError('la OP', [pago(), pago({ paymentMethod: 'TRANSFER' })])).toBeNull();
+  });
+
+  it('F8: devolución a socio con cuotas que no suman lo mismo que los pagos', () => {
+    expect(partnerRepaymentTotalsError([200, 200], [400])).toBeNull();
+    expect(partnerRepaymentTotalsError([0.1, 0.2], [0.3])).toBeNull();
+    expect(partnerRepaymentTotalsError([200], [400])).toBe(
+      'El total de las cuotas a devolver ($\u00a0200,00) no coincide con los pagos ($\u00a0400,00).'
     );
   });
 });
