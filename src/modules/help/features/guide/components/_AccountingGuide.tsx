@@ -282,6 +282,17 @@ export function _AccountingGuide() {
                   puede quedar sin asignar
                 </li>
                 <li>
+                  Sección <strong>Cheques y tarjetas</strong>: Valores a
+                  depositar, Cheques rechazados, Valores diferidos a pagar,
+                  Tarjetas de crédito a pagar y Deudas con socios. Cada una la
+                  usa el asiento de los recibos y órdenes de pago con cheque,
+                  e-cheq o tarjeta, y el ciclo del cheque (depositar, rechazar,
+                  debitar, anular); si usás ese medio y falta la cuenta, el
+                  comprobante no se puede confirmar. Valores a depositar y
+                  Cheques rechazados son cuentas de activo; las otras tres, de
+                  pasivo
+                </li>
+                <li>
                   Retenciones (IVA, Ganancias, IIBB, SUSS - emitidas y
                   sufridas): cada tipo que uses en recibos u órdenes de pago
                   necesita su cuenta

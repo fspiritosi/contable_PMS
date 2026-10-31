@@ -1,0 +1,488 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>TSK-735 · Cuentas contables para cheques y tarjetas</title>
+<style>
+  @page {
+    size: A4;
+    margin: 0;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #1f2430;
+    font-size: 13px;
+    line-height: 1.55;
+    background: #ffffff;
+  }
+
+  .page {
+    padding: 4mm 2mm;
+  }
+
+  header.cover {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    text-align: left;
+    padding: 10mm 2mm 8mm 2mm;
+    border-bottom: 3px solid #2f6f4f;
+    margin-bottom: 10mm;
+  }
+
+  .eyebrow {
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 11px;
+    font-weight: 700;
+    color: #2f6f4f;
+    margin-bottom: 6px;
+  }
+
+  h1 {
+    font-size: 26px;
+    margin: 0 0 8px 0;
+    color: #14251c;
+  }
+
+  .subtitle {
+    font-size: 14px;
+    color: #4b5563;
+    margin: 0;
+  }
+
+  section {
+    margin-bottom: 9mm;
+    page-break-inside: avoid;
+  }
+
+  section.allow-break {
+    page-break-inside: auto;
+  }
+
+  section:last-of-type { margin-bottom: 2mm; }
+
+  h2 {
+    font-size: 16px;
+    color: #14251c;
+    border-left: 4px solid #2f6f4f;
+    padding-left: 8px;
+    margin: 0 0 6mm 0;
+    page-break-after: avoid;
+  }
+
+  h3.sub {
+    font-size: 13.5px;
+    color: #14251c;
+    margin: 6mm 0 3mm 0;
+    page-break-after: avoid;
+  }
+
+  .quote {
+    background: #f4f7f5;
+    border-left: 4px solid #2f6f4f;
+    padding: 10px 14px;
+    font-style: italic;
+    color: #2b3a33;
+    margin: 0 0 6px 0;
+  }
+
+  .quote cite {
+    display: block;
+    font-style: normal;
+    font-size: 11.5px;
+    color: #6b7280;
+    margin-top: 6px;
+  }
+
+  .before-after {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    page-break-inside: avoid;
+  }
+
+  .card {
+    border: 1px solid #e2e5e0;
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+
+  .card.before { background: #fbf7f2; border-color: #ecd9bd; }
+  .card.after { background: #f2f8f4; border-color: #bfe0cb; }
+
+  .card h3 {
+    margin: 0 0 6px 0;
+    font-size: 12.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .card.before h3 { color: #9a6a1f; }
+  .card.after h3 { color: #226240; }
+
+  .card p { margin: 0; }
+
+  ol.steps {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    counter-reset: step;
+  }
+
+  ol.steps > li {
+    counter-increment: step;
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+    page-break-inside: avoid;
+  }
+
+  ol.steps > li::before {
+    content: counter(step);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    border-radius: 50%;
+    background: #2f6f4f;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  ol.steps.letters > li::before {
+    content: counter(step, lower-alpha);
+  }
+
+  .step-body { flex: 1; }
+
+  .step-body strong { color: #14251c; }
+
+  figure {
+    margin: 8px 0 0 0;
+    page-break-inside: avoid;
+  }
+
+  figure img {
+    max-width: 100%;
+    border: 1px solid #d9dce0;
+    border-radius: 6px;
+    display: block;
+  }
+
+  figure.small img { max-width: 320px; }
+
+  figure.sidebar img { max-width: 150px; }
+
+  figure.modal img { max-width: 400px; }
+
+  figure.modal-sm img { max-width: 340px; }
+
+  ol.steps.long > li { page-break-inside: auto; }
+
+  figcaption {
+    font-size: 11px;
+    color: #6b7280;
+    margin-top: 4px;
+  }
+
+  .callout {
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin: 0 0 8px 0;
+    page-break-inside: avoid;
+  }
+
+  .callout.config {
+    background: #f2f6fb;
+    border: 1px solid #cddaeb;
+  }
+
+  .callout.warning {
+    background: #fdf5ec;
+    border: 1px solid #efd6a8;
+  }
+
+  .callout h3 {
+    margin: 0 0 4px 0;
+    font-size: 13px;
+  }
+
+  .callout p { margin: 0 0 6px 0; }
+  .callout p:last-child { margin-bottom: 0; }
+
+  ul.plain {
+    margin: 4px 0 0 0;
+    padding-left: 18px;
+  }
+
+  ul.plain li { margin-bottom: 4px; }
+
+  .no-change-list {
+    display: grid;
+    gap: 6px;
+  }
+
+  .no-change-item {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+  }
+
+  .check {
+    color: #2f6f4f;
+    font-weight: 700;
+  }
+
+  .side-by-side {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8mm;
+    align-items: start;
+    page-break-inside: avoid;
+  }
+
+  .side-by-side figure { margin-top: 0; }
+
+  .side-by-side.narrow-left {
+    grid-template-columns: 160px 1fr;
+  }
+
+  .ui-text {
+    font-style: italic;
+    color: #374151;
+  }
+
+  table.chain {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 6px 0 8px 0;
+    font-size: 12px;
+    page-break-inside: avoid;
+  }
+
+  table.chain th, table.chain td {
+    border: 1px solid #dfe3e0;
+    padding: 6px 8px;
+    text-align: left;
+    vertical-align: top;
+  }
+
+  table.chain th {
+    background: #f4f7f5;
+    color: #14251c;
+    font-weight: 700;
+  }
+
+  .entry {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 11.5px;
+    background: #f7f8f7;
+    border: 1px solid #e2e5e0;
+    border-radius: 6px;
+    padding: 8px 10px;
+    margin: 6px 0;
+    white-space: pre;
+  }
+
+  /* TSK-798 */
+  figure.dialog img { max-width: 420px; }
+  ol.steps figure img { max-width: 520px; }
+  ol.steps figure.dialog img { max-width: 400px; }
+  .keep-together { page-break-inside: avoid; }
+
+  footer.doc-footer {
+    text-align: center;
+    color: #9ca3af;
+    font-size: 10.5px;
+    margin-top: 2mm;
+  }
+</style>
+
+</head>
+<body>
+<div class="page">
+  <header class="cover">
+    <div class="eyebrow">Ticket 735 · Tesorería y Contabilidad · Seguimiento del 728</div>
+    <h1>Cheques, tarjetas y devolución a socios: ahora con su asiento completo</h1>
+    <p class="subtitle">Guía de presentación: qué pedía el ticket, qué cambió y cómo se usa</p>
+  </header>
+
+  <section>
+    <h2>1. Qué pedía el ticket</h2>
+    <p>Hasta ahora, un recibo cobrado con cheque, o una orden de pago pagada con cheque propio, cheque endosado o
+    tarjeta, <strong>dejaba afuera ese pago del asiento</strong> y avisaba con un cartel naranja. El saldo de
+    <em>Deudores</em> o de <em>Proveedores</em> quedaba abierto hasta regularizarlo a mano. Además, la devolución a un
+    socio no generaba ningún asiento.</p>
+    <p>El pedido: que cada medio tenga su cuenta, que el asiento cierre por el total y que lo que ya quedó pendiente
+    en el pasado quede regularizado o, al menos, listado para la contadora.</p>
+  </section>
+
+  <section>
+    <h2>2. Qué cambió</h2>
+    <div class="before-after">
+      <div class="card before"><h3>Antes</h3>
+        <p>Cheque, e-cheq endosado, tarjeta y "Cuenta Corriente" quedaban fuera del asiento, con aviso. El importe seguía
+        abierto en Deudores o Proveedores. Depositar, rechazar o anular un cheque no generaba asiento. La devolución a un
+        socio, tampoco.</p></div>
+      <div class="card after"><h3>Ahora</h3>
+        <p>Cada medio tiene una cuenta y el asiento del recibo o la orden de pago cierra por el total, sin avisos. El
+        ciclo del cheque (depositar, rechazar, debitar, anular) y la devolución a socios generan su propio asiento,
+        siempre en borrador para que lo revise la contadora.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>3. Qué hay que configurar: las 5 cuentas nuevas</h2>
+    <p>En <span class="ui-text">Contabilidad → Configuración</span> hay una sección nueva, <strong>Cheques y tarjetas</strong>,
+    con cinco cuentas. Se eligen una sola vez, escribiendo el código o el nombre en el buscador.</p>
+    <figure><img src="assets/tsk735-01-config-cheques-tarjetas.png" alt="Sección Cheques y tarjetas de Configuración" />
+      <figcaption>La sección con las cinco cuentas elegidas.</figcaption></figure>
+    <table class="chain">
+      <tr><th>Cuenta</th><th>Tipo</th><th>Para qué sirve</th></tr>
+      <tr><td>Valores a depositar</td><td>Activo</td><td>Cheques de terceros que recibimos y todavía no depositamos</td></tr>
+      <tr><td>Cheques rechazados</td><td>Activo</td><td>Cheques que el banco rechazó y se le reclaman al cliente</td></tr>
+      <tr><td>Valores diferidos a pagar</td><td>Pasivo</td><td>Cheques propios entregados que todavía no se debitaron del banco</td></tr>
+      <tr><td>Tarjetas de crédito a pagar</td><td>Pasivo</td><td>Deuda por pagos con la tarjeta de crédito de la empresa</td></tr>
+      <tr><td>Deudas con socios</td><td>Pasivo</td><td>Lo que la empresa le debe a un socio cuando paga con una tarjeta suya</td></tr>
+    </table>
+    <div class="callout config">
+      <h3>Si falta una cuenta</h3>
+      <p>El comprobante no se puede confirmar: el diálogo lo dice en rojo, nombra la cuenta y dónde cargarla. Solo se
+      exige la cuenta del medio que se está usando.</p>
+    </div>
+  </section>
+
+  <section class="allow-break">
+    <h2>4. Cómo se usa, con un ejemplo</h2>
+
+    <h3 class="sub">a) Cobrar con un cheque de terceros</h3>
+    <p>La factura 0001-00000004 de Cliente Demo SA es de $ 49.005. El cliente paga con un cheque de $ 30.000 (Banco
+    Galicia) y $ 19.005 en efectivo.</p>
+    <ol class="steps">
+      <li><div class="step-body">Se carga el recibo en <span class="ui-text">Tesorería → Recibos de Cobro</span> con los
+        dos pagos y, desde la fila, <strong>Confirmar</strong>. El diálogo muestra con qué cuentas se va a armar el asiento.
+        <figure class="dialog"><img src="assets/tsk735-02-recibo-confirmar.png" alt="Confirmar recibo con cheque" />
+          <figcaption>El cheque va a "Valores a depositar" y el efectivo a la caja.</figcaption></figure></div></li>
+      <li><div class="step-body">El asiento queda completo y el cheque aparece en <span class="ui-text">Tesorería → Cheques</span>
+        como <em>En Cartera</em>.
+        <figure><img src="assets/tsk735-03-recibo-asiento.png" alt="Asiento del recibo con cheque" />
+          <figcaption>Valores a depositar $ 30.000 y Caja $ 19.005 contra Deudores locales $ 49.005: sin avisos.</figcaption></figure></div></li>
+    </ol>
+
+    <h3 class="sub">b) Qué asiento genera cada acción del cheque</h3>
+    <table class="chain">
+      <tr><th>Acción en Cheques</th><th>Qué pasa con el cheque</th><th>Asiento (Debe / Haber)</th></tr>
+      <tr><td>Depositar</td><td>En cartera → Depositado</td><td>Banco / Valores a depositar</td></tr>
+      <tr><td>Rechazar</td><td>Depositado → Rechazado</td><td>Cheques rechazados (a cuenta del cliente) / Banco</td></tr>
+      <tr><td>Debitar (nueva)</td><td>Cheque propio Entregado → Cobrado</td><td>Valores diferidos a pagar / Banco</td></tr>
+      <tr><td>Anular</td><td>Según el estado</td><td>Revierte lo que se había asentado</td></tr>
+      <tr><td>Acreditar</td><td>Depositado → Acreditado</td><td>Sin asiento: el banco ya se debitó al depositar</td></tr>
+    </table>
+
+    <h3 class="sub">c) Pagar con un cheque propio y debitarlo</h3>
+    <ol class="steps">
+      <li><div class="step-body">En una orden de pago se elige <strong>Cheque</strong> y se cargan número, banco y fechas.
+        Al confirmar, la deuda con el proveedor se cancela contra <strong>Valores diferidos a pagar</strong>.
+        <figure><img src="assets/tsk735-05-op-cheque-asiento.png" alt="Asiento de la orden de pago con cheque propio" />
+          <figcaption>OP con un cheque propio de $ 200.000: Acreedores Locales / Valores diferidos a pagar.</figcaption></figure></div></li>
+      <li><div class="step-body">Cuando el banco debita el cheque, en <span class="ui-text">Tesorería → Cheques</span> se abre el
+        menú de la fila y se elige <strong>Debitar</strong>.
+        <figure><img src="assets/tsk735-06-cheques-menu-debitar.png" alt="Menú de la fila del cheque" />
+          <figcaption>La acción aparece solo en cheques propios entregados.</figcaption></figure></div></li>
+      <li><div class="step-body">Se elige la cuenta bancaria y la fecha del débito, y se confirma.
+        <figure class="modal"><img src="assets/tsk735-07-debitar-modal.png" alt="Debitar cheque" /></figure>
+        <figure><img src="assets/tsk735-08-debitar-asiento.png" alt="Asiento del débito del cheque" />
+          <figcaption>Valores diferidos a pagar / Banco Santander: la deuda del cheque se cierra y el banco baja.</figcaption></figure></div></li>
+    </ol>
+
+    <h3 class="sub">d) Tarjeta de un socio y devolución al socio</h3>
+    <p>Si la empresa paga a un proveedor con la tarjeta personal de un socio, la deuda pasa a <em>Deudas con socios</em>.
+    Cuando la empresa le devuelve el dinero, esa deuda se cancela contra la caja o el banco: <strong>la devolución ahora
+    genera su asiento</strong>.</p>
+    <ol class="steps">
+      <li><div class="step-body">Orden de pago con la tarjeta de débito de Juan Perez por $ 25.000.
+        <figure><img src="assets/tsk735-10-op-tarjeta-socio-asiento.png" alt="Asiento del pago con tarjeta de socio" />
+          <figcaption>Acreedores Locales / Deudas con socios.</figcaption></figure></div></li>
+      <li><div class="step-body">La devolución se arma desde el detalle del socio y se confirma como cualquier orden de pago.
+        <figure class="dialog"><img src="assets/tsk735-11-devolucion-confirmar.png" alt="Confirmar la devolución al socio" /></figure>
+        <figure><img src="assets/tsk735-12-devolucion-asiento.png" alt="Asiento de la devolución al socio" />
+          <figcaption>Deudas con socios / Caja: la deuda con el socio queda saldada.</figcaption></figure></div></li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>5. "Cuenta Corriente" ya no se ofrece</h2>
+    <p>Como medio de pago de recibos y órdenes de pago, <strong>Cuenta Corriente</strong> no representa un movimiento de
+    fondos y era la causa de varios saldos abiertos. Ya no aparece en las listas y, si se intenta, el sistema responde:
+    <span class="ui-text">El medio "Cuenta Corriente" ya no se usa: elegí otro medio o registrá una nota de crédito/débito</span>.</p>
+    <p>Los comprobantes viejos que la usan quedan como estaban. Si hay que corregir o editar uno de ellos, hay que
+    cambiarle el medio.</p>
+  </section>
+
+  <section>
+    <h2>6. Lo que ya estaba pendiente: cómo se regulariza</h2>
+    <p>Los cheques y cuotas de antes de este cambio no tienen cuenta registrada. El sistema los trata así:</p>
+    <ul class="plain">
+      <li><strong>Se regularizan solos</strong> al usarlos: al depositar o endosar un cheque recibido, o al debitar un cheque
+      propio, el asiento descarga el saldo que había quedado abierto en Deudores o Proveedores.</li>
+      <li><strong>Se listan para la contadora</strong> los que no se regularizan solos (por ejemplo, un cheque que ya se
+      depositó antes del cambio, o un pago con la tarjeta de la empresa).</li>
+    </ul>
+    <h3 class="sub">El listado de regularización</h3>
+    <p>Lo corre quien administra el servidor, una sola vez después de publicar el cambio (es de solo lectura: no
+    modifica nada). Hay que indicar la <strong>fecha y hora de la publicación en horario UTC</strong>; la hora argentina
+    se expresa tres horas más adelante. Por ejemplo, una publicación a las 15:30 en Argentina se informa como 18:30.</p>
+    <div class="entry">psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -v corte='2026-11-05 18:30' \
+  -f prisma/scripts/tsk735-diagnostico-medios-sin-cuenta.sql</div>
+    <p>El resultado lista cada recibo u orden de pago confirmado antes de esa fecha, con el importe que quedó abierto,
+    el cliente o proveedor y qué va a pasar con cada uno:</p>
+    <table class="chain">
+      <tr><th>Texto en la columna "destino"</th><th>Qué significa</th></tr>
+      <tr><td>se regulariza al endosar o depositar</td><td>Cheque recibido que sigue en cartera: se arregla solo al usarlo</td></tr>
+      <tr><td>se regulariza al debitar</td><td>Cheque propio entregado: se arregla al debitarlo</td></tr>
+      <tr><td>se regulariza al devolver al socio</td><td>Deuda con el socio por una tarjeta suya: se arregla al devolverle</td></tr>
+      <tr><td>e-cheq ya en banco: sin saldo abierto</td><td>Nada que hacer: el asiento viejo ya lo había mandado al banco</td></tr>
+      <tr><td>regularizar a mano</td><td>La contadora tiene que hacer un asiento (cheque ya depositado o endosado, tarjeta de la empresa, cobro con tarjeta)</td></tr>
+      <tr><td>cuenta corriente: regularizar con NC/ND</td><td>Se resuelve con una nota de crédito o de débito</td></tr>
+    </table>
+    <p>Al final trae los totales por cliente y proveedor, para ver cuánto hay que regularizar en cada cuenta.</p>
+  </section>
+
+  <section>
+    <h2>7. Lo que no cambió</h2>
+    <div class="no-change-list">
+      <div class="no-change-item"><span class="check">✓</span><div><strong>Pago del resumen de la tarjeta de la empresa:</strong>
+        todavía no tiene flujo en el sistema. "Tarjetas de crédito a pagar" se va acumulando hasta que se resuelva en otro ticket.</div></div>
+      <div class="no-change-item"><span class="check">✓</span><div><strong>Endoso manual de un cheque</strong> desde Cheques: sigue sin asiento
+        y el sistema avisa. Para que el endoso se asiente, hay que hacerlo desde una orden de pago.</div></div>
+      <div class="no-change-item"><span class="check">✓</span><div><strong>Cobro con tarjeta de crédito en un recibo:</strong> sigue sin línea en
+        el asiento y con aviso. Ese importe queda pendiente en Deudores hasta un ticket específico.</div></div>
+      <div class="no-change-item"><span class="check">✓</span><div><strong>Cheques cargados a mano</strong> (sin recibo de origen): su rechazo no genera
+        asiento y el sistema lo avisa.</div></div>
+      <div class="no-change-item"><span class="check">✓</span><div><strong>Débito de un e-cheq propio:</strong> baja el saldo del banco en Tesorería
+        pero no agrega un asiento, porque la orden de pago ya había acreditado el banco.</div></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>8. A tener en cuenta</h2>
+    <div class="callout warning">
+      <p>Las cinco cuentas hay que configurarlas antes de usar cheques o tarjetas en comprobantes nuevos; si no, no se
+      podrán confirmar hasta que estén.</p>
+      <p>Una devolución a socio no se puede pagar con "Cuenta Corriente". Y si hay una devolución vieja en borrador que
+      la usaba, hay que cambiarle el medio antes de confirmarla.</p>
+      <p>Si el período contable está cerrado, la acción del cheque (depositar, rechazar, debitar, anular) no se hace y el
+      mensaje lo explica.</p>
+    </div>
+  </section>
+</div>
+</body>
+</html>
