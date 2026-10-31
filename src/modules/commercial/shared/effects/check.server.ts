@@ -187,6 +187,7 @@ export async function applyCheckEventTx(
       supplierId: check.supplierId,
       fromDocument: Boolean(check.receiptPaymentId || check.paymentOrderPaymentId),
       checkNumber: check.checkNumber,
+      depositEntered: Boolean(check.depositEntryId),
     },
     bankAccountId: bank?.accountId || settings?.defaultBankAccountId || null,
     settings: {

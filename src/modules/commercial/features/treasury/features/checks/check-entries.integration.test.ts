@@ -462,6 +462,53 @@ describe.skipIf(!dbAvailable)('integración e2e: asientos del ciclo del cheque (
     expect(await bankBalance()).toBe(before);
   });
 
+  it('histórico físico depositado antes de TSK-735 (sin asiento de depósito) → el rechazo reclasifica Cobrar sin tocar Banco', async () => {
+    // Cheque de RC llevado a su forma histórica: sin cuenta registrada y depositado sin asiento.
+    const checkId = await confirmedReceiptCheck('T735C-RC-HIST');
+    const movement = await prisma.bankMovement.create({
+      data: {
+        companyId,
+        bankAccountId,
+        type: 'CHECK',
+        amount: 1000,
+        date: DEPOSIT_DATE,
+        description: `${PREFIX}depósito histórico`,
+        reconciled: false,
+        createdBy: 'test',
+      },
+    });
+    await prisma.bankAccount.update({
+      where: { id: bankAccountId },
+      data: { balance: { increment: 1000 } },
+    });
+    await prisma.check.update({
+      where: { id: checkId },
+      data: {
+        accountId: null,
+        status: 'DEPOSITED',
+        bankAccountId,
+        bankMovementId: movement.id,
+        depositedAt: DEPOSIT_DATE,
+      },
+    });
+    const before = await bankBalance();
+
+    const result = await rejectCheck(checkId, 'Sin fondos');
+    expect(result).toEqual({ success: true, warnings: [] });
+
+    const check = await readCheck(checkId);
+    expect(check.status).toBe('REJECTED');
+    const lines = await entryLines(check.rejectionEntryId);
+    expect(lines).toEqual([
+      { accountId: rechazadosId, debit: 1000, credit: 0, customerId, supplierId: null },
+      { accountId: cobrarId, debit: 0, credit: 1000, customerId, supplierId: null },
+    ]);
+    expect(lines.some((l) => l.accountId === bancoId)).toBe(false);
+    // Tesorería sí deshace el depósito: movimiento borrado y saldo descontado.
+    expect(check.bankMovementId).toBeNull();
+    expect(await bankBalance()).toBe(before - 1000);
+  });
+
   it('Review Focus 3: mes cerrado → error legible; el cheque sigue en cartera y el saldo no cambia', async () => {
     const checkId = await confirmedReceiptCheck('T735C-RC-3');
     const before = await bankBalance();

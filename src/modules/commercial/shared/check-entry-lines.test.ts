@@ -25,6 +25,7 @@ const thirdParty = (over: Partial<CheckShape> = {}): CheckShape => ({
   supplierId: null,
   fromDocument: true,
   checkNumber: '123',
+  depositEntered: false,
   ...over,
 });
 
@@ -38,6 +39,7 @@ const own = (over: Partial<CheckShape> = {}): CheckShape => ({
   supplierId: 'prov',
   fromDocument: true,
   checkNumber: '777',
+  depositEntered: false,
   ...over,
 });
 
@@ -131,13 +133,16 @@ describe('buildCheckEventLines', () => {
     });
 
     it.each([
-      ['físico', false],
-      ['electrónico', true],
+      ['físico con asiento de depósito', false, true],
+      ['electrónico de documento', true, false],
     ] as const)(
-      'histórico %s de documento → Debe Cheques rechazados / Haber banco',
-      (_label, isElectronic) => {
+      'histórico %s → Debe Cheques rechazados / Haber banco',
+      (_label, isElectronic, depositEntered) => {
         const result = buildCheckEventLines(
-          input('REJECT', thirdParty({ status: 'DEPOSITED', accountId: null, isElectronic }))
+          input(
+            'REJECT',
+            thirdParty({ status: 'DEPOSITED', accountId: null, isElectronic, depositEntered })
+          )
         );
         expect(result).toMatchObject({
           lines: [
@@ -147,6 +152,34 @@ describe('buildCheckEventLines', () => {
         });
       }
     );
+
+    it('histórico físico depositado sin asiento → Debe Cheques rechazados / Haber Cuentas por Cobrar, sin banco', () => {
+      const result = buildCheckEventLines(
+        input('REJECT', thirdParty({ status: 'DEPOSITED', accountId: null }))
+      );
+      expect(result).toMatchObject({
+        lines: [
+          { accountId: 'rech', debit: 500, credit: 0, customerId: 'cli' },
+          { accountId: 'cobrar', debit: 0, credit: 500, customerId: 'cli' },
+        ],
+      });
+    });
+
+    it('histórico físico sin asiento y sin "Cuentas por Cobrar" → missing receivablesAccountId', () => {
+      const result = buildCheckEventLines(
+        input('REJECT', thirdParty({ status: 'DEPOSITED', accountId: null }), {
+          settings: { ...SETTINGS, receivablesAccountId: null },
+        })
+      );
+      expect(result).toEqual({ missing: 'receivablesAccountId' });
+    });
+
+    it('VOID de un histórico físico depositado sin asiento → sin asiento (Cobrar seguía abierto)', () => {
+      const result = buildCheckEventLines(
+        input('VOID', thirdParty({ status: 'DEPOSITED', accountId: null }))
+      );
+      expect(result).toMatchObject({ skip: true });
+    });
 
     it('sin "Cheques rechazados" configurada → missing checksRejectedAccountId', () => {
       const result = buildCheckEventLines(

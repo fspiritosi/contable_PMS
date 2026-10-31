@@ -17,7 +17,10 @@
  * | DEPOSIT | histórico físico                         | Banco / Cobrar (cliente)                  |
  * | DEPOSIT | histórico electrónico                    | sin asiento, aviso                        |
  * | todos   | cargado a mano                           | sin asiento, aviso                        |
- * | REJECT  | con cuenta o histórico de documento      | Cheques rechazados (cliente) / Banco      |
+ * | REJECT  | con cuenta, histórico e-cheq o histórico | Cheques rechazados (cliente) / Banco      |
+ * |         | físico con asiento de depósito           |                                           |
+ * | REJECT  | histórico físico depositado sin asiento² | Cheques rechazados (cliente) / Cobrar     |
+ * |         |                                          | (cliente)                                 |
  * | DEBIT   | propio con cuenta                        | cuenta del cheque / Banco                 |
  * | DEBIT   | propio histórico físico                  | Pagar (proveedor) / Banco                 |
  * | DEBIT   | e-cheq propio (va por banco)             | sin asiento, aviso                        |
@@ -30,6 +33,8 @@
  * | VOID    | ENDORSED o REJECTED                      | sin asiento, aviso                        |
  *
  * ¹ DEPOSITED: el llamador revierte antes el asiento del depósito (`applyCheckEventTx`).
+ * ² Depositado antes de TSK-735: ni el recibo ni el depósito debitaron Banco en libros y el
+ *   saldo del cliente siguió en Cobrar; el rechazo lo reclasifica sin tocar Banco.
  *
  * Puro: sin Prisma, sin React, sin importar de features.
  */
@@ -53,6 +58,8 @@ export interface CheckEventInput {
     /** `Boolean(receiptPaymentId || paymentOrderPaymentId)`. */
     fromDocument: boolean;
     checkNumber: string;
+    /** El depósito generó asiento (`Boolean(depositEntryId)`): el banco quedó debitado en libros. */
+    depositEntered: boolean;
   };
   /** Cuenta contable del banco ya resuelta (la propia o "Banco por Defecto"); null si no hay. */
   bankAccountId: string | null;
@@ -152,12 +159,14 @@ export function buildCheckEventLines(input: CheckEventInput): CheckEventLinesRes
     );
   }
 
-  // Histórico de documento también: el RC o el depósito legado ya debitó el banco.
   if (event === 'REJECT') {
     const rejected: Side = settings.checksRejectedAccountId
       ? { accountId: settings.checksRejectedAccountId, customerId: check.customerId }
       : { missing: 'checksRejectedAccountId' };
-    return pair(input, rejected, bank);
+    // El banco quedó debitado en libros por el depósito (con cuenta o histórico físico con
+    // asiento) o por el recibo (e-cheq histórico). Si no, el saldo seguía en Cobrar.
+    const bankDebited = registered !== 'legacyCounterparty' || check.depositEntered;
+    return pair(input, rejected, bankDebited ? bank : receivables);
   }
 
   if (event === 'DEPOSIT') {
