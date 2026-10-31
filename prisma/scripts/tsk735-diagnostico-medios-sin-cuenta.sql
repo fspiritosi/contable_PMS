@@ -8,14 +8,18 @@
 -- Uso (la imagen runner de producción no tiene tsx):
 --   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -v corte='2026-11-05 18:30' \
 --     -f prisma/scripts/tsk735-diagnostico-medios-sin-cuenta.sql
--- `corte` (obligatorio, 'YYYY-MM-DD HH:MI') es la fecha/hora del deploy de TSK-735: solo se listan
--- los RC/OP cuyo asiento (journal_entries.created_at) es anterior al corte, o que no tienen asiento.
--- Los posteriores ya se asientan completos y no son un falso positivo del detalle.
+-- `corte` (obligatorio, 'YYYY-MM-DD HH:MI') es la fecha/hora del deploy de TSK-735 EN UTC (hora
+-- argentina + 3: un deploy a las 15:30 de Argentina es corte='... 18:30'), porque
+-- journal_entries.created_at se guarda como timestamp sin zona en UTC. Solo se listan los RC/OP
+-- cuyo asiento es anterior al corte, o que no tienen asiento. Los posteriores ya se asientan
+-- completos y no son un falso positivo del detalle.
 --
 -- "Histórico" = el pago no está en el asiento:
 --   * cheques: checks.account_id IS NULL (los cargados desde este ticket tienen cuenta);
 --   * cuotas de tarjeta: payment_order_installments.account_id IS NULL;
---   * e-cheq recibido con banco: el asiento viejo ya lo mandó a Banco.
+--   * e-cheq (recibido en RC o propio en OP) con banco: el asiento viejo ya lo mandó a Banco;
+--   * cheque o tarjeta de crédito cuyo pago tenía caja o banco (arrastrados de otro medio en el
+--     formulario): el asiento viejo ya lo mandó a esa caja/banco.
 -- Las OP de devolución a socio (payment_orders.partner_id no nulo) no generaban asiento: no
 -- dejaron saldo abierto en Proveedores, se excluyen del detalle de pagos.
 -- Las cuotas de tarjeta de socio se listan una por cuota (importe de la cuota).
@@ -25,11 +29,15 @@
 --   Cheque propio físico (OP)      DELIVERED                    -> se regulariza al debitar
 --   Cheque, cualquier otro estado (DEPOSITED, CLEARED, ENDORSED, REJECTED, CASHED, VOIDED,
 --     o sin cheque asociado)                                     -> regularizar a mano
---   E-cheq (recibido en RC o propio en OP) con banco                        -> e-cheq ya en banco: sin saldo abierto
+--   E-cheq (recibido en RC o propio en OP) con banco           -> e-cheq ya en banco: sin saldo abierto
+--   Cheque o tarjeta de crédito (RC u OP) con caja o banco en el pago
+--                                                              -> ya registrado en caja/banco: sin saldo abierto
 --   Cuota de tarjeta de socio PENDING sin cuenta                -> se regulariza al devolver al socio
 --   Cuota de tarjeta de socio PAID sin cuenta                   -> regularizar a mano
---   CREDIT_CARD en un RC (cobro con tarjeta; sigue omitido)     -> regularizar a mano
---   Tarjeta de la empresa en una OP (o sin tarjeta registrada)  -> regularizar a mano
+--   CREDIT_CARD en un RC (cobro con tarjeta; sigue omitido), sin caja ni banco
+--                                                              -> regularizar a mano
+--   Tarjeta de la empresa en una OP (o sin tarjeta registrada), sin caja ni banco
+--                                                              -> regularizar a mano
 --   ACCOUNT (RC u OP)                                           -> cuenta corriente: regularizar con NC/ND
 
 \if :{?corte}
@@ -50,6 +58,8 @@ SELECT co.name AS empresa, 'RC' AS tipo, r.full_number AS comprobante, r.date::d
        CASE
          WHEN rp.payment_method = 'ECHEQ' AND rp.bank_account_id IS NOT NULL
            THEN 'e-cheq ya en banco: sin saldo abierto'
+         WHEN rp.bank_account_id IS NOT NULL OR rp.cash_register_id IS NOT NULL
+           THEN 'ya registrado en caja/banco: sin saldo abierto'
          WHEN c.status = 'PORTFOLIO' AND NOT COALESCE(c.is_electronic, false)
            THEN 'se regulariza al endosar o depositar'
          ELSE 'regularizar a mano'
@@ -69,9 +79,11 @@ UNION ALL
 SELECT co.name, 'RC', r.full_number, r.date::date, COALESCE(cu.name, '(sin cliente)'),
        CASE rp.payment_method WHEN 'CREDIT_CARD' THEN 'Tarjeta de crédito' ELSE 'Cuenta corriente' END,
        rp.amount,
-       CASE rp.payment_method
-         WHEN 'CREDIT_CARD' THEN 'regularizar a mano'
-         ELSE 'cuenta corriente: regularizar con NC/ND'
+       CASE
+         WHEN rp.payment_method = 'ACCOUNT' THEN 'cuenta corriente: regularizar con NC/ND'
+         WHEN rp.bank_account_id IS NOT NULL OR rp.cash_register_id IS NOT NULL
+           THEN 'ya registrado en caja/banco: sin saldo abierto'
+         ELSE 'regularizar a mano'
        END
 FROM receipts r
 JOIN companies co ON co.id = r.company_id
@@ -90,6 +102,8 @@ SELECT co.name, 'OP', o.full_number, o.date::date, COALESCE(s.business_name, '(s
        CASE
          WHEN op.payment_method = 'ECHEQ' AND op.bank_account_id IS NOT NULL
            THEN 'e-cheq ya en banco: sin saldo abierto'
+         WHEN op.bank_account_id IS NOT NULL OR op.cash_register_id IS NOT NULL
+           THEN 'ya registrado en caja/banco: sin saldo abierto'
          WHEN c.type = 'OWN' AND c.status = 'DELIVERED' AND NOT c.is_electronic
            THEN 'se regulariza al debitar'
          ELSE 'regularizar a mano'
@@ -113,8 +127,10 @@ SELECT co.name, 'OP', o.full_number, o.date::date, COALESCE(s.business_name, '(s
          ELSE 'Tarjeta de crédito' || COALESCE(' ' || cd.name, '')
        END,
        op.amount,
-       CASE op.payment_method
-         WHEN 'ACCOUNT' THEN 'cuenta corriente: regularizar con NC/ND'
+       CASE
+         WHEN op.payment_method = 'ACCOUNT' THEN 'cuenta corriente: regularizar con NC/ND'
+         WHEN op.bank_account_id IS NOT NULL OR op.cash_register_id IS NOT NULL
+           THEN 'ya registrado en caja/banco: sin saldo abierto'
          ELSE 'regularizar a mano'
        END
 FROM payment_orders o

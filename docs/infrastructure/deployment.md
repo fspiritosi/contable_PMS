@@ -35,17 +35,45 @@ SQL que cada script documenta en su header.
   sin cuenta contable quedaba `CONFIRMED` con `journal_entry_id IS NULL` en silencio, y hasta
   TSK-728 pasaba lo mismo con recibos, ordenes de pago y gastos (cuenta de Cobrar/Pagar, caja,
   banco o retencion faltante, o medio de pago sin cuenta). Desde esos tickets la confirmacion se
-  bloquea (los medios sin cuenta —cheque, tarjeta de credito, tarjeta de socio, cuenta corriente—
-  se confirman con aviso y asiento parcial: el importe queda en Cobrar/Pagar), pero los historicos
-  siguen en la base. El header del script trae el SQL para `psql`:
+  bloquea, pero los historicos siguen en la base. Desde TSK-735 cheques, e-cheqs y tarjetas tienen
+  cuenta propia y van al asiento completo; solo quedan fuera del asiento, con aviso y el importe
+  pendiente en Cobrar/Pagar, la "Cuenta Corriente" de borradores viejos, el cobro con tarjeta de
+  credito en un recibo y el endoso en una OP de un cheque cargado a mano en Tesoreria. El header del
+  script trae el SQL para `psql`:
   1) detalle por empresa y fecha de los cinco tipos (VENTA, COMPRA, RECIBO, OP, GASTO; `status::text`
-  y `voucher_type::text` por el UNION), 2) las OP a socio sin asiento (no son problema: no generan
-  asiento por diseno), 3) resumen por empresa y tipo, 4) y 5) **que medios de pago se usan** en
+  y `voucher_type::text` por el UNION), 2) las OP a socio sin asiento (son las historicas: hasta
+  TSK-735 la devolucion a socio no generaba asiento por diseno; desde TSK-735 si lo genera, Debe
+  Deudas con socios / Haber caja, banco o cheque), 3) resumen por empresa y tipo, 4) y 5) **que medios de pago se usan** en
   recibos y OP confirmados (conteo e importe por `payment_method`, y cuantos comprobantes tienen
   cheque fisico, tarjeta de credito o cuenta corriente: insumo del ticket de seguimiento "cuentas
   para cheques/tarjetas"), y 6) la consulta de items sin cuenta. Si 1) devuelve filas, se le
   avisa a la clienta: que hacer con esos comprobantes (regenerar el asiento o asentarlos a mano)
   es una decision contable y va en un ticket aparte.
+
+- **Cuentas de cheques y tarjetas** (TSK-735). Dos pasos, en este orden, apenas termina el deploy:
+  1. **Diagnostico de pagos historicos, ANTES de que se opere** (`prisma/scripts/tsk735-diagnostico-medios-sin-cuenta.sql`,
+     solo lectura, termina en `ROLLBACK`). Lista los RC/OP confirmados con la regla vieja cuyos
+     cheques, tarjetas o cuenta corriente dejaron saldo abierto en Deudores/Proveedores y que va a
+     pasar con cada uno (se regulariza al endosar/depositar/debitar/devolver, o regularizar a mano).
+     Correrlo antes de que se depositen, endosen o debiten cheques: despues de esas acciones el
+     estado del cheque cambia y el destino del detalle ya no describe lo que quedo pendiente. Recibe
+     la fecha/hora del deploy como variable obligatoria `corte`, **en UTC** (hora argentina + 3:
+     un deploy a las 15:30 de Argentina es `corte='2026-11-05 18:30'`), porque
+     `journal_entries.created_at` se guarda en UTC sin zona. Desde el host, con el repo:
+
+     ```bash
+     docker exec -i $(docker ps -q --filter name=contablemas-contablemas) \
+       sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -v "corte=2026-11-05 18:30"' \
+       < prisma/scripts/tsk735-diagnostico-medios-sin-cuenta.sql
+     ```
+
+     Pasarle el resultado a la clienta: es el insumo de la regularizacion contable.
+  2. **Configurar las 5 cuentas en cada empresa** (Contabilidad → Configuracion): "Valores a
+     depositar", "Cheques rechazados", "Valores diferidos a pagar", "Tarjetas de credito a pagar" y
+     "Deudas con socios". Hasta que esten cargadas se bloquea la confirmacion de todo recibo con
+     cheque o e-cheq, de toda orden de pago con cheque propio fisico o con tarjeta (de credito de la
+     empresa o de un socio) y de la devolucion a socio con cuotas nuevas, y tambien el rechazo de
+     cheques. Hacerlo en el mismo momento del deploy, con la clienta.
 
 - **Equipos y Bienes de Uso** (TSK-724c). Dos chequeos, uno en la UI y otro en la base:
   1. **Permisos de Equipos a roles personalizados.** `equipment` salio de `HIDDEN_MODULES`, y los roles

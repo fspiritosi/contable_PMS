@@ -455,7 +455,9 @@ export function _TreasuryGuide() {
                   <strong>De terceros</strong>: se <strong>endosa</strong> un cheque
                   recibido que tengas <strong>en cartera</strong>. Elegís el cheque
                   de la lista y el monto se completa solo; al confirmar, ese cheque
-                  pasa a estado &quot;Endosado&quot; a nombre del proveedor
+                  pasa a estado &quot;Endosado&quot; a nombre del proveedor. El cheque
+                  se endosa por su <strong>importe completo</strong>: si cambiás el
+                  monto del pago, la orden no se confirma
                 </li>
               </ul>
             </li>
@@ -491,7 +493,12 @@ export function _TreasuryGuide() {
             crédito a pagar y la <strong>tarjeta de un socio</strong> a Deudas
             con socios. La orden cancela por completo Cuentas por Pagar. Si
             falta alguna de esas cuentas, el diálogo lo dice en rojo y no deja
-            confirmar. La opción <strong>Cuenta Corriente</strong> ya no se
+            confirmar. Si endosás un cheque que <strong>se cargó a mano</strong>{' '}
+            en Tesorería → Cheques (no vino de un recibo), ese pago no entra al
+            asiento: el diálogo te avisa y ese importe queda pendiente en
+            Cuentas por Pagar hasta que lo regularice el contador. Un pago con
+            cheque propio <strong>sin número de cheque</strong> (borradores
+            viejos) no se confirma hasta que edites la orden y lo cargues. La opción <strong>Cuenta Corriente</strong> ya no se
             ofrece en órdenes nuevas (usá otro medio o una nota de
             crédito/débito); las órdenes viejas que la usan siguen mostrando el
             aviso naranja. Pagar el resumen de la tarjeta de la empresa
@@ -502,7 +509,12 @@ export function _TreasuryGuide() {
             que la empresa le debe por pagar con su tarjeta) ahora{' '}
             <strong>generan asiento</strong>: Deudas con socios contra la caja,
             el banco, el cheque propio o el endoso con que se devuelve. No se
-            pueden pagar con Cuenta Corriente. Al cargar cualquier
+            pueden pagar con Cuenta Corriente. Si las cuotas que devuelve
+            cambiaron después de armarla y ya no suman lo mismo que los pagos,
+            la devolución no se confirma y el mensaje muestra los dos totales.
+            Mientras una devolución esté en borrador, la orden de pago donde se
+            usó la tarjeta del socio no se puede corregir: primero eliminá o
+            editá la devolución. Al cargar cualquier
             orden, <strong>Efectivo</strong> exige elegir la caja y{' '}
             <strong>Transferencia</strong> la cuenta bancaria. Antes, una orden
             con una cuenta faltante podía quedar confirmada sin asiento y sin
@@ -673,7 +685,15 @@ export function _TreasuryGuide() {
             </li>
             <li>
               <strong>Anular</strong>: revierte lo asentado según el estado
-              (en cartera, depositado o entregado)
+              (en cartera, depositado o entregado). Un cheque propio que pagó
+              una <strong>devolución a un socio</strong> no se anula desde
+              Cheques: corregí esa orden de pago (si no, la deuda con el socio
+              quedaría saldada sin pago)
+            </li>
+            <li>
+              <strong>Eliminar</strong>: solo para cheques cargados a mano. Un
+              cheque que generó un recibo o una orden de pago no se elimina
+              (la opción no aparece): anulalo o corregí el comprobante
             </li>
             <li>
               <strong>Acreditar</strong> no genera asiento: el banco ya se
@@ -690,10 +710,16 @@ export function _TreasuryGuide() {
             del cliente: eso se regulariza a mano. Un cheque cargado a mano,
             sin recibo de origen, no genera asiento en ninguna acción y el
             sistema te avisa. El{' '}
-            <strong>endoso manual</strong> desde Cheques tampoco genera
-            asiento: para el endoso contable usá una orden de pago. Si falta
-            una cuenta en Configuración o el período está cerrado, la acción no
-            se hace y el mensaje te dice qué corregir.
+            <strong>endoso manual</strong> desde Cheques no genera asiento: si el
+            cheque vino de un recibo y está registrado en Valores a depositar,
+            el sistema no te deja endosarlo a mano (endosalo desde una orden de
+            pago para que el asiento lo descargue); los cheques anteriores a
+            este cambio o cargados a mano se endosan a mano con un aviso. Un{' '}
+            <strong>e-cheq</strong> que ya quedó registrado en un banco (los
+            propios y los recibidos antes de este cambio) se deposita o debita
+            solo en ese banco: el selector viene fijo. Si falta una cuenta en
+            Configuración o el período está cerrado, la acción no se hace y el
+            mensaje te dice qué corregir.
           </p>
 
           <p className="mt-3">

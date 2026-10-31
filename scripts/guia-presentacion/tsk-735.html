@@ -383,8 +383,10 @@
       <tr><td>Depositar</td><td>En cartera → Depositado</td><td>Banco / Valores a depositar</td></tr>
       <tr><td>Rechazar</td><td>Depositado → Rechazado</td><td>Cheques rechazados (a cuenta del cliente) / Banco</td></tr>
       <tr><td>Debitar (nueva)</td><td>Cheque propio Entregado → Cobrado</td><td>Valores diferidos a pagar / Banco</td></tr>
-      <tr><td>Anular</td><td>Según el estado</td><td>Revierte lo que se había asentado</td></tr>
+      <tr><td>Anular</td><td>Según el estado</td><td>Revierte lo que se había asentado. Un cheque propio que pagó una devolución a un socio no se anula desde acá: se corrige esa orden de pago</td></tr>
       <tr><td>Acreditar</td><td>Depositado → Acreditado</td><td>Sin asiento: el banco ya se debitó al depositar</td></tr>
+      <tr><td>Endosar a mano</td><td>En cartera → Endosado</td><td>No se permite si el cheque vino de un recibo y está en Valores a depositar: se endosa desde una orden de pago, que sí lo asienta. Los cheques anteriores o cargados a mano se endosan con un aviso, sin asiento</td></tr>
+      <tr><td>Eliminar</td><td>Se borra</td><td>Solo cheques cargados a mano. Uno que generó un recibo o una orden de pago se anula o se corrige el comprobante</td></tr>
     </table>
 
     <h3 class="sub">c) Pagar con un cheque propio y debitarlo</h3>
@@ -416,6 +418,24 @@
         <figure><img src="assets/tsk735-12-devolucion-asiento.png" alt="Asiento de la devolución al socio" />
           <figcaption>Deudas con socios / Caja: la deuda con el socio queda saldada.</figcaption></figure></div></li>
     </ol>
+    <p>Si la devolución se pagó con un cheque propio, ese cheque se debita como cualquier otro, pero no se anula desde
+    Cheques: para deshacerla se corrige la orden de pago de la devolución. Mientras una devolución está en borrador,
+    la orden de pago donde se usó la tarjeta del socio no se puede corregir: primero se elimina o edita la devolución.</p>
+    <h3 class="sub">e) Controles que cuidan el asiento</h3>
+    <ul class="plain">
+      <li><strong>Un cheque se endosa por su importe completo.</strong> Si el pago con el cheque endosado es por otro
+      importe, la orden no se confirma y el mensaje muestra los dos importes.</li>
+      <li><strong>Cheque cargado a mano y endosado en una orden de pago:</strong> como no vino de un recibo, nada lo
+      registró antes; el pago queda fuera del asiento con un aviso y ese importe sigue pendiente con el proveedor
+      hasta que lo regularice la contadora.</li>
+      <li><strong>Cheque sin número</strong> en un borrador viejo: no se confirma hasta cargarle el número.</li>
+      <li><strong>E-cheq ya registrado en un banco</strong> (los propios y los recibidos antes de este cambio): se
+      deposita o debita solo en ese banco; el selector viene fijo.</li>
+      <li><strong>Caja y banco de cada medio:</strong> al cambiar de medio en el formulario, la caja o el banco del medio
+      anterior ya no quedan guardados en el cheque o la tarjeta.</li>
+      <li><strong>Devolución a socio:</strong> si las cuotas cambiaron y ya no suman lo mismo que los pagos, no se
+      confirma y el mensaje muestra los dos totales.</li>
+    </ul>
   </section>
 
   <section>
@@ -437,8 +457,8 @@
       depositó antes del cambio, o un pago con la tarjeta de la empresa).</li>
     </ul>
     <h3 class="sub">El listado de regularización</h3>
-    <p>Lo corre quien administra el servidor, una sola vez después de publicar el cambio (es de solo lectura: no
-    modifica nada). Hay que indicar la <strong>fecha y hora de la publicación en horario UTC</strong>; la hora argentina
+    <p>Lo corre quien administra el servidor, una sola vez apenas se publica el cambio y antes de empezar a depositar,
+    endosar o debitar cheques (es de solo lectura: no modifica nada). Hay que indicar la <strong>fecha y hora de la publicación en horario UTC</strong>; la hora argentina
     se expresa tres horas más adelante. Por ejemplo, una publicación a las 15:30 en Argentina se informa como 18:30.</p>
     <div class="entry">psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -v corte='2026-11-05 18:30' \
   -f prisma/scripts/tsk735-diagnostico-medios-sin-cuenta.sql</div>
@@ -450,6 +470,7 @@
       <tr><td>se regulariza al debitar</td><td>Cheque propio entregado: se arregla al debitarlo</td></tr>
       <tr><td>se regulariza al devolver al socio</td><td>Deuda con el socio por una tarjeta suya: se arregla al devolverle</td></tr>
       <tr><td>e-cheq ya en banco: sin saldo abierto</td><td>Nada que hacer: el asiento viejo ya lo había mandado al banco</td></tr>
+      <tr><td>ya registrado en caja/banco: sin saldo abierto</td><td>Nada que hacer: el pago (cheque o tarjeta) tenía cargada una caja o un banco y el asiento viejo ya lo había mandado ahí</td></tr>
       <tr><td>regularizar a mano</td><td>La contadora tiene que hacer un asiento (cheque ya depositado o endosado, tarjeta de la empresa, cobro con tarjeta)</td></tr>
       <tr><td>cuenta corriente: regularizar con NC/ND</td><td>Se resuelve con una nota de crédito o de débito</td></tr>
     </table>
@@ -462,7 +483,8 @@
       <div class="no-change-item"><span class="check">✓</span><div><strong>Pago del resumen de la tarjeta de la empresa:</strong>
         todavía no tiene flujo en el sistema. "Tarjetas de crédito a pagar" se va acumulando hasta que se resuelva en otro ticket.</div></div>
       <div class="no-change-item"><span class="check">✓</span><div><strong>Endoso manual de un cheque</strong> desde Cheques: sigue sin asiento
-        y el sistema avisa. Para que el endoso se asiente, hay que hacerlo desde una orden de pago.</div></div>
+        y el sistema avisa; solo se permite para cheques anteriores al cambio o cargados a mano. Para que el endoso se
+        asiente, hay que hacerlo desde una orden de pago.</div></div>
       <div class="no-change-item"><span class="check">✓</span><div><strong>Cobro con tarjeta de crédito en un recibo:</strong> sigue sin línea en
         el asiento y con aviso. Ese importe queda pendiente en Deudores hasta un ticket específico.</div></div>
       <div class="no-change-item"><span class="check">✓</span><div><strong>Cheques cargados a mano</strong> (sin recibo de origen): ninguna acción
@@ -475,8 +497,8 @@
   <section>
     <h2>8. A tener en cuenta</h2>
     <div class="callout warning">
-      <p>Las cinco cuentas hay que configurarlas antes de usar cheques o tarjetas en comprobantes nuevos; si no, no se
-      podrán confirmar hasta que estén.</p>
+      <p>Las cinco cuentas hay que configurarlas en cada empresa apenas se publica el cambio, antes de usar cheques o
+      tarjetas en comprobantes nuevos; si no, no se podrán confirmar hasta que estén (y tampoco rechazar cheques).</p>
       <p>Una devolución a socio no se puede pagar con "Cuenta Corriente". Y si hay una devolución vieja en borrador que
       la usaba, hay que cambiarle el medio antes de confirmarla.</p>
       <p>Si el período contable está cerrado, la acción del cheque (depositar, rechazar, debitar, anular) no se hace y el
