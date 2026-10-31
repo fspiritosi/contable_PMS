@@ -68,6 +68,8 @@ describe.skipIf(!dbAvailable)('integración: efectos del recibo de cobro (TSK-79
   let cajaRegisterId: string;
   let sessionId: string;
   let bankAccountId: string;
+  /** TSK-735: Valores a depositar, donde ingresan los cheques recibidos. */
+  let valoresId: string;
   let otherCompanyId: string | undefined;
   let seq = 1;
 
@@ -186,11 +188,13 @@ describe.skipIf(!dbAvailable)('integración: efectos del recibo de cobro (TSK-79
       prisma.account.create({
         data: { companyId, code, name: `${PREFIX}${name}`, type: 'ASSET', nature: 'DEBIT' },
       });
-    const [cobrar, caja, banco] = await Promise.all([
+    const [cobrar, caja, banco, valores] = await Promise.all([
       mk('T792R-COBRAR', 'Cuentas por Cobrar'),
       mk('T792R-CAJA', 'Caja'),
       mk('T792R-BANCO', 'Banco'),
+      mk('T735-VAD', 'Valores a depositar'),
     ]);
+    valoresId = valores.id;
 
     await prisma.accountingSettings.create({
       data: {
@@ -198,6 +202,7 @@ describe.skipIf(!dbAvailable)('integración: efectos del recibo de cobro (TSK-79
         fiscalYearStart: new Date('2026-01-01'),
         fiscalYearEnd: new Date('2026-12-31'),
         receivablesAccountId: cobrar.id,
+        checksReceivedAccountId: valores.id,
         requireCostCenter: false,
       },
     });
@@ -339,6 +344,15 @@ describe.skipIf(!dbAvailable)('integración: efectos del recibo de cobro (TSK-79
     expect(await bankBalance()).toBe(bankBefore + 300);
     expect(await expectedBalance()).toBe(cashBefore + 200);
     expect((await checksOf(id)).map((c) => c.status)).toEqual(['PORTFOLIO', 'PORTFOLIO']);
+    // TSK-735: el cheque y el e-cheq quedan registrados en Valores a depositar.
+    expect(
+      (
+        await prisma.check.findMany({
+          where: { companyId, receiptPayment: { receiptId: id } },
+          select: { accountId: true },
+        })
+      ).map((c) => c.accountId)
+    ).toEqual([valoresId, valoresId]);
     const receiptBefore = await prisma.receipt.findUniqueOrThrow({
       where: { id },
       select: { status: true, journalEntryId: true, fullNumber: true },

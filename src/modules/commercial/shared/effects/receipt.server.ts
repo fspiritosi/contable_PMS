@@ -78,6 +78,17 @@ export async function applyReceiptEffectsTx(
     await recomputeSalesInvoiceStatusTx(tx, item.invoiceId);
   }
 
+  // Cuenta con la que ingresan los cheques recibidos (TSK-735): la misma del Debe del asiento.
+  // Si falta, el asiento de abajo bloquea la confirmación con su mensaje.
+  const checksReceivedAccountId = receipt.payments.some(createsCheck)
+    ? ((
+        await tx.accountingSettings.findUnique({
+          where: { companyId },
+          select: { checksReceivedAccountId: true },
+        })
+      )?.checksReceivedAccountId ?? null)
+    : null;
+
   // 3. Crear movimientos de caja/banco según formas de pago
   for (const payment of receipt.payments) {
     if (createsCashMovement(payment) && payment.cashRegisterId) {
@@ -176,6 +187,8 @@ export async function applyReceiptEffectsTx(
           customerId: receipt.customerId,
           // e-cheq: cuenta bancaria donde ingresó (cuenta de depósito)
           bankAccountId: isEcheq ? payment.bankAccountId : null,
+          // Valores a depositar: contra ella se descarga al depositar o endosar (TSK-735)
+          accountId: checksReceivedAccountId,
           receiptPaymentId: payment.id,
           createdBy: userId,
         },

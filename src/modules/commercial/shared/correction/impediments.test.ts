@@ -48,6 +48,12 @@ describe('impediments', () => {
     ],
     ['installmentPaid', impediments.installmentPaid('FC 1'), 'INSTALLMENT_PAID', 'BLOCKED'],
     [
+      'installmentReserved',
+      impediments.installmentReserved('OP-00002'),
+      'INSTALLMENT_RESERVED',
+      'MANUAL',
+    ],
+    [
       'bankMovementManualLink',
       impediments.bankMovementManualLink('OP 1'),
       'BANK_MOVEMENT_MANUAL_LINK',
@@ -77,8 +83,8 @@ describe('impediments', () => {
     ['simulationError', impediments.simulationError('Falló'), 'SIMULATION_ERROR', 'BLOCKED'],
   ];
 
-  it('cubre los 20 constructores', () => {
-    expect(table).toHaveLength(20);
+  it('cubre los 21 constructores', () => {
+    expect(table).toHaveLength(21);
     expect(Object.keys(impediments).sort()).toEqual(table.map(([name]) => name).sort());
   });
 

@@ -48,6 +48,11 @@ export const ACCOUNTING_SETTINGS_ACCOUNT_FIELDS = [
   'accumulatedDepreciationAccountId',
   'depreciationExpenseAccountId',
   'assetDisposalGainLossAccountId',
+  'checksReceivedAccountId',
+  'checksRejectedAccountId',
+  'checksPayableAccountId',
+  'creditCardsPayableAccountId',
+  'partnerDebtsAccountId',
 ] as const;
 
 export type AccountingSettingsAccountField = (typeof ACCOUNTING_SETTINGS_ACCOUNT_FIELDS)[number];
@@ -88,6 +93,11 @@ export const ACCOUNTING_SETTINGS_ACCOUNT_LABELS: Record<AccountingSettingsAccoun
   accumulatedDepreciationAccountId: 'Amortización acumulada por defecto',
   depreciationExpenseAccountId: 'Gasto de amortización por defecto',
   assetDisposalGainLossAccountId: 'Resultado por venta/baja de Bienes de Uso',
+  checksReceivedAccountId: 'Valores a depositar',
+  checksRejectedAccountId: 'Cheques rechazados',
+  checksPayableAccountId: 'Valores diferidos a pagar',
+  creditCardsPayableAccountId: 'Tarjetas de crédito a pagar',
+  partnerDebtsAccountId: 'Deudas con socios',
 };
 
 /** El "dónde" de todos los mensajes que mandan a configurar una cuenta. */

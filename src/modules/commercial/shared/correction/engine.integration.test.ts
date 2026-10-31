@@ -381,6 +381,13 @@ describe.skipIf(!dbAvailable)('integración: motor de corrección en cadena (TSK
       mk('GASTO', 'EXPENSE', 'DEBIT'),
     ]);
     accounts = { ivaDf: ivaDf.id, ivaCf: ivaCf.id };
+    // TSK-735: cuentas de cheques y tarjetas (los RC/OP con cheque o tarjeta las exigen).
+    const [valores, diferidos, tarjetas, socios] = await Promise.all([
+      mk('VAD', 'ASSET', 'DEBIT'),
+      mk('VDP', 'LIABILITY', 'CREDIT'),
+      mk('TCP', 'LIABILITY', 'CREDIT'),
+      mk('DSO', 'LIABILITY', 'CREDIT'),
+    ]);
 
     await prisma.accountingSettings.create({
       data: {
@@ -393,6 +400,10 @@ describe.skipIf(!dbAvailable)('integración: motor de corrección en cadena (TSK
         salesAccountId: ventas.id,
         receivablesAccountId: cobrar.id,
         vatDebitAccountId: ivaDf.id,
+        checksReceivedAccountId: valores.id,
+        checksPayableAccountId: diferidos.id,
+        creditCardsPayableAccountId: tarjetas.id,
+        partnerDebtsAccountId: socios.id,
         requireCostCenter: false,
       },
     });
@@ -1111,15 +1122,23 @@ describe.skipIf(!dbAvailable)('integración: motor de corrección en cadena (TSK
       payments: [cash(400)],
     });
     expect((await confirmPaymentOrder(repayment.id)).success).toBe(true);
-    const { fullNumber } = await prisma.paymentOrder.findUniqueOrThrow({
+    const { fullNumber, journalEntryId } = await prisma.paymentOrder.findUniqueOrThrow({
       where: { id: repayment.id },
-      select: { fullNumber: true },
+      select: { fullNumber: true, journalEntryId: true },
     });
+    // TSK-735: la devolución a socio ya tiene asiento (borrador): la anulación lo borra.
+    expect(journalEntryId).not.toBeNull();
 
     const proposal = await previewAndApply({
       mode: 'CANCEL',
       ref: ref('PAYMENT_ORDER', repayment.id),
     });
+    expect(proposal.cards.find((c) => c.key === `PAYMENT_ORDER:${repayment.id}`)?.action).toBe(
+      'CANCEL'
+    );
+    const cancelled = await opRow(repayment.id);
+    expect([cancelled.status, cancelled.journalEntryId]).toEqual(['CANCELLED', null]);
+    expect(await prisma.journalEntry.count({ where: { id: journalEntryId! } })).toBe(0);
     const card = proposal.cards.find((c) => c.key === `PARTNER_INSTALLMENT:${installment.id}`);
     expect(card?.action).toBe('UNLINK');
     expect(card?.rows).toEqual(
@@ -1127,6 +1146,50 @@ describe.skipIf(!dbAvailable)('integración: motor de corrección en cadena (TSK
         { label: 'Vinculado a', before: fullNumber, after: '—' },
         { label: 'Estado', before: 'Pagada', after: 'Pendiente' },
       ])
+    );
+    expect(
+      await prisma.paymentOrderInstallment.findUniqueOrThrow({
+        where: { id: installment.id },
+        select: { status: true, settledByPaymentOrderId: true },
+      })
+    ).toEqual({ status: 'PENDING', settledByPaymentOrderId: null });
+  });
+
+  it('TSK-735: anular OP de devolución a socio con asiento POSTED genera contraasiento y la deja CANCELLED', async () => {
+    const fc = await confirmedFC(300);
+    const originId = await confirmedOP(
+      [{ invoiceId: fc.id, amount: 300 }],
+      [{ paymentMethod: 'DEBIT_CARD', amount: '300.00', cardId: partnerCardId }]
+    );
+    const installment = await prisma.paymentOrderInstallment.findFirstOrThrow({
+      where: { paymentOrderId: originId },
+      select: { id: true },
+    });
+    const repayment = await createPartnerRepaymentOrder({
+      partnerId,
+      date: DATE,
+      notes: `${PREFIX}devolución contabilizada`,
+      installmentIds: [installment.id],
+      payments: [cash(300)],
+    });
+    expect((await confirmPaymentOrder(repayment.id)).success).toBe(true);
+    const entryId = (await opRow(repayment.id)).journalEntryId!;
+    await prisma.$transaction((tx) =>
+      postJournalEntryTx(tx, { companyId, entryId, userId: 'test' })
+    );
+
+    const proposal = await previewAndApply({
+      mode: 'CANCEL',
+      ref: ref('PAYMENT_ORDER', repayment.id),
+    });
+    const after = await opRow(repayment.id);
+    expect([after.status, after.journalEntryId]).toEqual(['CANCELLED', entryId]);
+    const original = await entryRow(entryId);
+    expect(original.status).toBe('REVERSED');
+    const reversal = await entryRow(original.reversalEntryId!);
+    expect(entryDebits(reversal)).toBe(300);
+    expect(proposal.cards.find((c) => c.key === `ENTRY:${reversal.number}`)?.action).toBe(
+      'REVERSE'
     );
     expect(
       await prisma.paymentOrderInstallment.findUniqueOrThrow({

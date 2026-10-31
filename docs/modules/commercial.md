@@ -797,22 +797,24 @@ gastos, `budgetWarning?`.
 | CashMovement (INCOME) | Si pago en efectivo | Crea movimiento, incrementa expectedBalance (requiere sesión abierta; `BusinessError` si no) |
 | BankMovement (DEPOSIT) | Si pago por transferencia | Crea movimiento, incrementa balance bancario |
 | Check (THIRD_PARTY) | Si pago con cheque | Crea cheque en estado PORTFOLIO |
-| Asiento Contable | Siempre | Dr: Caja/Banco de cada pago (cuenta propia → "Caja/Banco por Defecto") + Ret. Sufridas → Cr: Ctas por Cobrar **por el importe contabilizable** (`total − omittedAmount`). Si el asiento falla, la confirmación se revierte (TSK-728) |
-| Pagos sin cuenta | Cheque físico, tarjeta de crédito, "Cuenta Corriente" | No generan línea; aviso en el diálogo (`_EntryPreviewNotice`) y en `toast.warning` después; `warnings[]` en el resultado. El importe queda pendiente en Cobrar hasta regularizar |
+| Asiento Contable | Siempre | Dr: Caja/Banco de cada pago (cuenta propia → "Caja/Banco por Defecto"), **Valores a depositar** por cada cheque/e-cheq (TSK-735) + Ret. Sufridas → Cr: Ctas por Cobrar **por el importe contabilizable**. Si el asiento falla, la confirmación se revierte (TSK-728) |
+| Check.accountId | Si pago con cheque/e-cheq | Guarda Valores a depositar en el cheque creado (TSK-735) |
+| Pagos sin cuenta | Cobro con tarjeta de crédito (y "Cuenta Corriente" histórica) | No generan línea; aviso en el diálogo (`_EntryPreviewNotice`) y en `toast.warning` después; `warnings[]`. El importe queda pendiente en Cobrar hasta regularizar. Los cheques ya no entran acá |
 
 ### Confirmar Orden de Pago
 
 | Efecto | Condición | Detalle |
 |--------|-----------|---------|
-| Pre-validación | Siempre, antes de `$transaction` | `loadPaymentOrderEntryPreflight` + `assertEntryPreflight`: igual que el recibo con "Cuentas por Pagar" y "Ret. … Emitida". OP a socio (`partnerId`): solo se verifica caja/banco, `generatesEntry: false` y aviso «Las órdenes de pago a socios no generan asiento contable.» (TSK-728) |
+| Pre-validación | Siempre, antes de `$transaction` | `loadPaymentOrderEntryPreflight` + `assertEntryPreflight`: igual que el recibo con "Cuentas por Pagar" y "Ret. … Emitida". La OP a socio (`partnerId`) también genera asiento desde TSK-735 (Dr cuentas de las cuotas / Cr pagos) y exige las cuentas de sus medios |
 | PurchaseInvoice.status | Si tiene facturas | Actualiza a PAID / PARTIAL_PAID |
 | Expense.status | Si tiene gastos | Actualiza a PAID / PARTIAL_PAID |
 | CashMovement (EXPENSE) | Si pago en efectivo | Crea movimiento, decrementa expectedBalance (requiere sesión abierta) |
 | BankMovement (WITHDRAWAL) | Si pago por transferencia / débito de empresa / e-cheq | Crea movimiento, decrementa balance bancario |
 | Check (OWN) | Si pago con cheque propio | Crea cheque propio estado DELIVERED |
 | Check endosado | Si `endorsedCheckId` | El cheque de tercero pasa a ENDORSED (`BusinessError` si ya no está en cartera) |
-| Asiento Contable | Si no es OP a socio | Dr: Ctas por Pagar **por el importe contabilizable** → Cr: Caja/Banco de cada pago + Ret. Emitidas. Si el asiento falla, la confirmación se revierte (TSK-728) |
-| Pagos sin cuenta | Cheque propio/endosado, tarjeta de crédito, tarjeta de socio, "Cuenta Corriente" | No generan línea; aviso previo y posterior; `warnings[]`. El importe queda pendiente en Pagar |
+| Asiento Contable | Siempre | Dr: Ctas por Pagar por el total (OP normal) → Cr: Caja/Banco de cada pago, **Valores diferidos a pagar** (cheque propio), cuenta del cheque endosado, **Tarjetas de crédito a pagar** (tarjeta de la empresa), **Deudas con socios** (tarjeta de socio) + Ret. Emitidas. OP a socio: Dr cuentas de las cuotas (TSK-735). Si el asiento falla, la confirmación se revierte |
+| Check.accountId / Installment.accountId | Cheque propio físico; cuotas de tarjeta | Guardan la cuenta registrada (TSK-735) |
+| Pagos sin cuenta | Solo "Cuenta Corriente" histórica | No genera línea; aviso previo y posterior; `warnings[]` |
 
 ### Confirmar Gasto (Egreso)
 
@@ -955,11 +957,13 @@ Cada documento comercial confirmado genera un asiento contable automático:
 - **Recibos, órdenes de pago y gastos (TSK-728): bloqueante**, mismo esquema que facturas. Las tres
   integraciones (`createJournalEntryForReceipt` / `ForPaymentOrder` / `ForExpense`) devuelven
   `Promise<string>` y lanzan `BusinessError` donde antes hacían `return null` o `continue`; los
-  confirm pre-validan antes de la transacción y ya no envuelven el asiento en `try/catch`. Los
-  medios de pago sin cuenta (cheque, tarjeta de crédito, tarjeta de socio, "Cuenta Corriente") se
-  **omiten con aviso** y la línea de Cobrar/Pagar va por el importe contabilizable (asiento parcial,
-  decisión del ticket: bloquearlos dejaba esos comprobantes sin poder confirmarse nunca). Ver
-  [Cuentas de medios de pago](#cuentas-de-medios-de-pago-tsk-728).
+  confirm pre-validan antes de la transacción y ya no envuelven el asiento en `try/catch`. En
+  TSK-728 los medios de pago sin cuenta (cheque, tarjeta de crédito, tarjeta de socio, "Cuenta
+  Corriente") se **omitían con aviso** y la línea de Cobrar/Pagar iba por el importe contabilizable
+  (asiento parcial). Desde TSK-735 cheques y tarjetas tienen cuenta: solo se omiten con aviso la
+  "Cuenta Corriente" histórica, el cobro con tarjeta de crédito en un RC y el endoso de un cheque
+  cargado a mano. Ver [Cuentas de medios de pago](#cuentas-de-medios-de-pago-tsk-728) y
+  [Cuentas de cheques y tarjetas](#cuentas-de-cheques-y-tarjetas-tsk-735).
 - **Movimientos bancarios manuales y transferencias banco→banco / banco→caja**: siguen
   no-bloqueantes (`if (bankAccount.accountId)` sin aviso). Seguimiento en
   `.planes/tsk-728-…md` 2.4-2.
@@ -969,25 +973,29 @@ Cada documento comercial confirmado genera un asiento contable automático:
 Cadena de resolución de la cuenta de cada pago de un recibo u OP, idéntica en los dos
 (`resolvePaymentAccount`, `modules/commercial/shared/payment-accounts.ts`):
 
+> Cadena vigente hasta TSK-735. Desde TSK-735 los cheques, las tarjetas de la empresa y de socio ya no
+> se omiten (tienen cuenta, ver la sección TSK-735 más abajo). Solo siguen omitidos `ACCOUNT` y el
+> `CREDIT_CARD` de un recibo.
+
 ```
-tarjeta de socio (OP)                        → omitido (PARTNER_CARD)
+tarjeta de socio (OP)                        → omitido (PARTNER_CARD)   [TSK-735: Deudas con socios]
 cashRegisterId && cashRegister.accountId     → cuenta propia de la caja
 bankAccountId  && bankAccount.accountId      → cuenta propia del banco
 cashRegisterId && defaultCashAccountId       → "Caja por Defecto"  (Ajustes)
 bankAccountId  && defaultBankAccountId       → "Banco por Defecto" (Ajustes)
 CASH sin caja / TRANSFER-DEBIT-ECHEQ sin banco → missing (bloquea)
-CHECK / CREDIT_CARD / ACCOUNT                → omitido (aviso)
+CHECK / CREDIT_CARD / ACCOUNT                → omitido (aviso)   [TSK-735: solo ACCOUNT y CREDIT_CARD de RC]
 ```
 
 | Medio (`PaymentMethod`) | Recibo | OP | Tratamiento |
 |---|---|---|---|
 | `CASH` | caja (obligatoria en Zod) | ídem | Obligatorio: caja → "Caja por Defecto"; sin cuenta → **bloquea** con el nombre de la caja |
 | `TRANSFER` | banco (obligatorio en Zod) | ídem | Obligatorio: banco → "Banco por Defecto"; sin cuenta → **bloquea** con el nombre del banco |
-| `DEBIT_CARD` | banco obligatorio en Zod | banco opcional (tarjeta de socio) | Empresa: como transferencia. Socio: **omitido** con aviso |
-| `ECHEQ` | banco obligatorio | banco (emisión) | Como transferencia (se imputa al banco antes de acreditarse; seguimiento 2.4-1) |
-| `CHECK` | cheque físico recibido | propio o endosado | **Omitido** con aviso («los cheques todavía no tienen cuenta asignada en el sistema») |
-| `CREDIT_CARD` | solo `cardLast4` | `cardId` + cuotas | **Omitido** con aviso |
-| `ACCOUNT` ("Cuenta Corriente") | nada | nada | **Omitido** con aviso («no representa un movimiento de fondos») |
+| `DEBIT_CARD` | banco obligatorio en Zod | banco opcional (tarjeta de socio) | Empresa: como transferencia. Socio: Deudas con socios (TSK-735; antes omitido con aviso) |
+| `ECHEQ` | banco obligatorio | banco (emisión) | Recibido en un RC: Valores a depositar (TSK-735). Propio en una OP: como transferencia (banco) |
+| `CHECK` | cheque físico recibido | propio o endosado | Desde TSK-735 tiene cuenta propia (ver [Cuentas de cheques y tarjetas](#cuentas-de-cheques-y-tarjetas-tsk-735)) |
+| `CREDIT_CARD` | solo `cardLast4`: **omitido** con aviso (cobro con tarjeta de un cliente) | `cardId` + cuotas: Tarjetas de crédito a pagar (TSK-735) | Ver sección TSK-735 |
+| `ACCOUNT` ("Cuenta Corriente") | nada | nada | Ya no se ofrece (TSK-735); los históricos siguen **omitidos** con aviso («no representa un movimiento de fondos») |
 | Sin pagos ni retenciones / solo omitidos | — | — | **Bloquea**: «… el asiento quedaría con una sola línea. Agregá un pago en efectivo, transferencia[, débito de la empresa] o e-cheq, o una retención.» |
 
 Los mensajes citan el label literal de Ajustes (`shared/lib/accounts/settings-account-labels.ts`) y
@@ -996,7 +1004,7 @@ la ruta `ACCOUNTING_SETTINGS_PATH` («Contabilidad → Configuración»). Helper
 | Archivo | Rol |
 |---|---|
 | `modules/commercial/shared/settings-accounts.ts` | `findMissingSettingsAccounts`, `withholdingSettingsField`, `buildMissingSettingsAccountsMessage` («No se puede confirmar el recibo R-00001: falta configurar "Cuentas por Cobrar" en Contabilidad → Configuración.») |
-| `modules/commercial/shared/payment-accounts.ts` | `resolvePaymentAccount`, `classifyPayments` (`resolved` / `missing` / `omitted` + `omittedAmount`), `describePayment`, `buildMissingPaymentAccountMessage`, `buildOmittedPaymentWarning`, `buildSingleLineEntryMessage`, `buildPartnerOrderWarning`. Puros, 36 tests |
+| `modules/commercial/shared/payment-accounts.ts` | `resolvePaymentAccount`, `classifyPayments` (`resolved` / `missing` / `omitted` + `omittedAmount`), `describePayment`, `buildMissingPaymentAccountMessage`, `buildOmittedPaymentWarning`, `buildSingleLineEntryMessage` (`buildPartnerOrderWarning` se eliminó en TSK-735). Puros |
 | `treasury/shared/entry-preflight.ts` (`server-only`) | `loadReceiptEntryPreflight` / `loadPaymentOrderEntryPreflight(companyId, id, client?)` → `EntryPreflight { documentLabel, error, warnings, accounts }`; `assertEntryPreflight` lanza `BusinessError` con `error`. Una sola query alimenta la vista previa y la pre-validación |
 | `treasury/shared/components/_ConfirmEntryDialog.tsx` | Diálogo genérico de confirmar (recibo y OP): `useQuery` a `getReceiptEntryPreview` / `getPaymentOrderEntryPreview` (permiso `approve`), botón deshabilitado con `error`, `toast.error(result.error)`, `toast.warning(warningsTitle, { description: warnings.join(' ') })` |
 | `treasury/shared/components/_EntryPreviewNotice.tsx` | Estados del diálogo: «Verificando cuentas contables…», rojo «No se va a poder confirmar», ámbar «Avisos del asiento contable», neutro «El asiento contable se genera con estas cuentas:» |
@@ -1004,6 +1012,146 @@ la ruta `ACCOUNTING_SETTINGS_PATH` («Contabilidad → Configuración»). Helper
 Al cargar el comprobante, Zod (`refineFundsSourcePayment`) exige caja para `CASH` («Debe
 seleccionar la caja») y banco para `TRANSFER` («Debe seleccionar la cuenta bancaria»); en recibos
 también para `DEBIT_CARD`.
+
+### Cuentas de cheques y tarjetas (TSK-735)
+
+Seguimiento de TSK-728. Los cheques, e-cheqs, tarjetas y la devolución a socio pasan a tener cuenta
+contable; el saldo de Cobrar/Pagar se cierra por el total del comprobante. Spec:
+`docs/superpowers/specs/2026-10-31-tsk-735-cuentas-medios-de-pago-design.md`.
+
+**Cuentas de Configuración** (Contabilidad → Configuración, sección «Cheques y tarjetas»). Si el medio se
+usa y la cuenta no está configurada, la confirmación **se bloquea** con un mensaje que nombra la cuenta
+(mismo mecanismo `missing` de `payment-accounts.ts` y de la pre-validación).
+
+| Campo de `AccountingSettings` | Etiqueta | Tipo |
+|---|---|---|
+| `checksReceivedAccountId` | Valores a depositar | Activo |
+| `checksRejectedAccountId` | Cheques rechazados | Activo |
+| `checksPayableAccountId` | Valores diferidos a pagar | Pasivo |
+| `creditCardsPayableAccountId` | Tarjetas de crédito a pagar | Pasivo |
+| `partnerDebtsAccountId` | Deudas con socios | Pasivo |
+
+**Cuenta de cada pago** (`resolvePaymentAccount(payment, settings, kind)`; `kind` = `'receipt'` | `'paymentOrder'`):
+
+| Pago | Doc | Cuenta | Lado |
+|---|---|---|---|
+| CHECK o ECHEQ de tercero recibido | RC | Valores a depositar | Debe |
+| CHECK o ECHEQ endosado (`endorsedCheckId`) | OP | cuenta registrada del cheque endosado | Haber |
+| Endoso de un cheque histórico de RC | OP | e-cheq: banco del cheque; físico cuyo pago del RC tenía caja o banco: esa caja/banco (el RC viejo ya la debitó); físico: Deudores (cliente) | Haber |
+| Endoso de un cheque cargado a mano en Tesorería (sin RC ni cuenta) | OP | **omitido** con aviso (`MANUAL_ENDORSED_CHECK`, «el cheque se cargó a mano en Tesorería y no tiene asiento de origen»): Proveedores queda abierto por ese importe | — |
+| CHECK propio físico | OP | Valores diferidos a pagar | Haber |
+| ECHEQ propio (con banco) | OP | banco, como antes | Haber |
+| CREDIT_CARD de la empresa | OP | Tarjetas de crédito a pagar | Haber |
+| Tarjeta de socio (crédito o débito) | OP | Deudas con socios | Haber |
+| CREDIT_CARD en un RC (cobro con tarjeta de un cliente) | RC | **omitido** con aviso (`CUSTOMER_CREDIT_CARD`), como antes | — |
+| ACCOUNT | RC/OP históricos | **omitido** con aviso | — |
+
+El e-cheq recibido pasó de Banco a Valores a depositar, igual que el físico: Tesorería lo deja en cartera
+y su depósito se asienta con el mismo ciclo.
+
+**Cuenta registrada.** `Check.accountId` guarda la cuenta en la que quedó el cheque (Valores a depositar al
+confirmar el RC; Valores diferidos a pagar al emitir un cheque propio físico en una OP).
+`PaymentOrderInstallment.accountId` guarda Deudas con socios (tarjeta de socio) o Tarjetas de crédito a pagar
+(tarjeta de la empresa). Con `accountId` null el cheque o la cuota es **histórico**: su comprobante de origen
+omitió el pago y el saldo quedó abierto en Deudores/Proveedores, y su descarga va contra esa cuenta del
+tercero, de modo que se regulariza sola.
+
+**Ciclo del cheque** (`checks/actions.server.ts`, `shared/check-entry-lines.ts`, `shared/effects/check.server.ts`).
+Los asientos nacen en borrador, `createdBy: 'system'`, con `createJournalEntryTx`; respetan el período
+cerrado y, si el asiento falla, la acción entera se revierte. Se guardan en `Check.depositEntryId`,
+`rejectionEntryId`, `debitEntryId` y `voidEntryId`. Las acciones devuelven `ActionResult<{ warnings: string[] }>`.
+
+| Acción (Cheques) | Estado | Asiento (Debe / Haber) |
+|---|---|---|
+| Depositar | PORTFOLIO → DEPOSITED | Banco / cuenta del cheque |
+| Rechazar | DEPOSITED → REJECTED | Cheques rechazados (cliente) / Banco |
+| Debitar (nueva, permiso `commercial.treasury.checks` + `approve`) | DELIVERED → CASHED | cuenta del cheque / Banco |
+| Anular en cartera | PORTFOLIO → VOIDED | Deudores (cliente) / cuenta del cheque (histórico físico: sin asiento, con aviso) |
+| Anular depositado | DEPOSITED → VOIDED | revierte el depósito y anula como en cartera |
+| Anular entregado | DELIVERED → VOIDED | cuenta del cheque / Proveedores (proveedor) (histórico físico: sin asiento, con aviso) |
+| Acreditar | DEPOSITED → CLEARED | sin asiento (el débito al banco se hizo en el depósito) |
+| Endosar a mano (fuera de OP) | PORTFOLIO → ENDORSED | cheque con cuenta registrada: **bloqueado** («El cheque N° X está registrado en <cuenta>: endosalo desde una orden de pago para que el asiento lo descargue.»); histórico o cargado a mano: sin asiento, con aviso («El endoso manual no genera asiento: el endoso contable se hace con una orden de pago.») |
+| Eliminar | PORTFOLIO o DELIVERED | solo cheques cargados a mano. Uno nacido de un RC/OP se bloquea («El cheque N° X lo generó el recibo/la orden de pago N: anulalo o corregí el comprobante.») y el listado no ofrece «Eliminar» |
+
+La cuenta «Banco» sale de `BankAccount.accountId` y, si no tiene, de «Banco por Defecto»; si no se resuelve, la
+acción se bloquea. Casos particulares (decisiones tomadas durante la implementación):
+
+- **Cheque histórico** (sin `accountId`): depósito de cheque físico = Banco / Deudores (cliente); depósito de
+  e-cheq histórico = sin asiento y aviso (el RC ya lo había debitado al banco); endoso en OP = Proveedores /
+  Deudores (cliente); débito de cheque propio = Proveedores (proveedor) / Banco.
+- **Histórico físico cuyo pago de origen tenía caja o banco** (el formulario los arrastraba de otro medio y la
+  regla vieja mandó el pago a esa caja/banco): se trata como el e-cheq histórico. Depositar o debitar no asienta
+  (aviso «ya se registró en caja o banco»), rechazar = Cheques rechazados / Banco, anular = Deudores / Banco o
+  Banco / Proveedores, y el endoso en OP acredita esa caja/banco (cuenta propia → «Caja/Banco por Defecto»).
+- **Banco fijo del e-cheq** (registrado en el banco por su comprobante, sin asiento al depositar/debitar): la
+  acción exige el banco del cheque («El e-cheq N° X se registró en <banco>: depositalo/debitalo en esa cuenta.») y
+  los modales fijan el selector (`CheckListItem.lockedBankAccountId`).
+- **Cheque propio de una devolución a socio**: si la devolución tuvo asiento (el cheque tiene cuenta o la OP
+  asiento), debitar asienta como cualquier propio y **anularlo entregado se bloquea** («El cheque N° X pagó la
+  devolución al socio <OP>: para anularlo, corregí esa orden de pago.»): anularlo descuadraría Deudas con socios y
+  dejaría las cuotas pagadas. Si la devolución es histórica (sin asiento), debitar y anular no generan asiento y
+  avisan («La devolución al socio <OP> no tenía asiento: …»).
+- **Rechazo de un histórico físico depositado antes del deploy** (sin `depositEntryId`): no hay débito previo al
+  banco, así que reclasifica Cheques rechazados (cliente) / Cuentas por Cobrar (cliente) sin tocar Banco.
+- **Cheque cargado a mano** (sin `accountId` ni documento): ninguna acción (depositar, rechazar, debitar, anular) genera asiento; todas avisan («cargado a mano»).
+- **Anular un histórico físico** en cartera o entregado: no genera asiento y avisa.
+- **Débito de un e-cheq propio**: crea el movimiento bancario (egreso) y baja el saldo, pero **sin asiento**: la
+  OP ya había acreditado el banco.
+- Rechazar o anular un cheque depositado ahora también descuenta el saldo bancario que sumó el depósito.
+- Anular un e-cheq histórico de tercero: Cobrar / Banco; anular un e-cheq propio entregado: Banco / Pagar;
+  anular un cheque endosado o rechazado: sin asiento y con aviso.
+
+**Devolución a socio** (OP con `partnerId`). Genera asiento: Debe = por cada cuota saldada, la cuenta de la cuota
+(Deudas con socios) o Proveedores con el proveedor de la OP de origen si es histórica; Haber = los pagos
+resueltos (caja, banco, cheque propio, endoso). Se eliminó `buildPartnerOrderWarning`. Con «Cuenta Corriente» la
+devolución queda **bloqueada** (el Debe son las cuotas; omitir descuadraría).
+
+**Datos del pago que bloquean** (`findPaymentDataError`, en la pre-validación y en el asiento):
+
+- Cheque o e-cheq que no es un endoso, sin número (borradores viejos): «No se puede confirmar <doc>: el pago con
+  cheque de <importe> no tiene número de cheque. Editá el comprobante y cargalo.» (el asiento lo registraba en
+  Valores pero no se creaba el cheque).
+- Endoso por un importe distinto del cheque: «… el pago con el cheque endosado N° X es de <importe pago> pero el
+  cheque es de <importe cheque>. Un cheque se endosa por su importe completo.» (también en los efectos de la OP).
+- Devolución a socio cuyas cuotas no suman lo mismo que los pagos: «El total de las cuotas a devolver (<x>) no
+  coincide con los pagos (<y>).»
+
+**Caja y banco por medio** (`shared/payment-funds.ts`, `normalizePaymentFunds`): al crear o editar un RC, una OP o
+una devolución a socio el servidor guarda la caja solo en efectivo y el banco solo en transferencia, tarjeta de
+débito y e-cheq; el formulario los arrastraba de otro medio.
+
+**Corrección (TSK-792) de la OP de origen de cuotas de socio**: si una devolución en borrador las reservó, la
+propuesta trae el impedimento `INSTALLMENT_RESERVED` («Las cuotas de esta orden de pago están reservadas por la
+devolución al socio <OP>: eliminá o editá esa devolución antes.»).
+
+**«Cuenta Corriente».** Sale de los selectores de RC y OP. Los esquemas de alta y edición (incluido
+`partnerRepaymentSchema`) la rechazan con `El medio "Cuenta Corriente" ya no se usa: elegí otro medio o registrá
+una nota de crédito/débito`. Los registros existentes no se tocan, pero al **corregir** (TSK-792) o editar uno
+histórico con ese medio hay que cambiarlo.
+
+**Regularización de lo histórico.** `prisma/scripts/tsk735-diagnostico-medios-sin-cuenta.sql` (psql, solo
+lectura, termina con ROLLBACK):
+
+```bash
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -v corte='2026-11-05 18:30' \
+  -f prisma/scripts/tsk735-diagnostico-medios-sin-cuenta.sql
+```
+
+`corte` es **obligatorio**, en formato `YYYY-MM-DD HH:MI` y en **UTC** (fecha/hora del deploy):
+`journal_entries.created_at` es `timestamp` sin zona y se guarda en UTC. Solo lista RC/OP cuyo asiento es
+anterior al corte (o sin asiento). Destinos: «se regulariza al endosar o depositar» (cheque de tercero físico en
+cartera), «se regulariza al debitar» (cheque propio entregado), «se regulariza al devolver al socio» (cuota de
+tarjeta de socio pendiente), «e-cheq ya en banco: sin saldo abierto», «ya registrado en caja/banco: sin saldo
+abierto» (cheque o tarjeta de crédito cuyo pago tenía caja o banco), «regularizar a mano» (resto, incluida la
+tarjeta de la empresa) y «cuenta corriente: regularizar con NC/ND». Cierra con totales por tercero. Los pasos de
+deploy (diagnóstico antes de operar, las 5 cuentas por empresa) están en `docs/infrastructure/deployment.md`.
+
+**Fuera de alcance:** pagar el resumen de la tarjeta de la empresa (Tarjetas de crédito a pagar se acumula hasta
+ese ticket), gestión posterior del cheque rechazado (recupero, redepósito) y el asiento del endoso manual.
+
+**Tests:** `payment-accounts.test.ts`, `check-entry-lines.test.ts`, `payment-funds.test.ts`,
+`check-entries.integration.test.ts`, `receipt-journal-entry.integration.test.ts`,
+`payment-order-journal-entry.integration.test.ts`.
 
 ### Cuentas de línea (TSK-721)
 

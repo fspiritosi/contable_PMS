@@ -35,6 +35,7 @@ import {
   CHECK_STATUS_BADGES,
 } from '../../../../shared/validators';
 import type { CheckWithDetails } from '../../../../shared/types';
+import { notifyCheckActionResult } from '../check-action-result';
 
 interface Props {
   checkId: string;
@@ -92,14 +93,13 @@ export function _CheckDetailModal({ checkId, open, onOpenChange }: Props) {
     }
     setIsProcessing(true);
     try {
-      await rejectCheck(checkId, rejectionReason.trim());
-      toast.success('Cheque rechazado correctamente');
-      setRejectDialogOpen(false);
-      setRejectionReason('');
-      onOpenChange(false);
-      router.refresh();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Error al rechazar cheque');
+      const result = await rejectCheck(checkId, rejectionReason.trim());
+      if (notifyCheckActionResult(result, 'Cheque rechazado correctamente')) {
+        setRejectDialogOpen(false);
+        setRejectionReason('');
+        onOpenChange(false);
+        router.refresh();
+      }
     } finally {
       setIsProcessing(false);
     }
@@ -324,7 +324,8 @@ export function _CheckDetailModal({ checkId, open, onOpenChange }: Props) {
           <AlertDialogHeader>
             <AlertDialogTitle>Rechazar cheque</AlertDialogTitle>
             <AlertDialogDescription>
-              Ingrese el motivo del rechazo. Se eliminará el movimiento bancario asociado.
+              Ingrese el motivo del rechazo. Se eliminará el movimiento bancario asociado y se
+              generará el asiento del rechazo.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="px-6 pb-2">

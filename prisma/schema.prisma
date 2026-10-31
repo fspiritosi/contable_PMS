@@ -349,63 +349,69 @@ model Account {
   partners                 Partner[]          @relation("PartnerOwnContributionsAccount") // Socios con cuenta de aportes propia (TSK-717)
 
   // Relaciones inversas para AccountingSettings (many-to-one)
-  settingsAsSalesAccount             AccountingSettings[]   @relation("SalesAccount")
-  settingsAsPurchasesAccount         AccountingSettings[]   @relation("PurchasesAccount")
-  settingsAsReceivablesAccount       AccountingSettings[]   @relation("ReceivablesAccount")
-  settingsAsPayablesAccount          AccountingSettings[]   @relation("PayablesAccount")
-  settingsAsVatDebitAccount          AccountingSettings[]   @relation("VatDebitAccount")
-  settingsAsVatCreditAccount         AccountingSettings[]   @relation("VatCreditAccount")
-  settingsAsDefaultCashAccount       AccountingSettings[]   @relation("DefaultCashAccount")
-  settingsAsDefaultBankAccount       AccountingSettings[]   @relation("DefaultBankAccount")
-  settingsAsBankCharges              AccountingSettings[]   @relation("BankChargesAccount") // TSK-718
-  settingsAsHoldingGain              AccountingSettings[]   @relation("HoldingGainAccount") // TSK-793
-  settingsAsHoldingLoss              AccountingSettings[]   @relation("HoldingLossAccount") // TSK-793
-  settingsAsInvestmentFees           AccountingSettings[]   @relation("InvestmentFeesAccount") // TSK-793
+  settingsAsSalesAccount             AccountingSettings[]      @relation("SalesAccount")
+  settingsAsPurchasesAccount         AccountingSettings[]      @relation("PurchasesAccount")
+  settingsAsReceivablesAccount       AccountingSettings[]      @relation("ReceivablesAccount")
+  settingsAsPayablesAccount          AccountingSettings[]      @relation("PayablesAccount")
+  settingsAsVatDebitAccount          AccountingSettings[]      @relation("VatDebitAccount")
+  settingsAsVatCreditAccount         AccountingSettings[]      @relation("VatCreditAccount")
+  settingsAsDefaultCashAccount       AccountingSettings[]      @relation("DefaultCashAccount")
+  settingsAsDefaultBankAccount       AccountingSettings[]      @relation("DefaultBankAccount")
+  settingsAsBankCharges              AccountingSettings[]      @relation("BankChargesAccount") // TSK-718
+  settingsAsHoldingGain              AccountingSettings[]      @relation("HoldingGainAccount") // TSK-793
+  settingsAsHoldingLoss              AccountingSettings[]      @relation("HoldingLossAccount") // TSK-793
+  settingsAsInvestmentFees           AccountingSettings[]      @relation("InvestmentFeesAccount") // TSK-793
   investmentHoldings                 InvestmentHolding[] // TSK-793
-  settingsAsExpensesAccount          AccountingSettings[]   @relation("ExpensesAccount")
-  settingsAsResultAccount            AccountingSettings[]   @relation("ResultAccount")
-  settingsAsPartnerContributions     AccountingSettings[]   @relation("PartnerContributionsAccount")
-  settingsAsWhIvaEmitted             AccountingSettings[]   @relation("WhIvaEmittedAccount")
-  settingsAsWhGananciasEmitted       AccountingSettings[]   @relation("WhGananciasEmittedAccount")
-  settingsAsWhIibbEmitted            AccountingSettings[]   @relation("WhIibbEmittedAccount")
-  settingsAsWhSussEmitted            AccountingSettings[]   @relation("WhSussEmittedAccount")
-  settingsAsWhIvaSuffered            AccountingSettings[]   @relation("WhIvaSufferedAccount")
-  settingsAsWhGananciasSuffered      AccountingSettings[]   @relation("WhGananciasSufferedAccount")
-  settingsAsWhIibbSuffered           AccountingSettings[]   @relation("WhIibbSufferedAccount")
-  settingsAsWhSussSuffered           AccountingSettings[]   @relation("WhSussSufferedAccount")
-  settingsAsFixedAsset               AccountingSettings[]   @relation("FixedAssetAccount")
-  settingsAsAccumulatedDepr          AccountingSettings[]   @relation("AccumulatedDepreciationAccount")
-  settingsAsDepreciationExpense      AccountingSettings[]   @relation("DepreciationExpenseAccount")
-  settingsAsAssetDisposalGL          AccountingSettings[]   @relation("AssetDisposalGainLossAccount")
+  settingsAsExpensesAccount          AccountingSettings[]      @relation("ExpensesAccount")
+  settingsAsResultAccount            AccountingSettings[]      @relation("ResultAccount")
+  settingsAsPartnerContributions     AccountingSettings[]      @relation("PartnerContributionsAccount")
+  settingsAsWhIvaEmitted             AccountingSettings[]      @relation("WhIvaEmittedAccount")
+  settingsAsWhGananciasEmitted       AccountingSettings[]      @relation("WhGananciasEmittedAccount")
+  settingsAsWhIibbEmitted            AccountingSettings[]      @relation("WhIibbEmittedAccount")
+  settingsAsWhSussEmitted            AccountingSettings[]      @relation("WhSussEmittedAccount")
+  settingsAsWhIvaSuffered            AccountingSettings[]      @relation("WhIvaSufferedAccount")
+  settingsAsWhGananciasSuffered      AccountingSettings[]      @relation("WhGananciasSufferedAccount")
+  settingsAsWhIibbSuffered           AccountingSettings[]      @relation("WhIibbSufferedAccount")
+  settingsAsWhSussSuffered           AccountingSettings[]      @relation("WhSussSufferedAccount")
+  settingsAsFixedAsset               AccountingSettings[]      @relation("FixedAssetAccount")
+  settingsAsAccumulatedDepr          AccountingSettings[]      @relation("AccumulatedDepreciationAccount")
+  settingsAsDepreciationExpense      AccountingSettings[]      @relation("DepreciationExpenseAccount")
+  settingsAsAssetDisposalGL          AccountingSettings[]      @relation("AssetDisposalGainLossAccount")
   // TSK-724c: cuentas de Bienes de Uso por tipo de equipo y override por depreciación
-  vehicleTypesAsFixedAsset           VehicleType[]          @relation("VehicleTypeFixedAssetAccount")
-  vehicleTypesAsAccumulatedDepr      VehicleType[]          @relation("VehicleTypeAccumulatedDepreciationAccount")
-  vehicleTypesAsDepreciationExpense  VehicleType[]          @relation("VehicleTypeDepreciationExpenseAccount")
-  depreciationsAsFixedAsset          VehicleDepreciation[]  @relation("DepreciationFixedAssetAccount")
-  depreciationsAsAccumulatedDepr     VehicleDepreciation[]  @relation("DepreciationAccumulatedDepreciationAccount")
-  depreciationsAsDepreciationExpense VehicleDepreciation[]  @relation("DepreciationDepreciationExpenseAccount")
+  vehicleTypesAsFixedAsset           VehicleType[]             @relation("VehicleTypeFixedAssetAccount")
+  vehicleTypesAsAccumulatedDepr      VehicleType[]             @relation("VehicleTypeAccumulatedDepreciationAccount")
+  vehicleTypesAsDepreciationExpense  VehicleType[]             @relation("VehicleTypeDepreciationExpenseAccount")
+  depreciationsAsFixedAsset          VehicleDepreciation[]     @relation("DepreciationFixedAssetAccount")
+  depreciationsAsAccumulatedDepr     VehicleDepreciation[]     @relation("DepreciationAccumulatedDepreciationAccount")
+  depreciationsAsDepreciationExpense VehicleDepreciation[]     @relation("DepreciationDepreciationExpenseAccount")
   // TSK-757: categorías de egreso que imputan a esta cuenta
-  expenseCategories                  ExpenseCategory[]      @relation("ExpenseCategoryAccount")
-  settingsAsPercIvaCollected         AccountingSettings[]   @relation("PercIvaCollectedAccount")
-  settingsAsPercIibbCollected        AccountingSettings[]   @relation("PercIibbCollectedAccount")
-  settingsAsPercMunicipalCollected   AccountingSettings[]   @relation("PercMunicipalCollectedAccount")
-  settingsAsPercIvaSuffered          AccountingSettings[]   @relation("PercIvaSufferedAccount")
-  settingsAsPercIibbSuffered         AccountingSettings[]   @relation("PercIibbSufferedAccount")
-  settingsAsPercMunicipalSuffered    AccountingSettings[]   @relation("PercMunicipalSufferedAccount")
-  settingsAsInternalTaxes            AccountingSettings[]   @relation("InternalTaxesAccount")
-  settingsAsCogs                     AccountingSettings[]   @relation("CogsAccount")
-  settingsAsInventory                AccountingSettings[]   @relation("InventoryAccount")
-  settingsAsChecksReceived           AccountingSettings[]   @relation("ChecksReceivedAccount")
-  settingsAsChecksRejected           AccountingSettings[]   @relation("ChecksRejectedAccount")
-  settingsAsVatPayable               AccountingSettings[]   @relation("VatPayableAccount")
-  settingsAsVatBalance               AccountingSettings[]   @relation("VatBalanceAccount")
-  settingsAsRecpam                   AccountingSettings[]   @relation("RecpamAccount")
+  expenseCategories                  ExpenseCategory[]         @relation("ExpenseCategoryAccount")
+  settingsAsPercIvaCollected         AccountingSettings[]      @relation("PercIvaCollectedAccount")
+  settingsAsPercIibbCollected        AccountingSettings[]      @relation("PercIibbCollectedAccount")
+  settingsAsPercMunicipalCollected   AccountingSettings[]      @relation("PercMunicipalCollectedAccount")
+  settingsAsPercIvaSuffered          AccountingSettings[]      @relation("PercIvaSufferedAccount")
+  settingsAsPercIibbSuffered         AccountingSettings[]      @relation("PercIibbSufferedAccount")
+  settingsAsPercMunicipalSuffered    AccountingSettings[]      @relation("PercMunicipalSufferedAccount")
+  settingsAsInternalTaxes            AccountingSettings[]      @relation("InternalTaxesAccount")
+  settingsAsCogs                     AccountingSettings[]      @relation("CogsAccount")
+  settingsAsInventory                AccountingSettings[]      @relation("InventoryAccount")
+  settingsAsChecksReceived           AccountingSettings[]      @relation("ChecksReceivedAccount")
+  settingsAsChecksRejected           AccountingSettings[]      @relation("ChecksRejectedAccount")
+  // TSK-735: cuentas de cheques emitidos, tarjetas y socios; cuenta propia por cheque y por cuota
+  settingsAsChecksPayable            AccountingSettings[]      @relation("ChecksPayableAccount")
+  settingsAsCreditCardsPayable       AccountingSettings[]      @relation("CreditCardsPayableAccount")
+  settingsAsPartnerDebts             AccountingSettings[]      @relation("PartnerDebtsAccount")
+  checks                             Check[]                   @relation("CheckAccount")
+  paymentOrderInstallments           PaymentOrderInstallment[] @relation("InstallmentAccount")
+  settingsAsVatPayable               AccountingSettings[]      @relation("VatPayableAccount")
+  settingsAsVatBalance               AccountingSettings[]      @relation("VatBalanceAccount")
+  settingsAsRecpam                   AccountingSettings[]      @relation("RecpamAccount")
   vatAccountMappings                 AccountingVatAccount[]
   recurringEntryLines                RecurringEntryLine[]
   budgets                            Budget[]
   withholdingRegimes                 WithholdingRegime[]
-  productsAsExpenseAccount           Product[]              @relation("ProductExpenseAccount")
-  productsAsIncomeAccount            Product[]              @relation("ProductIncomeAccount")
+  productsAsExpenseAccount           Product[]                 @relation("ProductExpenseAccount")
+  productsAsIncomeAccount            Product[]                 @relation("ProductIncomeAccount")
   fundMovementLines                  FundMovementLine[]
   movementConcepts                   MovementConcept[]
 
@@ -463,6 +469,12 @@ model JournalEntry {
   // Relaciones con depreciación de equipos
   depreciationEntries DepreciationScheduleEntry[]
   valueAdjustments    AssetValueAdjustment[]
+
+  // TSK-735: cheques cuyo ciclo de vida generó este asiento
+  checksDeposited Check[] @relation("CheckDepositEntry")
+  checksRejected  Check[] @relation("CheckRejectionEntry")
+  checksDebited   Check[] @relation("CheckDebitEntry")
+  checksVoided    Check[] @relation("CheckVoidEntry")
 
   @@unique([companyId, number])
   @@map("journal_entries")
@@ -670,6 +682,15 @@ model AccountingSettings {
 
   checksReceivedAccount Account? @relation("ChecksReceivedAccount", fields: [checksReceivedAccountId], references: [id])
   checksRejectedAccount Account? @relation("ChecksRejectedAccount", fields: [checksRejectedAccountId], references: [id])
+
+  // TSK-735: cheques emitidos (valores diferidos), tarjetas a pagar y deudas con socios
+  checksPayableAccountId      String? @map("checks_payable_account_id") @db.Uuid
+  creditCardsPayableAccountId String? @map("credit_cards_payable_account_id") @db.Uuid
+  partnerDebtsAccountId       String? @map("partner_debts_account_id") @db.Uuid
+
+  checksPayableAccount      Account? @relation("ChecksPayableAccount", fields: [checksPayableAccountId], references: [id])
+  creditCardsPayableAccount Account? @relation("CreditCardsPayableAccount", fields: [creditCardsPayableAccountId], references: [id])
+  partnerDebtsAccount       Account? @relation("PartnerDebtsAccount", fields: [partnerDebtsAccountId], references: [id])
 
   // Cuentas de Liquidación IVA
   vatPayableAccountId String? @map("vat_payable_account_id") @db.Uuid
@@ -4084,12 +4105,30 @@ model Check {
   receiptPayment      ReceiptPayment?      @relation(fields: [receiptPaymentId], references: [id])
   paymentOrderPayment PaymentOrderPayment? @relation(fields: [paymentOrderPaymentId], references: [id])
 
+  // TSK-735: cuenta contable propia del cheque y asientos de su ciclo de vida
+  accountId        String? @map("account_id") @db.Uuid
+  depositEntryId   String? @map("deposit_entry_id") @db.Uuid
+  rejectionEntryId String? @map("rejection_entry_id") @db.Uuid
+  debitEntryId     String? @map("debit_entry_id") @db.Uuid
+  voidEntryId      String? @map("void_entry_id") @db.Uuid
+
+  account        Account?      @relation("CheckAccount", fields: [accountId], references: [id], onDelete: SetNull)
+  depositEntry   JournalEntry? @relation("CheckDepositEntry", fields: [depositEntryId], references: [id], onDelete: SetNull)
+  rejectionEntry JournalEntry? @relation("CheckRejectionEntry", fields: [rejectionEntryId], references: [id], onDelete: SetNull)
+  debitEntry     JournalEntry? @relation("CheckDebitEntry", fields: [debitEntryId], references: [id], onDelete: SetNull)
+  voidEntry      JournalEntry? @relation("CheckVoidEntry", fields: [voidEntryId], references: [id], onDelete: SetNull)
+
   createdBy String   @map("created_by")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@index([companyId, type, status])
   @@index([companyId, dueDate])
+  @@index([accountId])
+  @@index([depositEntryId])
+  @@index([rejectionEntryId])
+  @@index([debitEntryId])
+  @@index([voidEntryId])
   @@map("checks")
 }
 
@@ -4775,12 +4814,15 @@ model PaymentOrderInstallment {
   // OP de devolución que saldó esta cuota (cuando es de un socio) + fecha de pago
   settledByPaymentOrderId String?                  @map("settled_by_payment_order_id") @db.Uuid
   paidAt                  DateTime?                @map("paid_at")
+  // TSK-735: cuenta contable a la que se imputó la cuota (tarjeta o deuda con socio)
+  accountId               String?                  @map("account_id") @db.Uuid
 
   company      Company             @relation(fields: [companyId], references: [id])
   paymentOrder PaymentOrder        @relation("InstallmentOrigin", fields: [paymentOrderId], references: [id], onDelete: Cascade)
   card         Card?               @relation(fields: [cardId], references: [id])
   partner      Partner?            @relation(fields: [partnerId], references: [id])
   settledBy    PaymentOrder?       @relation("InstallmentSettlement", fields: [settledByPaymentOrderId], references: [id])
+  account      Account?            @relation("InstallmentAccount", fields: [accountId], references: [id], onDelete: SetNull)
   projection   CashflowProjection?
 
   createdAt DateTime @default(now()) @map("created_at")
@@ -4789,6 +4831,7 @@ model PaymentOrderInstallment {
   @@index([companyId])
   @@index([paymentOrderId])
   @@index([partnerId, status])
+  @@index([accountId])
   @@map("payment_order_installments")
 }
 

@@ -5,7 +5,6 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { toast } from 'sonner';
 import moment from 'moment';
 import {
   Dialog,
@@ -16,6 +15,7 @@ import {
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -32,10 +32,11 @@ import {
 import { Button } from '@/shared/components/ui/button';
 import { Skeleton } from '@/shared/components/ui/skeleton';
 import { formatCurrency } from '@/shared/utils/formatters';
-import { businessToday } from '@/shared/utils/date-input';
+import { businessToday, fromDateInputValue, toDateInputValue } from '@/shared/utils/date-input';
 import { depositCheckSchema, type DepositCheckFormData } from '../../../../shared/validators';
 import { depositCheck, getActiveBankAccounts } from '../../actions.server';
 import type { CheckListItem } from '../../../../shared/types';
+import { notifyCheckActionResult } from '../check-action-result';
 
 interface Props {
   check: CheckListItem;
@@ -43,6 +44,10 @@ interface Props {
   onOpenChange: (open: boolean) => void;
 }
 
+/**
+ * Depositar un cheque de tercero en cartera. Un e-cheq ya registrado en un banco
+ * (`lockedBankAccountId`, TSK-735) solo se deposita en esa cuenta: el selector queda fijo.
+ */
 export function _DepositCheckModal({ check, open, onOpenChange }: Props) {
   const router = useRouter();
 
@@ -50,7 +55,7 @@ export function _DepositCheckModal({ check, open, onOpenChange }: Props) {
     resolver: zodResolver(depositCheckSchema),
     defaultValues: {
       checkId: check.id,
-      bankAccountId: '',
+      bankAccountId: check.lockedBankAccountId ?? '',
       depositDate: businessToday(),
     },
   });
@@ -66,20 +71,17 @@ export function _DepositCheckModal({ check, open, onOpenChange }: Props) {
   const handleClose = useCallback(() => {
     form.reset({
       checkId: check.id,
-      bankAccountId: '',
+      bankAccountId: check.lockedBankAccountId ?? '',
       depositDate: businessToday(),
     });
     onOpenChange(false);
-  }, [form, check.id, onOpenChange]);
+  }, [form, check.id, check.lockedBankAccountId, onOpenChange]);
 
   const onSubmit = async (values: DepositCheckFormData) => {
-    try {
-      await depositCheck(values);
-      toast.success('Cheque depositado correctamente');
+    const result = await depositCheck(values);
+    if (notifyCheckActionResult(result, 'Cheque depositado correctamente')) {
       handleClose();
       router.refresh();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Error al depositar cheque');
     }
   };
 
@@ -111,7 +113,11 @@ export function _DepositCheckModal({ check, open, onOpenChange }: Props) {
                   {loadingAccounts ? (
                     <Skeleton className="h-10 w-full" />
                   ) : (
-                    <Select onValueChange={field.onChange} value={field.value}>
+                    <Select
+                      onValueChange={field.onChange}
+                      value={field.value}
+                      disabled={Boolean(check.lockedBankAccountId)}
+                    >
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Seleccionar cuenta" />
@@ -129,6 +135,11 @@ export function _DepositCheckModal({ check, open, onOpenChange }: Props) {
                       </SelectContent>
                     </Select>
                   )}
+                  {check.lockedBankAccountId && (
+                    <FormDescription>
+                      El e-cheq ya se registró en esta cuenta: solo se puede depositarlo acá.
+                    </FormDescription>
+                  )}
                   <FormMessage />
                 </FormItem>
               )}
@@ -144,10 +155,8 @@ export function _DepositCheckModal({ check, open, onOpenChange }: Props) {
                   <FormControl>
                     <Input
                       type="date"
-                      value={field.value ? moment(field.value).format('YYYY-MM-DD') : ''}
-                      onChange={(e) =>
-                        field.onChange(e.target.value ? new Date(e.target.value) : null)
-                      }
+                      value={toDateInputValue(field.value)}
+                      onChange={(e) => field.onChange(fromDateInputValue(e.target.value))}
                     />
                   </FormControl>
                   <FormMessage />

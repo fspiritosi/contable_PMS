@@ -150,6 +150,43 @@ const SECTIONS: SectionDef[] = [
     ],
   },
   {
+    title: 'Cheques y tarjetas',
+    description:
+      'Cuentas que usan los recibos y órdenes de pago al registrar cheques y tarjetas, y el ciclo de vida del cheque.',
+    fields: [
+      {
+        name: 'checksReceivedAccountId',
+        label: ACCOUNTING_SETTINGS_ACCOUNT_LABELS.checksReceivedAccountId,
+        types: ['ASSET'],
+        help: 'Cheques de terceros recibidos que están en cartera hasta depositarlos',
+      },
+      {
+        name: 'checksRejectedAccountId',
+        label: ACCOUNTING_SETTINGS_ACCOUNT_LABELS.checksRejectedAccountId,
+        types: ['ASSET'],
+        help: 'Cheques rechazados por el banco, pendientes de recuperar del cliente',
+      },
+      {
+        name: 'checksPayableAccountId',
+        label: ACCOUNTING_SETTINGS_ACCOUNT_LABELS.checksPayableAccountId,
+        types: ['LIABILITY'],
+        help: 'Cheques propios emitidos que todavía no se debitaron del banco',
+      },
+      {
+        name: 'creditCardsPayableAccountId',
+        label: ACCOUNTING_SETTINGS_ACCOUNT_LABELS.creditCardsPayableAccountId,
+        types: ['LIABILITY'],
+        help: 'Deuda por pagos con tarjeta de crédito de la empresa',
+      },
+      {
+        name: 'partnerDebtsAccountId',
+        label: ACCOUNTING_SETTINGS_ACCOUNT_LABELS.partnerDebtsAccountId,
+        types: ['LIABILITY'],
+        help: 'Deuda con el socio cuando se paga con una tarjeta suya',
+      },
+    ],
+  },
+  {
     title: 'Cierre de Ejercicio',
     fields: [
       {

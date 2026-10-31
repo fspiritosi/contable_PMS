@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import {
   BANK_ACCOUNT_TYPE_LABELS,
+  ACCOUNT_METHOD_REJECTED_MESSAGE,
   bankAccountSchema,
+  createReceiptSchema,
+  partnerRepaymentSchema,
+  PAYMENT_METHOD_LABELS,
+  SELECTABLE_PAYMENT_METHOD_LABELS,
   paymentOrderPaymentSchema,
   receiptPaymentSchema,
 } from './validators';
@@ -176,5 +181,59 @@ describe('broker como tipo de cuenta (TSK-793)', () => {
   it('acepta un broker con nombre y sin CBU, alias ni número de cuenta', () => {
     const result = bankAccountSchema.safeParse({ accountType: 'BROKER', bankName: 'Balanz' });
     expect(result.success).toBe(true);
+  });
+});
+
+describe('"Cuenta Corriente" ya no se ofrece (TSK-735)', () => {
+  const MENSAJE =
+    'El medio "Cuenta Corriente" ya no se usa: elegí otro medio o registrá una nota de crédito/débito';
+  const FACTURA = '55555555-5555-4555-8555-555555555555';
+  const CLIENTE = '66666666-6666-4666-8666-666666666666';
+  const SOCIO = '77777777-7777-4777-8777-777777777777';
+  const base = (payment: { paymentMethod: string; amount: string; cashRegisterId?: string }) => ({
+    customerId: CLIENTE,
+    date: new Date('2026-03-01'),
+    items: [{ invoiceId: FACTURA, amount: '1000' }],
+    payments: [payment],
+    withholdings: [],
+  });
+
+  it('el mensaje es el literal', () => {
+    expect(ACCOUNT_METHOD_REJECTED_MESSAGE).toBe(MENSAJE);
+  });
+
+  it('createReceiptSchema rechaza un pago ACCOUNT con el literal', () => {
+    const result = createReceiptSchema.safeParse(base({ paymentMethod: 'ACCOUNT', amount: '1000' }));
+    expect(result.success).toBe(false);
+    expect(issuesDe(result)).toContainEqual({ path: 'payments.0.paymentMethod', message: MENSAJE });
+  });
+
+  it('createReceiptSchema acepta un pago CASH con caja', () => {
+    const result = createReceiptSchema.safeParse(
+      base({ paymentMethod: 'CASH', amount: '1000', cashRegisterId: CAJA })
+    );
+    expect(result.success).toBe(true);
+  });
+
+  it('paymentOrderPaymentSchema rechaza ACCOUNT con el literal', () => {
+    const result = paymentOrderPaymentSchema.safeParse({ paymentMethod: 'ACCOUNT', amount: '10' });
+    expect(issuesDe(result)).toContainEqual({ path: 'paymentMethod', message: MENSAJE });
+  });
+
+  it('partnerRepaymentSchema rechaza una devolución con ACCOUNT', () => {
+    const result = partnerRepaymentSchema.safeParse({
+      partnerId: SOCIO,
+      date: new Date('2026-03-01'),
+      installmentIds: [FACTURA],
+      payments: [{ paymentMethod: 'ACCOUNT', amount: '10' }],
+    });
+    expect(result.success).toBe(false);
+    expect(issuesDe(result)).toContainEqual({ path: 'payments.0.paymentMethod', message: MENSAJE });
+  });
+
+  it('SELECTABLE_PAYMENT_METHOD_LABELS es la completa sin ACCOUNT', () => {
+    const { ACCOUNT: _omit, ...sinAccount } = PAYMENT_METHOD_LABELS;
+    expect(SELECTABLE_PAYMENT_METHOD_LABELS).toEqual(sinAccount);
+    expect(Object.keys(SELECTABLE_PAYMENT_METHOD_LABELS)).not.toContain('ACCOUNT');
   });
 });

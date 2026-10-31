@@ -4,6 +4,7 @@ import { Prisma } from '@/generated/prisma/client';
 import type { Tx } from '@/modules/accounting/features/integrations/core';
 import type { CreatePaymentOrderFormData } from '@/modules/commercial/features/treasury/shared/validators';
 import { BusinessError } from '@/shared/lib/action-result';
+import { normalizePaymentFunds } from '../payment-funds';
 
 /**
  * Escritura de los datos editables de una orden de pago (TSK-792). Vive fuera del
@@ -107,8 +108,10 @@ export async function writePaymentOrderDataTx(
   tx: Tx,
   companyId: string,
   paymentOrderId: string,
-  input: CreatePaymentOrderFormData
+  rawInput: CreatePaymentOrderFormData
 ): Promise<void> {
+  // Solo la caja/banco que usa cada medio: el formulario arrastra los de otro medio (TSK-735).
+  const input = { ...rawInput, payments: rawInput.payments.map(normalizePaymentFunds) };
   await assertPaymentOrderReferencesTx(tx, companyId, paymentOrderId, input);
 
   const totalCents = input.items.reduce(

@@ -347,15 +347,22 @@ export function _TreasuryGuide() {
             Configuración). El recibo queda en Borrador hasta que lo corrijas.
           </p>
           <p className="text-muted-foreground">
-            Los pagos con <strong>cheque, tarjeta de crédito o cuenta
-            corriente</strong> todavía no tienen cuenta contable en el sistema
-            y <strong>no generan línea en el asiento</strong>. El diálogo los
-            lista en un aviso naranja antes de confirmar y, si confirmás igual,
-            te lo repite después: ese importe queda pendiente en Cuentas por
-            Cobrar hasta que se regularice. Si <strong>todos</strong> los pagos
-            son de ese tipo y no hay retenciones, el recibo no se puede
-            confirmar: agregá un pago en efectivo, transferencia o e-cheq, o
-            una retención.
+            Los <strong>cheques y e-cheq</strong> recibidos se asientan en la
+            cuenta <strong>Valores a depositar</strong> (Contabilidad →
+            Configuración → Cheques y tarjetas): el recibo cancela por completo
+            Cuentas por Cobrar y el cheque queda como un valor a depositar hasta
+            que lo deposites. Si esa cuenta no está configurada, el diálogo lo
+            dice en rojo y no deja confirmar.
+          </p>
+          <p className="text-muted-foreground">
+            Dos casos siguen sin línea en el asiento y se avisan en naranja
+            antes de confirmar: el <strong>cobro con tarjeta de crédito</strong>{' '}
+            (ese importe queda pendiente en Cuentas por Cobrar) y los recibos
+            viejos cargados con <strong>Cuenta Corriente</strong>. La opción{' '}
+            <strong>Cuenta Corriente</strong> ya no se ofrece como medio de pago
+            en recibos nuevos: elegí otro medio o registrá una nota de
+            crédito/débito. Si corregís o editás un recibo viejo que la usaba,
+            tenés que cambiar el medio.
           </p>
           <p className="text-sm text-muted-foreground">
             Antes, un recibo con una cuenta faltante podía quedar confirmado{' '}
@@ -448,7 +455,9 @@ export function _TreasuryGuide() {
                   <strong>De terceros</strong>: se <strong>endosa</strong> un cheque
                   recibido que tengas <strong>en cartera</strong>. Elegís el cheque
                   de la lista y el monto se completa solo; al confirmar, ese cheque
-                  pasa a estado &quot;Endosado&quot; a nombre del proveedor
+                  pasa a estado &quot;Endosado&quot; a nombre del proveedor. El cheque
+                  se endosa por su <strong>importe completo</strong>: si cambiás el
+                  monto del pago, la orden no se confirma
                 </li>
               </ul>
             </li>
@@ -476,20 +485,36 @@ export function _TreasuryGuide() {
             queda en Borrador hasta que lo corrijas.
           </p>
           <p className="text-muted-foreground">
-            Los pagos con <strong>cheque propio o endosado, tarjeta de
-            crédito, tarjeta de un socio o cuenta corriente</strong> todavía no
-            tienen cuenta contable en el sistema y no generan línea en el
-            asiento: el diálogo los lista en un aviso naranja y, si confirmás,
-            ese importe queda pendiente en Cuentas por Pagar hasta que se
-            regularice. Si <strong>todos</strong> los pagos son de ese tipo y
-            no hay retenciones, la orden no se puede confirmar: agregá un pago
-            en efectivo, transferencia, débito de la empresa o e-cheq, o una
-            retención.
+            Cada medio tiene su cuenta (se configuran en{' '}
+            <strong>Contabilidad → Configuración → Cheques y tarjetas</strong>):
+            el <strong>cheque propio</strong> va a Valores diferidos a pagar, el{' '}
+            <strong>cheque endosado</strong> descarga el valor que recibiste, la{' '}
+            <strong>tarjeta de crédito de la empresa</strong> va a Tarjetas de
+            crédito a pagar y la <strong>tarjeta de un socio</strong> a Deudas
+            con socios. La orden cancela por completo Cuentas por Pagar. Si
+            falta alguna de esas cuentas, el diálogo lo dice en rojo y no deja
+            confirmar. Si endosás un cheque que <strong>se cargó a mano</strong>{' '}
+            en Tesorería → Cheques (no vino de un recibo), ese pago no entra al
+            asiento: el diálogo te avisa y ese importe queda pendiente en
+            Cuentas por Pagar hasta que lo regularice el contador. Un pago con
+            cheque propio <strong>sin número de cheque</strong> (borradores
+            viejos) no se confirma hasta que edites la orden y lo cargues. La opción <strong>Cuenta Corriente</strong> ya no se
+            ofrece en órdenes nuevas (usá otro medio o una nota de
+            crédito/débito); las órdenes viejas que la usan siguen mostrando el
+            aviso naranja. Pagar el resumen de la tarjeta de la empresa
+            todavía no tiene flujo propio.
           </p>
           <p className="text-sm text-muted-foreground">
-            Las <strong>órdenes de pago a un socio</strong> (devolución de
-            aportes) mueven la caja o el banco pero <strong>no generan
-            asiento</strong>; el diálogo te lo avisa. Al cargar cualquier
+            Las <strong>órdenes de pago a un socio</strong> (devolución de lo
+            que la empresa le debe por pagar con su tarjeta) ahora{' '}
+            <strong>generan asiento</strong>: Deudas con socios contra la caja,
+            el banco, el cheque propio o el endoso con que se devuelve. No se
+            pueden pagar con Cuenta Corriente. Si las cuotas que devuelve
+            cambiaron después de armarla y ya no suman lo mismo que los pagos,
+            la devolución no se confirma y el mensaje muestra los dos totales.
+            Mientras una devolución esté en borrador, la orden de pago donde se
+            usó la tarjeta del socio no se puede corregir: primero eliminá o
+            editá la devolución. Al cargar cualquier
             orden, <strong>Efectivo</strong> exige elegir la caja y{' '}
             <strong>Transferencia</strong> la cuenta bancaria. Antes, una orden
             con una cuenta faltante podía quedar confirmada sin asiento y sin
@@ -640,8 +665,61 @@ export function _TreasuryGuide() {
           </ul>
 
           <p className="text-sm text-muted-foreground mt-2">
-            Desde el detalle del cheque puedes realizar acciones como depositar,
-            endosar o marcar como rechazado.
+            Desde el menú de la fila del cheque podés depositar, endosar,
+            rechazar, debitar o anular. Cada acción genera su asiento
+            automáticamente (en borrador, para que lo revise el contador):
+          </p>
+          <ul className="list-disc pl-6 space-y-1 text-muted-foreground mt-2">
+            <li>
+              <strong>Depositar</strong> (cheque de terceros en cartera): Banco
+              contra Valores a depositar
+            </li>
+            <li>
+              <strong>Rechazar</strong> (depositado): Cheques rechazados
+              contra Banco; el cheque queda a cuenta del cliente
+            </li>
+            <li>
+              <strong>Debitar</strong> (cheque propio entregado, pasa a
+              Cobrado): Valores diferidos a pagar contra Banco. Elegís la cuenta
+              bancaria y la fecha del débito
+            </li>
+            <li>
+              <strong>Anular</strong>: revierte lo asentado según el estado
+              (en cartera, depositado o entregado). Un cheque propio que pagó
+              una <strong>devolución a un socio</strong> no se anula desde
+              Cheques: corregí esa orden de pago (si no, la deuda con el socio
+              quedaría saldada sin pago)
+            </li>
+            <li>
+              <strong>Eliminar</strong>: solo para cheques cargados a mano. Un
+              cheque que generó un recibo o una orden de pago no se elimina
+              (la opción no aparece): anulalo o corregí el comprobante
+            </li>
+            <li>
+              <strong>Acreditar</strong> no genera asiento: el banco ya se
+              debitó al depositar
+            </li>
+          </ul>
+          <p className="text-sm text-muted-foreground mt-2">
+            Los cheques de antes de este cambio se regularizan solos al
+            depositarlos, endosarlos o debitarlos (el asiento descarga la
+            deuda del cliente o del proveedor). El depósito de un e-cheq
+            anterior no genera asiento (el recibo ya lo había mandado al
+            banco). Si rechazás un cheque anterior que ya estaba depositado,
+            el asiento lo pasa a Cheques rechazados pero no cierra el saldo
+            del cliente: eso se regulariza a mano. Un cheque cargado a mano,
+            sin recibo de origen, no genera asiento en ninguna acción y el
+            sistema te avisa. El{' '}
+            <strong>endoso manual</strong> desde Cheques no genera asiento: si el
+            cheque vino de un recibo y está registrado en Valores a depositar,
+            el sistema no te deja endosarlo a mano (endosalo desde una orden de
+            pago para que el asiento lo descargue); los cheques anteriores a
+            este cambio o cargados a mano se endosan a mano con un aviso. Un{' '}
+            <strong>e-cheq</strong> que ya quedó registrado en un banco (los
+            propios y los recibidos antes de este cambio) se deposita o debita
+            solo en ese banco: el selector viene fijo. Si falta una cuenta en
+            Configuración o el período está cerrado, la acción no se hace y el
+            mensaje te dice qué corregir.
           </p>
 
           <p className="mt-3">

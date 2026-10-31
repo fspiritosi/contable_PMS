@@ -594,5 +594,10 @@ Enums nuevos: `InvestmentInstrumentType`, `InvestmentHoldingStatus`, `Investment
 |---|---|---|
 | `FundMovement` | `holdingId`, `nominals`, `unitPrice`, `commission`, `isFullSale` | Tenencia, nominales, precio, comisión (gasto aparte) y marca de venta total de una compra/venta de inversión |
 | `AccountingSettings` | `holdingGainAccountId`, `holdingLossAccountId`, `investmentFeesAccountId` | Cuentas de resultado por tenencia (positivo/negativo) y de comisiones de inversiones |
+| `AccountingSettings` | `checksPayableAccountId`, `creditCardsPayableAccountId`, `partnerDebtsAccountId` | TSK-735: Valores diferidos a pagar, Tarjetas de crédito a pagar, Deudas con socios (`checksReceivedAccountId` y `checksRejectedAccountId` ya existían y ahora tienen UI). FK `Account`, `onDelete` por defecto |
+| `Check` | `accountId`, `depositEntryId`, `rejectionEntryId`, `debitEntryId`, `voidEntryId` | TSK-735: cuenta en la que quedó registrado el cheque (null = histórico) y asientos del ciclo (FK `Account` / `JournalEntry`, `onDelete: SetNull`; relaciones `CheckAccount`, `CheckDepositEntry`, `CheckRejectionEntry`, `CheckDebitEntry`, `CheckVoidEntry`) |
+| `PaymentOrderInstallment` | `accountId` | TSK-735: Deudas con socios o Tarjetas de crédito a pagar (null = histórica; relación `InstallmentAccount`, `SetNull`) |
 
 Migración `20261028144955_tsk_793_inversiones`. Detalle en [Tesorería - Inversiones](../modules/treasury-investments.md).
+
+TSK-735: migración manual `20261031120000_tsk_735_cuentas_cheques_tarjetas` (columnas nulables, sin backfill). Detalle en [Comercial](../modules/commercial.md#cuentas-de-cheques-y-tarjetas-tsk-735).

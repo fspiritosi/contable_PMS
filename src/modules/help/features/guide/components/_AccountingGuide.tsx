@@ -282,6 +282,17 @@ export function _AccountingGuide() {
                   puede quedar sin asignar
                 </li>
                 <li>
+                  Sección <strong>Cheques y tarjetas</strong>: Valores a
+                  depositar, Cheques rechazados, Valores diferidos a pagar,
+                  Tarjetas de crédito a pagar y Deudas con socios. Cada una la
+                  usa el asiento de los recibos y órdenes de pago con cheque,
+                  e-cheq o tarjeta, y el ciclo del cheque (depositar, rechazar,
+                  debitar, anular); si usás ese medio y falta la cuenta, el
+                  comprobante no se puede confirmar. Valores a depositar y
+                  Cheques rechazados son cuentas de activo; las otras tres, de
+                  pasivo
+                </li>
+                <li>
                   Retenciones (IVA, Ganancias, IIBB, SUSS - emitidas y
                   sufridas): cada tipo que uses en recibos u órdenes de pago
                   necesita su cuenta
@@ -381,10 +392,11 @@ export function _AccountingGuide() {
               nombre exacto del campo que falta (tal como aparece en esta
               pantalla) y el comprobante queda en Borrador. En recibos y
               órdenes de pago, además, el diálogo de confirmar te muestra las
-              cuentas antes de que confirmes. Los pagos con cheque, tarjeta de
-              crédito, tarjeta de un socio o cuenta corriente todavía no
-              tienen cuenta en el sistema: se confirman con un aviso y ese
-              importe queda pendiente en Cuentas por Cobrar / Pagar.
+              cuentas antes de que confirmes. Los cheques, e-cheq y tarjetas
+              ya tienen su cuenta (sección Cheques y tarjetas). Solo dos casos
+              se siguen confirmando con un aviso, y ese importe queda pendiente
+              en Cuentas por Cobrar / Pagar: el cobro con tarjeta de crédito en
+              un recibo y la Cuenta Corriente de comprobantes viejos.
             </AlertDescription>
           </Alert>
           <Alert>

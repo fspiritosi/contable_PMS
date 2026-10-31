@@ -1,13 +1,19 @@
 import 'server-only';
 
 import type { Prisma } from '@/generated/prisma/client';
+import { withEndorsedChecks } from '@/modules/commercial/shared/endorsed-checks';
 import { formatAccountLabel } from '@/modules/commercial/shared/line-accounts';
 import {
   buildMissingPaymentAccountMessage,
   buildOmittedPaymentWarning,
-  buildPartnerOrderWarning,
+  buildPartnerRepaymentOmittedMessage,
   buildSingleLineEntryMessage,
   classifyPayments,
+  endorsedEcheqLabel,
+  findPaymentDataError,
+  partnerRepaymentTotalsError,
+  paymentBankLabel,
+  paymentCashRegisterName,
   type EntryDocumentKind,
   type PaymentAccountCheck,
   type ResolvedPaymentSource,
@@ -63,7 +69,7 @@ export interface EntryPreflight {
   documentLabel: string;
   /** Motivo por el que la confirmación va a fallar, o `null`. */
   error: string | null;
-  /** Avisos que no bloquean (pagos omitidos del asiento, OP a socio). */
+  /** Avisos que no bloquean (pagos omitidos del asiento). */
   warnings: string[];
   /** Cuentas con las que se genera el asiento (vacío si hay `error` o no hay asiento). */
   accounts: EntryPreviewAccount[];
@@ -85,6 +91,12 @@ const PAYMENT_SELECT = {
 const SETTINGS_COMMON_SELECT = {
   defaultCashAccountId: true,
   defaultBankAccountId: true,
+  checksReceivedAccountId: true,
+  checksPayableAccountId: true,
+  creditCardsPayableAccountId: true,
+  partnerDebtsAccountId: true,
+  receivablesAccountId: true,
+  payablesAccountId: true,
 } satisfies Prisma.AccountingSettingsSelect;
 
 const NO_SETTINGS_MESSAGE = `No se encontró configuración contable para la empresa. Configurala en ${ACCOUNTING_SETTINGS_PATH}.`;
@@ -105,16 +117,30 @@ interface PreflightInput<T extends PaymentAccountCheck> {
   client: PrismaClientLike;
   documentLabel: string;
   kind: EntryDocumentKind;
-  counterpartField: 'receivablesAccountId' | 'payablesAccountId';
+  /**
+   * Contrapartida de Ajustes. En la devolución a socio solo se exige Cuentas por Pagar si
+   * hay cuotas históricas (sin cuenta); si no, `null`.
+   */
+  counterpartField: 'receivablesAccountId' | 'payablesAccountId' | null;
   withholdingRole: WithholdingRole;
   payments: readonly T[];
   withholdings: readonly { taxType: WithholdingTaxTypeKey }[];
   settings: SettingsAccountIds;
-  /** `false` en OP a socio: no hay asiento, solo se exige cuenta a caja/banco. */
-  generatesEntry: boolean;
-  /** Avisos previos (por ejemplo «Las OP a socios no generan asiento»). */
-  baseWarnings?: string[];
+  /** Cuentas propias del comprobante que el asiento también usa (cuotas devueltas al socio). */
+  documentAccounts?: readonly AccountToCheck[];
+  /**
+   * Devolución a socio (TSK-735): su Debe son las cuotas, así que un pago sin línea
+   * (Cuenta Corriente) descuadraría el asiento y bloquea en vez de avisar.
+   */
+  isPartnerRepayment?: boolean;
 }
+
+/** Cuotas de tarjeta de socio que devuelve la OP, con la cuenta en la que se registraron. */
+const PARTNER_INSTALLMENT_ORIGIN: AccountOrigin = {
+  concept: 'Cuotas devueltas al socio',
+  origin: 'con la que se registró la cuota del socio',
+  fixPath: 'Contabilidad → Plan de Cuentas',
+};
 
 function paymentAccountOrigin(resolved: {
   payment: PaymentAccountCheck;
@@ -122,7 +148,8 @@ function paymentAccountOrigin(resolved: {
 }): AccountOrigin {
   switch (resolved.source) {
     case 'cashRegister': {
-      const caja = `"${resolved.payment.cashRegister?.name ?? ''}"`;
+      // En un cheque endosado histórico la caja es la del pago del RC con el que ingresó.
+      const caja = `"${paymentCashRegisterName(resolved.payment)}"`;
       return {
         concept: `Caja ${caja}`,
         origin: `de la caja ${caja}`,
@@ -130,11 +157,19 @@ function paymentAccountOrigin(resolved: {
       };
     }
     case 'bankAccount': {
-      const bank = resolved.payment.bankAccount;
-      const banco = `"${bank ? `${bank.bankName} ${bank.accountNumber}` : ''}"`;
+      // En un e-cheq endosado histórico el banco es el del cheque, no el de la línea de la OP.
+      const bank = paymentBankLabel(resolved.payment);
+      if (!bank) {
+        const echeq = endorsedEcheqLabel(resolved.payment);
+        return {
+          concept: `Banco del ${echeq}`,
+          origin: `de la cuenta bancaria del ${echeq}`,
+          fixPath: 'Tesorería → Cuentas Bancarias',
+        };
+      }
       return {
-        concept: `Banco ${banco}`,
-        origin: `de la cuenta bancaria ${banco}`,
+        concept: `Banco "${bank}"`,
+        origin: `de la cuenta bancaria "${bank}"`,
         fixPath: 'Tesorería → Cuentas Bancarias',
       };
     }
@@ -142,6 +177,22 @@ function paymentAccountOrigin(resolved: {
       return settingsOrigin('defaultCashAccountId');
     case 'defaultBank':
       return settingsOrigin('defaultBankAccountId');
+    case 'checksReceived':
+      return settingsOrigin('checksReceivedAccountId');
+    case 'checksPayable':
+      return settingsOrigin('checksPayableAccountId');
+    case 'creditCardsPayable':
+      return settingsOrigin('creditCardsPayableAccountId');
+    case 'partnerDebts':
+      return settingsOrigin('partnerDebtsAccountId');
+    case 'endorsedLegacyReceivable':
+      return settingsOrigin('receivablesAccountId');
+    case 'endorsedCheck':
+      return {
+        concept: 'Cuenta del cheque endosado',
+        origin: 'con la que ingresó el cheque endosado',
+        fixPath: 'Tesorería → Cheques',
+      };
   }
 }
 
@@ -199,12 +250,12 @@ async function checkAccounts(
   };
 }
 
-/** Los cuatro chequeos en orden; el primero que falla es el `error`. */
+/** Los chequeos en orden; el primero que falla es el `error`. */
 async function runPreflight<T extends PaymentAccountCheck>(
   input: PreflightInput<T>
 ): Promise<EntryPreflight> {
-  const { documentLabel, kind, settings, generatesEntry } = input;
-  const warnings = [...(input.baseWarnings ?? [])];
+  const { documentLabel, kind, settings } = input;
+  const warnings: string[] = [];
   const toCheck: AccountToCheck[] = [];
   const fail = (error: string): EntryPreflight => ({
     documentLabel,
@@ -214,53 +265,50 @@ async function runPreflight<T extends PaymentAccountCheck>(
   });
 
   // (a) Cuentas obligatorias de Ajustes: contrapartida + una por tipo de retención.
-  if (generatesEntry) {
-    const withholdingFields = [
-      ...new Set(
-        input.withholdings.map((w) => withholdingSettingsField(w.taxType, input.withholdingRole))
-      ),
-    ];
-    const required: AccountingSettingsAccountField[] = [
-      input.counterpartField,
-      ...withholdingFields,
-    ];
-    const missing = findMissingSettingsAccounts(settings, required);
-    if (missing.length > 0)
-      return fail(buildMissingSettingsAccountsMessage(documentLabel, missing));
-    for (const field of required) {
-      const accountId = settings[field];
-      if (accountId) toCheck.push({ accountId, ...settingsOrigin(field) });
-    }
+  const withholdingFields = [
+    ...new Set(
+      input.withholdings.map((w) => withholdingSettingsField(w.taxType, input.withholdingRole))
+    ),
+  ];
+  const required: AccountingSettingsAccountField[] = [
+    ...(input.counterpartField ? [input.counterpartField] : []),
+    ...withholdingFields,
+  ];
+  const missing = findMissingSettingsAccounts(settings, required);
+  if (missing.length > 0) return fail(buildMissingSettingsAccountsMessage(documentLabel, missing));
+  for (const field of required) {
+    const accountId = settings[field];
+    if (accountId) toCheck.push({ accountId, ...settingsOrigin(field) });
   }
+  toCheck.push(...(input.documentAccounts ?? []));
 
-  // (b) Caja/banco sin cuenta resoluble: obligatoria, bloquea.
-  const classification = classifyPayments(input.payments, settings);
+  // (b) Pago al que le falta un dato (número de cheque, endoso por otro importe): bloquea.
+  const dataError = findPaymentDataError(documentLabel, input.payments);
+  if (dataError) return fail(dataError);
+
+  // (c) Pago sin cuenta resoluble (caja/banco, cuenta de Ajustes, cheque endosado): bloquea.
+  const classification = classifyPayments(input.payments, settings, kind);
   if (classification.missing.length > 0) {
     return fail(buildMissingPaymentAccountMessage(documentLabel, classification.missing[0]));
   }
+  if (input.isPartnerRepayment && classification.omitted.length > 0) {
+    return fail(buildPartnerRepaymentOmittedMessage(documentLabel, classification.omitted[0]));
+  }
 
-  // (c) Ningún pago con cuenta ni retención: el asiento quedaría con una sola línea.
-  if (generatesEntry && classification.resolved.length === 0 && input.withholdings.length === 0) {
+  // (d) Ningún pago con cuenta ni retención: el asiento quedaría con una sola línea.
+  if (classification.resolved.length === 0 && input.withholdings.length === 0) {
     return fail(buildSingleLineEntryMessage(documentLabel, kind, classification.omitted));
   }
 
-  // (d) Imputabilidad de todo lo que el asiento va a usar.
+  // (e) Imputabilidad de todo lo que el asiento va a usar.
   for (const resolved of classification.resolved) {
     toCheck.push({ accountId: resolved.accountId, ...paymentAccountOrigin(resolved) });
   }
   const checked = await checkAccounts(input.client, input.companyId, documentLabel, toCheck);
   if ('error' in checked) return fail(checked.error);
 
-  if (generatesEntry) {
-    warnings.push(...classification.omitted.map((o) => buildOmittedPaymentWarning(o, kind)));
-  }
-  // En OP a socio las cuentas de caja/banco se verificaron, pero no hay asiento que listar.
-  return {
-    documentLabel,
-    error: null,
-    warnings,
-    accounts: generatesEntry ? checked.accounts : EMPTY_ACCOUNTS,
-  };
+  warnings.push(...classification.omitted.map((o) => buildOmittedPaymentWarning(o, kind)));
+  return { documentLabel, error: null, warnings, accounts: checked.accounts };
 }
 
 /** Pre-validación del asiento de un recibo de cobro. */
@@ -300,7 +348,6 @@ export async function loadReceiptEntryPreflight(
     where: { companyId },
     select: {
       ...SETTINGS_COMMON_SELECT,
-      receivablesAccountId: true,
       withholdingIvaSufferedAccountId: true,
       withholdingGananciasSufferedAccountId: true,
       withholdingIibbSufferedAccountId: true,
@@ -319,14 +366,13 @@ export async function loadReceiptEntryPreflight(
     payments: receipt.payments.map((p) => ({ ...p, amount: Number(p.amount) })),
     withholdings: receipt.withholdings,
     settings,
-    generatesEntry: true,
   });
 }
 
 /**
- * Pre-validación del asiento de una orden de pago. Las OP a socio
- * (`partnerId`) no generan asiento por diseño: solo se exige cuenta a la
- * caja/banco que sí mueven fondos y se avisa.
+ * Pre-validación del asiento de una orden de pago. En la devolución a socio
+ * (`partnerId`, TSK-735) el Debe son las cuotas que salda: se verifica la
+ * cuenta de cada una y, si alguna es histórica (sin cuenta), Cuentas por Pagar.
  */
 export async function loadPaymentOrderEntryPreflight(
   companyId: string,
@@ -347,6 +393,7 @@ export async function loadPaymentOrderEntryPreflight(
         },
       },
       withholdings: { select: { taxType: true } },
+      settledInstallments: { select: { accountId: true, amount: true } },
     },
   });
   if (!order) {
@@ -372,7 +419,6 @@ export async function loadPaymentOrderEntryPreflight(
     where: { companyId },
     select: {
       ...SETTINGS_COMMON_SELECT,
-      payablesAccountId: true,
       withholdingIvaEmittedAccountId: true,
       withholdingGananciasEmittedAccountId: true,
       withholdingIibbEmittedAccountId: true,
@@ -381,19 +427,39 @@ export async function loadPaymentOrderEntryPreflight(
   });
   if (!settings) return { documentLabel, error: NO_SETTINGS_MESSAGE, warnings: [], accounts: [] };
 
-  const isPartnerOrder = Boolean(order.partnerId);
+  const payments = await withEndorsedChecks(
+    client,
+    companyId,
+    order.payments.map((p) => ({ ...p, amount: Number(p.amount) }))
+  );
+
+  const isPartnerRepayment = Boolean(order.partnerId);
+  if (isPartnerRepayment) {
+    const totalsError = partnerRepaymentTotalsError(
+      order.settledInstallments.map((i) => Number(i.amount)),
+      payments.map((p) => p.amount)
+    );
+    if (totalsError) return { documentLabel, error: totalsError, warnings: [], accounts: [] };
+  }
+  const installmentAccountIds = isPartnerRepayment
+    ? [...new Set(order.settledInstallments.flatMap((i) => (i.accountId ? [i.accountId] : [])))]
+    : [];
+  const hasLegacyInstallments = order.settledInstallments.some((i) => !i.accountId);
   return runPreflight({
     companyId,
     client,
     documentLabel,
     kind: 'paymentOrder',
-    counterpartField: 'payablesAccountId',
+    counterpartField: !isPartnerRepayment || hasLegacyInstallments ? 'payablesAccountId' : null,
     withholdingRole: 'emitted',
-    payments: order.payments.map((p) => ({ ...p, amount: Number(p.amount) })),
+    payments,
     withholdings: order.withholdings,
     settings,
-    generatesEntry: !isPartnerOrder,
-    baseWarnings: isPartnerOrder ? [buildPartnerOrderWarning()] : [],
+    documentAccounts: installmentAccountIds.map((accountId) => ({
+      accountId,
+      ...PARTNER_INSTALLMENT_ORIGIN,
+    })),
+    isPartnerRepayment,
   });
 }
 

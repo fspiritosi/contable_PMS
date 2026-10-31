@@ -24,6 +24,7 @@ import {
   type EntryPreflight,
 } from '../../shared/entry-preflight';
 import { applyPaymentOrderEffectsTx } from '@/modules/commercial/shared/effects/payment-order.server';
+import { normalizePaymentFunds } from '@/modules/commercial/shared/payment-funds';
 import {
   paymentOrderWithholdingRows,
   writePaymentOrderDataTx,
@@ -280,7 +281,8 @@ export async function createPartnerRepaymentOrder(data: PartnerRepaymentFormData
       });
 
       await tx.paymentOrderPayment.createMany({
-        data: payments.map((payment) => ({
+        // Solo la caja/banco que usa el medio: el formulario arrastra los de otro medio (TSK-735).
+        data: payments.map(normalizePaymentFunds).map((payment) => ({
           paymentOrderId: newOp.id,
           paymentMethod: payment.paymentMethod,
           amount: new Prisma.Decimal(payment.amount),
@@ -372,9 +374,10 @@ export async function createPaymentOrder(data: CreatePaymentOrderFormData) {
         })),
       });
 
-      // Crear pagos
+      // Crear pagos, solo con la caja/banco que usa el medio: el formulario arrastra los de
+      // otro medio (TSK-735).
       await tx.paymentOrderPayment.createMany({
-        data: data.payments.map((payment) => ({
+        data: data.payments.map(normalizePaymentFunds).map((payment) => ({
           paymentOrderId: newPaymentOrder.id,
           paymentMethod: payment.paymentMethod,
           amount: new Prisma.Decimal(payment.amount),

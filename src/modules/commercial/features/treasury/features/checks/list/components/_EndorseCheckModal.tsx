@@ -4,7 +4,6 @@ import { useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useRouter } from 'next/navigation';
-import { toast } from 'sonner';
 import moment from 'moment';
 import {
   Dialog,
@@ -27,6 +26,7 @@ import { businessToday } from '@/shared/utils/date-input';
 import { endorseCheckSchema, type EndorseCheckFormData } from '../../../../shared/validators';
 import { endorseCheck } from '../../actions.server';
 import type { CheckListItem } from '../../../../shared/types';
+import { notifyCheckActionResult } from '../check-action-result';
 
 interface Props {
   check: CheckListItem;
@@ -62,13 +62,12 @@ export function _EndorseCheckModal({ check, open, onOpenChange }: Props) {
   }, [form, check.id, onOpenChange]);
 
   const onSubmit = async (values: EndorseCheckFormData) => {
-    try {
-      await endorseCheck(values);
-      toast.success('Cheque endosado correctamente');
+    // Error (cheque registrado en una cuenta: se endosa por OP) o éxito con el aviso de que
+    // el endoso manual no genera asiento (TSK-735).
+    const result = await endorseCheck(values);
+    if (notifyCheckActionResult(result, 'Cheque endosado correctamente')) {
       handleClose();
       router.refresh();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Error al endosar cheque');
     }
   };
 

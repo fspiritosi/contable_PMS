@@ -6,6 +6,7 @@ import { getCurrentUserId } from '@/shared/lib/current-user';
 import { getActiveCompanyId } from '@/shared/lib/company';
 import { logger } from '@/shared/lib/logger';
 import { prisma } from '@/shared/lib/prisma';
+import { normalizePaymentFunds } from '@/modules/commercial/shared/payment-funds';
 import { revalidatePath } from 'next/cache';
 import { Prisma } from '@/generated/prisma/client';
 import type { DataTableSearchParams } from '@/shared/components/common/DataTable';
@@ -172,7 +173,8 @@ export async function createReceipt(data: CreateReceiptFormData) {
 
       // Crear pagos
       await tx.receiptPayment.createMany({
-        data: data.payments.map((payment) => ({
+        // Solo la caja/banco que usa el medio: el formulario arrastra los de otro medio (TSK-735).
+        data: data.payments.map(normalizePaymentFunds).map((payment) => ({
           receiptId: newReceipt.id,
           paymentMethod: payment.paymentMethod,
           amount: new Prisma.Decimal(payment.amount),

@@ -119,6 +119,11 @@ async function AccountingSettingsContent({ companyId }: { companyId: string }) {
               accumulatedDepreciationAccountId: settings?.accumulatedDepreciationAccountId ?? null,
               depreciationExpenseAccountId: settings?.depreciationExpenseAccountId ?? null,
               assetDisposalGainLossAccountId: settings?.assetDisposalGainLossAccountId ?? null,
+              checksReceivedAccountId: settings?.checksReceivedAccountId ?? null, // TSK-735
+              checksRejectedAccountId: settings?.checksRejectedAccountId ?? null,
+              checksPayableAccountId: settings?.checksPayableAccountId ?? null,
+              creditCardsPayableAccountId: settings?.creditCardsPayableAccountId ?? null,
+              partnerDebtsAccountId: settings?.partnerDebtsAccountId ?? null,
               requireCostCenter: settings?.requireCostCenter ?? false,
             }}
           />
