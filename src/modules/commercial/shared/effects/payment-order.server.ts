@@ -4,6 +4,7 @@ import moment from 'moment';
 
 import { Prisma } from '@/generated/prisma/client';
 import {
+  createJournalEntryForPartnerRepayment,
   createJournalEntryForPaymentOrder,
   type DocumentEntryOptions,
 } from '@/modules/accounting/features/integrations/commercial';
@@ -71,7 +72,9 @@ async function recomputeImputedDocumentsTx(
  * Lo que hace la confirmación de la OP dentro de la transacción salvo el cambio de
  * estado: recalcula facturas y gastos, crea movimientos de caja/banco, cheques,
  * cuotas de tarjeta con sus proyecciones, salda las cuotas de socio y genera el
- * asiento (solo OP a proveedor). Espera la OP ya en CONFIRMED.
+ * asiento (de la OP a proveedor o de la devolución a socio, TSK-735). Cada cheque
+ * propio físico y cada cuota guardan la cuenta en la que quedaron registrados.
+ * Espera la OP ya en CONFIRMED.
  *
  * Con `opts.rewriteEntryId` reescribe ese asiento (DRAFT) conservando su número
  * en vez de crear uno nuevo.
@@ -101,6 +104,17 @@ export async function applyPaymentOrderEffectsTx(
   if (!paymentOrder) {
     throw new BusinessError('Orden de pago no encontrada');
   }
+
+  // Cuentas en las que quedan registrados el cheque propio y las cuotas (TSK-735): las
+  // mismas del Haber del asiento. Si faltan, el asiento bloquea la confirmación.
+  const accounts = await tx.accountingSettings.findUnique({
+    where: { companyId },
+    select: {
+      checksPayableAccountId: true,
+      creditCardsPayableAccountId: true,
+      partnerDebtsAccountId: true,
+    },
+  });
 
   // 2. Actualizar estado de facturas y gastos
   await recomputeImputedDocumentsTx(tx, paymentOrder.items);
@@ -238,6 +252,8 @@ export async function applyPaymentOrderEffectsTx(
             supplierId: paymentOrder.supplierId,
             // e-cheq propio: cuenta bancaria desde la que se emite
             bankAccountId: isEcheq ? payment.bankAccountId : null,
+            // Físico: Valores diferidos a pagar, se descarga al debitarlo. El e-cheq va por banco.
+            accountId: isEcheq ? null : (accounts?.checksPayableAccountId ?? null),
             paymentOrderPaymentId: payment.id,
             createdBy: userId,
           },
@@ -265,6 +281,11 @@ export async function applyPaymentOrderEffectsTx(
       installmentsCount = 1;
     }
     if (installmentsCount === 0) continue;
+    // Deuda con el socio o con la tarjeta de la empresa, como el Haber del asiento.
+    const installmentAccountId =
+      (card.ownerType === 'PARTNER'
+        ? accounts?.partnerDebtsAccountId
+        : accounts?.creditCardsPayableAccountId) ?? null;
 
     // Reparto en centavos para que la suma cuadre exactamente con el total
     const totalCents = Math.round(paymentAmount * 100);
@@ -296,6 +317,7 @@ export async function applyPaymentOrderEffectsTx(
           dueDate: dueDate.toDate(),
           amount,
           status: 'PENDING',
+          accountId: installmentAccountId,
         },
       });
 
@@ -327,26 +349,27 @@ export async function applyPaymentOrderEffectsTx(
       where: { settledByPaymentOrderId: paymentOrderId, status: 'PENDING' },
       data: { status: 'PAID', paidAt: paymentOrder.date },
     });
-    // Las OP de devolución a socio no generan asiento de compra (seguimiento del plan 728, 2.4-4).
-    return { journalEntryId: null };
   }
 
-  // Asiento contable (solo OP a proveedor). Si falla, la transacción entera se
-  // revierte. TSK-728: antes solo se relanzaba "período cerrado" y cualquier otro
-  // fallo dejaba la OP confirmada sin asiento.
-  const journalEntryId = await createJournalEntryForPaymentOrder(
-    paymentOrderId,
-    companyId,
-    tx,
-    opts
-  );
+  // Asiento contable: de la OP a proveedor o, desde TSK-735, de la devolución a socio
+  // (Deudas con socios / Caja o Banco). Si falla, la transacción entera se revierte.
+  // TSK-728: antes solo se relanzaba "período cerrado" y cualquier otro fallo dejaba
+  // la OP confirmada sin asiento.
+  const journalEntryId = paymentOrder.partnerId
+    ? await createJournalEntryForPartnerRepayment(paymentOrderId, companyId, tx, opts)
+    : await createJournalEntryForPaymentOrder(paymentOrderId, companyId, tx, opts);
   await tx.paymentOrder.update({
     where: { id: paymentOrderId },
     data: { journalEntryId },
   });
 
   logger.info('Asiento contable generado para orden de pago', {
-    data: { paymentOrderId, journalEntryId, rewritten: Boolean(opts?.rewriteEntryId) },
+    data: {
+      paymentOrderId,
+      journalEntryId,
+      partnerRepayment: Boolean(paymentOrder.partnerId),
+      rewritten: Boolean(opts?.rewriteEntryId),
+    },
   });
 
   return { journalEntryId };

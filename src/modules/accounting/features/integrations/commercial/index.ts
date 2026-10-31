@@ -22,17 +22,23 @@
  * devuelva con su mensaje tal cual.
  *
  * 3. Recibo de Cobro (confirmado):
- *    - Debe: caja/banco de cada pago (cuenta propia o "Caja/Banco por Defecto") + retenciones sufridas
+ *    - Debe: cuenta de cada pago (caja/banco propia o por defecto; cheque y e-cheq a "Valores a
+ *      depositar", TSK-735) + retenciones sufridas
  *    - Haber: Cuentas por Cobrar por el importe contabilizable
- *    Los pagos con cheque, tarjeta o cuenta corriente no generan línea (aviso al usuario, TSK-728).
+ *    "Cuenta Corriente" y el cobro con tarjeta de crédito no generan línea (aviso al usuario).
  *    Pre-validado en confirmReceipt (`treasury/shared/entry-preflight.ts`); acá defensa en profundidad.
  *
- * 4. Orden de Pago (confirmada):
+ * 4. Orden de Pago a proveedor (confirmada):
  *    - Debe: Cuentas por Pagar por el importe contabilizable
- *    - Haber: caja/banco de cada pago (cuenta propia o "Caja/Banco por Defecto") + retenciones emitidas
- *    Cheque propio/endosado, tarjeta de crédito, tarjeta de socio y cuenta corriente no generan
- *    línea (aviso al usuario, TSK-728). Las OP a socios no generan asiento. Pre-validado en
- *    confirmPaymentOrder; acá defensa en profundidad.
+ *    - Haber: cuenta de cada pago (caja/banco; cheque propio a "Valores diferidos a pagar";
+ *      endoso a la cuenta del cheque; tarjeta de la empresa a "Tarjetas de crédito a pagar";
+ *      tarjeta de socio a "Deudas con socios", TSK-735) + retenciones emitidas
+ *    "Cuenta Corriente" no genera línea (aviso). Pre-validado en confirmPaymentOrder.
+ *
+ * 4b. Orden de Pago de devolución a socio (confirmada, TSK-735):
+ *    - Debe: la cuenta de cada cuota devuelta (o Cuentas por Pagar con el proveedor de la OP
+ *      de origen si la cuota es histórica), agrupado por cuenta y proveedor
+ *    - Haber: cuenta de cada pago, como en la OP a proveedor
  *
  * 5. Gasto (confirmado):
  *    - Debe: cuenta de la categoría del egreso, o "Cuenta de egresos por defecto" (TSK-757)
@@ -67,10 +73,15 @@ import {
   findLinesMissingAccount,
   resolveLineAccount,
 } from '@/modules/commercial/shared/line-accounts';
+import { withEndorsedChecks } from '@/modules/commercial/shared/endorsed-checks';
 import {
   buildMissingPaymentAccountMessage,
+  buildPartnerRepaymentOmittedMessage,
   buildSingleLineEntryMessage,
   classifyPayments,
+  type EntryDocumentKind,
+  type PaymentAccountCheck,
+  type ResolvedPaymentSource,
 } from '@/modules/commercial/shared/payment-accounts';
 import {
   buildMissingSettingsAccountsMessage,
@@ -724,6 +735,53 @@ export async function createJournalEntryForPurchaseInvoice(
 }
 
 // ============================================
+// HELPER: Descripción de la línea de un pago (TSK-735)
+// ============================================
+
+/** «Cobro en efectivo - RC-…», «Cheque propio entregado - OP-…», según la cuenta que resolvió. */
+function paymentLineDescription(
+  kind: EntryDocumentKind,
+  resolved: { source: ResolvedPaymentSource; payment: PaymentAccountCheck },
+  docNumber: string
+): string {
+  // El e-cheq endosado histórico resuelve al banco del cheque, pero sigue siendo un endoso.
+  if (resolved.payment.endorsedCheckId) return `Cheque endosado - ${docNumber}`;
+  const isReceipt = kind === 'receipt';
+  switch (resolved.source) {
+    case 'cashRegister':
+    case 'defaultCash':
+      return `${isReceipt ? 'Cobro' : 'Pago'} en efectivo - ${docNumber}`;
+    case 'bankAccount':
+    case 'defaultBank':
+      return `${isReceipt ? 'Cobro' : 'Pago'} bancario - ${docNumber}`;
+    case 'checksReceived':
+      return `Cheque recibido - ${docNumber}`;
+    case 'checksPayable':
+      return `Cheque propio entregado - ${docNumber}`;
+    case 'endorsedCheck':
+    case 'endorsedLegacyReceivable':
+      return `Cheque endosado - ${docNumber}`;
+    case 'creditCardsPayable':
+      return `Tarjeta de crédito - ${docNumber}`;
+    case 'partnerDebts':
+      return `Tarjeta de socio - ${docNumber}`;
+  }
+}
+
+/** Select de los pagos de una OP para resolver su cuenta (`classifyPayments`). */
+const PAYMENT_ORDER_PAYMENT_SELECT = {
+  paymentMethod: true,
+  amount: true,
+  cashRegisterId: true,
+  bankAccountId: true,
+  checkNumber: true,
+  endorsedCheckId: true,
+  cashRegister: { select: { name: true, accountId: true } },
+  bankAccount: { select: { bankName: true, accountNumber: true, accountId: true } },
+  card: { select: { name: true, ownerType: true } },
+} satisfies Prisma.PaymentOrderPaymentSelect;
+
+// ============================================
 // INTEGRACIÓN: Recibo de Cobro
 // ============================================
 
@@ -798,8 +856,8 @@ export async function createJournalEntryForReceipt(
     const lines: JournalEntryLineInput[] = [];
 
     // Haber: Cuentas por Cobrar (activo disminuye) por el importe contabilizable.
-    // TSK-728: los pagos de medios sin cuenta (cheque, tarjeta, cuenta corriente) no entran
-    // al asiento; la cuenta por cobrar queda con ese saldo hasta regularizar (ver plan 2.4-1).
+    // Los pagos omitidos (cuenta corriente, tarjeta de crédito) no entran al asiento; la
+    // cuenta por cobrar queda con ese saldo hasta regularizar (TSK-728, plan 2.4-1).
     lines.push({
       accountId: settings.receivablesAccountId,
       debit: 0,
@@ -808,16 +866,13 @@ export async function createJournalEntryForReceipt(
       customerId: receipt.customerId,
     });
 
-    // Debe: Caja/Banco (activo aumenta) por cada pago con cuenta
-    for (const { payment, accountId, source } of resolved) {
-      const isCash = source === 'cashRegister' || source === 'defaultCash';
+    // Debe: Caja/Banco/Valores a depositar (activo aumenta) por cada pago con cuenta
+    for (const item of resolved) {
       lines.push({
-        accountId,
-        debit: payment.amount,
+        accountId: item.accountId,
+        debit: item.payment.amount,
         credit: 0,
-        description: isCash
-          ? `Cobro en efectivo - ${receipt.fullNumber}`
-          : `Cobro bancario - ${receipt.fullNumber}`,
+        description: paymentLineDescription('receipt', item, receipt.fullNumber),
       });
     }
 
@@ -886,19 +941,7 @@ export async function createJournalEntryForPaymentOrder(
             tradeName: true,
           }
         },
-        payments: {
-          select: {
-            paymentMethod: true,
-            amount: true,
-            cashRegisterId: true,
-            bankAccountId: true,
-            checkNumber: true,
-            endorsedCheckId: true,
-            cashRegister: { select: { name: true, accountId: true } },
-            bankAccount: { select: { bankName: true, accountNumber: true, accountId: true } },
-            card: { select: { name: true, ownerType: true } },
-          },
-        },
+        payments: { select: PAYMENT_ORDER_PAYMENT_SELECT },
         withholdings: {
           select: {
             taxType: true,
@@ -926,30 +969,14 @@ export async function createJournalEntryForPaymentOrder(
       throw new BusinessError(buildMissingSettingsAccountsMessage(documentLabel, missingSettings));
     }
 
-    // Clasificar → bloquear por caja/banco sin cuenta → recién ahí restar los omitidos.
+    // Clasificar → bloquear por cuenta faltante → recién ahí restar los omitidos.
     // La tarjeta de socio se decide antes que el banco: la empresa no mueve fondos ahora.
-    const endorsedIds = paymentOrder.payments.flatMap((p) =>
-      p.endorsedCheckId ? [p.endorsedCheckId] : []
-    );
-    const endorsedChecks = endorsedIds.length
-      ? await tx.check.findMany({
-          where: { id: { in: endorsedIds } },
-          select: {
-            id: true,
-            accountId: true,
-            customerId: true,
-            isElectronic: true,
-            bankAccount: { select: { accountId: true } },
-          },
-        })
-      : [];
-    const endorsedById = new Map(endorsedChecks.map((c) => [c.id, c]));
     const { resolved, missing, omitted, omittedAmount } = classifyPayments(
-      paymentOrder.payments.map((p) => ({
-        ...p,
-        amount: Number(p.amount),
-        endorsedCheck: p.endorsedCheckId ? (endorsedById.get(p.endorsedCheckId) ?? null) : null,
-      })),
+      await withEndorsedChecks(
+        tx,
+        companyId,
+        paymentOrder.payments.map((p) => ({ ...p, amount: Number(p.amount) }))
+      ),
       settings,
       'paymentOrder'
     );
@@ -964,8 +991,8 @@ export async function createJournalEntryForPaymentOrder(
     const lines: JournalEntryLineInput[] = [];
 
     // Debe: Cuentas por Pagar (pasivo disminuye) por el importe contabilizable.
-    // TSK-728: cheque propio/endosado, tarjeta de crédito, tarjeta de socio y cuenta corriente
-    // no entran al asiento; la cuenta por pagar queda con ese saldo hasta regularizar (plan 2.4-1).
+    // Solo "Cuenta Corriente" queda fuera del asiento (TSK-735): la cuenta por pagar queda
+    // con ese saldo hasta regularizar (TSK-728, plan 2.4-1).
     lines.push({
       accountId: settings.payablesAccountId,
       debit: Math.round((total - omittedAmount) * 100) / 100,
@@ -974,18 +1001,8 @@ export async function createJournalEntryForPaymentOrder(
       supplierId: paymentOrder.supplierId ?? undefined,
     });
 
-    // Haber: Caja/Banco (activo disminuye) por cada pago con cuenta
-    for (const { payment, accountId, source } of resolved) {
-      const isCash = source === 'cashRegister' || source === 'defaultCash';
-      lines.push({
-        accountId,
-        debit: 0,
-        credit: payment.amount,
-        description: isCash
-          ? `Pago en efectivo - ${paymentOrder.fullNumber}`
-          : `Pago bancario - ${paymentOrder.fullNumber}`,
-      });
-    }
+    // Haber: la cuenta de cada pago (caja, banco, valores, tarjetas, deuda con socios)
+    lines.push(...paymentCreditLines(resolved, paymentOrder.fullNumber));
 
     // Haber: Retenciones Emitidas (pasivo, por pagar a AFIP)
     for (const withholding of paymentOrder.withholdings) {
@@ -1021,6 +1038,136 @@ export async function createJournalEntryForPaymentOrder(
     return entryId;
   } catch (error) {
     logger.error('Error al crear asiento para orden de pago', {
+      data: { error, paymentOrderId, companyId },
+    });
+    throw error;
+  }
+}
+
+/** Haber de una OP: una línea por pago resuelto; el endoso histórico lleva el cliente del cheque. */
+function paymentCreditLines(
+  resolved: readonly {
+    payment: PaymentAccountCheck;
+    accountId: string;
+    source: ResolvedPaymentSource;
+    customerId?: string | null;
+  }[],
+  docNumber: string
+): JournalEntryLineInput[] {
+  return resolved.map((item) => ({
+    accountId: item.accountId,
+    debit: 0,
+    credit: item.payment.amount,
+    description: paymentLineDescription('paymentOrder', item, docNumber),
+    customerId: item.customerId ?? undefined,
+  }));
+}
+
+// ============================================
+// INTEGRACIÓN: Orden de Pago de devolución a socio (TSK-735)
+// ============================================
+
+/**
+ * Asiento de la OP que devuelve a un socio lo que adelantó con su tarjeta:
+ * Debe la cuenta de cada cuota saldada por esta OP (Deudas con socios; Cuentas por Pagar
+ * con el proveedor de la OP de origen si la cuota es histórica, sin cuenta), agrupado por
+ * cuenta y proveedor; Haber la cuenta de cada pago. Pre-validado en confirmPaymentOrder;
+ * acá defensa en profundidad.
+ */
+export async function createJournalEntryForPartnerRepayment(
+  paymentOrderId: string,
+  companyId: string,
+  tx: PrismaTransactionClient,
+  opts?: DocumentEntryOptions
+): Promise<string> {
+  try {
+    const order = await tx.paymentOrder.findFirst({
+      where: { id: paymentOrderId, companyId },
+      select: {
+        fullNumber: true,
+        date: true,
+        partner: { select: { name: true } },
+        payments: { select: PAYMENT_ORDER_PAYMENT_SELECT },
+        settledInstallments: {
+          select: {
+            amount: true,
+            accountId: true,
+            paymentOrder: { select: { supplierId: true } },
+          },
+        },
+      },
+    });
+    if (!order?.partner) {
+      throw new BusinessError('Orden de pago de devolución a socio no encontrada');
+    }
+
+    const documentLabel = `la orden de pago ${order.fullNumber}`;
+    const settings = await getAccountingSettings(companyId, tx);
+    const description = `Devolución a socio ${order.partner.name} - ${order.fullNumber}`;
+
+    // Debe: una línea por (cuenta, proveedor), sumando las cuotas en centavos.
+    const debitByKey = new Map<string, { accountId: string; supplierId?: string; cents: number }>();
+    for (const installment of order.settledInstallments) {
+      const isLegacy = !installment.accountId;
+      const accountId = installment.accountId ?? settings.payablesAccountId;
+      if (!accountId) {
+        throw new BusinessError(
+          buildMissingSettingsAccountsMessage(documentLabel, ['payablesAccountId'])
+        );
+      }
+      const supplierId = isLegacy ? (installment.paymentOrder.supplierId ?? undefined) : undefined;
+      const key = `${accountId}|${supplierId ?? ''}`;
+      const group = debitByKey.get(key) ?? { accountId, supplierId, cents: 0 };
+      group.cents += Math.round(Number(installment.amount) * 100);
+      debitByKey.set(key, group);
+    }
+    if (debitByKey.size === 0) {
+      throw new BusinessError(
+        `No se puede confirmar ${documentLabel}: no tiene cuotas a devolver.`
+      );
+    }
+
+    // Haber: los pagos. Uno sin línea (Cuenta Corriente) descuadraría el asiento: bloquea.
+    const { resolved, missing, omitted } = classifyPayments(
+      await withEndorsedChecks(
+        tx,
+        companyId,
+        order.payments.map((p) => ({ ...p, amount: Number(p.amount) }))
+      ),
+      settings,
+      'paymentOrder'
+    );
+    if (missing.length > 0) {
+      throw new BusinessError(buildMissingPaymentAccountMessage(documentLabel, missing[0]));
+    }
+    if (omitted.length > 0) {
+      throw new BusinessError(buildPartnerRepaymentOmittedMessage(documentLabel, omitted[0]));
+    }
+
+    const lines: JournalEntryLineInput[] = [
+      ...[...debitByKey.values()].map((group) => ({
+        accountId: group.accountId,
+        debit: group.cents / 100,
+        credit: 0,
+        description,
+        supplierId: group.supplierId,
+      })),
+      ...paymentCreditLines(resolved, order.fullNumber),
+    ];
+
+    return await createJournalEntry(
+      {
+        companyId,
+        date: order.date,
+        description,
+        lines,
+        source: `partner-repayment:${paymentOrderId}`,
+      },
+      tx,
+      opts
+    );
+  } catch (error) {
+    logger.error('Error al crear asiento para devolución a socio', {
       data: { error, paymentOrderId, companyId },
     });
     throw error;

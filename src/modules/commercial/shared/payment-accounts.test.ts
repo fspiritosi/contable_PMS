@@ -5,10 +5,12 @@ import { ACCOUNTING_SETTINGS_PATH } from '@/shared/lib/accounts/settings-account
 import {
   buildMissingPaymentAccountMessage,
   buildOmittedPaymentWarning,
-  buildPartnerOrderWarning,
+  buildPartnerRepaymentOmittedMessage,
   buildSingleLineEntryMessage,
   classifyPayments,
   describePayment,
+  endorsedEcheqLabel,
+  paymentBankLabel,
   resolvePaymentAccount,
   type EntryDocumentKind,
   type PaymentAccountCheck,
@@ -545,10 +547,95 @@ describe('asiento de una sola línea', () => {
   });
 });
 
-describe('OP de devolución a socio', () => {
-  it('avisa que no genera asiento', () => {
-    expect(buildPartnerOrderWarning()).toBe(
-      'Las órdenes de pago a socios no generan asiento contable.'
+describe('OP de devolución a socio (TSK-735)', () => {
+  it('un pago sin línea bloquea: el Debe son las cuotas y el asiento descuadraría', () => {
+    expect(
+      buildPartnerRepaymentOmittedMessage('la orden de pago OP-00007', {
+        payment: pago({ paymentMethod: 'ACCOUNT', amount: 400 }),
+        reason: 'ACCOUNT',
+      })
+    ).toBe(
+      'No se puede confirmar la orden de pago OP-00007: Cuenta Corriente por $\u00a0400,00 no ' +
+        'genera línea en el asiento contable ("Cuenta Corriente" no representa un movimiento de ' +
+        'fondos) y la devolución al socio tiene que salir de una caja, un banco o un cheque. ' +
+        'Elegí otro medio de pago.'
+    );
+  });
+});
+
+describe('cheque endosado inexistente o e-cheq endosado sin banco (TSK-735)', () => {
+  const colgado = pago({ paymentMethod: 'CHECK', endorsedCheckId: 'chk', endorsedCheck: null });
+
+  it('endorsedCheckId sin cheque cargado → falta, no cae al histórico', () => {
+    expect(resolve(colgado, { receivablesAccountId: 'cobrar' }, 'paymentOrder')).toEqual({
+      kind: 'missing',
+      via: 'endorsedCheckNotFound',
+    });
+    expect(resolve({ ...colgado, endorsedCheck: undefined }, CON_DEFAULTS, 'paymentOrder')).toEqual(
+      { kind: 'missing', via: 'endorsedCheckNotFound' }
+    );
+  });
+
+  it('el mensaje manda a Tesorería → Cheques', () => {
+    expect(
+      buildMissingPaymentAccountMessage('la orden de pago OP-00003', {
+        via: 'endorsedCheckNotFound',
+        payment: colgado,
+      })
+    ).toBe(
+      'No se puede confirmar la orden de pago OP-00003: el cheque endosado ya no existe en ' +
+        'Tesorería → Cheques.'
+    );
+  });
+
+  const echeq = (
+    bankAccount: { accountId: string | null; bankName: string; accountNumber: string } | null
+  ) =>
+    pago({
+      paymentMethod: 'ECHEQ',
+      endorsedCheckId: 'chk',
+      endorsedCheck: {
+        accountId: null,
+        customerId: 'c1',
+        isElectronic: true,
+        checkNumber: 'E-77',
+        bankAccount,
+      },
+    });
+
+  it('e-cheq endosado con banco sin cuenta: nombra el banco del cheque, no el de la línea', () => {
+    const payment = echeq({ accountId: null, bankName: 'Banco Nación', accountNumber: '999' });
+    expect(paymentBankLabel(payment)).toBe('Banco Nación 999');
+    expect(
+      buildMissingPaymentAccountMessage('la orden de pago OP-00003', {
+        via: 'noBankAccount',
+        payment,
+      })
+    ).toBe(
+      'No se puede confirmar la orden de pago OP-00003: la cuenta bancaria "Banco Nación 999" del ' +
+        'e-cheq endosado N° E-77 no tiene cuenta contable asociada. Configurala en Tesorería → ' +
+        'Cuentas Bancarias o definí el "Banco por Defecto" en Contabilidad → Configuración.'
+    );
+  });
+
+  it('e-cheq endosado sin banco: lo nombra por su número', () => {
+    const payment = echeq(null);
+    expect(paymentBankLabel(payment)).toBeNull();
+    expect(endorsedEcheqLabel(payment)).toBe('e-cheq endosado N° E-77');
+    expect(
+      buildMissingPaymentAccountMessage('la orden de pago OP-00003', {
+        via: 'noBankAccount',
+        payment,
+      })
+    ).toBe(
+      'No se puede confirmar la orden de pago OP-00003: el e-cheq endosado N° E-77 no tiene ' +
+        'cuenta bancaria. Definí el "Banco por Defecto" en Contabilidad → Configuración.'
+    );
+  });
+
+  it('pago con banco propio: la etiqueta es la de la línea', () => {
+    expect(paymentBankLabel(pago({ bankAccountId: 'b', bankAccount: BANCO }))).toBe(
+      'Banco Galicia 123-456'
     );
   });
 });

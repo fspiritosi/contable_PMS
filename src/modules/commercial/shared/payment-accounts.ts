@@ -19,8 +19,9 @@
  * Valores diferidos a pagar, Tarjetas de crédito a pagar, Deudas con socios).
  * Orden de resolución: tarjeta de socio → cheque recibido (RC) → cheque
  * endosado (OP; con cuenta registrada, histórico físico a Cuentas por Cobrar o
- * e-cheq al banco del cheque) → cheque propio (OP) → tarjeta de crédito de la
- * empresa (solo OP) → "Cuenta Corriente" → cadena de caja/banco.
+ * e-cheq al banco del cheque; si el cheque ya no existe, bloquea) → cheque
+ * propio (OP) → tarjeta de crédito de la empresa (solo OP) → "Cuenta Corriente"
+ * → cadena de caja/banco.
  *
  * Funciones puras: sin Prisma, sin React, sin importar de features.
  */
@@ -44,12 +45,23 @@ export interface PaymentAccountCheck {
   cashRegister?: { name: string; accountId: string | null } | null;
   bankAccount?: { bankName: string; accountNumber: string; accountId: string | null } | null;
   card?: { name: string; ownerType: 'COMPANY' | 'PARTNER' } | null;
-  /** Cheque endosado en una OP, con la cuenta con la que ingresó (null = histórico). */
-  endorsedCheck?: {
+  /**
+   * Cheque endosado en una OP, con la cuenta con la que ingresó (`accountId` null = histórico).
+   * `null` con `endorsedCheckId` cargado = el cheque ya no existe en la empresa: bloquea.
+   */
+  endorsedCheck?: EndorsedCheckInfo | null;
+}
+
+/** Lo que la resolución necesita del cheque endosado (ver `loadEndorsedChecks`). */
+export interface EndorsedCheckInfo {
+  accountId: string | null;
+  customerId: string | null;
+  isElectronic: boolean;
+  checkNumber?: string | null;
+  bankAccount: {
     accountId: string | null;
-    customerId: string | null;
-    isElectronic: boolean;
-    bankAccount: { accountId: string | null } | null;
+    bankName?: string;
+    accountNumber?: string;
   } | null;
 }
 
@@ -82,6 +94,7 @@ export type MissingPaymentAccountVia =
   | 'bankAccount'
   | 'noCashRegister'
   | 'noBankAccount'
+  | 'endorsedCheckNotFound'
   | 'settings:checksReceivedAccountId'
   | 'settings:checksPayableAccountId'
   | 'settings:creditCardsPayableAccountId'
@@ -160,22 +173,23 @@ function resolveEndorsedCheck(
   settings: PaymentAccountSettings
 ): PaymentAccountResolution {
   const check = payment.endorsedCheck;
-  if (check?.accountId) {
+  // Id colgado (cheque borrado o de otra empresa): no se cae en silencio al histórico.
+  if (!check) return { kind: 'missing', via: 'endorsedCheckNotFound' };
+  if (check.accountId) {
     return { kind: 'resolved', accountId: check.accountId, source: 'endorsedCheck' };
   }
-  const isElectronic = check?.isElectronic ?? payment.paymentMethod === 'ECHEQ';
-  if (!isElectronic) {
+  if (!check.isElectronic) {
     const receivables = settings.receivablesAccountId || null;
     return receivables
       ? {
           kind: 'resolved',
           accountId: receivables,
           source: 'endorsedLegacyReceivable',
-          customerId: check?.customerId ?? null,
+          customerId: check.customerId,
         }
       : { kind: 'missing', via: 'settings:receivablesAccountId' };
   }
-  const bankAccountId = check?.bankAccount?.accountId || null;
+  const bankAccountId = check.bankAccount?.accountId || null;
   if (bankAccountId) return { kind: 'resolved', accountId: bankAccountId, source: 'bankAccount' };
   const defaultBank = settings.defaultBankAccountId || null;
   return defaultBank
@@ -299,6 +313,24 @@ function bankAccountLabel(bank: { bankName: string; accountNumber: string }): st
   return `${bank.bankName} ${bank.accountNumber}`;
 }
 
+/**
+ * Cuenta bancaria por la que va un pago con banco: la de la línea o, en un e-cheq
+ * endosado, la del cheque (la línea de la OP no la tiene). `null` si no hay banco que nombrar.
+ */
+export function paymentBankLabel(payment: PaymentAccountCheck): string | null {
+  if (payment.endorsedCheckId) {
+    const bank = payment.endorsedCheck?.bankAccount;
+    return bank?.bankName ? `${bank.bankName} ${bank.accountNumber ?? ''}`.trim() : null;
+  }
+  return payment.bankAccount ? bankAccountLabel(payment.bankAccount) : null;
+}
+
+/** «e-cheq endosado N° 123» (sin artículo), para los mensajes del endoso histórico electrónico. */
+export function endorsedEcheqLabel(payment: PaymentAccountCheck): string {
+  const number = payment.endorsedCheck?.checkNumber || payment.checkNumber;
+  return number ? `e-cheq endosado N° ${number}` : 'e-cheq endosado';
+}
+
 /** «Cheque N° 123 por $ 1.000,00», «Transferencia (Banco Galicia 123-456) por $ …». */
 export function describePayment(payment: PaymentAccountCheck): string {
   const method = PAYMENT_METHOD_LABELS[payment.paymentMethod];
@@ -329,6 +361,8 @@ export function buildMissingPaymentAccountMessage(
   }
 
   switch (via) {
+    case 'endorsedCheckNotFound':
+      return `${prefix} el cheque endosado ya no existe en Tesorería → Cheques.`;
     case 'cashRegister':
       return (
         `${prefix} la caja "${payment.cashRegister?.name ?? ''}" no tiene cuenta contable asociada. ` +
@@ -347,12 +381,24 @@ export function buildMissingPaymentAccountMessage(
         `${formatCurrency(payment.amount)} no tiene caja asignada. Editá el comprobante y elegí la caja.`
       );
     case 'noBankAccount':
+      if (payment.endorsedCheckId) return endorsedEcheqWithoutBankMessage(prefix, payment);
       return (
         `${prefix} el pago en ${PAYMENT_METHOD_LABELS[payment.paymentMethod]} de ` +
         `${formatCurrency(payment.amount)} no tiene cuenta bancaria asignada. ` +
         `Editá el comprobante y elegí la cuenta bancaria.`
       );
   }
+}
+
+/** E-cheq endosado histórico sin cuenta resoluble: su banco no tiene cuenta y no hay "Banco por Defecto". */
+function endorsedEcheqWithoutBankMessage(prefix: string, payment: PaymentAccountCheck): string {
+  const echeq = endorsedEcheqLabel(payment);
+  const bank = paymentBankLabel(payment);
+  const defaultBank = `el ${settingsAccountLabel('defaultBankAccountId')} en ${ACCOUNTING_SETTINGS_PATH}`;
+  return bank
+    ? `${prefix} la cuenta bancaria "${bank}" del ${echeq} no tiene cuenta contable asociada. ` +
+        `Configurala en Tesorería → Cuentas Bancarias o definí ${defaultBank}.`
+    : `${prefix} el ${echeq} no tiene cuenta bancaria. Definí ${defaultBank}.`;
 }
 
 const OMITTED_REASON_TEXT: Record<OmittedPaymentReason, string> = {
@@ -403,7 +449,17 @@ export function buildSingleLineEntryMessage(
   );
 }
 
-/** Las OP de devolución a socio no generan asiento por diseño (sin cambio en 728). */
-export function buildPartnerOrderWarning(): string {
-  return 'Las órdenes de pago a socios no generan asiento contable.';
+/**
+ * Bloqueo de la devolución a socio (TSK-735): el Debe son las cuotas devueltas, así que un
+ * pago sin línea (Cuenta Corriente) descuadraría el asiento.
+ */
+export function buildPartnerRepaymentOmittedMessage(
+  documentLabel: string,
+  omitted: OmittedPayment<PaymentAccountCheck>
+): string {
+  return (
+    `No se puede confirmar ${documentLabel}: ${describePayment(omitted.payment)} no genera línea ` +
+    `en el asiento contable (${OMITTED_REASON_TEXT[omitted.reason]}) y la devolución al socio ` +
+    'tiene que salir de una caja, un banco o un cheque. Elegí otro medio de pago.'
+  );
 }

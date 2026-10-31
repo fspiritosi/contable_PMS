@@ -68,6 +68,10 @@ describe.skipIf(!dbAvailable)('integración: efectos de la orden de pago (TSK-79
   let bankAccountId: string;
   let creditCardId: string;
   let partnerDebitCardId: string;
+  /** TSK-735: cuentas en las que quedan el cheque propio y las cuotas. */
+  let diferidosId: string;
+  let tarjetasId: string;
+  let sociosId: string;
   let seq = 1;
 
   const cash = (amount: string): PaymentInput => ({
@@ -201,11 +205,21 @@ describe.skipIf(!dbAvailable)('integración: efectos de la orden de pago (TSK-79
       nature: 'DEBIT' | 'CREDIT'
     ) =>
       prisma.account.create({ data: { companyId, code, name: `${PREFIX}${name}`, type, nature } });
-    const [pagar, caja, banco] = await Promise.all([
+    const [pagar, caja, banco, cobrar, valores, diferidos, tarjetas, socios] = await Promise.all([
       mk('T792F-PAGAR', 'Cuentas por Pagar', 'LIABILITY', 'CREDIT'),
       mk('T792F-CAJA', 'Caja', 'ASSET', 'DEBIT'),
       mk('T792F-BANCO', 'Banco', 'ASSET', 'DEBIT'),
+      // Endoso de cheques históricos (sin cuenta): van contra Cuentas por Cobrar.
+      mk('T792F-COBRAR', 'Cuentas por Cobrar', 'ASSET', 'DEBIT'),
+      // TSK-735: cuentas de cheques y tarjetas (hojas).
+      mk('T735-VAD', 'Valores a depositar', 'ASSET', 'DEBIT'),
+      mk('T735-VDP', 'Valores diferidos a pagar', 'LIABILITY', 'CREDIT'),
+      mk('T735-TCP', 'Tarjetas de crédito a pagar', 'LIABILITY', 'CREDIT'),
+      mk('T735-DSO', 'Deudas con socios', 'LIABILITY', 'CREDIT'),
     ]);
+    diferidosId = diferidos.id;
+    tarjetasId = tarjetas.id;
+    sociosId = socios.id;
 
     await prisma.accountingSettings.create({
       data: {
@@ -213,6 +227,11 @@ describe.skipIf(!dbAvailable)('integración: efectos de la orden de pago (TSK-79
         fiscalYearStart: new Date('2026-01-01'),
         fiscalYearEnd: new Date('2026-12-31'),
         payablesAccountId: pagar.id,
+        receivablesAccountId: cobrar.id,
+        checksReceivedAccountId: valores.id,
+        checksPayableAccountId: diferidos.id,
+        creditCardsPayableAccountId: tarjetas.id,
+        partnerDebtsAccountId: socios.id,
         requireCostCenter: false,
       },
     });
@@ -371,12 +390,17 @@ describe.skipIf(!dbAvailable)('integración: efectos de la orden de pago (TSK-79
     // apply movió todo
     expect(await bankBalance()).toBe(bankBefore - 300);
     expect(await expectedBalance()).toBe(cashBefore - 200);
-    expect(await prisma.check.count({ where: { companyId, checkNumber: 'T792F-OWN-1' } })).toBe(1);
+    const ownChecks = await prisma.check.findMany({
+      where: { companyId, checkNumber: 'T792F-OWN-1' },
+      select: { accountId: true },
+    });
+    // TSK-735: el cheque propio queda en Valores diferidos a pagar y las cuotas en Tarjetas a pagar.
+    expect(ownChecks).toEqual([{ accountId: diferidosId }]);
     const installments = await prisma.paymentOrderInstallment.findMany({
       where: { paymentOrderId: id },
-      select: { id: true },
+      select: { id: true, accountId: true },
     });
-    expect(installments).toHaveLength(3);
+    expect(installments.map((i) => i.accountId)).toEqual([tarjetasId, tarjetasId, tarjetasId]);
     const orderBefore = await prisma.paymentOrder.findUniqueOrThrow({
       where: { id },
       select: { status: true, journalEntryId: true, fullNumber: true },
@@ -468,6 +492,18 @@ describe.skipIf(!dbAvailable)('integración: efectos de la orden de pago (TSK-79
     const confirmed = await confirmPaymentOrder(repayment.id);
     expect(confirmed.success).toBe(true);
     expect(await expectedBalance()).toBe(cashBefore - 400);
+    // TSK-735: la devolución genera asiento (Deudas con socios / Caja).
+    const { journalEntryId } = await prisma.paymentOrder.findUniqueOrThrow({
+      where: { id: repayment.id },
+      select: { journalEntryId: true },
+    });
+    expect(journalEntryId).not.toBeNull();
+    const entryNumber = (
+      await prisma.journalEntry.findUniqueOrThrow({
+        where: { id: journalEntryId! },
+        select: { number: true },
+      })
+    ).number;
     expect(
       (
         await prisma.paymentOrderInstallment.findUniqueOrThrow({
@@ -491,9 +527,20 @@ describe.skipIf(!dbAvailable)('integración: efectos de la orden de pago (TSK-79
     expect(await expectedBalance()).toBe(cashBefore);
     expect(await prisma.cashMovement.count({ where: { paymentOrderId: repayment.id } })).toBe(0);
 
-    // apply de la OP de socio no genera asiento
-    const result = await inTx((tx) => applyPaymentOrderEffectsTx(tx, ctx, repayment.id));
-    expect(result).toEqual({ journalEntryId: null });
+    // Reaplicar como el motor (reescribiendo el asiento) conserva asiento y número.
+    const result = await inTx((tx) =>
+      applyPaymentOrderEffectsTx(tx, ctx, repayment.id, { rewriteEntryId: journalEntryId! })
+    );
+    expect(result).toEqual({ journalEntryId });
+    const entry = await prisma.journalEntry.findUniqueOrThrow({
+      where: { id: journalEntryId! },
+      select: { number: true, lines: { select: { accountId: true, debit: true, credit: true } } },
+    });
+    expect(entry.number).toBe(entryNumber);
+    expect(entry.lines).toHaveLength(2);
+    const debit = entry.lines.find((l) => Number(l.debit) > 0);
+    expect([debit?.accountId, Number(debit?.debit)]).toEqual([sociosId, 400]);
+    expect(entry.lines.find((l) => Number(l.credit) > 0)?.credit.toString()).toBe('400');
     expect(
       (
         await prisma.paymentOrderInstallment.findUniqueOrThrow({

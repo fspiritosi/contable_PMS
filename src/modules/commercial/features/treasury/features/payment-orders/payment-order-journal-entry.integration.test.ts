@@ -3,12 +3,14 @@
  * asiento no se puede generar (TSK-728), contra la base real. Espejo de
  * `receipts/receipt-journal-entry.integration.test.ts` con lo propio de OP:
  * retenciones emitidas, cheque propio y endosado, tarjeta de crédito, tarjeta
- * de un socio y OP de devolución a socio (sin asiento por diseño, con aviso).
+ * de un socio y OP de devolución a socio. Desde TSK-735 cheques y tarjetas tienen
+ * cuenta (asiento completo, sin avisos) y la devolución a socio genera asiento.
  *
  * Se entra por los **server actions reales** (`createPaymentOrder`,
  * `createPartnerRepaymentOrder`, `confirmPaymentOrder`, `getPaymentOrderEntryPreview`).
  */
 import 'dotenv/config';
+import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { prisma } from '@/shared/lib/prisma';
@@ -62,6 +64,8 @@ interface JournalLineRow {
   accountId: string;
   debit: number;
   credit: number;
+  customerId: string | null;
+  supplierId: string | null;
 }
 
 describe.skipIf(!dbAvailable)(
@@ -70,11 +74,18 @@ describe.skipIf(!dbAvailable)(
     let companyId: string;
     let supplierId: string;
     let partnerId: string;
+    let customerId: string;
 
     let pagarId: string;
     let cajaId: string;
     let bancoId: string;
     let retIibbId: string;
+    let cobrarId: string;
+    /** TSK-735: Valores a depositar, Valores diferidos a pagar, Tarjetas a pagar, Deudas con socios. */
+    let valoresId: string;
+    let diferidosId: string;
+    let tarjetasId: string;
+    let sociosId: string;
 
     let cajaPrincipalId: string;
     let cajaPrincipalSessionId: string;
@@ -86,6 +97,9 @@ describe.skipIf(!dbAvailable)(
     let debitCardEmpresaId: string;
     let debitCardSocioId: string;
     let chequeTerceroId: string;
+    /** Cheques de tercero de antes de TSK-735 (sin cuenta registrada). */
+    let chequeHistoricoId: string;
+    let echeqHistoricoId: string;
     /** Cuota del socio generada en el caso 8 y devuelta en el caso 10. */
     let partnerInstallmentId: string;
 
@@ -161,17 +175,20 @@ describe.skipIf(!dbAvailable)(
       if (!order.journalEntryId) throw new Error('La orden de pago no tiene asiento generado');
       const rows = await prisma.journalEntryLine.findMany({
         where: { entryId: order.journalEntryId },
-        select: { accountId: true, debit: true, credit: true },
+        select: { accountId: true, debit: true, credit: true, customerId: true, supplierId: true },
       });
       return rows.map((r) => ({
         accountId: r.accountId,
         debit: Number(r.debit),
         credit: Number(r.credit),
+        customerId: r.customerId,
+        supplierId: r.supplierId,
       }));
     }
 
     const setSettings = (data: {
       payablesAccountId?: string | null;
+      partnerDebtsAccountId?: string | null;
       lockedUntilDate?: Date | null;
     }) => prisma.accountingSettings.update({ where: { companyId }, data });
 
@@ -191,16 +208,28 @@ describe.skipIf(!dbAvailable)(
           data: { companyId, code, name: `${PREFIX}${name}`, type, nature },
         });
 
-      const [pagar, caja, banco, retIibb] = await Promise.all([
-        mk('T728O-PAGAR', 'Cuentas por Pagar', 'LIABILITY', 'CREDIT'),
-        mk('T728O-CAJA', 'Caja', 'ASSET', 'DEBIT'),
-        mk('T728O-BANCO', 'Banco', 'ASSET', 'DEBIT'),
-        mk('T728O-RET-IIBB', 'Ret IIBB Emitida', 'LIABILITY', 'CREDIT'),
-      ]);
+      const [pagar, caja, banco, retIibb, cobrar, valores, diferidos, tarjetas, socios] =
+        await Promise.all([
+          mk('T728O-PAGAR', 'Cuentas por Pagar', 'LIABILITY', 'CREDIT'),
+          mk('T728O-CAJA', 'Caja', 'ASSET', 'DEBIT'),
+          mk('T728O-BANCO', 'Banco', 'ASSET', 'DEBIT'),
+          mk('T728O-RET-IIBB', 'Ret IIBB Emitida', 'LIABILITY', 'CREDIT'),
+          mk('T728O-COBRAR', 'Cuentas por Cobrar', 'ASSET', 'DEBIT'),
+          // TSK-735: cuentas de cheques y tarjetas (hojas).
+          mk('T735-VAD', 'Valores a depositar', 'ASSET', 'DEBIT'),
+          mk('T735-VDP', 'Valores diferidos a pagar', 'LIABILITY', 'CREDIT'),
+          mk('T735-TCP', 'Tarjetas de crédito a pagar', 'LIABILITY', 'CREDIT'),
+          mk('T735-DSO', 'Deudas con socios', 'LIABILITY', 'CREDIT'),
+        ]);
       pagarId = pagar.id;
       cajaId = caja.id;
       bancoId = banco.id;
       retIibbId = retIibb.id;
+      cobrarId = cobrar.id;
+      valoresId = valores.id;
+      diferidosId = diferidos.id;
+      tarjetasId = tarjetas.id;
+      sociosId = socios.id;
 
       await prisma.accountingSettings.create({
         data: {
@@ -208,7 +237,12 @@ describe.skipIf(!dbAvailable)(
           fiscalYearStart: new Date('2026-01-01'),
           fiscalYearEnd: new Date('2026-12-31'),
           payablesAccountId: pagarId,
+          receivablesAccountId: cobrarId,
           withholdingIibbEmittedAccountId: retIibbId,
+          checksReceivedAccountId: valoresId,
+          checksPayableAccountId: diferidosId,
+          creditCardsPayableAccountId: tarjetasId,
+          partnerDebtsAccountId: sociosId,
           // "Caja por Defecto" y "Banco por Defecto" vacías a propósito.
           requireCostCenter: false,
         },
@@ -226,6 +260,12 @@ describe.skipIf(!dbAvailable)(
         select: { id: true },
       });
       supplierId = supplier.id;
+
+      const customer = await prisma.contractor.create({
+        data: { companyId, name: `${PREFIX}Cliente` },
+        select: { id: true },
+      });
+      customerId = customer.id;
 
       const register = await prisma.cashRegister.create({
         data: {
@@ -301,22 +341,36 @@ describe.skipIf(!dbAvailable)(
       debitCardEmpresaId = debitEmpresa.id;
       debitCardSocioId = debitSocio.id;
 
-      const cheque = await prisma.check.create({
-        data: {
-          companyId,
-          type: 'THIRD_PARTY',
-          status: 'PORTFOLIO',
-          checkNumber: 'T728O-CH-001',
-          bankName: 'Banco del Cliente',
-          amount: 1000,
-          issueDate: new Date('2026-02-01'),
-          dueDate: new Date('2026-05-01'),
-          drawerName: `${PREFIX}Cliente librador`,
-          createdBy: 'test',
-        },
-        select: { id: true },
-      });
-      chequeTerceroId = cheque.id;
+      const mkThirdPartyCheck = (
+        checkNumber: string,
+        extra: { accountId?: string; isElectronic?: boolean; bankAccountId?: string } = {}
+      ) =>
+        prisma.check.create({
+          data: {
+            companyId,
+            type: 'THIRD_PARTY',
+            status: 'PORTFOLIO',
+            checkNumber,
+            bankName: 'Banco del Cliente',
+            amount: 1000,
+            issueDate: new Date('2026-02-01'),
+            dueDate: new Date('2026-05-01'),
+            drawerName: `${PREFIX}Cliente librador`,
+            customerId,
+            createdBy: 'test',
+            ...extra,
+          },
+          select: { id: true },
+        });
+      // Ingresó por un RC de TSK-735: registrado en Valores a depositar.
+      chequeTerceroId = (await mkThirdPartyCheck('T728O-CH-001', { accountId: valoresId })).id;
+      chequeHistoricoId = (await mkThirdPartyCheck('T735-CH-HIST')).id;
+      echeqHistoricoId = (
+        await mkThirdPartyCheck('T735-ECH-HIST', {
+          isElectronic: true,
+          bankAccountId: bancoConCuentaId,
+        })
+      ).id;
 
       vi.mocked(getActiveCompanyId).mockResolvedValue(companyId);
       vi.mocked(getCurrentUserId).mockResolvedValue('test-user');
@@ -340,6 +394,7 @@ describe.skipIf(!dbAvailable)(
         await prisma.journalEntry.deleteMany({ where: { companyId } });
         await prisma.purchaseInvoice.deleteMany({ where: { companyId } });
         await prisma.supplier.deleteMany({ where: { companyId } });
+        await prisma.contractor.deleteMany({ where: { companyId } });
         await prisma.accountingSettings.deleteMany({ where: { companyId } });
         await prisma.account.deleteMany({ where: { companyId } });
         await prisma.company.deleteMany({ where: { id: companyId } });
@@ -448,31 +503,30 @@ describe.skipIf(!dbAvailable)(
       expect(lines.find((l) => l.accountId === pagarId)?.debit).toBe(1000);
     });
 
-    it('caso 5: cheque propio + efectivo → confirma con aviso; asiento de dos líneas por el importe contabilizable; cheque OWN entregado', async () => {
+    it('caso 5 (TSK-735): cheque propio + efectivo → sin avisos; Debe Pagar 1000 / Haber Valores diferidos a pagar 400 + Caja 600; cheque OWN con su cuenta', async () => {
       const { id } = await createDraft([ownCheckPayment('400', 'T728O-OWN-1'), cashPayment('600')]);
 
       const result = await confirmPaymentOrder(id);
       expect(result.success).toBe(true);
       if (!result.success) return;
-      expect(result.warnings).toHaveLength(1);
-      expect(result.warnings[0]).toContain('Cheque N° T728O-OWN-1');
-      expect(result.warnings[0]).toContain('no genera línea');
-      expect(result.warnings[0]).toContain('Cuentas por Pagar');
+      expect(result.warnings).toEqual([]);
 
       const lines = await fetchEntryLines(id);
-      expect(lines).toHaveLength(2);
-      expect(lines.find((l) => l.accountId === pagarId)?.debit).toBe(600);
+      expect(lines).toHaveLength(3);
+      expect(lines.find((l) => l.accountId === pagarId)?.debit).toBe(1000);
+      expect(lines.find((l) => l.accountId === diferidosId)?.credit).toBe(400);
       expect(lines.find((l) => l.accountId === cajaId)?.credit).toBe(600);
 
       const check = await prisma.check.findFirst({
         where: { companyId, checkNumber: 'T728O-OWN-1' },
-        select: { type: true, status: true },
+        select: { type: true, status: true, accountId: true },
       });
       expect(check?.type).toBe('OWN');
       expect(check?.status).toBe('DELIVERED');
+      expect(check?.accountId).toBe(diferidosId);
     });
 
-    it('caso 6: solo cheque de tercero endosado → bloqueado por una sola línea; el cheque sigue en cartera', async () => {
+    it('caso 6 (TSK-735): solo cheque de tercero endosado con cuenta → confirma; Debe Pagar / Haber Valores a depositar', async () => {
       const { id } = await createDraft([
         {
           paymentMethod: 'CHECK',
@@ -483,19 +537,86 @@ describe.skipIf(!dbAvailable)(
       ]);
 
       const result = await confirmPaymentOrder(id);
-      expect(result.success).toBe(false);
-      if (result.success) return;
-      expect(result.error).toContain('una sola línea');
+      expect(result.success).toBe(true);
+      if (!result.success) return;
+      expect(result.warnings).toEqual([]);
 
-      expect((await readOrder(id)).status).toBe('DRAFT');
+      const lines = await fetchEntryLines(id);
+      expect(lines).toHaveLength(2);
+      expect(lines.find((l) => l.accountId === pagarId)?.debit).toBe(1000);
+      expect(lines.find((l) => l.accountId === valoresId)).toMatchObject({
+        credit: 1000,
+        customerId: null,
+      });
       const check = await prisma.check.findUniqueOrThrow({
         where: { id: chequeTerceroId },
-        select: { status: true },
+        select: { status: true, accountId: true },
       });
-      expect(check.status).toBe('PORTFOLIO');
+      expect(check).toEqual({ status: 'ENDORSED', accountId: valoresId });
     });
 
-    it('caso 7: solo tarjeta de crédito de la empresa en 3 cuotas → bloqueado; sin cuotas generadas', async () => {
+    it('TSK-735: endoso de un cheque histórico (sin cuenta) → Haber Cuentas por Cobrar con el cliente del cheque', async () => {
+      const { id } = await createDraft([
+        {
+          paymentMethod: 'CHECK',
+          amount: '1000',
+          checkOwnership: 'THIRD_PARTY',
+          endorsedCheckId: chequeHistoricoId,
+        },
+      ]);
+
+      const result = await confirmPaymentOrder(id);
+      expect(result.success).toBe(true);
+      if (!result.success) return;
+      expect(result.warnings).toEqual([]);
+
+      const lines = await fetchEntryLines(id);
+      expect(lines).toHaveLength(2);
+      expect(lines.find((l) => l.accountId === pagarId)?.debit).toBe(1000);
+      expect(lines.find((l) => l.accountId === cobrarId)).toMatchObject({
+        credit: 1000,
+        customerId,
+      });
+    });
+
+    it('TSK-735: e-cheq histórico endosado → la vista previa nombra el banco del cheque, no un banco vacío', async () => {
+      const { id } = await createDraft([
+        {
+          paymentMethod: 'ECHEQ',
+          amount: '1000',
+          checkOwnership: 'THIRD_PARTY',
+          endorsedCheckId: echeqHistoricoId,
+        },
+      ]);
+
+      const preview = await getPaymentOrderEntryPreview(id);
+      expect(preview.error).toBeNull();
+      expect(preview.accounts.map((a) => a.concept)).toEqual([
+        'Cuentas por Pagar',
+        `Banco "${PREFIX}Banco con cuenta T728O-0001"`,
+      ]);
+    });
+
+    it('TSK-735: cheque endosado que ya no existe → bloqueado en la vista previa y al confirmar', async () => {
+      const { id } = await createDraft([
+        {
+          paymentMethod: 'CHECK',
+          amount: '1000',
+          checkOwnership: 'THIRD_PARTY',
+          endorsedCheckId: randomUUID(),
+        },
+      ]);
+      const expected = `No se puede confirmar la orden de pago ${(await readOrder(id)).fullNumber}: el cheque endosado ya no existe en Tesorería → Cheques.`;
+
+      expect((await getPaymentOrderEntryPreview(id)).error).toBe(expected);
+      const result = await confirmPaymentOrder(id);
+      expect(result.success).toBe(false);
+      if (result.success) return;
+      expect(result.error).toBe(expected);
+      expect((await readOrder(id)).status).toBe('DRAFT');
+    });
+
+    it('caso 7 (TSK-735): solo tarjeta de crédito de la empresa en 3 cuotas → confirma; Haber Tarjetas de crédito a pagar; 3 cuotas con su cuenta', async () => {
       const { id } = await createDraft([
         {
           paymentMethod: 'CREDIT_CARD',
@@ -506,19 +627,28 @@ describe.skipIf(!dbAvailable)(
       ]);
 
       const result = await confirmPaymentOrder(id);
-      expect(result.success).toBe(false);
-      if (result.success) return;
-      expect(result.error).toContain('una sola línea');
-      expect(result.error).toContain(`Tarjeta de Crédito (${PREFIX}Visa Empresa)`);
+      expect(result.success).toBe(true);
+      if (!result.success) return;
+      expect(result.warnings).toEqual([]);
 
-      expect((await readOrder(id)).status).toBe('DRAFT');
-      const installments = await prisma.paymentOrderInstallment.count({
+      const lines = await fetchEntryLines(id);
+      expect(lines).toHaveLength(2);
+      expect(lines.find((l) => l.accountId === pagarId)?.debit).toBe(1000);
+      expect(lines.find((l) => l.accountId === tarjetasId)?.credit).toBe(1000);
+
+      const installments = await prisma.paymentOrderInstallment.findMany({
         where: { paymentOrderId: id },
+        select: { accountId: true, amount: true, partnerId: true },
+        orderBy: { number: 'asc' },
       });
-      expect(installments).toBe(0);
+      expect(installments.map((i) => [i.accountId, Number(i.amount), i.partnerId])).toEqual([
+        [tarjetasId, 333.34, null],
+        [tarjetasId, 333.33, null],
+        [tarjetasId, 333.33, null],
+      ]);
     });
 
-    it('caso 8: tarjeta de débito de un socio (con banco cargado) + efectivo → aviso; el asiento no toca el banco; cuota del socio creada', async () => {
+    it('caso 8 (TSK-735): tarjeta de débito de un socio (con banco cargado) + efectivo → sin avisos; Haber Deudas con socios; el asiento no toca el banco; cuota del socio con su cuenta', async () => {
       const { id } = await createDraft([
         {
           paymentMethod: 'DEBIT_CARD',
@@ -532,22 +662,23 @@ describe.skipIf(!dbAvailable)(
       const result = await confirmPaymentOrder(id);
       expect(result.success).toBe(true);
       if (!result.success) return;
-      expect(result.warnings).toHaveLength(1);
-      expect(result.warnings[0]).toContain('tarjeta es de un socio');
+      expect(result.warnings).toEqual([]);
 
       const lines = await fetchEntryLines(id);
-      expect(lines).toHaveLength(2);
-      expect(lines.find((l) => l.accountId === pagarId)?.debit).toBe(600);
+      expect(lines).toHaveLength(3);
+      expect(lines.find((l) => l.accountId === pagarId)?.debit).toBe(1000);
+      expect(lines.find((l) => l.accountId === sociosId)?.credit).toBe(400);
       expect(lines.find((l) => l.accountId === cajaId)?.credit).toBe(600);
       expect(lines.find((l) => l.accountId === bancoId)).toBeUndefined();
 
       const installment = await prisma.paymentOrderInstallment.findFirstOrThrow({
         where: { paymentOrderId: id },
-        select: { id: true, partnerId: true, status: true, amount: true },
+        select: { id: true, partnerId: true, status: true, amount: true, accountId: true },
       });
       expect(installment.partnerId).toBe(partnerId);
       expect(installment.status).toBe('PENDING');
       expect(Number(installment.amount)).toBe(400);
+      expect(installment.accountId).toBe(sociosId);
       partnerInstallmentId = installment.id;
 
       const bankMovements = await prisma.bankMovement.count({
@@ -568,7 +699,7 @@ describe.skipIf(!dbAvailable)(
       expect((await readOrder(id)).status).toBe('DRAFT');
     });
 
-    it('caso 10: OP de devolución a socio en efectivo → confirma con el aviso, sin asiento; egreso de caja; cuota PAID', async () => {
+    it('caso 10 (TSK-735): OP de devolución a socio en efectivo → asiento Debe Deudas con socios / Haber Caja, sin avisos; egreso de caja; cuota PAID', async () => {
       const created = await createPartnerRepaymentOrder({
         partnerId,
         date: ORDER_DATE,
@@ -577,16 +708,37 @@ describe.skipIf(!dbAvailable)(
         payments: [cashPayment('400')],
       });
 
+      const preview = await getPaymentOrderEntryPreview(created.id);
+      expect(preview.error).toBeNull();
+      expect(preview.accounts.map((a) => a.concept)).toEqual([
+        'Cuotas devueltas al socio',
+        `Caja "${PREFIX}Caja principal"`,
+      ]);
+
       const result = await confirmPaymentOrder(created.id);
       expect(result.success).toBe(true);
       if (!result.success) return;
-      expect(result.warnings).toContain(
-        'Las órdenes de pago a socios no generan asiento contable.'
-      );
+      expect(result.warnings).toEqual([]);
 
       const order = await readOrder(created.id);
       expect(order.status).toBe('CONFIRMED');
-      expect(order.journalEntryId).toBeNull();
+      expect(order.journalEntryId).not.toBeNull();
+      const lines = await fetchEntryLines(created.id);
+      expect(lines).toHaveLength(2);
+      expect(lines.find((l) => l.accountId === sociosId)).toMatchObject({
+        debit: 400,
+        supplierId: null,
+      });
+      expect(lines.find((l) => l.accountId === cajaId)?.credit).toBe(400);
+      const entry = await prisma.journalEntry.findUniqueOrThrow({
+        where: { id: order.journalEntryId! },
+        select: { description: true, status: true, createdBy: true },
+      });
+      expect(entry).toEqual({
+        description: `Devolución a socio ${PREFIX}Socia - ${order.fullNumber}`,
+        status: 'DRAFT',
+        createdBy: 'system',
+      });
 
       const movement = await prisma.cashMovement.findFirst({
         where: { cashRegisterId: cajaPrincipalId, reference: order.fullNumber },
@@ -600,6 +752,103 @@ describe.skipIf(!dbAvailable)(
         select: { status: true },
       });
       expect(installment.status).toBe('PAID');
+    });
+
+    it('TSK-735 (Review Focus 4): devolución de una cuota histórica más una nueva → dos líneas Debe, la histórica contra Proveedores con el proveedor de origen', async () => {
+      // Cuota nueva: OP con débito de la socia (queda en Deudas con socios).
+      const nueva = await createDraft([
+        {
+          paymentMethod: 'DEBIT_CARD',
+          amount: '300',
+          cardId: debitCardSocioId,
+        },
+        cashPayment('700'),
+      ]);
+      expect((await confirmPaymentOrder(nueva.id)).success).toBe(true);
+      const cuotaNueva = await prisma.paymentOrderInstallment.findFirstOrThrow({
+        where: { paymentOrderId: nueva.id },
+        select: { id: true, accountId: true },
+      });
+      expect(cuotaNueva.accountId).toBe(sociosId);
+
+      // Cuota histórica (anterior a TSK-735): sin cuenta, sobre una OP del proveedor.
+      const cuotaHistorica = await prisma.paymentOrderInstallment.create({
+        data: {
+          companyId,
+          paymentOrderId: nueva.id,
+          cardId: debitCardSocioId,
+          partnerId,
+          number: 2,
+          dueDate: ORDER_DATE,
+          amount: 250,
+          status: 'PENDING',
+          accountId: null,
+        },
+        select: { id: true },
+      });
+
+      const created = await createPartnerRepaymentOrder({
+        partnerId,
+        date: ORDER_DATE,
+        notes: `${PREFIX}devolución mixta`,
+        installmentIds: [cuotaNueva.id, cuotaHistorica.id],
+        payments: [cashPayment('550')],
+      });
+      const result = await confirmPaymentOrder(created.id);
+      expect(result.success).toBe(true);
+
+      const lines = await fetchEntryLines(created.id);
+      expect(lines).toHaveLength(3);
+      const debits = lines
+        .filter((l) => l.debit > 0)
+        .map((l) => [l.accountId, l.debit, l.supplierId])
+        .sort((a, b) => Number(a[1]) - Number(b[1]));
+      expect(debits).toEqual([
+        [pagarId, 250, supplierId],
+        [sociosId, 300, null],
+      ]);
+      expect(lines.find((l) => l.accountId === cajaId)?.credit).toBe(550);
+
+      const settled = await prisma.paymentOrderInstallment.findMany({
+        where: { id: { in: [cuotaNueva.id, cuotaHistorica.id] } },
+        select: { status: true },
+      });
+      expect(settled.map((i) => i.status)).toEqual(['PAID', 'PAID']);
+    });
+
+    it('TSK-735: devolución de una cuota histórica sin "Cuentas por Pagar" en Ajustes → bloqueado, sigue en borrador', async () => {
+      const origen = await createDraft([cashPayment('1000')]);
+      expect((await confirmPaymentOrder(origen.id)).success).toBe(true);
+      const historica = await prisma.paymentOrderInstallment.create({
+        data: {
+          companyId,
+          paymentOrderId: origen.id,
+          cardId: debitCardSocioId,
+          partnerId,
+          number: 1,
+          dueDate: ORDER_DATE,
+          amount: 100,
+          status: 'PENDING',
+        },
+        select: { id: true },
+      });
+      const created = await createPartnerRepaymentOrder({
+        partnerId,
+        date: ORDER_DATE,
+        notes: `${PREFIX}devolución histórica`,
+        installmentIds: [historica.id],
+        payments: [cashPayment('100')],
+      });
+      await setSettings({ payablesAccountId: null });
+      try {
+        const result = await confirmPaymentOrder(created.id);
+        expect(result.success).toBe(false);
+        if (result.success) return;
+        expect(result.error).toContain('falta configurar "Cuentas por Pagar"');
+        expect((await readOrder(created.id)).status).toBe('DRAFT');
+      } finally {
+        await setSettings({ payablesAccountId: pagarId });
+      }
     });
 
     it('caso 11: caja sin sesión abierta → error legible con el nombre de la caja', async () => {
@@ -652,17 +901,17 @@ describe.skipIf(!dbAvailable)(
       expect(again.error).toBe('Orden de pago no encontrada o ya confirmada');
     });
 
-    it('caso 14: getPaymentOrderEntryPreview anticipa el aviso del cheque y el error del banco', async () => {
+    it('caso 14 (TSK-735): getPaymentOrderEntryPreview lista la cuenta del cheque sin aviso y anticipa el error del banco', async () => {
       const conCheque = await createDraft([
         ownCheckPayment('400', 'T728O-OWN-2'),
         cashPayment('600'),
       ]);
       const preview = await getPaymentOrderEntryPreview(conCheque.id);
       expect(preview.error).toBeNull();
-      expect(preview.warnings).toHaveLength(1);
-      expect(preview.warnings[0]).toMatch(/Cheque N° T728O-OWN-2/);
+      expect(preview.warnings).toEqual([]);
       expect(preview.accounts.map((a) => a.concept)).toEqual([
         'Cuentas por Pagar',
+        'Valores diferidos a pagar',
         `Caja "${PREFIX}Caja principal"`,
       ]);
       expect((await readOrder(conCheque.id)).status).toBe('DRAFT');
