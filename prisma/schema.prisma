@@ -4124,6 +4124,11 @@ model Check {
 
   @@index([companyId, type, status])
   @@index([companyId, dueDate])
+  @@index([accountId])
+  @@index([depositEntryId])
+  @@index([rejectionEntryId])
+  @@index([debitEntryId])
+  @@index([voidEntryId])
   @@map("checks")
 }
 
@@ -4826,6 +4831,7 @@ model PaymentOrderInstallment {
   @@index([companyId])
   @@index([paymentOrderId])
   @@index([partnerId, status])
+  @@index([accountId])
   @@map("payment_order_installments")
 }
 
