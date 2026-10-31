@@ -1,23 +1,25 @@
 /**
- * Cuenta contable de cada pago de un recibo o una orden de pago (TSK-728).
+ * Cuenta contable de cada pago de un recibo o una orden de pago (TSK-728, TSK-735).
  *
  * La cadena de resolución (cuenta propia de la caja/banco → "Caja por
  * Defecto"/"Banco por Defecto" de Ajustes) estaba copiada dos veces en el
- * asiento (recibo y OP) y, cuando no resolvía nada, hacía `continue`: el
- * asiento quedaba descuadrado, `validateBalance` lanzaba, el action lo tragaba
- * y el comprobante quedaba confirmado sin asiento. Acá la regla está una sola
- * vez y distingue tres resultados:
+ * asiento (recibo y OP). Acá la regla está una sola vez y distingue tres
+ * resultados:
  *
  * - `resolved`: el pago tiene cuenta y va al asiento.
- * - `missing`: es caja o banco (sí mueven fondos) y NO se pudo resolver
- *   cuenta: obligatoria, la confirmación se bloquea con un mensaje que nombra
- *   la caja/banco y dónde configurarla.
- * - `omitted`: el medio no tiene cuenta definida en el sistema (cheque físico,
- *   cheque endosado, tarjeta de crédito, tarjeta de un socio, "Cuenta
- *   Corriente"). No se bloquea ni se inventa cuenta: el pago queda fuera del
- *   asiento con aviso explícito, y la línea de Cuentas por Cobrar/Pagar va por
- *   el importe contabilizable (total − omitidos), así el asiento cuadra y el
- *   saldo abierto queda a la vista hasta que un ticket posterior les dé cuenta.
+ * - `missing`: el medio mueve fondos o valores y NO se pudo resolver cuenta:
+ *   obligatoria, la confirmación se bloquea con un mensaje que nombra el medio
+ *   y dónde configurarlo.
+ * - `omitted`: solo "Cuenta Corriente", que no es un movimiento de fondos. El
+ *   pago queda fuera del asiento con aviso y la línea de Cuentas por
+ *   Cobrar/Pagar va por el importe contabilizable (total − omitidos).
+ *
+ * TSK-735: cheques y tarjetas tienen cuenta propia (Valores a depositar,
+ * Valores diferidos a pagar, Tarjetas de crédito a pagar, Deudas con socios).
+ * Orden de resolución: tarjeta de socio → cheque recibido (RC) → cheque
+ * endosado (OP; con cuenta registrada, histórico físico a Cuentas por Cobrar o
+ * e-cheq al banco del cheque) → cheque propio (OP) → tarjeta de crédito de la
+ * empresa → "Cuenta Corriente" → cadena de caja/banco.
  *
  * Funciones puras: sin Prisma, sin React, sin importar de features.
  */
@@ -25,6 +27,7 @@
 import type { PaymentMethod } from '@/generated/prisma/enums';
 import {
   ACCOUNTING_SETTINGS_PATH,
+  type AccountingSettingsAccountField,
   settingsAccountLabel,
 } from '@/shared/lib/accounts/settings-account-labels';
 import { formatCurrency } from '@/shared/utils/formatters';
@@ -40,29 +43,59 @@ export interface PaymentAccountCheck {
   cashRegister?: { name: string; accountId: string | null } | null;
   bankAccount?: { bankName: string; accountNumber: string; accountId: string | null } | null;
   card?: { name: string; ownerType: 'COMPANY' | 'PARTNER' } | null;
+  /** Cheque endosado en una OP, con la cuenta con la que ingresó (null = histórico). */
+  endorsedCheck?: {
+    accountId: string | null;
+    customerId: string | null;
+    isElectronic: boolean;
+    bankAccount: { accountId: string | null } | null;
+  } | null;
 }
 
 /** Lo que se necesita de `AccountingSettings`. */
 export interface PaymentAccountSettings {
   defaultCashAccountId?: string | null;
   defaultBankAccountId?: string | null;
+  checksReceivedAccountId?: string | null;
+  checksPayableAccountId?: string | null;
+  creditCardsPayableAccountId?: string | null;
+  partnerDebtsAccountId?: string | null;
+  /** Para endosos y cuotas históricos que ingresaron sin cuenta. */
+  receivablesAccountId?: string | null;
+  payablesAccountId?: string | null;
 }
 
-export type ResolvedPaymentSource = 'cashRegister' | 'bankAccount' | 'defaultCash' | 'defaultBank';
+export type ResolvedPaymentSource =
+  | 'cashRegister'
+  | 'bankAccount'
+  | 'defaultCash'
+  | 'defaultBank'
+  | 'checksReceived'
+  | 'checksPayable'
+  | 'endorsedCheck'
+  | 'endorsedLegacyReceivable'
+  | 'creditCardsPayable'
+  | 'partnerDebts';
 export type MissingPaymentAccountVia =
   | 'cashRegister'
   | 'bankAccount'
   | 'noCashRegister'
-  | 'noBankAccount';
-export type OmittedPaymentReason =
-  | 'PARTNER_CARD'
-  | 'CHECK'
-  | 'ENDORSED_CHECK'
-  | 'CREDIT_CARD'
-  | 'ACCOUNT';
+  | 'noBankAccount'
+  | 'settings:checksReceivedAccountId'
+  | 'settings:checksPayableAccountId'
+  | 'settings:creditCardsPayableAccountId'
+  | 'settings:partnerDebtsAccountId'
+  | 'settings:receivablesAccountId';
+export type OmittedPaymentReason = 'ACCOUNT';
 
 export type PaymentAccountResolution =
-  | { kind: 'resolved'; accountId: string; source: ResolvedPaymentSource }
+  | {
+      kind: 'resolved';
+      accountId: string;
+      source: ResolvedPaymentSource;
+      /** Cliente del cheque, para la línea de Cuentas por Cobrar de un endoso histórico. */
+      customerId?: string | null;
+    }
   | { kind: 'missing'; via: MissingPaymentAccountVia }
   | { kind: 'omitted'; reason: OmittedPaymentReason };
 
@@ -72,6 +105,7 @@ export interface ResolvedPayment<T extends PaymentAccountCheck> {
   payment: T;
   accountId: string;
   source: ResolvedPaymentSource;
+  customerId?: string | null;
 }
 export interface MissingPaymentAccount<T extends PaymentAccountCheck> {
   payment: T;
@@ -104,16 +138,94 @@ const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
   ACCOUNT: 'Cuenta Corriente',
 };
 
-/**
- * Cuenta del pago. Usa `||` a propósito: una cadena vacía cuenta como "sin
- * valor". La tarjeta de socio se decide antes que la caja/banco porque el
- * form de OP muestra "Cuenta Bancaria" para débito sin mirar el dueño.
- */
-export function resolvePaymentAccount(
+type SettingsMissingVia = Extract<MissingPaymentAccountVia, `settings:${string}`>;
+
+function isSettingsVia(via: MissingPaymentAccountVia): via is SettingsMissingVia {
+  return via.startsWith('settings:');
+}
+
+/** Cuenta de Ajustes o falta obligatoria de ese campo. */
+function fromSettings(
+  accountId: string | null | undefined,
+  source: ResolvedPaymentSource,
+  via: SettingsMissingVia
+): PaymentAccountResolution {
+  return accountId ? { kind: 'resolved', accountId, source } : { kind: 'missing', via };
+}
+
+/** Cheque endosado en una OP: cuenta registrada, histórico físico o e-cheq al banco. */
+function resolveEndorsedCheck(
   payment: PaymentAccountCheck,
   settings: PaymentAccountSettings
 ): PaymentAccountResolution {
-  if (payment.card?.ownerType === 'PARTNER') return { kind: 'omitted', reason: 'PARTNER_CARD' };
+  const check = payment.endorsedCheck;
+  if (check?.accountId) {
+    return { kind: 'resolved', accountId: check.accountId, source: 'endorsedCheck' };
+  }
+  const isElectronic = check?.isElectronic ?? payment.paymentMethod === 'ECHEQ';
+  if (!isElectronic) {
+    const receivables = settings.receivablesAccountId || null;
+    return receivables
+      ? {
+          kind: 'resolved',
+          accountId: receivables,
+          source: 'endorsedLegacyReceivable',
+          customerId: check?.customerId ?? null,
+        }
+      : { kind: 'missing', via: 'settings:receivablesAccountId' };
+  }
+  const bankAccountId = check?.bankAccount?.accountId || null;
+  if (bankAccountId) return { kind: 'resolved', accountId: bankAccountId, source: 'bankAccount' };
+  const defaultBank = settings.defaultBankAccountId || null;
+  return defaultBank
+    ? { kind: 'resolved', accountId: defaultBank, source: 'defaultBank' }
+    : { kind: 'missing', via: 'noBankAccount' };
+}
+
+/**
+ * Cuenta del pago. Usa `||` a propósito: una cadena vacía cuenta como "sin
+ * valor". Ver el docblock del archivo para el orden de resolución.
+ */
+export function resolvePaymentAccount(
+  payment: PaymentAccountCheck,
+  settings: PaymentAccountSettings,
+  kind: EntryDocumentKind
+): PaymentAccountResolution {
+  const isCheck = payment.paymentMethod === 'CHECK' || payment.paymentMethod === 'ECHEQ';
+
+  if (payment.card?.ownerType === 'PARTNER') {
+    return fromSettings(
+      settings.partnerDebtsAccountId || null,
+      'partnerDebts',
+      'settings:partnerDebtsAccountId'
+    );
+  }
+  if (isCheck && kind === 'receipt') {
+    return fromSettings(
+      settings.checksReceivedAccountId || null,
+      'checksReceived',
+      'settings:checksReceivedAccountId'
+    );
+  }
+  if (isCheck && kind === 'paymentOrder') {
+    if (payment.endorsedCheckId) return resolveEndorsedCheck(payment, settings);
+    if (payment.paymentMethod === 'CHECK') {
+      return fromSettings(
+        settings.checksPayableAccountId || null,
+        'checksPayable',
+        'settings:checksPayableAccountId'
+      );
+    }
+    // E-cheq propio: sigue la cadena de banco de abajo.
+  }
+  if (payment.paymentMethod === 'CREDIT_CARD') {
+    return fromSettings(
+      settings.creditCardsPayableAccountId || null,
+      'creditCardsPayable',
+      'settings:creditCardsPayableAccountId'
+    );
+  }
+  if (payment.paymentMethod === 'ACCOUNT') return { kind: 'omitted', reason: 'ACCOUNT' };
 
   const cashRegisterId = payment.cashRegisterId || null;
   const bankAccountId = payment.bankAccountId || null;
@@ -138,29 +250,16 @@ export function resolvePaymentAccount(
   if (cashRegisterId) return { kind: 'missing', via: 'cashRegister' };
   if (bankAccountId) return { kind: 'missing', via: 'bankAccount' };
 
-  switch (payment.paymentMethod) {
-    case 'CASH':
-      return { kind: 'missing', via: 'noCashRegister' };
-    case 'TRANSFER':
-    case 'DEBIT_CARD':
-      return { kind: 'missing', via: 'noBankAccount' };
-    case 'CHECK':
-      return { kind: 'omitted', reason: payment.endorsedCheckId ? 'ENDORSED_CHECK' : 'CHECK' };
-    case 'ECHEQ':
-      return payment.endorsedCheckId
-        ? { kind: 'omitted', reason: 'ENDORSED_CHECK' }
-        : { kind: 'missing', via: 'noBankAccount' };
-    case 'CREDIT_CARD':
-      return { kind: 'omitted', reason: 'CREDIT_CARD' };
-    case 'ACCOUNT':
-      return { kind: 'omitted', reason: 'ACCOUNT' };
-  }
+  return payment.paymentMethod === 'CASH'
+    ? { kind: 'missing', via: 'noCashRegister' }
+    : { kind: 'missing', via: 'noBankAccount' };
 }
 
 /** Reparte los pagos según su resolución, conservando orden y objeto original. */
 export function classifyPayments<T extends PaymentAccountCheck>(
   payments: readonly T[],
-  settings: PaymentAccountSettings
+  settings: PaymentAccountSettings,
+  kind: EntryDocumentKind
 ): PaymentsClassification<T> {
   const result: PaymentsClassification<T> = {
     resolved: [],
@@ -170,9 +269,14 @@ export function classifyPayments<T extends PaymentAccountCheck>(
   };
 
   for (const payment of payments) {
-    const resolution = resolvePaymentAccount(payment, settings);
+    const resolution = resolvePaymentAccount(payment, settings, kind);
     if (resolution.kind === 'resolved') {
-      result.resolved.push({ payment, accountId: resolution.accountId, source: resolution.source });
+      result.resolved.push({
+        payment,
+        accountId: resolution.accountId,
+        source: resolution.source,
+        customerId: resolution.customerId,
+      });
     } else if (resolution.kind === 'missing') {
       result.missing.push({ payment, via: resolution.via });
     } else {
@@ -212,6 +316,14 @@ export function buildMissingPaymentAccountMessage(
   const { payment, via } = missing;
   const prefix = `No se puede confirmar ${documentLabel}:`;
 
+  if (isSettingsVia(via)) {
+    const field = via.slice('settings:'.length) as AccountingSettingsAccountField;
+    return (
+      `${prefix} ${PAYMENT_METHOD_LABELS[payment.paymentMethod]} por ${formatCurrency(payment.amount)} ` +
+      `necesita la cuenta ${settingsAccountLabel(field)}. Configurala en ${ACCOUNTING_SETTINGS_PATH}.`
+    );
+  }
+
   switch (via) {
     case 'cashRegister':
       return (
@@ -240,10 +352,6 @@ export function buildMissingPaymentAccountMessage(
 }
 
 const OMITTED_REASON_TEXT: Record<OmittedPaymentReason, string> = {
-  CHECK: 'los cheques todavía no tienen cuenta asignada en el sistema',
-  ENDORSED_CHECK: 'los cheques endosados todavía no tienen cuenta asignada en el sistema',
-  CREDIT_CARD: 'las tarjetas de crédito todavía no tienen cuenta asignada en el sistema',
-  PARTNER_CARD: 'la tarjeta es de un socio y la empresa no mueve fondos ahora',
   ACCOUNT: '"Cuenta Corriente" no representa un movimiento de fondos',
 };
 
@@ -267,8 +375,8 @@ export function buildOmittedPaymentWarning(
 }
 
 const SUGGESTED_PAYMENTS: Record<EntryDocumentKind, string> = {
-  receipt: 'un pago en efectivo, transferencia o e-cheq',
-  paymentOrder: 'un pago en efectivo, transferencia, débito de la empresa o e-cheq',
+  receipt: 'un pago en efectivo, transferencia o cheque',
+  paymentOrder: 'un pago en efectivo, transferencia, cheque o tarjeta',
 };
 
 /** Bloqueo: ningún pago con cuenta ni retención, el asiento quedaría con una sola línea. */

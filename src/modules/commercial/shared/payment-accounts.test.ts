@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import { ACCOUNTING_SETTINGS_PATH } from '@/shared/lib/accounts/settings-account-labels';
+
 import {
   buildMissingPaymentAccountMessage,
   buildOmittedPaymentWarning,
@@ -8,7 +10,9 @@ import {
   classifyPayments,
   describePayment,
   resolvePaymentAccount,
+  type EntryDocumentKind,
   type PaymentAccountCheck,
+  type PaymentAccountSettings,
 } from './payment-accounts';
 
 /**
@@ -28,6 +32,17 @@ const BANCO_SIN_CUENTA = { bankName: 'Banco Galicia', accountNumber: '123-456', 
 const SIN_DEFAULTS = { defaultCashAccountId: null, defaultBankAccountId: null };
 const CON_DEFAULTS = { defaultCashAccountId: 'DC', defaultBankAccountId: 'DB' };
 
+const resolve = (
+  payment: PaymentAccountCheck,
+  settings: PaymentAccountSettings,
+  kind: EntryDocumentKind = 'receipt'
+) => resolvePaymentAccount(payment, settings, kind);
+const classify = <T extends PaymentAccountCheck>(
+  payments: readonly T[],
+  settings: PaymentAccountSettings,
+  kind: EntryDocumentKind = 'receipt'
+) => classifyPayments(payments, settings, kind);
+
 function pago(overrides: Partial<PaymentAccountCheck> = {}): PaymentAccountCheck {
   return {
     paymentMethod: 'CASH',
@@ -40,32 +55,28 @@ function pago(overrides: Partial<PaymentAccountCheck> = {}): PaymentAccountCheck
 
 describe('resolución de la cuenta de un pago', () => {
   it('efectivo con caja que tiene cuenta propia → la cuenta de la caja', () => {
-    expect(
-      resolvePaymentAccount(pago({ cashRegisterId: 'caja', cashRegister: CAJA }), CON_DEFAULTS)
-    ).toEqual({ kind: 'resolved', accountId: 'CTA-CAJA', source: 'cashRegister' });
+    expect(resolve(pago({ cashRegisterId: 'caja', cashRegister: CAJA }), CON_DEFAULTS)).toEqual({
+      kind: 'resolved',
+      accountId: 'CTA-CAJA',
+      source: 'cashRegister',
+    });
   });
 
   it('caja sin cuenta propia cae en la "Caja por Defecto"', () => {
     expect(
-      resolvePaymentAccount(
-        pago({ cashRegisterId: 'caja', cashRegister: CAJA_SIN_CUENTA }),
-        CON_DEFAULTS
-      )
+      resolve(pago({ cashRegisterId: 'caja', cashRegister: CAJA_SIN_CUENTA }), CON_DEFAULTS)
     ).toEqual({ kind: 'resolved', accountId: 'DC', source: 'defaultCash' });
   });
 
   it('caja sin cuenta propia ni por defecto → falta obligatoria de la caja', () => {
     expect(
-      resolvePaymentAccount(
-        pago({ cashRegisterId: 'caja', cashRegister: CAJA_SIN_CUENTA }),
-        SIN_DEFAULTS
-      )
+      resolve(pago({ cashRegisterId: 'caja', cashRegister: CAJA_SIN_CUENTA }), SIN_DEFAULTS)
     ).toEqual({ kind: 'missing', via: 'cashRegister' });
   });
 
   it('transferencia con banco que tiene cuenta propia → la cuenta del banco', () => {
     expect(
-      resolvePaymentAccount(
+      resolve(
         pago({ paymentMethod: 'TRANSFER', bankAccountId: 'banco', bankAccount: BANCO }),
         CON_DEFAULTS
       )
@@ -74,7 +85,7 @@ describe('resolución de la cuenta de un pago', () => {
 
   it('banco sin cuenta propia cae en el "Banco por Defecto"', () => {
     expect(
-      resolvePaymentAccount(
+      resolve(
         pago({ paymentMethod: 'TRANSFER', bankAccountId: 'banco', bankAccount: BANCO_SIN_CUENTA }),
         CON_DEFAULTS
       )
@@ -83,9 +94,10 @@ describe('resolución de la cuenta de un pago', () => {
 
   it('banco sin cuenta propia ni por defecto → falta obligatoria del banco', () => {
     expect(
-      resolvePaymentAccount(
+      resolve(
         pago({ paymentMethod: 'ECHEQ', bankAccountId: 'banco', bankAccount: BANCO_SIN_CUENTA }),
-        SIN_DEFAULTS
+        SIN_DEFAULTS,
+        'paymentOrder'
       )
     ).toEqual({ kind: 'missing', via: 'bankAccount' });
   });
@@ -93,7 +105,7 @@ describe('resolución de la cuenta de un pago', () => {
   /** Es el orden actual del asiento (`index.ts:740-750`): caja propia > banco propio > defaults. */
   it('la caja gana sobre el banco si vinieran los dos', () => {
     expect(
-      resolvePaymentAccount(
+      resolve(
         pago({
           cashRegisterId: 'caja',
           cashRegister: CAJA,
@@ -108,49 +120,35 @@ describe('resolución de la cuenta de un pago', () => {
   /** `''` en un id o una cuenta es "sin valor", no un id. */
   it('trata la cadena vacía como ausencia', () => {
     expect(
-      resolvePaymentAccount(
-        pago({ cashRegisterId: 'caja', cashRegister: { name: 'Caja', accountId: '' } }),
-        { defaultCashAccountId: '', defaultBankAccountId: null }
-      )
+      resolve(pago({ cashRegisterId: 'caja', cashRegister: { name: 'Caja', accountId: '' } }), {
+        defaultCashAccountId: '',
+        defaultBankAccountId: null,
+      })
     ).toEqual({ kind: 'missing', via: 'cashRegister' });
-    expect(resolvePaymentAccount(pago({ cashRegisterId: '' }), CON_DEFAULTS)).toEqual({
+    expect(resolve(pago({ cashRegisterId: '' }), CON_DEFAULTS)).toEqual({
       kind: 'missing',
       via: 'noCashRegister',
     });
   });
 
-  it('tarjeta de socio se omite aunque traiga un banco con cuenta', () => {
-    expect(
-      resolvePaymentAccount(
-        pago({
-          paymentMethod: 'DEBIT_CARD',
-          bankAccountId: 'banco',
-          bankAccount: BANCO,
-          card: { name: 'Visa Galicia Socio', ownerType: 'PARTNER' },
-        }),
-        CON_DEFAULTS
-      )
-    ).toEqual({ kind: 'omitted', reason: 'PARTNER_CARD' });
-  });
-
   it('efectivo sin caja → falta la caja (borrador viejo, el Zod ya no lo permite)', () => {
-    expect(resolvePaymentAccount(pago(), CON_DEFAULTS)).toEqual({
+    expect(resolve(pago(), CON_DEFAULTS)).toEqual({
       kind: 'missing',
       via: 'noCashRegister',
     });
   });
 
   it('transferencia o débito de la empresa sin banco → falta el banco', () => {
-    expect(resolvePaymentAccount(pago({ paymentMethod: 'TRANSFER' }), CON_DEFAULTS)).toEqual({
+    expect(resolve(pago({ paymentMethod: 'TRANSFER' }), CON_DEFAULTS)).toEqual({
       kind: 'missing',
       via: 'noBankAccount',
     });
-    expect(resolvePaymentAccount(pago({ paymentMethod: 'DEBIT_CARD' }), CON_DEFAULTS)).toEqual({
+    expect(resolve(pago({ paymentMethod: 'DEBIT_CARD' }), CON_DEFAULTS)).toEqual({
       kind: 'missing',
       via: 'noBankAccount',
     });
     expect(
-      resolvePaymentAccount(
+      resolve(
         pago({
           paymentMethod: 'DEBIT_CARD',
           card: { name: 'Visa Débito Empresa', ownerType: 'COMPANY' },
@@ -161,33 +159,159 @@ describe('resolución de la cuenta de un pago', () => {
   });
 
   it('e-cheq sin banco → falta el banco (se imputa al banco como hoy)', () => {
-    expect(resolvePaymentAccount(pago({ paymentMethod: 'ECHEQ' }), CON_DEFAULTS)).toEqual({
+    expect(resolve(pago({ paymentMethod: 'ECHEQ' }), CON_DEFAULTS, 'paymentOrder')).toEqual({
       kind: 'missing',
       via: 'noBankAccount',
     });
   });
 
-  it('cheque físico → sin cuenta por diseño', () => {
-    expect(
-      resolvePaymentAccount(pago({ paymentMethod: 'CHECK', checkNumber: '123' }), CON_DEFAULTS)
-    ).toEqual({ kind: 'omitted', reason: 'CHECK' });
-  });
-
-  it('cheque o e-cheq endosado → sin cuenta por diseño', () => {
-    expect(
-      resolvePaymentAccount(pago({ paymentMethod: 'CHECK', endorsedCheckId: 'chk' }), CON_DEFAULTS)
-    ).toEqual({ kind: 'omitted', reason: 'ENDORSED_CHECK' });
-    expect(
-      resolvePaymentAccount(pago({ paymentMethod: 'ECHEQ', endorsedCheckId: 'chk' }), CON_DEFAULTS)
-    ).toEqual({ kind: 'omitted', reason: 'ENDORSED_CHECK' });
-  });
-
-  it('tarjeta de crédito y "Cuenta Corriente" → sin cuenta por diseño', () => {
-    expect(resolvePaymentAccount(pago({ paymentMethod: 'CREDIT_CARD' }), CON_DEFAULTS)).toEqual({
-      kind: 'omitted',
-      reason: 'CREDIT_CARD',
+  it('tarjeta de socio → Deudas con socios, aunque traiga un banco con cuenta', () => {
+    const socio = pago({
+      paymentMethod: 'DEBIT_CARD',
+      bankAccountId: 'banco',
+      bankAccount: BANCO,
+      card: { name: 'Visa Galicia Socio', ownerType: 'PARTNER' },
     });
-    expect(resolvePaymentAccount(pago({ paymentMethod: 'ACCOUNT' }), CON_DEFAULTS)).toEqual({
+    expect(resolve(socio, { partnerDebtsAccountId: 'SOC' }, 'paymentOrder')).toEqual({
+      kind: 'resolved',
+      accountId: 'SOC',
+      source: 'partnerDebts',
+    });
+    expect(resolve(socio, CON_DEFAULTS, 'paymentOrder')).toEqual({
+      kind: 'missing',
+      via: 'settings:partnerDebtsAccountId',
+    });
+  });
+
+  it('cheque o e-cheq en un recibo → Valores a depositar, ignora el banco elegido', () => {
+    const echeq = pago({
+      paymentMethod: 'ECHEQ',
+      bankAccountId: 'b1',
+      bankAccount: { ...BANCO, accountId: 'bankAcc' },
+    });
+    expect(resolve(echeq, { checksReceivedAccountId: 'vad' }, 'receipt')).toEqual({
+      kind: 'resolved',
+      accountId: 'vad',
+      source: 'checksReceived',
+    });
+    expect(
+      resolve(pago({ paymentMethod: 'CHECK', checkNumber: '1' }), CON_DEFAULTS, 'receipt')
+    ).toEqual({ kind: 'missing', via: 'settings:checksReceivedAccountId' });
+  });
+
+  it('cheque endosado en una OP con cuenta registrada → esa cuenta', () => {
+    const endosado = pago({
+      paymentMethod: 'CHECK',
+      endorsedCheckId: 'chk',
+      endorsedCheck: { accountId: 'REG', customerId: 'c1', isElectronic: false, bankAccount: null },
+    });
+    expect(resolve(endosado, {}, 'paymentOrder')).toEqual({
+      kind: 'resolved',
+      accountId: 'REG',
+      source: 'endorsedCheck',
+    });
+  });
+
+  it('endoso histórico físico → Cuentas por Cobrar con el cliente del cheque', () => {
+    const historico = pago({
+      paymentMethod: 'CHECK',
+      endorsedCheckId: 'chk',
+      endorsedCheck: { accountId: null, customerId: 'c1', isElectronic: false, bankAccount: null },
+    });
+    expect(resolve(historico, { receivablesAccountId: 'cobrar' }, 'paymentOrder')).toEqual({
+      kind: 'resolved',
+      accountId: 'cobrar',
+      source: 'endorsedLegacyReceivable',
+      customerId: 'c1',
+    });
+    expect(resolve(historico, {}, 'paymentOrder')).toEqual({
+      kind: 'missing',
+      via: 'settings:receivablesAccountId',
+    });
+  });
+
+  it('endoso histórico electrónico → banco del cheque, luego Banco por Defecto, luego falta', () => {
+    const echeqHistorico = (bankAccountAccountId: string | null) =>
+      pago({
+        paymentMethod: 'ECHEQ',
+        endorsedCheckId: 'chk',
+        endorsedCheck: {
+          accountId: null,
+          customerId: 'c1',
+          isElectronic: true,
+          bankAccount: { accountId: bankAccountAccountId },
+        },
+      });
+    expect(resolve(echeqHistorico('BCH'), CON_DEFAULTS, 'paymentOrder')).toEqual({
+      kind: 'resolved',
+      accountId: 'BCH',
+      source: 'bankAccount',
+    });
+    expect(resolve(echeqHistorico(null), CON_DEFAULTS, 'paymentOrder')).toEqual({
+      kind: 'resolved',
+      accountId: 'DB',
+      source: 'defaultBank',
+    });
+    expect(resolve(echeqHistorico(null), SIN_DEFAULTS, 'paymentOrder')).toEqual({
+      kind: 'missing',
+      via: 'noBankAccount',
+    });
+  });
+
+  it('cheque propio en una OP → Valores diferidos a pagar', () => {
+    const propio = pago({ paymentMethod: 'CHECK', checkNumber: '9' });
+    expect(resolve(propio, { checksPayableAccountId: 'dif' }, 'paymentOrder')).toEqual({
+      kind: 'resolved',
+      accountId: 'dif',
+      source: 'checksPayable',
+    });
+    expect(resolve(propio, CON_DEFAULTS, 'paymentOrder')).toEqual({
+      kind: 'missing',
+      via: 'settings:checksPayableAccountId',
+    });
+  });
+
+  it('e-cheq propio en una OP → cadena de banco, sin cambio', () => {
+    expect(
+      resolve(
+        pago({ paymentMethod: 'ECHEQ', bankAccountId: 'banco', bankAccount: BANCO }),
+        CON_DEFAULTS,
+        'paymentOrder'
+      )
+    ).toEqual({ kind: 'resolved', accountId: 'CTA-BANCO', source: 'bankAccount' });
+    expect(resolve(pago({ paymentMethod: 'ECHEQ' }), CON_DEFAULTS, 'paymentOrder')).toEqual({
+      kind: 'missing',
+      via: 'noBankAccount',
+    });
+  });
+
+  it('tarjeta de crédito de la empresa → Tarjetas de crédito a pagar', () => {
+    const tarjeta = pago({
+      paymentMethod: 'CREDIT_CARD',
+      card: { name: 'Visa', ownerType: 'COMPANY' },
+    });
+    expect(resolve(tarjeta, { creditCardsPayableAccountId: 'tc' }, 'paymentOrder')).toEqual({
+      kind: 'resolved',
+      accountId: 'tc',
+      source: 'creditCardsPayable',
+    });
+    const sinCuenta = resolve(tarjeta, CON_DEFAULTS, 'paymentOrder');
+    expect(sinCuenta).toEqual({ kind: 'missing', via: 'settings:creditCardsPayableAccountId' });
+    if (sinCuenta.kind !== 'missing') throw new Error('esperaba missing');
+    expect(
+      buildMissingPaymentAccountMessage('la orden de pago OP-00001', {
+        payment: tarjeta,
+        via: sinCuenta.via,
+      })
+    ).toBe(
+      'No se puede confirmar la orden de pago OP-00001: Tarjeta de Crédito por $\u00a01.000,00 ' +
+        'necesita la cuenta "Tarjetas de crédito a pagar". Configurala en ' +
+        `${ACCOUNTING_SETTINGS_PATH}.`
+    );
+  });
+
+  it('"Cuenta Corriente" → omitido', () => {
+    expect(resolve(pago({ paymentMethod: 'ACCOUNT' }), CON_DEFAULTS)).toEqual({
       kind: 'omitted',
       reason: 'ACCOUNT',
     });
@@ -198,40 +322,42 @@ describe('clasificación de los pagos de un comprobante', () => {
   const efectivo = pago({ cashRegisterId: 'caja', cashRegister: CAJA, amount: 500 });
   const cheque = pago({ paymentMethod: 'CHECK', checkNumber: '123', amount: 300 });
   const transferenciaSinBanco = pago({ paymentMethod: 'TRANSFER', amount: 200 });
-  const tarjeta = pago({ paymentMethod: 'CREDIT_CARD', amount: 100.5 });
+  const cuentaCorriente = pago({ paymentMethod: 'ACCOUNT', amount: 100.5 });
+  const settings = { ...CON_DEFAULTS, checksReceivedAccountId: 'VAD' };
 
   it('separa resueltos, faltantes y omitidos conservando orden y objeto original', () => {
-    const result = classifyPayments(
-      [efectivo, cheque, transferenciaSinBanco, tarjeta],
-      CON_DEFAULTS
-    );
+    const result = classify([efectivo, cheque, transferenciaSinBanco, cuentaCorriente], settings);
 
     expect(result.resolved).toEqual([
       { payment: efectivo, accountId: 'CTA-CAJA', source: 'cashRegister' },
+      { payment: cheque, accountId: 'VAD', source: 'checksReceived' },
     ]);
     expect(result.resolved[0].payment).toBe(efectivo);
     expect(result.missing).toEqual([{ payment: transferenciaSinBanco, via: 'noBankAccount' }]);
-    expect(result.omitted).toEqual([
-      { payment: cheque, reason: 'CHECK' },
-      { payment: tarjeta, reason: 'CREDIT_CARD' },
-    ]);
+    expect(result.omitted).toEqual([{ payment: cuentaCorriente, reason: 'ACCOUNT' }]);
   });
 
-  it('suma el importe de los omitidos, redondeado a centavos', () => {
-    expect(classifyPayments([efectivo, cheque, tarjeta], CON_DEFAULTS).omittedAmount).toBe(400.5);
+  it('omittedAmount es solo el importe de "Cuenta Corriente", redondeado a centavos', () => {
+    expect(classify([efectivo, cheque, cuentaCorriente], settings).omittedAmount).toBe(100.5);
     expect(
-      classifyPayments(
+      classify(
         [
-          pago({ paymentMethod: 'CHECK', amount: 0.1 }),
-          pago({ paymentMethod: 'CHECK', amount: 0.2 }),
+          pago({ paymentMethod: 'ACCOUNT', amount: 0.1 }),
+          pago({ paymentMethod: 'ACCOUNT', amount: 0.2 }),
         ],
         CON_DEFAULTS
       ).omittedAmount
     ).toBe(0.3);
   });
 
+  it('el kind decide: el mismo cheque va a Valores a depositar o a Valores diferidos', () => {
+    const s = { checksReceivedAccountId: 'VAD', checksPayableAccountId: 'DIF' };
+    expect(classify([cheque], s, 'receipt').resolved[0].accountId).toBe('VAD');
+    expect(classify([cheque], s, 'paymentOrder').resolved[0].accountId).toBe('DIF');
+  });
+
   it('sin pagos devuelve listas vacías y cero', () => {
-    expect(classifyPayments([], SIN_DEFAULTS)).toEqual({
+    expect(classify([], SIN_DEFAULTS)).toEqual({
       resolved: [],
       missing: [],
       omitted: [],
@@ -337,70 +463,6 @@ describe('mensaje de caja/banco sin cuenta', () => {
 });
 
 describe('aviso de pago omitido del asiento', () => {
-  const cheque = pago({ paymentMethod: 'CHECK', checkNumber: '123' });
-
-  it('cheque en un recibo: queda pendiente en Cuentas por Cobrar', () => {
-    expect(buildOmittedPaymentWarning({ payment: cheque, reason: 'CHECK' }, 'receipt')).toBe(
-      'Cheque N° 123 por $\u00a01.000,00 no genera línea en el asiento contable: los cheques todavía ' +
-        'no tienen cuenta asignada en el sistema. Ese importe queda pendiente en Cuentas por ' +
-        'Cobrar hasta que se regularice.'
-    );
-  });
-
-  it('cheque endosado en una OP: queda pendiente en Cuentas por Pagar', () => {
-    expect(
-      buildOmittedPaymentWarning(
-        {
-          payment: pago({ paymentMethod: 'CHECK', endorsedCheckId: 'x' }),
-          reason: 'ENDORSED_CHECK',
-        },
-        'paymentOrder'
-      )
-    ).toBe(
-      'Cheque por $\u00a01.000,00 no genera línea en el asiento contable: los cheques endosados ' +
-        'todavía no tienen cuenta asignada en el sistema. Ese importe queda pendiente en ' +
-        'Cuentas por Pagar hasta que se regularice.'
-    );
-  });
-
-  it('tarjeta de crédito', () => {
-    expect(
-      buildOmittedPaymentWarning(
-        {
-          payment: pago({
-            paymentMethod: 'CREDIT_CARD',
-            card: { name: 'Visa Galicia Empresa', ownerType: 'COMPANY' },
-          }),
-          reason: 'CREDIT_CARD',
-        },
-        'paymentOrder'
-      )
-    ).toBe(
-      'Tarjeta de Crédito (Visa Galicia Empresa) por $\u00a01.000,00 no genera línea en el asiento ' +
-        'contable: las tarjetas de crédito todavía no tienen cuenta asignada en el sistema. Ese ' +
-        'importe queda pendiente en Cuentas por Pagar hasta que se regularice.'
-    );
-  });
-
-  it('tarjeta de socio: la empresa no mueve fondos ahora', () => {
-    expect(
-      buildOmittedPaymentWarning(
-        {
-          payment: pago({
-            paymentMethod: 'DEBIT_CARD',
-            card: { name: 'Visa Socio', ownerType: 'PARTNER' },
-          }),
-          reason: 'PARTNER_CARD',
-        },
-        'paymentOrder'
-      )
-    ).toBe(
-      'Tarjeta de Débito (Visa Socio) por $\u00a01.000,00 no genera línea en el asiento contable: la ' +
-        'tarjeta es de un socio y la empresa no mueve fondos ahora. Ese importe queda pendiente ' +
-        'en Cuentas por Pagar hasta que se regularice.'
-    );
-  });
-
   it('"Cuenta Corriente" no es un movimiento de fondos', () => {
     expect(
       buildOmittedPaymentWarning(
@@ -413,39 +475,48 @@ describe('aviso de pago omitido del asiento', () => {
         'Cuentas por Cobrar hasta que se regularice.'
     );
   });
+
+  it('en una OP queda pendiente en Cuentas por Pagar', () => {
+    expect(
+      buildOmittedPaymentWarning(
+        { payment: pago({ paymentMethod: 'ACCOUNT' }), reason: 'ACCOUNT' },
+        'paymentOrder'
+      )
+    ).toContain('Cuentas por Pagar hasta que se regularice.');
+  });
 });
 
 describe('asiento de una sola línea', () => {
   it('recibo: lista los pagos omitidos y qué agregar', () => {
     expect(
       buildSingleLineEntryMessage('el recibo R-00012', 'receipt', [
-        { payment: pago({ paymentMethod: 'CHECK', checkNumber: '123' }), reason: 'CHECK' },
+        { payment: pago({ paymentMethod: 'CHECK', checkNumber: '123' }), reason: 'ACCOUNT' },
       ])
     ).toBe(
       'No se puede confirmar el recibo R-00012: ningún pago genera línea contable (Cheque N° 123 ' +
         'por $\u00a01.000,00) y no hay retenciones, así que el asiento quedaría con una sola línea. ' +
-        'Agregá un pago en efectivo, transferencia o e-cheq, o una retención.'
+        'Agregá un pago en efectivo, transferencia o cheque, o una retención.'
     );
   });
 
   it('OP: suma el débito de la empresa y separa varios pagos con coma', () => {
     expect(
       buildSingleLineEntryMessage('la orden de pago OP-00003', 'paymentOrder', [
-        { payment: pago({ paymentMethod: 'CHECK', checkNumber: '9' }), reason: 'CHECK' },
+        { payment: pago({ paymentMethod: 'CHECK', checkNumber: '9' }), reason: 'ACCOUNT' },
         { payment: pago({ paymentMethod: 'ACCOUNT', amount: 50 }), reason: 'ACCOUNT' },
       ])
     ).toBe(
       'No se puede confirmar la orden de pago OP-00003: ningún pago genera línea contable ' +
         '(Cheque N° 9 por $\u00a01.000,00, Cuenta Corriente por $\u00a050,00) y no hay retenciones, así que ' +
         'el asiento quedaría con una sola línea. Agregá un pago en efectivo, transferencia, ' +
-        'débito de la empresa o e-cheq, o una retención.'
+        'cheque o tarjeta, o una retención.'
     );
   });
 
   it('sin ningún pago tampoco lista nada', () => {
     expect(buildSingleLineEntryMessage('el recibo R-00012', 'receipt', [])).toBe(
       'No se puede confirmar el recibo R-00012: no hay pagos ni retenciones, así que el asiento ' +
-        'quedaría con una sola línea. Agregá un pago en efectivo, transferencia o e-cheq, o una ' +
+        'quedaría con una sola línea. Agregá un pago en efectivo, transferencia o cheque, o una ' +
         'retención.'
     );
   });

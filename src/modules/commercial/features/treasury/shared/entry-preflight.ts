@@ -85,7 +85,22 @@ const PAYMENT_SELECT = {
 const SETTINGS_COMMON_SELECT = {
   defaultCashAccountId: true,
   defaultBankAccountId: true,
+  checksReceivedAccountId: true,
+  checksPayableAccountId: true,
+  creditCardsPayableAccountId: true,
+  partnerDebtsAccountId: true,
+  receivablesAccountId: true,
+  payablesAccountId: true,
 } satisfies Prisma.AccountingSettingsSelect;
+
+/** Cheque endosado en una OP: `PaymentOrderPayment` no tiene relación Prisma a `Check`. */
+const ENDORSED_CHECK_SELECT = {
+  id: true,
+  accountId: true,
+  customerId: true,
+  isElectronic: true,
+  bankAccount: { select: { accountId: true } },
+} satisfies Prisma.CheckSelect;
 
 const NO_SETTINGS_MESSAGE = `No se encontró configuración contable para la empresa. Configurala en ${ACCOUNTING_SETTINGS_PATH}.`;
 
@@ -142,6 +157,22 @@ function paymentAccountOrigin(resolved: {
       return settingsOrigin('defaultCashAccountId');
     case 'defaultBank':
       return settingsOrigin('defaultBankAccountId');
+    case 'checksReceived':
+      return settingsOrigin('checksReceivedAccountId');
+    case 'checksPayable':
+      return settingsOrigin('checksPayableAccountId');
+    case 'creditCardsPayable':
+      return settingsOrigin('creditCardsPayableAccountId');
+    case 'partnerDebts':
+      return settingsOrigin('partnerDebtsAccountId');
+    case 'endorsedLegacyReceivable':
+      return settingsOrigin('receivablesAccountId');
+    case 'endorsedCheck':
+      return {
+        concept: 'Cuenta del cheque endosado',
+        origin: 'con la que ingresó el cheque endosado',
+        fixPath: 'Tesorería → Cheques',
+      };
   }
 }
 
@@ -234,7 +265,7 @@ async function runPreflight<T extends PaymentAccountCheck>(
   }
 
   // (b) Caja/banco sin cuenta resoluble: obligatoria, bloquea.
-  const classification = classifyPayments(input.payments, settings);
+  const classification = classifyPayments(input.payments, settings, kind);
   if (classification.missing.length > 0) {
     return fail(buildMissingPaymentAccountMessage(documentLabel, classification.missing[0]));
   }
@@ -300,7 +331,6 @@ export async function loadReceiptEntryPreflight(
     where: { companyId },
     select: {
       ...SETTINGS_COMMON_SELECT,
-      receivablesAccountId: true,
       withholdingIvaSufferedAccountId: true,
       withholdingGananciasSufferedAccountId: true,
       withholdingIibbSufferedAccountId: true,
@@ -372,7 +402,6 @@ export async function loadPaymentOrderEntryPreflight(
     where: { companyId },
     select: {
       ...SETTINGS_COMMON_SELECT,
-      payablesAccountId: true,
       withholdingIvaEmittedAccountId: true,
       withholdingGananciasEmittedAccountId: true,
       withholdingIibbEmittedAccountId: true,
@@ -380,6 +409,15 @@ export async function loadPaymentOrderEntryPreflight(
     },
   });
   if (!settings) return { documentLabel, error: NO_SETTINGS_MESSAGE, warnings: [], accounts: [] };
+
+  const endorsedIds = order.payments.flatMap((p) => (p.endorsedCheckId ? [p.endorsedCheckId] : []));
+  const endorsedChecks = endorsedIds.length
+    ? await client.check.findMany({
+        where: { id: { in: endorsedIds } },
+        select: ENDORSED_CHECK_SELECT,
+      })
+    : [];
+  const endorsedById = new Map(endorsedChecks.map((c) => [c.id, c]));
 
   const isPartnerOrder = Boolean(order.partnerId);
   return runPreflight({
@@ -389,7 +427,11 @@ export async function loadPaymentOrderEntryPreflight(
     kind: 'paymentOrder',
     counterpartField: 'payablesAccountId',
     withholdingRole: 'emitted',
-    payments: order.payments.map((p) => ({ ...p, amount: Number(p.amount) })),
+    payments: order.payments.map((p) => ({
+      ...p,
+      amount: Number(p.amount),
+      endorsedCheck: p.endorsedCheckId ? (endorsedById.get(p.endorsedCheckId) ?? null) : null,
+    })),
     withholdings: order.withholdings,
     settings,
     generatesEntry: !isPartnerOrder,

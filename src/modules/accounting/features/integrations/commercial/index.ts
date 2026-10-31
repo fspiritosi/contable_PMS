@@ -784,7 +784,8 @@ export async function createJournalEntryForReceipt(
     // Clasificar → bloquear por caja/banco sin cuenta → recién ahí restar los omitidos.
     const { resolved, missing, omitted, omittedAmount } = classifyPayments(
       receipt.payments.map((p) => ({ ...p, amount: Number(p.amount) })),
-      settings
+      settings,
+      'receipt'
     );
     if (missing.length > 0) {
       throw new BusinessError(buildMissingPaymentAccountMessage(documentLabel, missing[0]));
@@ -927,9 +928,30 @@ export async function createJournalEntryForPaymentOrder(
 
     // Clasificar → bloquear por caja/banco sin cuenta → recién ahí restar los omitidos.
     // La tarjeta de socio se decide antes que el banco: la empresa no mueve fondos ahora.
+    const endorsedIds = paymentOrder.payments.flatMap((p) =>
+      p.endorsedCheckId ? [p.endorsedCheckId] : []
+    );
+    const endorsedChecks = endorsedIds.length
+      ? await tx.check.findMany({
+          where: { id: { in: endorsedIds } },
+          select: {
+            id: true,
+            accountId: true,
+            customerId: true,
+            isElectronic: true,
+            bankAccount: { select: { accountId: true } },
+          },
+        })
+      : [];
+    const endorsedById = new Map(endorsedChecks.map((c) => [c.id, c]));
     const { resolved, missing, omitted, omittedAmount } = classifyPayments(
-      paymentOrder.payments.map((p) => ({ ...p, amount: Number(p.amount) })),
-      settings
+      paymentOrder.payments.map((p) => ({
+        ...p,
+        amount: Number(p.amount),
+        endorsedCheck: p.endorsedCheckId ? (endorsedById.get(p.endorsedCheckId) ?? null) : null,
+      })),
+      settings,
+      'paymentOrder'
     );
     if (missing.length > 0) {
       throw new BusinessError(buildMissingPaymentAccountMessage(documentLabel, missing[0]));
