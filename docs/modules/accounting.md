@@ -536,10 +536,13 @@ descuadrado que `validateBalance` rechazaba), y los tres confirm tragaban el err
   resuelve el campo con `withholdingSettingsField(taxType, 'suffered' | 'emitted')`.
 - Recibo: Debe caja/banco de cada pago resuelto + Ret. Sufridas → Haber Cuentas por Cobrar **por el
   importe contabilizable** (`total − omittedAmount`). OP: espejo con Cuentas por Pagar y Ret.
-  Emitidas; las OP a socio (`partnerId`) no generan asiento (sin cambio). Gasto: Debe Gastos
+  Emitidas; las OP a socio (`partnerId`) generan asiento desde TSK-735 (Debe cuentas de las cuotas, Haber pagos). Gasto: Debe Gastos
   Operativos → Haber Cuentas por Pagar.
-- Los **medios de pago sin cuenta** (cheque fisico/propio/endosado, tarjeta de credito, tarjeta de
-  socio, "Cuenta Corriente") se clasifican como `omitted` (`classifyPayments`,
+- Desde TSK-735 los cheques, e-cheq y tarjetas tienen cuenta (Valores a depositar, Valores diferidos a
+  pagar, Tarjetas de crédito a pagar, Deudas con socios) y el ciclo del cheque genera sus asientos;
+  ver [Cuentas de cheques y tarjetas](commercial.md#cuentas-de-cheques-y-tarjetas-tsk-735). Los
+  **medios de pago sin cuenta** que quedan ("Cuenta Corriente" histórica y el CREDIT_CARD de un
+  recibo) se clasifican como `omitted` (`classifyPayments`,
   `commercial/shared/payment-accounts.ts`) y no generan linea; el confirm los devuelve en
   `warnings[]` y el usuario los ve antes (dialogo) y despues (toast). Si ningun pago genera linea y
   no hay retenciones, la pre-validacion bloquea (asiento de una sola linea). Cadena de resolucion
@@ -552,8 +555,7 @@ descuadrado que `validateBalance` rechazaba), y los tres confirm tragaban el err
   `confirmExpense` (`assertExpenseEntryAccounts`); el asiento repite los chequeos como defensa en
   profundidad. Sin `try/catch` que trague: cualquier error aborta la transaccion y llega como
   `{ success: false, error }`.
-- Seguimientos (`.planes/tsk-728-…md` 2.4): dar cuenta a cheques/tarjetas/socios
-  (`checksReceivedAccountId` existe sin UI), movimientos bancarios manuales y transferencias (siguen
+- Seguimientos (`.planes/tsk-728-…md` 2.4): dar cuenta a cheques/tarjetas/socios (resuelto en TSK-735), movimientos bancarios manuales y transferencias (siguen
   no bloqueantes; TSK-760 los hizo rechazar el período cerrado). `integrations/treasury/index.ts` y
   `createJournalEntryForCOGS` (sin llamadores, callaban errores) se borraron en TSK-760 (fase 11).
 

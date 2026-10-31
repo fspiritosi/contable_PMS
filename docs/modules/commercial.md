@@ -971,22 +971,26 @@ Cada documento comercial confirmado genera un asiento contable automático:
 Cadena de resolución de la cuenta de cada pago de un recibo u OP, idéntica en los dos
 (`resolvePaymentAccount`, `modules/commercial/shared/payment-accounts.ts`):
 
+> Cadena vigente hasta TSK-735. Desde TSK-735 los cheques, las tarjetas de la empresa y de socio ya no
+> se omiten (tienen cuenta, ver la sección TSK-735 más abajo). Solo siguen omitidos `ACCOUNT` y el
+> `CREDIT_CARD` de un recibo.
+
 ```
-tarjeta de socio (OP)                        → omitido (PARTNER_CARD)
+tarjeta de socio (OP)                        → omitido (PARTNER_CARD)   [TSK-735: Deudas con socios]
 cashRegisterId && cashRegister.accountId     → cuenta propia de la caja
 bankAccountId  && bankAccount.accountId      → cuenta propia del banco
 cashRegisterId && defaultCashAccountId       → "Caja por Defecto"  (Ajustes)
 bankAccountId  && defaultBankAccountId       → "Banco por Defecto" (Ajustes)
 CASH sin caja / TRANSFER-DEBIT-ECHEQ sin banco → missing (bloquea)
-CHECK / CREDIT_CARD / ACCOUNT                → omitido (aviso)
+CHECK / CREDIT_CARD / ACCOUNT                → omitido (aviso)   [TSK-735: solo ACCOUNT y CREDIT_CARD de RC]
 ```
 
 | Medio (`PaymentMethod`) | Recibo | OP | Tratamiento |
 |---|---|---|---|
 | `CASH` | caja (obligatoria en Zod) | ídem | Obligatorio: caja → "Caja por Defecto"; sin cuenta → **bloquea** con el nombre de la caja |
 | `TRANSFER` | banco (obligatorio en Zod) | ídem | Obligatorio: banco → "Banco por Defecto"; sin cuenta → **bloquea** con el nombre del banco |
-| `DEBIT_CARD` | banco obligatorio en Zod | banco opcional (tarjeta de socio) | Empresa: como transferencia. Socio: **omitido** con aviso |
-| `ECHEQ` | banco obligatorio | banco (emisión) | Como transferencia (se imputa al banco antes de acreditarse; seguimiento 2.4-1) |
+| `DEBIT_CARD` | banco obligatorio en Zod | banco opcional (tarjeta de socio) | Empresa: como transferencia. Socio: Deudas con socios (TSK-735; antes omitido con aviso) |
+| `ECHEQ` | banco obligatorio | banco (emisión) | Recibido en un RC: Valores a depositar (TSK-735). Propio en una OP: como transferencia (banco) |
 | `CHECK` | cheque físico recibido | propio o endosado | Desde TSK-735 tiene cuenta propia (ver [Cuentas de cheques y tarjetas](#cuentas-de-cheques-y-tarjetas-tsk-735)) |
 | `CREDIT_CARD` | solo `cardLast4`: **omitido** con aviso (cobro con tarjeta de un cliente) | `cardId` + cuotas: Tarjetas de crédito a pagar (TSK-735) | Ver sección TSK-735 |
 | `ACCOUNT` ("Cuenta Corriente") | nada | nada | Ya no se ofrece (TSK-735); los históricos siguen **omitidos** con aviso («no representa un movimiento de fondos») |
@@ -998,7 +1002,7 @@ la ruta `ACCOUNTING_SETTINGS_PATH` («Contabilidad → Configuración»). Helper
 | Archivo | Rol |
 |---|---|
 | `modules/commercial/shared/settings-accounts.ts` | `findMissingSettingsAccounts`, `withholdingSettingsField`, `buildMissingSettingsAccountsMessage` («No se puede confirmar el recibo R-00001: falta configurar "Cuentas por Cobrar" en Contabilidad → Configuración.») |
-| `modules/commercial/shared/payment-accounts.ts` | `resolvePaymentAccount`, `classifyPayments` (`resolved` / `missing` / `omitted` + `omittedAmount`), `describePayment`, `buildMissingPaymentAccountMessage`, `buildOmittedPaymentWarning`, `buildSingleLineEntryMessage`, `buildPartnerOrderWarning`. Puros, 36 tests |
+| `modules/commercial/shared/payment-accounts.ts` | `resolvePaymentAccount`, `classifyPayments` (`resolved` / `missing` / `omitted` + `omittedAmount`), `describePayment`, `buildMissingPaymentAccountMessage`, `buildOmittedPaymentWarning`, `buildSingleLineEntryMessage` (`buildPartnerOrderWarning` se eliminó en TSK-735). Puros |
 | `treasury/shared/entry-preflight.ts` (`server-only`) | `loadReceiptEntryPreflight` / `loadPaymentOrderEntryPreflight(companyId, id, client?)` → `EntryPreflight { documentLabel, error, warnings, accounts }`; `assertEntryPreflight` lanza `BusinessError` con `error`. Una sola query alimenta la vista previa y la pre-validación |
 | `treasury/shared/components/_ConfirmEntryDialog.tsx` | Diálogo genérico de confirmar (recibo y OP): `useQuery` a `getReceiptEntryPreview` / `getPaymentOrderEntryPreview` (permiso `approve`), botón deshabilitado con `error`, `toast.error(result.error)`, `toast.warning(warningsTitle, { description: warnings.join(' ') })` |
 | `treasury/shared/components/_EntryPreviewNotice.tsx` | Estados del diálogo: «Verificando cuentas contables…», rojo «No se va a poder confirmar», ámbar «Avisos del asiento contable», neutro «El asiento contable se genera con estas cuentas:» |
@@ -1058,9 +1062,9 @@ cerrado y, si el asiento falla, la acción entera se revierte. Se guardan en `Ch
 | Depositar | PORTFOLIO → DEPOSITED | Banco / cuenta del cheque |
 | Rechazar | DEPOSITED → REJECTED | Cheques rechazados (cliente) / Banco |
 | Debitar (nueva, permiso `commercial.treasury.checks` + `approve`) | DELIVERED → CASHED | cuenta del cheque / Banco |
-| Anular en cartera | PORTFOLIO → VOIDED | Deudores (cliente) / cuenta del cheque |
+| Anular en cartera | PORTFOLIO → VOIDED | Deudores (cliente) / cuenta del cheque (histórico físico: sin asiento, con aviso) |
 | Anular depositado | DEPOSITED → VOIDED | revierte el depósito y anula como en cartera |
-| Anular entregado | DELIVERED → VOIDED | cuenta del cheque / Proveedores (proveedor) |
+| Anular entregado | DELIVERED → VOIDED | cuenta del cheque / Proveedores (proveedor) (histórico físico: sin asiento, con aviso) |
 | Acreditar | DEPOSITED → CLEARED | sin asiento (el débito al banco se hizo en el depósito) |
 | Endosar a mano (fuera de OP) | PORTFOLIO → ENDORSED | sin asiento, con aviso: el endoso contable va por OP |
 
@@ -1072,7 +1076,8 @@ acción se bloquea. Casos particulares (decisiones tomadas durante la implementa
   Deudores (cliente); débito de cheque propio = Proveedores (proveedor) / Banco.
 - **Rechazo de un histórico físico depositado antes del deploy** (sin `depositEntryId`): no hay débito previo al
   banco, así que reclasifica Cheques rechazados (cliente) / Cuentas por Cobrar (cliente) sin tocar Banco.
-- **Cheque cargado a mano** (sin `accountId` ni documento): su rechazo no genera asiento y avisa («cargado a mano»).
+- **Cheque cargado a mano** (sin `accountId` ni documento): ninguna acción (depositar, rechazar, debitar, anular) genera asiento; todas avisan («cargado a mano»).
+- **Anular un histórico físico** en cartera o entregado: no genera asiento y avisa.
 - **Débito de un e-cheq propio**: crea el movimiento bancario (egreso) y baja el saldo, pero **sin asiento**: la
   OP ya había acreditado el banco.
 - Rechazar o anular un cheque depositado ahora también descuenta el saldo bancario que sumó el depósito.

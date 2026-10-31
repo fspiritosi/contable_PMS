@@ -683,8 +683,13 @@ export function _TreasuryGuide() {
           <p className="text-sm text-muted-foreground mt-2">
             Los cheques de antes de este cambio se regularizan solos al
             depositarlos, endosarlos o debitarlos (el asiento descarga la
-            deuda del cliente o del proveedor). Un cheque cargado a mano, sin
-            recibo de origen, no genera asiento y el sistema te avisa. El{' '}
+            deuda del cliente o del proveedor). El depósito de un e-cheq
+            anterior no genera asiento (el recibo ya lo había mandado al
+            banco). Si rechazás un cheque anterior que ya estaba depositado,
+            el asiento lo pasa a Cheques rechazados pero no cierra el saldo
+            del cliente: eso se regulariza a mano. Un cheque cargado a mano,
+            sin recibo de origen, no genera asiento en ninguna acción y el
+            sistema te avisa. El{' '}
             <strong>endoso manual</strong> desde Cheques tampoco genera
             asiento: para el endoso contable usá una orden de pago. Si falta
             una cuenta en Configuración o el período está cerrado, la acción no

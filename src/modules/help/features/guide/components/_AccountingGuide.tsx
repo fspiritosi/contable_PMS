@@ -392,10 +392,11 @@ export function _AccountingGuide() {
               nombre exacto del campo que falta (tal como aparece en esta
               pantalla) y el comprobante queda en Borrador. En recibos y
               órdenes de pago, además, el diálogo de confirmar te muestra las
-              cuentas antes de que confirmes. Los pagos con cheque, tarjeta de
-              crédito, tarjeta de un socio o cuenta corriente todavía no
-              tienen cuenta en el sistema: se confirman con un aviso y ese
-              importe queda pendiente en Cuentas por Cobrar / Pagar.
+              cuentas antes de que confirmes. Los cheques, e-cheq y tarjetas
+              ya tienen su cuenta (sección Cheques y tarjetas). Solo dos casos
+              se siguen confirmando con un aviso, y ese importe queda pendiente
+              en Cuentas por Cobrar / Pagar: el cobro con tarjeta de crédito en
+              un recibo y la Cuenta Corriente de comprobantes viejos.
             </AlertDescription>
           </Alert>
           <Alert>
