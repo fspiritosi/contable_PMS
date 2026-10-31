@@ -60,6 +60,12 @@ export const commercialIntegrationSchema = z.object({
   accumulatedDepreciationAccountId: accountField,
   depreciationExpenseAccountId: accountField,
   assetDisposalGainLossAccountId: accountField,
+  // TSK-735: cheques y tarjetas. Las dos primeras ya existían en el modelo sin pantalla.
+  checksReceivedAccountId: accountField,
+  checksRejectedAccountId: accountField,
+  checksPayableAccountId: accountField,
+  creditCardsPayableAccountId: accountField,
+  partnerDebtsAccountId: accountField,
   /**
    * Con esto activo, toda línea imputada a una cuenta de resultado necesita
    * reparto por centro de costo para poder confirmar la factura (TSK-583).

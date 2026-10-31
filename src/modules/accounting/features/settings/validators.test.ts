@@ -83,12 +83,13 @@ describe('commercialIntegrationSchema', () => {
 
   // 23 + las 7 de percepciones e impuestos internos (TSK-644): percepción
   // IVA/IIBB/Municipal cobrada y sufrida, más impuestos internos; + la cuenta de
-  // gastos bancarios por defecto (TSK-718); + las 3 de inversiones (TSK-793).
-  it('cubre las 34 cuentas configurables', () => {
+  // gastos bancarios por defecto (TSK-718); + las 3 de inversiones (TSK-793);
+  // + las 5 de cheques y tarjetas (TSK-735).
+  it('cubre las 39 cuentas configurables', () => {
     const cuentas = Object.keys(commercialIntegrationSchema.shape).filter((key) =>
       key.endsWith('AccountId')
     );
-    expect(cuentas).toHaveLength(34);
+    expect(cuentas).toHaveLength(39);
   });
 
   /**

@@ -307,4 +307,38 @@ describe.skipIf(!dbAvailable)('Ajustes contables: ejercicio y cuentas (TSK-760, 
     expect(settings.fiscalYearEnd.toISOString()).toBe('2026-12-31T23:59:59.999Z');
     expect(await fiscalYearsOf(companyId)).toEqual([fyBefore]);
   });
+
+  it('guarda y devuelve las cuentas de cheques y tarjetas (TSK-735)', async () => {
+    const { companyId } = await setupCompany('Cheques');
+    await saveFiscalYearSettings({ startDay: '2026-01-01', endDay: '2026-12-31' });
+    const nombres = [
+      ['checksReceivedAccountId', 'ASSET', 'DEBIT'],
+      ['checksRejectedAccountId', 'ASSET', 'DEBIT'],
+      ['checksPayableAccountId', 'LIABILITY', 'CREDIT'],
+      ['creditCardsPayableAccountId', 'LIABILITY', 'CREDIT'],
+      ['partnerDebtsAccountId', 'LIABILITY', 'CREDIT'],
+    ] as const;
+    const ids: Record<string, string> = {};
+    for (const [campo, type, nature] of nombres) {
+      const { id } = await prisma.account.create({
+        data: { companyId, code: `T735-${campo}`, name: `${PREFIX}${campo}`, type, nature },
+        select: { id: true },
+      });
+      ids[campo] = id;
+    }
+
+    expect(await saveAccountingSettings(ids)).toEqual({ success: true });
+
+    const guardado = await prisma.accountingSettings.findUniqueOrThrow({
+      where: { companyId },
+      select: {
+        checksReceivedAccountId: true,
+        checksRejectedAccountId: true,
+        checksPayableAccountId: true,
+        creditCardsPayableAccountId: true,
+        partnerDebtsAccountId: true,
+      },
+    });
+    expect(guardado).toEqual(ids);
+  });
 });
