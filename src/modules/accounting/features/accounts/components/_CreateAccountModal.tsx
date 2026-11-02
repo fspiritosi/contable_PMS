@@ -74,7 +74,12 @@ export function _CreateAccountModal({ companyId, onClose }: CreateAccountModalPr
   const handleSubmit = async (data: CreateAccountInput) => {
     setIsLoading(true);
     try {
-      await createAccountFromForm({ companyId, input: data });
+      // TSK-822: los errores de negocio llegan como dato; un throw se redacta en producción.
+      const result = await createAccountFromForm({ companyId, input: data });
+      if (!result.success) {
+        toast.error(result.error);
+        return;
+      }
       toast.success('Cuenta creada correctamente');
       router.refresh();
       onClose();

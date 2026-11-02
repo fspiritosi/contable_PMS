@@ -27,7 +27,25 @@ Estructura jerarquica (arbol) donde cada cuenta puede tener cuentas hijas (`pare
 - Codigo unico por empresa
 - Naturaleza debe coincidir con el tipo (fija, no configurable)
 - No se puede eliminar si tiene sub-cuentas o lineas de asiento
-- Eliminacion soft (isActive = false)
+- Eliminacion soft (isActive = false). `recomputeIsLeaf` cuenta solo hijas activas: al eliminar la
+  ultima hija, el padre vuelve a ser imputable (TSK-822)
+- **Codigo de una cuenta eliminada (TSK-822).** La eliminada sigue ocupando el `@@unique([companyId, code])`.
+  `createAccount` y `updateAccount` llaman a `freeAccountCode` (`features/accounts/lib/deleted-account-code.server.ts`)
+  dentro de su transaccion:
+  - cuenta **activa** con ese codigo → `BusinessError` "Ya existe una cuenta con el código X («nombre»)";
+  - cuenta **eliminada sin referencias** → se borra fisicamente y el codigo queda libre (la baja ya garantiza que
+    no tiene asientos ni hijas);
+  - cuenta **eliminada con referencias** → `BusinessError` que nombra donde sigue asignada. Sin este control, el
+    borrado dejaria en NULL en silencio las FK opcionales (`SET NULL`).
+
+  Las referencias se cuentan con `_count` sobre `ACCOUNT_REFERENCE_LABELS`, un
+  `Record<keyof Prisma.AccountCountOutputType, string>`: **una relacion nueva hacia `Account` hace fallar
+  `npm run check-types` hasta agregarla ahi** con su etiqueta para el usuario. El `next build` no lo detecta
+  (`ignoreBuildErrors: true`), y una relacion que falte no se controla: si su FK es `SET NULL`, se pierde en silencio.
+- `createAccount` y `updateAccount` devuelven `ActionResult` (`{ success: true, id }` /
+  `{ success: true, fixedAssetCascade }`): los validadores de cuenta lanzan `BusinessError`, cuyo mensaje llega
+  al toast tambien en produccion. La importacion de Excel sigue saltando (no recrea) los codigos que ocupa una
+  cuenta eliminada.
 
 ---
 

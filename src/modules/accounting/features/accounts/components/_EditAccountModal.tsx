@@ -106,7 +106,12 @@ export function _EditAccountModal({ account, companyId, onClose }: EditAccountMo
   const saveAccount = async (data: CreateAccountInput) => {
     setIsLoading(true);
     try {
+      // TSK-822: los errores de negocio llegan como dato; un throw se redacta en producción.
       const result = await updateAccount(companyId, account.id, data);
+      if (!result.success) {
+        toast.error(result.error);
+        return;
+      }
       toast.success(
         result.fixedAssetCascade.applied && result.fixedAssetCascade.affectedAccountIds.length > 0
           ? `Cuenta actualizada. La marca de Bien de Uso se aplicó a ${result.fixedAssetCascade.affectedAccountIds.length} cuenta(s) del rubro.`

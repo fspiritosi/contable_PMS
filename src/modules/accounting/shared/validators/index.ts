@@ -1,22 +1,6 @@
 import { AccountNature, AccountType } from '@/generated/prisma/enums';
 import { prisma } from '@/shared/lib/prisma';
-
-/**
- * Valida que el código de cuenta sea único para la empresa
- */
-export async function validateAccountCode(companyId: string, code: string, excludeId?: string) {
-  const existingAccount = await prisma.account.findFirst({
-    where: {
-      companyId,
-      code,
-      id: excludeId ? { not: excludeId } : undefined,
-    },
-  });
-
-  if (existingAccount) {
-    throw new Error(`Ya existe una cuenta con el código ${code}`);
-  }
-}
+import { BusinessError } from '@/shared/lib/action-result';
 
 /**
  * Valida que el parent exista y pertenezca a la misma empresa
@@ -29,11 +13,11 @@ export async function validateAccountParent(companyId: string, parentId?: string
   });
 
   if (!parent) {
-    throw new Error('La cuenta padre no existe');
+    throw new BusinessError('La cuenta padre no existe');
   }
 
   if (parent.companyId !== companyId) {
-    throw new Error('La cuenta padre no pertenece a la empresa');
+    throw new BusinessError('La cuenta padre no pertenece a la empresa');
   }
 }
 
@@ -51,7 +35,7 @@ export async function validateAccountParentSameType(
   if (!parentId) return;
 
   if (selfAccountId && parentId === selfAccountId) {
-    throw new Error('Una cuenta no puede ser su propia cuenta padre');
+    throw new BusinessError('Una cuenta no puede ser su propia cuenta padre');
   }
 
   const parent = await prisma.account.findUnique({
@@ -60,15 +44,15 @@ export async function validateAccountParentSameType(
   });
 
   if (!parent) {
-    throw new Error('La cuenta padre no existe');
+    throw new BusinessError('La cuenta padre no existe');
   }
 
   if (parent.companyId !== companyId) {
-    throw new Error('La cuenta padre no pertenece a la empresa');
+    throw new BusinessError('La cuenta padre no pertenece a la empresa');
   }
 
   if (parent.type !== childType) {
-    throw new Error('La cuenta padre debe ser del mismo tipo que la cuenta');
+    throw new BusinessError('La cuenta padre debe ser del mismo tipo que la cuenta');
   }
 }
 
@@ -92,7 +76,7 @@ export function natureForType(type: AccountType): AccountNature {
  */
 export function validateAccountNature(type: AccountType, nature: AccountNature) {
   if (natureForType(type) !== nature) {
-    throw new Error(`La naturaleza ${nature} no es válida para una cuenta de tipo ${type}`);
+    throw new BusinessError(`La naturaleza ${nature} no es válida para una cuenta de tipo ${type}`);
   }
 }
 
