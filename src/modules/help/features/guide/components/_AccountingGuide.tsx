@@ -121,6 +121,16 @@ export function _AccountingGuide() {
             sumatoria, la baja se aplica <strong>en cascada</strong> a sus hijas.
           </p>
           <p className="mt-2">
+            <strong>Eliminar una cuenta:</strong> solo se pueden eliminar cuentas
+            sin movimientos y sin subcuentas. La cuenta eliminada deja de verse en
+            el plan y su <strong>código queda libre</strong>: podés crear otra
+            cuenta con ese mismo código. Si la cuenta eliminada todavía está
+            asignada en algún lado (una cuenta bancaria, una caja, la
+            configuración contable, una categoría de egreso), el sistema te avisa
+            dónde: quitá esa asignación o usá otro código. Si el código lo tiene
+            una cuenta que sigue en el plan, el aviso te dice cuál es.
+          </p>
+          <p className="mt-2">
             <strong>Cargar Plan Modelo:</strong> si tu empresa todavía no tiene
             cuentas, aparece el botón <strong>Cargar Plan Modelo</strong> que crea
             un plan de cuentas completo y predefinido (Activo, Pasivo, Patrimonio

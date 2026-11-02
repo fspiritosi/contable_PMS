@@ -5,7 +5,6 @@ import { prisma } from '@/shared/lib/prisma';
 import { logger } from '@/shared/lib/logger';
 import { checkPermission } from '@/shared/lib/permissions';
 import type { AccountType } from '@/generated/prisma/enums';
-import type { Account } from '@/generated/prisma/client';
 import { buildImputableAccountsWhere } from '@/shared/lib/accounts/imputable-accounts';
 import { revalidateAccountingRoutes, getAccountRollupBalances } from '../../shared/utils';
 import {
@@ -14,8 +13,9 @@ import {
   type FixedAssetCascadeReason,
 } from '../../shared/utils/account-subtree';
 import { type CreateAccountInput } from '../../shared/types';
+import { type ActionResult, BusinessError, toActionResult } from '@/shared/lib/action-result';
+import { freeAccountCode } from './lib/deleted-account-code.server';
 import {
-  validateAccountCode,
   validateAccountNature,
   validateAccountParent,
   validateAccountParentSameType,
@@ -33,14 +33,14 @@ import { randomUUID } from 'crypto';
 
 /**
  * Normaliza el código con `validateAccountCodeFormat` traduciendo el error de
- * formato a un `Error` con mensaje claro para la UI.
+ * formato a una `BusinessError`, para que su mensaje llegue a la UI en producción.
  */
 function normalizeAccountCode(code: string): string {
   try {
     return validateAccountCodeFormat(code);
   } catch (error) {
     if (error instanceof AccountCodeFormatError) {
-      throw new Error(error.message);
+      throw new BusinessError(error.message);
     }
     throw error;
   }
@@ -48,13 +48,14 @@ function normalizeAccountCode(code: string): string {
 
 /**
  * Recalcula `isLeaf` de una cuenta padre en base a la cantidad real de hijas.
- * Una cuenta sin hijas vuelve a ser hoja (imputable).
+ * Una cuenta sin hijas vuelve a ser hoja (imputable). Las hijas eliminadas (soft
+ * delete) no cuentan: si no, el padre no volvía a ser imputable nunca (TSK-822).
  */
 async function recomputeIsLeaf(
   tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
   parentId: string
 ): Promise<void> {
-  const childCount = await tx.account.count({ where: { parentId } });
+  const childCount = await tx.account.count({ where: { parentId, isActive: true } });
   await tx.account.update({
     where: { id: parentId },
     data: { isLeaf: childCount === 0 },
@@ -62,9 +63,16 @@ async function recomputeIsLeaf(
 }
 
 /**
- * Crea una nueva cuenta contable
+ * Crea una nueva cuenta contable.
+ *
+ * TSK-822: devuelve `ActionResult` (Next redacta en producción el mensaje de un
+ * `throw` y el usuario veía un error genérico) y libera el código si lo ocupa una
+ * cuenta eliminada sin referencias (ver `freeAccountCode`).
  */
-export async function createAccount(params: { companyId: string, input: CreateAccountInput }) {
+export async function createAccount(params: {
+  companyId: string;
+  input: CreateAccountInput;
+}): Promise<ActionResult<{ id: string }>> {
   const userId = await getCurrentUserId();
   if (!userId) throw new Error('No autenticado');
   await checkPermission('accounting.accounts', 'create', { redirect: true });
@@ -74,14 +82,18 @@ export async function createAccount(params: { companyId: string, input: CreateAc
     // Normalizar y validar formato de código antes de unicidad.
     const normalizedCode = normalizeAccountCode(input.code);
 
-    // Validaciones
-    await validateAccountCode(companyId, normalizedCode);
+    // Validaciones (la unicidad del código se resuelve dentro de la transacción).
     await validateAccountParent(companyId, input.parentId);
     await validateAccountParentSameType(companyId, input.parentId, input.type);
     validateAccountNature(input.type, input.nature);
 
     // La cuenta nace hoja (imputable); si tiene padre, el padre deja de ser hoja.
     const account = await prisma.$transaction(async (tx) => {
+      const { freedParentId } = await freeAccountCode(tx, { companyId, code: normalizedCode });
+      if (freedParentId) {
+        await recomputeIsLeaf(tx, freedParentId);
+      }
+
       // TSK-618: la cuenta nueva HEREDA la marca de Bien de Uso del padre. Sin
       // esto, una hija creada después de tildar el rubro queda desalineada en
       // silencio. Un valor explícito en el input gana: el modal deja destildar
@@ -124,10 +136,9 @@ export async function createAccount(params: { companyId: string, input: CreateAc
     });
     revalidateAccountingRoutes(companyId);
 
-    return account;
+    return { success: true, id: account.id };
   } catch (error) {
-    logger.error('Error al crear cuenta contable', { data: { error, userId } });
-    throw error;
+    return toActionResult(error, 'Error al crear cuenta contable');
   }
 }
 
@@ -143,9 +154,9 @@ export interface FixedAssetCascadeResult {
   affectedAccountIds: string[];
 }
 
-export type UpdateAccountResult = Account & {
+export type UpdateAccountResult = ActionResult<{
   fixedAssetCascade: FixedAssetCascadeResult;
-};
+}>;
 
 /**
  * Actualiza una cuenta contable existente.
@@ -155,6 +166,9 @@ export type UpdateAccountResult = Account & {
  * guardado, editar el nombre del rubro pisaría las excepciones destildadas a
  * mano —típicamente las Amortizaciones Acumuladas, que cuelgan del rubro pero
  * son regularizadoras— y el síntoma aparecería recién en producción.
+ *
+ * TSK-822: devuelve `ActionResult` y, si el código nuevo lo ocupa una cuenta
+ * eliminada sin referencias, lo libera (ver `freeAccountCode`).
  */
 export async function updateAccount(
   companyId: string,
@@ -172,21 +186,19 @@ export async function updateAccount(
     });
 
     if (!account) {
-      throw new Error('Cuenta no encontrada');
+      throw new BusinessError('Cuenta no encontrada');
     }
 
     if (account.companyId !== companyId) {
-      throw new Error('La cuenta no pertenece a la empresa');
+      throw new BusinessError('La cuenta no pertenece a la empresa');
     }
 
-    // Normalizar código si cambia.
+    // Normalizar código si cambia (su unicidad se resuelve dentro de la transacción).
     let normalizedCode: string | undefined;
     if (input.code && input.code !== account.code) {
       normalizedCode = normalizeAccountCode(input.code);
-      if (normalizedCode !== account.code) {
-        await validateAccountCode(companyId, normalizedCode, accountId);
-      }
     }
+    const codeChanged = normalizedCode !== undefined && normalizedCode !== account.code;
 
     // Tipo efectivo de la cuenta tras la edición (para validar el padre).
     const effectiveType: AccountType = input.type ?? account.type;
@@ -233,6 +245,17 @@ export async function updateAccount(
     }
 
     const updatedAccount = await prisma.$transaction(async (tx) => {
+      if (codeChanged && normalizedCode) {
+        const { freedParentId } = await freeAccountCode(tx, {
+          companyId,
+          code: normalizedCode,
+          excludeId: accountId,
+        });
+        if (freedParentId) {
+          await recomputeIsLeaf(tx, freedParentId);
+        }
+      }
+
       const updated = await tx.account.update({
         where: { id: accountId },
         data: {
@@ -282,7 +305,7 @@ export async function updateAccount(
     revalidateAccountingRoutes(companyId);
 
     return {
-      ...updatedAccount,
+      success: true,
       fixedAssetCascade: {
         applied: cascade !== null,
         value: cascade?.value ?? updatedAccount.isFixedAsset,
@@ -291,8 +314,7 @@ export async function updateAccount(
       },
     };
   } catch (error) {
-    logger.error('Error al actualizar cuenta contable', { data: { error, accountId, userId } });
-    throw error;
+    return toActionResult(error, 'Error al actualizar cuenta contable');
   }
 }
 
