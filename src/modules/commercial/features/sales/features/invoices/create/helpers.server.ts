@@ -83,6 +83,8 @@ export async function getActiveProducts() {
       trackStock: true,
       // El tipo de la cuenta decide si la línea admite centro de costo (TSK-583).
       defaultIncomeAccount: { select: { type: true } },
+      // Si la línea queda sin reparto, el asiento usa este centro (TSK-840).
+      defaultCostCenterId: true,
     },
     orderBy: {
       name: 'asc',

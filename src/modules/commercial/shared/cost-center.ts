@@ -161,6 +161,27 @@ export function findLinesMissingCostCenter<T extends CostCenterLineCheck>(lines:
   });
 }
 
+/**
+ * Líneas que, guardadas como están, terminan sin centro de costo en el asiento
+ * (TSK-840): admiten centro de costo, no tienen reparto y su ítem tampoco tiene
+ * centro predeterminado.
+ *
+ * Es el criterio del recordatorio al guardar, no una obligación: el formulario
+ * pregunta y deja guardar igual. Una línea sin reparto pero con centro
+ * predeterminado no se marca, porque `expandByCostCenter` ya imputa ese centro.
+ * La obligatoriedad al confirmar sigue siendo `findLinesMissingCostCenter`.
+ */
+export function findLinesWithoutCostCenter<
+  T extends CostCenterLineCheck & { defaultCostCenterId?: string | null },
+>(lines: T[]): T[] {
+  return lines.filter(
+    (line) =>
+      allowsCostCenter(line.accountType) &&
+      line.allocations.length === 0 &&
+      !line.defaultCostCenterId
+  );
+}
+
 /** Aviso para el usuario, nombrando qué líneas hay que completar. */
 export function buildMissingCostCenterMessage(missing: CostCenterLineCheck[]): string {
   const nombres = missing.map((l) => l.description).join(', ');

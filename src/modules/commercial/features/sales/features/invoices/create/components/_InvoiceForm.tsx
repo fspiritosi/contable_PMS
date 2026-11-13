@@ -44,8 +44,13 @@ import { invoiceFormSchema, VOUCHER_TYPE_LABELS } from '../../shared/validators'
 import {
   allowsCostCenter,
   effectiveAccountType,
+  findLinesWithoutCostCenter,
   replicateAllocations,
 } from '@/modules/commercial/shared/cost-center';
+import {
+  costCenterFieldId,
+  useCostCenterReminder,
+} from '@/modules/commercial/shared/components/_CostCenterReminder';
 import { _CostCenterAllocationField } from '@/modules/commercial/shared/components/_CostCenterAllocationField';
 import { _PerceptionsField } from '@/modules/commercial/shared/components/_PerceptionsField';
 import { calculateOtherTaxes } from '@/modules/commercial/shared/perceptions';
@@ -160,7 +165,7 @@ function _LineCostCenterField({
   };
 
   return (
-    <div className="pt-2">
+    <div id={costCenterFieldId(index)} className="pt-2 scroll-mt-24">
       <_CostCenterAllocationField
         name={`lines.${index}.costCenterAllocations`}
         lineAmount={lineAmount}
@@ -548,6 +553,8 @@ interface InvoiceFormProps {
     trackStock: boolean;
     // El tipo de la cuenta de ingresos decide si el ítem admite centro de costo (TSK-583).
     defaultIncomeAccountType?: string | null;
+    // Centro que usa el asiento si la línea no tiene reparto (TSK-840).
+    defaultCostCenterId?: string | null;
   }>;
   costCenters: SalesCostCenterSelectItem[];
   /** Cuenta de ventas por defecto de la empresa (TSK-583, revisión final). */
@@ -568,6 +575,7 @@ export function InvoiceForm({ customers, pointsOfSale, products, costCenters, de
       router.refresh();
     },
   });
+  const costCenterReminder = useCostCenterReminder<FormInput>();
   const isEdit = mode === 'edit';
   const [totals, setTotals] = useState({
     subtotalBeforeDiscount: 0,
@@ -861,12 +869,29 @@ export function InvoiceForm({ customers, pointsOfSale, products, costCenters, de
   };
 
   const onSubmit = async (data: FormInput) => {
-    try {
-      if (data.lines.length === 0) {
-        toast.error('Debe agregar al menos un ítem a la factura');
-        return;
-      }
+    if (data.lines.length === 0) {
+      toast.error('Debe agregar al menos un ítem a la factura');
+      return;
+    }
 
+    // TSK-840: antes de guardar, avisa qué líneas quedarían sin centro de costo.
+    const withoutCostCenter = findLinesWithoutCostCenter(
+      data.lines.map((line, index) => {
+        const product = products.find((p) => p.id === line.productId);
+        return {
+          index,
+          description: line.description,
+          accountType: effectiveAccountType(product?.defaultIncomeAccountType, defaultAccountType),
+          allocations: line.costCenterAllocations ?? [],
+          defaultCostCenterId: product?.defaultCostCenterId ?? null,
+        };
+      })
+    );
+    await costCenterReminder.guard(data, withoutCostCenter, save);
+  };
+
+  const save = async (data: FormInput) => {
+    try {
       if (isEdit && invoiceId && correction) {
         // El número viaja para que la regla de campos fijos de la FV lo controle.
         documentCorrection.open({
@@ -1364,6 +1389,7 @@ export function InvoiceForm({ customers, pointsOfSale, products, costCenters, de
         </div>
       </form>
       {documentCorrection.dialog}
+      {costCenterReminder.dialog}
     </Form>
   );
 }

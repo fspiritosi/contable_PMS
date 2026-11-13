@@ -1256,6 +1256,15 @@ porcentaje, en vez de un único centro fijo. Reglas:
   omite esas facturas, sigue con el resto e informa el motivo. Con el flag apagado (default),
   el comportamiento es el previo a esta entrega.
 - Facturas ya confirmadas no se revalidan: la regla corre solo al confirmar.
+- **Recordatorio al guardar (TSK-840)**: los formularios de factura de compra y de venta (alta y
+  edición) llaman a `findLinesWithoutCostCenter` antes de guardar. Marca las líneas de resultado
+  sin reparto **cuyo ítem tampoco tiene `defaultCostCenterId`**: son las que terminan sin centro
+  en el asiento. Si hay alguna, `useCostCenterReminder`
+  (`commercial/shared/components/_CostCenterReminder.tsx`) abre un `AlertDialog` que las nombra:
+  "Elegir ahora" cierra y lleva la vista al reparto de la primera (`costCenterFieldId(index)`), y
+  "Guardar sin centro de costo" guarda igual. No es una validación: es independiente de
+  `requireCostCenter`, que sigue bloqueando solo al confirmar (y ahí el centro predeterminado no
+  alcanza: exige reparto).
 - **Visible en el detalle** (TSK-583, reapertura): `PurchaseInvoiceDetail` e `InvoiceDetail`
   muestran el reparto debajo de la descripción de cada línea, con
   `formatCostCenterAllocations()` (`modules/commercial/shared/cost-center.ts`): un solo centro
