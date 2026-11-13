@@ -86,12 +86,16 @@ export function _AccountingConceptsGuide() {
           </li>
           <li>
             <strong>Movimientos bancarios</strong>: cuentas de <strong>Activo</strong>,{' '}
-            <strong>Pasivo</strong> o <strong>Patrimonio Neto</strong>
+            <strong>Pasivo</strong> o <strong>Patrimonio Neto</strong>. Además,{' '}
+            <strong>Comisión</strong> y <strong>Débito Automático</strong> admiten cuentas de{' '}
+            <strong>Egreso</strong>, e <strong>Interés</strong> admite cuentas de{' '}
+            <strong>Ingreso</strong> o <strong>Egreso</strong> (según se cobre o se pague)
           </li>
           <li>
             Si el concepto tiene <strong>varios usos</strong>, solo admite las cuentas que sirven
             para todos a la vez. Por ejemplo, un concepto de Gastos bancarios y de Comisión
-            bancaria admite únicamente cuentas de Activo
+            bancaria (como el impuesto a los débitos y créditos) admite cuentas de Egreso o de
+            Activo; uno de Gastos bancarios y de Depósito, solo de Activo
           </li>
         </ul>
         <p>

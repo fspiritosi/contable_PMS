@@ -95,10 +95,20 @@ describe.skipIf(!dbAvailable)('integración: ABM de conceptos (TSK-791)', () => 
     expect(row?.usageCount).toBe(0);
   });
 
-  it('rechaza cuenta EXPENSE si también aplica a BANK_FEE', async () => {
+  it('acepta cuenta EXPENSE para gastos bancarios + comisión (TSK-839)', async () => {
+    const result = await createConcept({
+      name: `${PREFIX}Imp deb cred`,
+      usages: ['FUND_BANK_CHARGES', 'BANK_FEE'],
+      accountMode: 'OWN_ACCOUNT',
+      accountId: expenseAccountId,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rechaza cuenta EXPENSE si también aplica a un depósito', async () => {
     const result = await createConcept({
       name: `${PREFIX}Mixto`,
-      usages: ['FUND_BANK_CHARGES', 'BANK_FEE'],
+      usages: ['FUND_BANK_CHARGES', 'BANK_DEPOSIT'],
       accountMode: 'OWN_ACCOUNT',
       accountId: expenseAccountId,
     });
@@ -107,17 +117,22 @@ describe.skipIf(!dbAvailable)('integración: ABM de conceptos (TSK-791)', () => 
     // La cuenta ASSET sí sirve para ambos usos
     const ok = await createConcept({
       name: `${PREFIX}Mixto`,
-      usages: ['FUND_BANK_CHARGES', 'BANK_FEE'],
+      usages: ['FUND_BANK_CHARGES', 'BANK_DEPOSIT'],
       accountMode: 'OWN_ACCOUNT',
       accountId: assetAccountId,
     });
     expect(ok.success).toBe(true);
   });
 
-  it('getConceptAccountOptions ofrece solo cuentas de la intersección e incluye las pedidas', async () => {
+  it('getConceptAccountOptions ofrece las cuentas de gastos para una comisión (TSK-839)', async () => {
     const options = await getConceptAccountOptions(['FUND_BANK_CHARGES', 'BANK_FEE']);
+    expect(options.map((a) => a.id).sort()).toEqual([assetAccountId, expenseAccountId].sort());
+  });
+
+  it('getConceptAccountOptions ofrece solo cuentas de la intersección e incluye las pedidas', async () => {
+    const options = await getConceptAccountOptions(['FUND_BANK_CHARGES', 'BANK_DEPOSIT']);
     expect(options.map((a) => a.id)).toEqual([assetAccountId]);
-    const withInclude = await getConceptAccountOptions(['FUND_BANK_CHARGES', 'BANK_FEE'], [
+    const withInclude = await getConceptAccountOptions(['FUND_BANK_CHARGES', 'BANK_DEPOSIT'], [
       expenseAccountId,
     ]);
     expect(withInclude.map((a) => a.id).sort()).toEqual([assetAccountId, expenseAccountId].sort());
