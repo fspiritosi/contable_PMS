@@ -42,8 +42,39 @@ describe('allowedAccountTypes', () => {
   it('gastos bancarios admite EXPENSE y ASSET', () => {
     expect([...allowedAccountTypes(['FUND_BANK_CHARGES'])].sort()).toEqual(['ASSET', 'EXPENSE']);
   });
-  it('intersecta gastos bancarios con comisión bancaria', () => {
-    expect(allowedAccountTypes(['FUND_BANK_CHARGES', 'BANK_FEE'])).toEqual(['ASSET']);
+  // TSK-839: una comisión bancaria es un gasto. El caso del ticket: «Imp. déb./créd.» con
+  // gastos bancarios + comisión tiene que poder llevar la cuenta 4.2.1/07/06 (Gastos).
+  it('intersecta gastos bancarios con comisión bancaria: admite EXPENSE y ASSET', () => {
+    expect([...allowedAccountTypes(['FUND_BANK_CHARGES', 'BANK_FEE'])].sort()).toEqual([
+      'ASSET',
+      'EXPENSE',
+    ]);
+  });
+  it('comisión y débito automático admiten EXPENSE además de las patrimoniales', () => {
+    for (const usage of ['BANK_FEE', 'BANK_DEBIT'] as const) {
+      expect([...allowedAccountTypes([usage])].sort()).toEqual([
+        'ASSET',
+        'EQUITY',
+        'EXPENSE',
+        'LIABILITY',
+      ]);
+    }
+  });
+  it('interés admite REVENUE y EXPENSE (cobrado o pagado)', () => {
+    expect([...allowedAccountTypes(['BANK_INTEREST'])].sort()).toEqual([
+      'ASSET',
+      'EQUITY',
+      'EXPENSE',
+      'LIABILITY',
+      'REVENUE',
+    ]);
+  });
+  it('depósito sigue siendo solo patrimonial', () => {
+    expect([...allowedAccountTypes(['BANK_DEPOSIT'])].sort()).toEqual([
+      'ASSET',
+      'EQUITY',
+      'LIABILITY',
+    ]);
   });
   it('aporte de socio con depósito admite ASSET, LIABILITY y EQUITY', () => {
     expect([...allowedAccountTypes(['FUND_PARTNER_CONTRIBUTION', 'BANK_DEPOSIT'])].sort()).toEqual([

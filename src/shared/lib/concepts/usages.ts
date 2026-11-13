@@ -78,18 +78,25 @@ export function bankMovementUsage(type: BankMovementType): ConceptUsage {
 export const PARTNER_USAGES: ConceptUsage[] = ['FUND_PARTNER_CONTRIBUTION', 'FUND_PARTNER_WITHDRAWAL'];
 
 // Tipos de cuenta admitidos por uso (reglas existentes: TSK-579, TSK-717, ticket #376).
+//
+// TSK-839: el #376 pedía que las cuentas "de Resultado" no aparezcan en los selects de
+// imputación, pero ahí "Resultado" quería decir cuenta de sumatoria (no imputable), no
+// tipo Ingresos/Gastos: la propia configuración contable ofrece cuentas de Gastos. Una
+// comisión o un débito bancario son gastos, y un interés puede cobrarse o pagarse; los
+// demás movimientos bancarios mueven patrimonio y siguen restringidos.
+const BANK_PATRIMONIAL: AccountType[] = ['ASSET', 'LIABILITY', 'EQUITY'];
 const ALLOWED_ACCOUNT_TYPES_BY_USAGE: Record<ConceptUsage, AccountType[]> = {
   FUND_BANK_CHARGES: ['EXPENSE', 'ASSET'],
   FUND_PARTNER_CONTRIBUTION: ['ASSET', 'LIABILITY', 'EQUITY'],
   FUND_PARTNER_WITHDRAWAL: ['ASSET', 'LIABILITY', 'EQUITY'],
-  BANK_DEPOSIT: ['ASSET', 'LIABILITY', 'EQUITY'],
-  BANK_WITHDRAWAL: ['ASSET', 'LIABILITY', 'EQUITY'],
-  BANK_TRANSFER_IN: ['ASSET', 'LIABILITY', 'EQUITY'],
-  BANK_TRANSFER_OUT: ['ASSET', 'LIABILITY', 'EQUITY'],
-  BANK_CHECK: ['ASSET', 'LIABILITY', 'EQUITY'],
-  BANK_DEBIT: ['ASSET', 'LIABILITY', 'EQUITY'],
-  BANK_FEE: ['ASSET', 'LIABILITY', 'EQUITY'],
-  BANK_INTEREST: ['ASSET', 'LIABILITY', 'EQUITY'],
+  BANK_DEPOSIT: BANK_PATRIMONIAL,
+  BANK_WITHDRAWAL: BANK_PATRIMONIAL,
+  BANK_TRANSFER_IN: BANK_PATRIMONIAL,
+  BANK_TRANSFER_OUT: BANK_PATRIMONIAL,
+  BANK_CHECK: BANK_PATRIMONIAL,
+  BANK_DEBIT: [...BANK_PATRIMONIAL, 'EXPENSE'],
+  BANK_FEE: [...BANK_PATRIMONIAL, 'EXPENSE'],
+  BANK_INTEREST: [...BANK_PATRIMONIAL, 'REVENUE', 'EXPENSE'],
 };
 
 /** Tipos de cuenta admitidos por TODOS los usos (intersección). Vacío si no hay usos. */

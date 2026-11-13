@@ -28,8 +28,13 @@ import { MoneyInput } from '@/shared/components/ui/money-input';
 import {
   allowsCostCenter,
   effectiveAccountType,
+  findLinesWithoutCostCenter,
   replicateAllocations,
 } from '@/modules/commercial/shared/cost-center';
+import {
+  costCenterFieldId,
+  useCostCenterReminder,
+} from '@/modules/commercial/shared/components/_CostCenterReminder';
 import { _CostCenterAllocationField } from '@/modules/commercial/shared/components/_CostCenterAllocationField';
 import { _PerceptionsField } from '@/modules/commercial/shared/components/_PerceptionsField';
 import { _FixedAssetAttachmentNotice } from '@/modules/commercial/shared/components/_FixedAssetAttachmentNotice';
@@ -151,7 +156,7 @@ function _LineCostCenterField({
   };
 
   return (
-    <div className="md:col-span-2 lg:col-span-3">
+    <div id={costCenterFieldId(index)} className="md:col-span-2 lg:col-span-3 scroll-mt-24">
       <_CostCenterAllocationField
         name={`lines.${index}.costCenterAllocations`}
         lineAmount={lineAmount}
@@ -195,6 +200,7 @@ export function _PurchaseInvoiceForm({
       router.refresh();
     },
   });
+  const costCenterReminder = useCostCenterReminder<PurchaseInvoiceFormInput>();
   const [totals, setTotals] = useState({
     subtotal: 0,
     vatAmount: 0,
@@ -417,6 +423,23 @@ export function _PurchaseInvoiceForm({
       if (hasError) return;
     }
 
+    // TSK-840: antes de guardar, avisa qué líneas quedarían sin centro de costo.
+    const withoutCostCenter = findLinesWithoutCostCenter(
+      data.lines.map((line, index) => {
+        const product = products.find((p) => p.id === line.productId);
+        return {
+          index,
+          description: line.description,
+          accountType: effectiveAccountType(product?.defaultExpenseAccountType, defaultAccountType),
+          allocations: line.costCenterAllocations ?? [],
+          defaultCostCenterId: product?.defaultCostCenterId ?? null,
+        };
+      })
+    );
+    await costCenterReminder.guard(data, withoutCostCenter, save);
+  };
+
+  const save = async (data: PurchaseInvoiceFormInput) => {
     try {
       if (mode === 'edit' && invoiceId && isCorrection) {
         documentCorrection.open({
@@ -999,6 +1022,7 @@ export function _PurchaseInvoiceForm({
         </div>
       </form>
       {documentCorrection.dialog}
+      {costCenterReminder.dialog}
     </Form>
   );
 }

@@ -402,7 +402,11 @@ Modelo y campos en `docs/architecture/data-model.md` (`MovementConcept`).
 - **Validación** (`shared/validators.ts` + `validateConceptConfig` de `shared/lib/concepts`): cuenta
   propia obligatoria si algún uso no es Aporte/Retiro; `PARTNER_ACCOUNT` solo si todos los usos son
   Aporte/Retiro; la cuenta debe ser imputable y de un tipo admitido por **todos** los usos
-  (intersección: Gastos bancarios `EXPENSE`/`ASSET`; Aporte/Retiro y `BANK_*` `ASSET`/`LIABILITY`/`EQUITY`).
+  (intersección: Gastos bancarios `EXPENSE`/`ASSET`; Aporte/Retiro y `BANK_*` `ASSET`/`LIABILITY`/`EQUITY`,
+  más `EXPENSE` en `BANK_FEE` y `BANK_DEBIT`, y `REVENUE`/`EXPENSE` en `BANK_INTEREST`).
+  **TSK-839:** antes ningún `BANK_*` admitía resultado, por leer el #376 ("las de tipo Resultado no
+  aparecen en los selects de imputación") como tipo Ingresos/Gastos, cuando ahí "Resultado" quería
+  decir sumatoria. Por eso un concepto de Gastos bancarios + Comisión solo ofrecía `ASSET`.
 - **UI**: DataTable con usos como badges; formulario con usos agrupados por familia (Movimientos de
   fondo / Movimientos bancarios) y el campo de cuenta, que solo ofrece "cuenta del socio" cuando
   corresponde.

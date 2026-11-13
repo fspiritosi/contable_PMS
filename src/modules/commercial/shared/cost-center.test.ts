@@ -7,6 +7,7 @@ import {
   effectiveAccountType,
   expandByCostCenter,
   findLinesMissingCostCenter,
+  findLinesWithoutCostCenter,
   formatCostCenterAllocations,
   prorateAmount,
   replicateAllocations,
@@ -483,5 +484,40 @@ describe('texto de los centros de costo de una línea (TSK-583)', () => {
     expect(
       formatCostCenterAllocations([centro('Logística', 12.3456), centro('Mantenimiento', 87.6544)])
     ).toBe('Centros de costo: Logística 12,35% · Mantenimiento 87,65%');
+  });
+});
+
+describe('recordatorio al guardar: líneas que quedan sin centro de costo (TSK-840)', () => {
+  const line = (
+    description: string,
+    accountType: string | null,
+    allocations: CostCenterAllocation[] = [],
+    defaultCostCenterId: string | null = null
+  ) => ({ description, accountType, allocations, defaultCostCenterId });
+
+  it('marca una línea de gastos sin reparto y sin centro predeterminado', () => {
+    const missing = findLinesWithoutCostCenter([line('Gastos bancarios c/IVA', 'EXPENSE')]);
+    expect(missing.map((l) => l.description)).toEqual(['Gastos bancarios c/IVA']);
+  });
+
+  it('marca también una línea de ingresos (factura de venta)', () => {
+    expect(findLinesWithoutCostCenter([line('Servicio', 'REVENUE')])).toHaveLength(1);
+  });
+
+  it('no marca la línea si el ítem tiene centro predeterminado: el asiento ya lo usa', () => {
+    expect(findLinesWithoutCostCenter([line('Con predeterminado', 'EXPENSE', [], 'cc-1')])).toEqual(
+      []
+    );
+  });
+
+  it('no marca la línea que ya tiene reparto', () => {
+    const allocated = line('Repartida', 'EXPENSE', [{ costCenterId: 'cc-1', percentage: 100 }]);
+    expect(findLinesWithoutCostCenter([allocated])).toEqual([]);
+  });
+
+  it('no marca líneas que no admiten centro de costo (activo o sin cuenta conocida)', () => {
+    expect(findLinesWithoutCostCenter([line('Compra de rodado', 'ASSET'), line('Suelto', null)])).toEqual(
+      []
+    );
   });
 });

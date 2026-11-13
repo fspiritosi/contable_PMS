@@ -575,6 +575,14 @@ export function _CommercialGuide() {
             nada, porque usan el centro predeterminado del ítem.
           </p>
           <p className="text-sm text-muted-foreground">
+            <strong>Aviso al guardar:</strong> si alguna línea de gasto o de ingreso no
+            tiene reparto y su ítem tampoco tiene un centro de costo predeterminado,
+            al guardar aparece un aviso con esas líneas. Con{' '}
+            <strong>Elegir ahora</strong> volvés al formulario, justo en el reparto de
+            la primera; con <strong>Guardar sin centro de costo</strong> la factura se
+            guarda igual y el centro se puede cargar después, editándola.
+          </p>
+          <p className="text-sm text-muted-foreground">
             Si en <strong>Contabilidad → Configuración</strong> está
             activado <strong>Exigir centro de costo</strong>, no se puede{' '}
             <strong>confirmar</strong> una factura (de compra o de venta) con

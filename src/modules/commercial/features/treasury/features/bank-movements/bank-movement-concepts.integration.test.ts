@@ -56,9 +56,14 @@ describe.skipIf(!dbAvailable)('integración: conceptos en el movimiento bancario
   let bankId: string;
   const concepts: Record<string, string> = {};
 
-  async function createAccount(cid: string, code: string, name: string) {
+  async function createAccount(
+    cid: string,
+    code: string,
+    name: string,
+    type: 'ASSET' | 'EXPENSE' = 'ASSET'
+  ) {
     const a = await prisma.account.create({
-      data: { companyId: cid, code, name: `${PREFIX}${name}`, type: 'ASSET', nature: 'DEBIT' },
+      data: { companyId: cid, code, name: `${PREFIX}${name}`, type, nature: 'DEBIT' },
       select: { id: true },
     });
     return a.id;
@@ -106,7 +111,8 @@ describe.skipIf(!dbAvailable)('integración: conceptos en el movimiento bancario
     ).id;
 
     bankLedgerId = await createAccount(companyId, 'T791B-BANCO', 'Banco');
-    feeAccountId = await createAccount(companyId, 'T791B-COMISION', 'Cuenta de comisión');
+    // TSK-839: la comisión se imputa a una cuenta de Gastos, como en la empresa real.
+    feeAccountId = await createAccount(companyId, 'T791B-COMISION', 'Cuenta de comisión', 'EXPENSE');
     const otherAccountId = await createAccount(otherCompanyId, 'T791B-OTRA', 'Cuenta ajena');
 
     bankId = (
