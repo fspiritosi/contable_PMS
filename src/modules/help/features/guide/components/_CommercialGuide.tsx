@@ -512,7 +512,10 @@ export function _CommercialGuide() {
             </li>
             <li>
               Los importes se muestran con separador de miles y coma decimal
-              (4.000.000,50), así no hay que contar dígitos
+              (4.000.000,50), así no hay que contar dígitos. Para los
+              decimales sirve la coma o el <strong>punto del teclado
+              numérico</strong>; el punto del teclado de letras se toma como
+              separador de miles. Vale para todos los importes del sistema
             </li>
             <li>
               Cada línea puede repartirse entre uno o varios{' '}

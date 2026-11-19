@@ -163,6 +163,19 @@ mañana y, el último día del mes, en el período siguiente (TSK-782). "Hoy" se
 contable, `todayBusinessDayUtc()` (`utc-month.ts`) es lo mismo con la convención D8. Las marcas de tiempo
 de un evento (`createdAt`, la fecha de un movimiento de stock) siguen con `new Date()`.
 
+### Importes: `MoneyInput`
+
+Todo campo de importe usa `MoneyInput` (`@/shared/components/ui/money-input`): muestra el valor en es-AR
+(`4.000.000,50`) mientras se escribe y le pasa al formulario el número crudo con punto (`"4000000.5"`).
+
+- El `.` del teclado principal es separador de miles y se descarta; la coma es el decimal.
+- El `.` del **teclado numérico** (`e.code === 'NumpadDecimal'`) escribe la coma decimal, como en Excel
+  (TSK-851). No inserta una segunda coma ni actúa con `maxDecimals={0}`. El cursor queda tras la coma con
+  un `useLayoutEffect`: con un `requestAnimationFrame` se pisaba la tecla siguiente al tipear rápido.
+- La lógica pura (`formatMoneyDisplay`, `parseMoneyDisplay`, `insertDecimalComma`) está en
+  `@/shared/utils/money-input`, con tests.
+- En celulares el teclado `inputMode="decimal"` no manda `NumpadDecimal`: ahí no cambia nada.
+
 ### Schemas en `validators.ts`
 
 Los schemas Zod van en el archivo `validators.ts` de cada feature o en `shared/validators.ts` si son compartidos.

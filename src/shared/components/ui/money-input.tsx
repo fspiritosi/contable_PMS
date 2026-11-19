@@ -3,6 +3,11 @@
 import * as React from 'react';
 
 import { Input } from '@/shared/components/ui/input';
+import {
+  formatMoneyDisplay,
+  insertDecimalComma,
+  parseMoneyDisplay,
+} from '@/shared/utils/money-input';
 
 /**
  * Input de importes con separadores de miles en formato es-AR
@@ -12,6 +17,9 @@ import { Input } from '@/shared/components/ui/input';
  * decimal (ej. "4000000.5"), compatible con las validaciones Zod existentes
  * del tipo `^\d+(\.\d{1,2})?$`. Lo que se MUESTRA es el valor formateado
  * ("4.000.000,5").
+ *
+ * El "." del teclado numérico escribe la coma decimal (TSK-851); el "." del
+ * teclado principal sigue siendo separador de miles.
  */
 export interface MoneyInputProps
   extends Omit<React.ComponentProps<typeof Input>, 'value' | 'onChange' | 'type' | 'inputMode'> {
@@ -23,42 +31,47 @@ export interface MoneyInputProps
   maxDecimals?: number;
 }
 
-/** "4000000.5" -> "4.000.000,5" (formato es-AR). */
-function formatDisplay(raw: string): string {
-  if (raw === '' || raw == null) return '';
-  const negative = raw.startsWith('-');
-  const unsigned = negative ? raw.slice(1) : raw;
-  const [intPart, decPart] = unsigned.split('.');
-  const intClean = intPart.replace(/^0+(?=\d)/, ''); // sin ceros a la izquierda
-  const intFormatted = (intClean || '0').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-  const body = decPart !== undefined ? `${intFormatted},${decPart}` : intFormatted;
-  return negative ? `-${body}` : body;
-}
-
-/**
- * Texto tipeado (es-AR) -> valor crudo con punto decimal.
- * Acepta puntos y comas: el ÚLTIMO separador de coma se toma como decimal;
- * los puntos se tratan como separadores de miles.
- */
-function parseToRaw(display: string, maxDecimals: number): string {
-  const negative = display.trim().startsWith('-');
-  // Quitar todo lo que no sea dígito o coma (los puntos son miles)
-  let cleaned = display.replace(/[^\d,]/g, '');
-  // Solo la primera coma cuenta como decimal
-  const firstComma = cleaned.indexOf(',');
-  if (firstComma !== -1) {
-    const intp = cleaned.slice(0, firstComma).replace(/,/g, '');
-    let decp = cleaned.slice(firstComma + 1).replace(/,/g, '');
-    if (maxDecimals >= 0) decp = decp.slice(0, maxDecimals);
-    cleaned = `${intp}.${decp}`;
-  }
-  if (cleaned === '' || cleaned === '.') return '';
-  return negative ? `-${cleaned}` : cleaned;
-}
-
 export const MoneyInput = React.forwardRef<HTMLInputElement, MoneyInputProps>(
-  ({ value, onChange, maxDecimals = 2, ...props }, ref) => {
-    const display = formatDisplay(value == null ? '' : String(value));
+  ({ value, onChange, maxDecimals = 2, onKeyDown, ...props }, ref) => {
+    const display = formatMoneyDisplay(value == null ? '' : String(value));
+
+    // Input donde se acaba de escribir la coma con el numérico: tras el render
+    // hay que dejar el cursor detrás de ella, porque al reformatear el valor
+    // React lo manda al final. Se hace en layout effect (no en un frame
+    // posterior) para no pisar la tecla siguiente si se tipea rápido.
+    const caretAfterComma = React.useRef<HTMLInputElement | null>(null);
+    React.useLayoutEffect(() => {
+      const input = caretAfterComma.current;
+      if (!input) return;
+      caretAfterComma.current = null;
+      const comma = input.value.indexOf(',');
+      if (comma !== -1) input.setSelectionRange(comma + 1, comma + 1);
+    }, [display]);
+
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+      onKeyDown?.(e);
+      if (e.defaultPrevented || e.code !== 'NumpadDecimal') return;
+
+      e.preventDefault();
+      const input = e.currentTarget;
+      const next = insertDecimalComma(
+        input.value,
+        input.selectionStart ?? input.value.length,
+        input.selectionEnd ?? input.value.length,
+        maxDecimals
+      );
+      if (next === null) return;
+
+      const nextRaw = parseMoneyDisplay(next, maxDecimals);
+      if (formatMoneyDisplay(nextRaw) === display) {
+        // Sin cambio visible (p. ej. se reemplazó la coma por otra): no habrá render.
+        const comma = display.indexOf(',');
+        input.setSelectionRange(comma + 1, comma + 1);
+        return;
+      }
+      caretAfterComma.current = input;
+      onChange(nextRaw);
+    };
 
     return (
       <Input
@@ -67,7 +80,8 @@ export const MoneyInput = React.forwardRef<HTMLInputElement, MoneyInputProps>(
         type="text"
         inputMode="decimal"
         value={display}
-        onChange={(e) => onChange(parseToRaw(e.target.value, maxDecimals))}
+        onChange={(e) => onChange(parseMoneyDisplay(e.target.value, maxDecimals))}
+        onKeyDown={handleKeyDown}
       />
     );
   }
