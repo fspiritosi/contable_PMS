@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>TSK-850 · Buscador en el plan de cuentas</title>
+<style>
+  @page {
+    size: A4;
+    margin: 0;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #1f2430;
+    font-size: 13px;
+    line-height: 1.55;
+    background: #ffffff;
+  }
+
+  .page {
+    padding: 4mm 2mm;
+  }
+
+  header.cover {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    text-align: left;
+    padding: 10mm 2mm 8mm 2mm;
+    border-bottom: 3px solid #2f6f4f;
+    margin-bottom: 10mm;
+  }
+
+  .eyebrow {
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 11px;
+    font-weight: 700;
+    color: #2f6f4f;
+    margin-bottom: 6px;
+  }
+
+  h1 {
+    font-size: 26px;
+    margin: 0 0 8px 0;
+    color: #14251c;
+  }
+
+  .subtitle {
+    font-size: 14px;
+    color: #4b5563;
+    margin: 0;
+  }
+
+  section {
+    margin-bottom: 9mm;
+    page-break-inside: avoid;
+  }
+
+  section.allow-break {
+    page-break-inside: auto;
+  }
+
+  section:last-of-type { margin-bottom: 2mm; }
+
+  h2 {
+    font-size: 16px;
+    color: #14251c;
+    border-left: 4px solid #2f6f4f;
+    padding-left: 8px;
+    margin: 0 0 6mm 0;
+    page-break-after: avoid;
+  }
+
+  h3.sub {
+    font-size: 13.5px;
+    color: #14251c;
+    margin: 6mm 0 3mm 0;
+    page-break-after: avoid;
+  }
+
+  .quote {
+    background: #f4f7f5;
+    border-left: 4px solid #2f6f4f;
+    padding: 10px 14px;
+    font-style: italic;
+    color: #2b3a33;
+    margin: 0 0 6px 0;
+  }
+
+  .quote cite {
+    display: block;
+    font-style: normal;
+    font-size: 11.5px;
+    color: #6b7280;
+    margin-top: 6px;
+  }
+
+  .before-after {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    page-break-inside: avoid;
+  }
+
+  .card {
+    border: 1px solid #e2e5e0;
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+
+  .card.before { background: #fbf7f2; border-color: #ecd9bd; }
+  .card.after { background: #f2f8f4; border-color: #bfe0cb; }
+
+  .card h3 {
+    margin: 0 0 6px 0;
+    font-size: 12.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .card.before h3 { color: #9a6a1f; }
+  .card.after h3 { color: #226240; }
+
+  .card p { margin: 0; }
+
+  ol.steps {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    counter-reset: step;
+  }
+
+  ol.steps > li {
+    counter-increment: step;
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+    page-break-inside: avoid;
+  }
+
+  ol.steps > li::before {
+    content: counter(step);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    border-radius: 50%;
+    background: #2f6f4f;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  ol.steps.letters > li::before {
+    content: counter(step, lower-alpha);
+  }
+
+  .step-body { flex: 1; }
+
+  .step-body strong { color: #14251c; }
+
+  figure {
+    margin: 8px 0 0 0;
+    page-break-inside: avoid;
+  }
+
+  figure img {
+    max-width: 100%;
+    border: 1px solid #d9dce0;
+    border-radius: 6px;
+    display: block;
+  }
+
+  figure.small img { max-width: 320px; }
+
+  figure.sidebar img { max-width: 150px; }
+
+  figure.modal img { max-width: 400px; }
+
+  figure.modal-sm img { max-width: 340px; }
+
+  ol.steps.long > li { page-break-inside: auto; }
+
+  figcaption {
+    font-size: 11px;
+    color: #6b7280;
+    margin-top: 4px;
+  }
+
+  .callout {
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin: 0 0 8px 0;
+    page-break-inside: avoid;
+  }
+
+  .callout.config {
+    background: #f2f6fb;
+    border: 1px solid #cddaeb;
+  }
+
+  .callout.warning {
+    background: #fdf5ec;
+    border: 1px solid #efd6a8;
+  }
+
+  .callout h3 {
+    margin: 0 0 4px 0;
+    font-size: 13px;
+  }
+
+  .callout p { margin: 0 0 6px 0; }
+  .callout p:last-child { margin-bottom: 0; }
+
+  ul.plain {
+    margin: 4px 0 0 0;
+    padding-left: 18px;
+  }
+
+  ul.plain li { margin-bottom: 4px; }
+
+  .no-change-list {
+    display: grid;
+    gap: 6px;
+  }
+
+  .no-change-item {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+  }
+
+  .check {
+    color: #2f6f4f;
+    font-weight: 700;
+  }
+
+  .side-by-side {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8mm;
+    align-items: start;
+    page-break-inside: avoid;
+  }
+
+  .side-by-side figure { margin-top: 0; }
+
+  .side-by-side.narrow-left {
+    grid-template-columns: 160px 1fr;
+  }
+
+  .ui-text {
+    font-style: italic;
+    color: #374151;
+  }
+
+  table.chain {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 6px 0 8px 0;
+    font-size: 12px;
+    page-break-inside: avoid;
+  }
+
+  table.chain th, table.chain td {
+    border: 1px solid #dfe3e0;
+    padding: 6px 8px;
+    text-align: left;
+    vertical-align: top;
+  }
+
+  table.chain th {
+    background: #f4f7f5;
+    color: #14251c;
+    font-weight: 700;
+  }
+
+  .entry {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 11.5px;
+    background: #f7f8f7;
+    border: 1px solid #e2e5e0;
+    border-radius: 6px;
+    padding: 8px 10px;
+    margin: 6px 0;
+    white-space: pre;
+  }
+
+  /* TSK-798 */
+  figure.dialog img { max-width: 420px; }
+  ol.steps figure img { max-width: 520px; }
+  ol.steps figure.dialog img { max-width: 400px; }
+  .keep-together { page-break-inside: avoid; }
+
+  footer.doc-footer {
+    text-align: center;
+    color: #9ca3af;
+    font-size: 10.5px;
+    margin-top: 2mm;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="cover">
+    <div class="eyebrow">Ticket 850 · Contabilidad · Plan de cuentas</div>
+    <h1>El plan de cuentas ahora tiene buscador</h1>
+    <p class="subtitle">Guía de presentación: qué pasaba, qué cambió y cómo se usa</p>
+  </header>
+
+  <section>
+    <h2>1. Qué nos pidieron</h2>
+    <p class="quote">"Estaría bueno filtrar en el plan de cuentas porque no encuentro a ojo rápido lo que necesito cambiar."
+      <cite>Elizabeth Perez · Contabilidad → Plan de cuentas</cite></p>
+    <p>El plan de cuentas se muestra como un árbol: las cuentas que están dentro de una sumatoria cerrada no se
+    dibujan en la pantalla. Por eso el buscador del navegador (Ctrl+F) no las encontraba: en la captura del ticket,
+    «tarjej» da 0 resultados aunque la cuenta existe.</p>
+    <figure class="small"><img src="assets/tsk850-0-antes.png" alt="Ctrl+F sin resultados en el plan de cuentas" style="max-width:520px" />
+      <figcaption>Antes: la captura del ticket. El Ctrl+F del navegador no ve las cuentas que están dentro de sumatorias cerradas.</figcaption></figure>
+  </section>
+
+  <section>
+    <h2>2. Qué cambió</h2>
+    <div class="before-after">
+      <div class="card before"><h3>Antes</h3>
+        <p>Para encontrar una cuenta había que abrir sumatoria por sumatoria hasta dar con ella.</p></div>
+      <div class="card after"><h3>Ahora</h3>
+        <p>Arriba de la tabla hay un <strong>buscador</strong>. Se escribe parte del código o del nombre y la tabla deja
+        solo las cuentas que coinciden, con el camino de sumatorias abierto y la cuenta resaltada.</p></div>
+    </div>
+  </section>
+
+  <section class="allow-break">
+    <h2>3. Cómo se usa</h2>
+    <ol class="steps long">
+      <li><div class="step-body">Entrá a <strong>Contabilidad → Plan de cuentas</strong>. El buscador está arriba de la tabla.
+        <figure><img src="assets/tsk850-1-sin-buscar.png" alt="Plan de cuentas con el buscador vacío" />
+          <figcaption>Sin buscar, el árbol se ve como siempre: solo los rubros principales.</figcaption></figure></div></li>
+      <li><div class="step-body">Escribí parte del nombre, por ejemplo <span class="ui-text">tarj</span>. La tabla muestra la
+        cuenta «Tarjeta de crédito empresa» con sus sumatorias abiertas (Activo → Activo corriente → Caja y bancos → Cajas),
+        y al lado del buscador indica cuántas cuentas coinciden.
+        <figure><img src="assets/tsk850-2-buscar-tarjeta.png" alt="Búsqueda tarj" />
+          <figcaption>Con «tarj» queda una sola cuenta, resaltada, y el camino hasta ella abierto.</figcaption></figure></div></li>
+      <li><div class="step-body">No hace falta escribir con acentos ni en orden: <span class="ui-text">imp deb</span> encuentra
+        «Impuesto débitos y créditos bancarios» y también «Crédito por Imp a los deb/cred».
+        <figure><img src="assets/tsk850-3-buscar-sin-acentos.png" alt="Búsqueda imp deb" />
+          <figcaption>Varias palabras, en cualquier orden y sin acentos.</figcaption></figure></div></li>
+      <li><div class="step-body">También se puede buscar por código: <span class="ui-text">1.1.1/02</span> muestra todas las
+        cuentas de ese grupo.</div></li>
+      <li><div class="step-body">Para volver al árbol completo, tocá la <strong>X</strong> del buscador o la tecla
+        <strong>Esc</strong>. Las sumatorias quedan abiertas o cerradas como estaban antes de buscar.</div></li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>4. Qué NO cambió</h2>
+    <div class="no-change-list">
+      <div class="no-change-item"><span class="check">✓</span><div><strong>Las acciones de cada cuenta:</strong> desde el resultado
+        de la búsqueda se puede editar, deshabilitar o eliminar igual que siempre.</div></div>
+      <div class="no-change-item"><span class="check">✓</span><div><strong>Si una sumatoria coincide</strong> (por ejemplo «caja y
+        bancos»), se muestra con todas sus subcuentas; se abre con la flecha como siempre.</div></div>
+      <div class="no-change-item"><span class="check">✓</span><div><strong>Los saldos y estados</strong> que muestra la tabla son los
+        mismos con o sin búsqueda.</div></div>
+    </div>
+  </section>
+</div>
+</body>
+</html>

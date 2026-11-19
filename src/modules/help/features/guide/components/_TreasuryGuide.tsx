@@ -1195,7 +1195,9 @@ export function _TreasuryGuide() {
               dejás vacío, el asiento usa el nombre del concepto) y el importe.
               Nunca elegís una cuenta contable: la define el concepto. El total
               se calcula solo y no se puede confirmar sin al menos una línea
-              cargada.
+              cargada. Los decimales del importe se escriben con la coma o con
+              el <strong>punto del teclado numérico</strong> (24 . 5 queda
+              24,50); el punto del teclado de letras separa los miles.
             </li>
             <li>
               Escribí una descripción y elegí:

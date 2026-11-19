@@ -12,12 +12,15 @@ import {
   DropdownMenuTrigger,
 } from '@/shared/components/ui/dropdown-menu';
 import { Badge } from '@/shared/components/ui/badge';
-import { useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { usePermissions } from '@/shared/hooks/usePermissions';
 import { formatCurrency } from '@/shared/utils/formatters';
+import { cn } from '@/shared/lib/utils';
 import { _EditAccountModal } from './_EditAccountModal';
 import { _DeleteAccountDialog } from './_DeleteAccountDialog';
 import { _DisableAccountDialog } from './_DisableAccountDialog';
+import { _AccountsSearchBar } from './_AccountsSearchBar';
+import { accountMatches, filterAccountTree } from '../lib/account-tree-filter';
 
 // Wrappers para manejar props asíncronas
 function AsyncEditModalWrapper({ account, companyId, onClose }: { account: AccountWithChildren, companyId: string, onClose: () => void }) {
@@ -51,6 +54,11 @@ export function _AccountsTable({
   const [editAccount, setEditAccount] = useState<AccountWithChildren | null>(null);
   const [deleteAccount, setDeleteAccount] = useState<AccountWithChildren | null>(null);
   const [disableAccountTarget, setDisableAccountTarget] = useState<AccountWithChildren | null>(null);
+  const [query, setQuery] = useState('');
+  // Lo que estaba abierto antes de buscar, para devolverlo al limpiar la búsqueda.
+  const expandedBeforeSearch = useRef<Set<string> | null>(null);
+  const searching = query.trim() !== '';
+  const filtered = useMemo(() => filterAccountTree(accounts, query), [accounts, query]);
   const canUpdate = hasPermission('accounting.accounts', 'update');
   const canDelete = hasPermission('accounting.accounts', 'delete');
 
@@ -72,6 +80,19 @@ export function _AccountsTable({
       return { label: 'Baja programada', variant: 'outline' };
     }
     return { label: 'Vigente', variant: 'secondary' };
+  };
+
+  // Al buscar se abren las sumatorias que llevan a cada coincidencia; al limpiar,
+  // vuelve la expansión que había. Después el usuario puede abrir y cerrar a mano.
+  const handleQueryChange = (value: string) => {
+    if (value.trim() === '') {
+      setExpandedRows(expandedBeforeSearch.current ?? new Set());
+      expandedBeforeSearch.current = null;
+    } else {
+      if (expandedBeforeSearch.current === null) expandedBeforeSearch.current = expandedRows;
+      setExpandedRows(filterAccountTree(accounts, value).expandedIds);
+    }
+    setQuery(value);
   };
 
   const toggleRow = (accountId: string) => {
@@ -106,7 +127,13 @@ export function _AccountsTable({
 
     return (
       <>
-        <tr key={account.id} className={!account.isActive ? 'opacity-50' : undefined}>
+        <tr
+          key={account.id}
+          className={cn(
+            !account.isActive && 'opacity-50',
+            searching && accountMatches(account, query) && 'bg-primary/5 font-medium'
+          )}
+        >
           <td className="py-2">
             <div className="flex items-center" style={{ paddingLeft }}>
               {hasChildren ? (
@@ -192,7 +219,12 @@ export function _AccountsTable({
   };
 
   return (
-    <>
+    <div className="space-y-3">
+      <_AccountsSearchBar
+        value={query}
+        onChange={handleQueryChange}
+        matchCount={filtered.matchCount}
+      />
       <div className="rounded-md border">
         <table className="w-full">
           <thead>
@@ -209,7 +241,14 @@ export function _AccountsTable({
             </tr>
           </thead>
           <tbody>
-            {accounts.map((account) => renderAccountRow(account))}
+            {filtered.tree.map((account) => renderAccountRow(account))}
+            {searching && filtered.tree.length === 0 && (
+              <tr>
+                <td colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
+                  No hay cuentas que coincidan con «{query.trim()}».
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
@@ -237,6 +276,6 @@ export function _AccountsTable({
           onClose={() => setDisableAccountTarget(null)}
         />
       )}
-    </>
+    </div>
   );
 }
