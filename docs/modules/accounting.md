@@ -53,6 +53,10 @@ mayusculas ni acentos y con todas las palabras en cualquier orden («imp deb» e
   `Record<keyof Prisma.AccountCountOutputType, string>`: **una relacion nueva hacia `Account` hace fallar
   `npm run check-types` hasta agregarla ahi** con su etiqueta para el usuario. El `next build` no lo detecta
   (`ignoreBuildErrors: true`), y una relacion que falte no se controla: si su FK es `SET NULL`, se pierde en silencio.
+  Como `check-types` no corre en ningun paso automatico, TSK-735 sumo cinco relaciones (`checks`,
+  `paymentOrderInstallments` y tres de `AccountingSettings`) que quedaron sin controlar hasta TSK-864. Desde
+  entonces `lib/deleted-account-code.test.ts` compara el Record con las relaciones `[]` del `model Account` de
+  `prisma/schema.prisma`, asi que una relacion faltante tambien rompe `npm run test`.
 - `createAccount` y `updateAccount` devuelven `ActionResult` (`{ success: true, id }` /
   `{ success: true, fixedAssetCascade }`): los validadores de cuenta lanzan `BusinessError`, cuyo mensaje llega
   al toast tambien en produccion. La importacion de Excel sigue saltando (no recrea) los codigos que ocupa una

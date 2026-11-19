@@ -107,6 +107,8 @@ describe.skipIf(!dbAvailable)('integración: código de una cuenta eliminada (TS
     // Guarda: sin companyId Prisma omitiría el filtro y borraría la tabla entera.
     if (companyId) {
       await prisma.expenseCategory.deleteMany({ where: { companyId } });
+      await prisma.check.deleteMany({ where: { companyId } });
+      await prisma.accountingSettings.deleteMany({ where: { companyId } });
       // Hijas antes que padres: la FK de la jerarquía no cascadea.
       await prisma.account.deleteMany({ where: { companyId, parentId: { not: null } } });
       await prisma.account.deleteMany({ where: { companyId } });
@@ -168,6 +170,62 @@ describe.skipIf(!dbAvailable)('integración: código de una cuenta eliminada (TS
       select: { accountId: true },
     });
     expect(category?.accountId).toBe(deletedId);
+  });
+
+  // TSK-864: relaciones de TSK-735 que el control no contaba. Sin ellas, la eliminada
+  // se borraba y la FK quedaba en NULL (configuración por defecto de Prisma, cheque
+  // con `onDelete: SetNull`).
+  it('no libera el código de una eliminada asignada en la configuración contable (TSK-864)', async () => {
+    const deletedId = await createDeletedBank('1.1.1/02/07', 'Cheques diferidos');
+    await prisma.accountingSettings.create({
+      data: {
+        companyId,
+        fiscalYearStart: new Date('2026-01-01T00:00:00Z'),
+        fiscalYearEnd: new Date('2026-12-31T00:00:00Z'),
+        checksPayableAccountId: deletedId,
+      },
+    });
+
+    const result = await createAccount({ companyId, input: bankInput('1.1.1/02/07', 'Otra') });
+
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.error).toContain(`${PREFIX}Cheques diferidos`);
+    expect(result.error).toContain('Configuración contable');
+    const settings = await prisma.accountingSettings.findUnique({
+      where: { companyId },
+      select: { checksPayableAccountId: true },
+    });
+    expect(settings?.checksPayableAccountId).toBe(deletedId);
+  });
+
+  it('no libera el código de una eliminada asignada a un cheque (TSK-864)', async () => {
+    const deletedId = await createDeletedBank('1.1.1/02/08', 'Banco cheques');
+    const check = await prisma.check.create({
+      data: {
+        companyId,
+        type: 'THIRD_PARTY',
+        checkNumber: `${PREFIX}0001`,
+        bankName: 'Banco Galicia',
+        amount: 1000,
+        issueDate: new Date('2026-11-01T12:00:00Z'),
+        dueDate: new Date('2026-12-01T12:00:00Z'),
+        drawerName: `${PREFIX}Librador`,
+        createdBy: `${PREFIX}user`,
+        accountId: deletedId,
+      },
+    });
+
+    const result = await createAccount({ companyId, input: bankInput('1.1.1/02/08', 'Otra') });
+
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.error).toContain('Cheques');
+    const reloaded = await prisma.check.findUnique({
+      where: { id: check.id },
+      select: { accountId: true },
+    });
+    expect(reloaded?.accountId).toBe(deletedId);
   });
 
   it('rechaza un código de una cuenta activa con un mensaje que llega al cliente', async () => {

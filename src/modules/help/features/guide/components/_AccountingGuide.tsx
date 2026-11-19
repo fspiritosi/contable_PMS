@@ -138,7 +138,8 @@ export function _AccountingGuide() {
             el plan y su <strong>código queda libre</strong>: podés crear otra
             cuenta con ese mismo código. Si la cuenta eliminada todavía está
             asignada en algún lado (una cuenta bancaria, una caja, la
-            configuración contable, una categoría de egreso), el sistema te avisa
+            configuración contable, una categoría de egreso, un cheque, una
+            cuota de una orden de pago), el sistema te avisa
             dónde: quitá esa asignación o usá otro código. Si el código lo tiene
             una cuenta que sigue en el plan, el aviso te dice cuál es.
           </p>

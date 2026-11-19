@@ -14,6 +14,11 @@ type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
  * `next build` NO, porque corre con `ignoreBuildErrors`). Sin eso, borrar una
  * cuenta eliminada podría dejar en NULL una referencia en silencio (las FK
  * opcionales hacen `SET NULL`) en lugar de frenar con un mensaje.
+ *
+ * Como `check-types` no corre en ningún paso automático, TSK-735 sumó cinco
+ * relaciones que nadie agregó acá (TSK-864). Desde entonces
+ * `deleted-account-code.test.ts` compara este Record con el `model Account` del
+ * schema, así que una relación faltante también rompe `npm run test`.
  */
 const ACCOUNT_REFERENCE_LABELS: Record<keyof Prisma.AccountCountOutputType, string> = {
   children: 'Subcuentas',
@@ -77,12 +82,18 @@ const ACCOUNT_REFERENCE_LABELS: Record<keyof Prisma.AccountCountOutputType, stri
   settingsAsInventory: 'Configuración contable',
   settingsAsChecksReceived: 'Configuración contable',
   settingsAsChecksRejected: 'Configuración contable',
+  // TSK-735 (agregadas en TSK-864)
+  settingsAsChecksPayable: 'Configuración contable',
+  settingsAsCreditCardsPayable: 'Configuración contable',
+  settingsAsPartnerDebts: 'Configuración contable',
+  checks: 'Cheques',
+  paymentOrderInstallments: 'Cuotas de órdenes de pago',
   settingsAsVatPayable: 'Configuración contable',
   settingsAsVatBalance: 'Configuración contable',
   settingsAsRecpam: 'Configuración contable',
 };
 
-const REFERENCE_KEYS = Object.keys(ACCOUNT_REFERENCE_LABELS) as Array<
+export const REFERENCE_KEYS = Object.keys(ACCOUNT_REFERENCE_LABELS) as Array<
   keyof Prisma.AccountCountOutputType
 >;
 
