@@ -12,6 +12,17 @@
 
 Estructura jerarquica (arbol) donde cada cuenta puede tener cuentas hijas (`parentId` self-referential).
 
+### Buscador (TSK-850)
+
+La tabla solo renderiza las filas expandidas, asi que el Ctrl+F del navegador no encuentra una cuenta dentro
+de una sumatoria cerrada. `_AccountsSearchBar` filtra en el cliente por codigo o nombre, sin distinguir
+mayusculas ni acentos y con todas las palabras en cualquier orden («imp deb» encuentra «Impuesto debitos...»).
+
+- `filterAccountTree` (`features/accounts/lib/account-tree-filter.ts`, puro y con tests) poda el arbol a las
+  coincidencias y sus ancestros. Una sumatoria que coincide conserva todas sus hijas (cerrada).
+- Al buscar se abren los ancestros de cada coincidencia (`expandedIds`); al limpiar (boton o Esc) vuelve la
+  expansion que habia antes de buscar. Las filas que coinciden se resaltan.
+
 ### Tipos de Cuenta
 
 | Tipo | Naturaleza | Descripcion |

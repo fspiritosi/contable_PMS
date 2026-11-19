@@ -96,6 +96,18 @@ export function _AccountingGuide() {
             </li>
           </ol>
           <p className="mt-2">
+            <strong>Buscar una cuenta:</strong> arriba de la tabla está el
+            buscador. Escribí parte del código o del nombre (por ejemplo{' '}
+            <em>tarj</em> o <em>1.1.1/02</em>) y la tabla deja solo las
+            cuentas que coinciden, con sus sumatorias abiertas para que se vean
+            y la cuenta encontrada resaltada. No importan las mayúsculas ni los
+            acentos, y podés escribir varias palabras en cualquier orden:{' '}
+            <em>imp deb</em> encuentra «Impuesto débitos y créditos
+            bancarios». Con la <strong>X</strong> o la tecla{' '}
+            <strong>Esc</strong> se limpia la búsqueda y el árbol vuelve a como
+            estaba.
+          </p>
+          <p className="mt-2">
             <strong>Cuentas imputables vs. de sumatoria:</strong>
           </p>
           <ul className="list-disc pl-6 space-y-1 text-muted-foreground">
